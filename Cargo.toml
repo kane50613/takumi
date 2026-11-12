@@ -187,8 +187,9 @@ opt-level = 2
 
 # The crates that draw pixels, so tests that render hundreds of fixtures run in seconds.
 # takumi-core stays unoptimized: it changes most often, and optimizing it doubles a rebuild.
+# Level 2 also stops its tests from sharing takumi-core's unoptimized generic instances.
 [profile.dev.package.takumi]
-opt-level = 1
+opt-level = 2
 
 [profile.dev.package.takumi-raster]
 opt-level = 1

@@ -1785,6 +1785,7 @@ dependencies = [
  "takumi-core",
  "takumi-raster",
  "takumi-svg",
+ "xxhash-rust",
  "zune-core",
  "zune-jpeg",
 ]

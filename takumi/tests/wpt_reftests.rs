@@ -17,7 +17,7 @@
 mod test_utils;
 
 use std::{
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
   collections::{BTreeMap, BTreeSet, HashMap, HashSet},
   env, fs,
   panic::{self, AssertUnwindSafe},
@@ -25,7 +25,7 @@ use std::{
   process,
   rc::Rc,
   sync::{
-    Arc, Mutex, MutexGuard, PoisonError,
+    Arc, Mutex, MutexGuard, OnceLock, PoisonError,
     atomic::{AtomicBool, AtomicUsize, Ordering},
   },
   thread,
@@ -50,6 +50,7 @@ use takumi_core::{
   style::{PageName, page_rule::PageContext},
 };
 use test_utils::{CONTEXT, matches_fragments};
+use xxhash_rust::xxh3::Xxh3;
 
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
@@ -125,6 +126,7 @@ fn wpt_reftests() {
     "WPT={only:?} selects no reftests"
   );
   let started = Instant::now();
+  let runner = runner.sharing_references(&tests);
   let finished = AtomicUsize::new(0);
   let watchdog = Watchdog::default();
   let runs: BTreeMap<String, TestRun> = thread::scope(|scope| {
@@ -845,6 +847,16 @@ struct Runner {
   dump: Option<PathBuf>,
   fonts: Fonts,
   images: ResourceCache,
+  /// The digest of each reference document, filled by the first exact comparison against it.
+  references: HashMap<ReferenceDocument, OnceLock<Result<u128, String>>>,
+}
+
+/// A reference document as a test renders it.
+#[derive(PartialEq, Eq, Hash)]
+struct ReferenceDocument {
+  path: PathBuf,
+  print: bool,
+  page_ranges: Option<Vec<(usize, usize)>>,
 }
 
 impl Runner {
@@ -866,7 +878,47 @@ impl Runner {
       dump: env::var_os("WPT_DUMP").map(PathBuf::from),
       fonts,
       images: ResourceCache::default(),
+      references: HashMap::new(),
     }
+  }
+
+  /// Each reference `source` links, whether it must match, and its document unless `about:blank`.
+  fn references_of(
+    &self,
+    path: &Path,
+    source: &str,
+  ) -> Vec<(String, bool, Option<ReferenceDocument>)> {
+    let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
+    let page_ranges = reftest_pages(source);
+
+    references(source)
+      .into_iter()
+      .map(|(href, matches)| {
+        let document = (href != "about:blank").then(|| ReferenceDocument {
+          path: self.resolve(path, &href),
+          print,
+          page_ranges: page_ranges.get(&Some(href.clone())).cloned(),
+        });
+
+        (href, matches, document)
+      })
+      .collect()
+  }
+
+  /// Gives each reference document `tests` link an empty digest slot.
+  fn sharing_references(mut self, tests: &[&PathBuf]) -> Self {
+    self.references = tests
+      .par_iter()
+      .flat_map_iter(|path| {
+        let source = fs::read_to_string(path).unwrap_or_default();
+
+        self
+          .references_of(path, &source)
+          .into_iter()
+          .filter_map(|(_, _, document)| Some((document?, OnceLock::new())))
+      })
+      .collect();
+    self
   }
 
   fn relative(&self, path: &Path) -> String {
@@ -927,30 +979,53 @@ impl Runner {
     let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
     let page_ranges = reftest_pages(&source);
     let test = self.render(path, &source, print, page_ranges.get(&None))?;
+    let test_digest = OnceCell::new();
     let mut has_match_reference = false;
     let mut matched = false;
 
-    for (href, matches) in references(&source) {
-      let reference_path = self.resolve(path, &href);
-      let reference_pages = page_ranges.get(&Some(href.clone()));
-      let reference = if href == "about:blank" {
-        self.render(path, "", print, reference_pages)?
-      } else {
-        fs::read_to_string(&reference_path)
+    for (href, matches, document) in self.references_of(path, &source) {
+      let fuzzy = Fuzzy::of(&source, &href);
+      let render_reference = || match &document {
+        None => self.render(path, "", print, page_ranges.get(&Some(href.clone()))),
+        Some(document) => fs::read_to_string(&document.path)
           .map_err(|error| format!("{href}: {error}"))
-          .and_then(|reference| self.render(&reference_path, &reference, print, reference_pages))?
+          .and_then(|reference| {
+            self.render(
+              &document.path,
+              &reference,
+              document.print,
+              document.page_ranges.as_ref(),
+            )
+          }),
       };
+      // An exact comparison without a dump needs only the digest, which renders once per run.
+      let shared_digest = document
+        .as_ref()
+        .and_then(|document| self.references.get(document))
+        .filter(|_| fuzzy == Fuzzy::EXACT && self.dump.is_none());
+      let (is_alike, reference) = match shared_digest {
+        Some(digest) => {
+          let digest = digest
+            .get_or_init(|| render_reference().map(|reference| reference.digest()))
+            .clone()?;
 
-      let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href));
+          (*test_digest.get_or_init(|| test.digest()) == digest, None)
+        }
+        None => {
+          let reference = render_reference()?;
+
+          (test.is_alike(&reference, fuzzy), Some(reference))
+        }
+      };
 
       has_match_reference |= matches;
       matched |= matches && is_alike;
 
       if is_alike != matches {
-        if let Some(dump) = &self.dump {
+        if let (Some(dump), Some(reference)) = (&self.dump, &reference) {
           let name = self.relative(path).replace('/', "__");
 
-          for (suffix, rendering) in [("test", &test), ("ref", &reference)] {
+          for (suffix, rendering) in [("test", &test), ("ref", reference)] {
             for (index, rendered) in rendering.pages.iter().enumerate() {
               let (width, height) = rendered.size;
               let page = if print {
@@ -1212,6 +1287,21 @@ impl Page {
 }
 
 impl Rendering {
+  /// A digest of its page sizes and pixels, equal for renderings exactly alike.
+  fn digest(&self) -> u128 {
+    let mut hasher = Xxh3::new();
+
+    hasher.update(&self.pages.len().to_le_bytes());
+
+    for page in &self.pages {
+      hasher.update(&page.size.0.to_le_bytes());
+      hasher.update(&page.size.1.to_le_bytes());
+      hasher.update(&page.pixels);
+    }
+
+    hasher.digest128()
+  }
+
   /// Whether it renders like `reference` within `fuzzy`, page for page.
   fn is_alike(&self, reference: &Self, fuzzy: Fuzzy) -> bool {
     self.pages.len() == reference.pages.len()
@@ -1220,26 +1310,27 @@ impl Rendering {
         .iter()
         .zip(&reference.pages)
         .all(|(test, reference)| {
-          test.size == reference.size && fuzzy.allows(&test.pixels, &reference.pixels)
+          test.size == reference.size
+            && (test.pixels == reference.pixels || fuzzy.allows(&test.pixels, &reference.pixels))
         })
   }
 }
 
 /// `bitmap`'s RGBA over white.
 fn over_white(bitmap: &Bitmap) -> Vec<u8> {
-  bitmap
-    .as_raw()
-    .as_chunks::<4>()
-    .0
-    .iter()
-    .flat_map(|&[red, green, blue, alpha]| {
-      let alpha = u32::from(alpha);
-      let over_white =
-        |channel: u8| ((u32::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+  let mut pixels = bitmap.as_raw().to_vec();
 
-      [over_white(red), over_white(green), over_white(blue), 255]
-    })
-    .collect()
+  for pixel in pixels.as_chunks_mut::<4>().0 {
+    let alpha = u32::from(pixel[3]);
+
+    for channel in &mut pixel[..3] {
+      *channel = ((u32::from(*channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+    }
+
+    pixel[3] = 255;
+  }
+
+  pixels
 }
 
 #[test]
