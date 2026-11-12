@@ -150,7 +150,7 @@ export interface RenderAnimationOptions {
 }
 
 /** The byte budget of each kind of data a renderer keeps across renders, where `0` keeps none of
- * that kind. */
+ * that kind, except as `fonts` says. */
 export interface CacheOptions {
   /**
    * Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
@@ -175,7 +175,7 @@ export interface CacheOptions {
   /**
    * Resolved glyphs, and the masks rasterized from glyphs and shapes. Raise it for CJK text,
    * whose glyphs outgrow the default.
-   * @default 8 MiB
+   * @default 8 MiB, or the budget the last `setGlyphCacheMaxBytes` call set
    */
   glyphs?: number;
   /**
