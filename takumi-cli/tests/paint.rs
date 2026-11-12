@@ -2,6 +2,7 @@
 
 use std::{
   env, fs,
+  path::Path,
   process::{self, Command},
 };
 
@@ -13,10 +14,14 @@ const PAGE: &str = r#"<style>
 <div id="card"><h1 class="title big">Hello</h1><div class="ghost"></div><p style="height: 0"></p><section style="opacity: 0; position: absolute; top: 0">faded <b>deep</b></section><p class="unseen" style="visibility: hidden; position: absolute; top: 0; margin: 0">unseen</p><span>shown<em style="opacity: 0">inline</em><i style="visibility: hidden">hidden</i></span></div>"#;
 
 fn paint(name: &str, arguments: &[&str]) -> String {
+  paint_html(name, PAGE, arguments)
+}
+
+fn paint_html(name: &str, html: &str, arguments: &[&str]) -> String {
   let dir = env::temp_dir().join(format!("takumi-cli-paint-{name}-{}", process::id()));
 
   fs::create_dir_all(&dir).unwrap();
-  fs::write(dir.join("page.html"), PAGE).unwrap();
+  fs::write(dir.join("page.html"), html).unwrap();
 
   let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
     .arg("paint")
@@ -92,4 +97,36 @@ fn json_leaves_out_what_the_detail_does() {
   assert!(full.contains("\"drawables\""));
   assert!(full.contains("\"glyphs\""));
   assert!(full.contains("\"steps\""));
+}
+
+#[test]
+fn json_nodes_hold_no_mask_drawables() {
+  let masked = r#"<div style="width: 50px; height: 50px; background: red; mask-image: linear-gradient(black, transparent)"></div>"#;
+  let nodes = paint_html("json-mask", masked, &["--format", "json"]);
+  let drawables = paint_html(
+    "json-mask-drawables",
+    masked,
+    &["--format", "json", "--detail", "drawables"],
+  );
+
+  assert!(drawables.contains("\"mask\""), "{drawables}");
+  assert!(!nodes.contains("\"mask\""), "{nodes}");
+}
+
+/// Writes the outline and the JSON of the page to `tests/fixtures-generated/`, which pin the
+/// output.
+#[test]
+fn the_outline_and_its_json_write_their_goldens() {
+  let goldens = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated");
+
+  fs::write(
+    goldens.join("paint-outline.txt"),
+    paint("golden-text", &["--detail", "full"]),
+  )
+  .unwrap();
+  fs::write(
+    goldens.join("paint-nodes.json"),
+    paint("golden-json", &["--format", "json"]),
+  )
+  .unwrap();
 }

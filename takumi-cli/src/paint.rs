@@ -31,7 +31,8 @@ Each line of the text format is one node, indented under its parent:
 `offscreen` marks a node outside the canvas, with the edge it is past, `empty` one without an
 area, and `draws nothing` text or an image that paints no pixel, as `visibility: hidden` leaves
 it. An element `opacity: 0` hides has no node, and is listed under `not painted`. An element
-with `display: none` makes no box and is not listed.")]
+with `display: none` makes no box and is not listed, unless it is the root element, which is
+listed under `not painted`.")]
 pub(crate) struct PaintArgs {
   #[command(flatten)]
   pub(crate) input: InputArgs,
@@ -133,7 +134,10 @@ impl PaintProduct {
     let mut value = serde_json::to_value(document)?;
 
     match self.detail {
-      Detail::Nodes => remove(&mut value, &["drawables", "outline", "glyphs", "steps"]),
+      Detail::Nodes => remove(
+        &mut value,
+        &["drawables", "mask", "outline", "glyphs", "steps"],
+      ),
       Detail::Drawables => remove(&mut value, &["glyphs", "steps"]),
       Detail::Full => {}
     }

@@ -1,0 +1,554 @@
+{
+  "fonts": [
+    {
+      "faceIndex": 0,
+      "family": "Geist",
+      "stretch": 100.0,
+      "style": "normal",
+      "variationSettings": [
+        {
+          "tag": "wght",
+          "value": 700.0
+        }
+      ],
+      "weight": 700.0
+    },
+    {
+      "faceIndex": 0,
+      "family": "Geist",
+      "stretch": 100.0,
+      "style": "normal",
+      "variationSettings": [],
+      "weight": 400.0
+    },
+    {
+      "faceIndex": 0,
+      "family": "Geist",
+      "stretch": 100.0,
+      "style": "oblique",
+      "variationSettings": [],
+      "weight": 400.0
+    }
+  ],
+  "height": 100.0,
+  "nodes": [
+    {
+      "bounds": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "children": [
+        1
+      ],
+      "contentBox": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "path": [],
+        "tagName": "html"
+      },
+      "height": 100.0,
+      "id": 0,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "children": [
+        2
+      ],
+      "contentBox": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "path": [
+          0
+        ],
+        "tagName": "body"
+      },
+      "height": 100.0,
+      "id": 1,
+      "parent": 0,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "children": [
+        3,
+        8,
+        4,
+        5
+      ],
+      "contentBox": {
+        "height": 100.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "id": "card",
+        "path": [
+          0,
+          0
+        ],
+        "tagName": "div"
+      },
+      "height": 100.0,
+      "id": 2,
+      "overflowClip": {
+        "rect": {
+          "height": 100.0,
+          "width": 300.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        "type": "rect"
+      },
+      "parent": 1,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 41.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 21.4375
+      },
+      "children": [
+        6
+      ],
+      "contentBox": {
+        "height": 41.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "className": "title big",
+        "path": [
+          0,
+          0,
+          0
+        ],
+        "tagName": "h1"
+      },
+      "height": 41.0,
+      "id": 3,
+      "parent": 2,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        21.4375
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 0.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 83.875
+      },
+      "children": [],
+      "contentBox": {
+        "height": 0.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "path": [
+          0,
+          0,
+          2
+        ],
+        "tagName": "p"
+      },
+      "height": 0.0,
+      "id": 4,
+      "parent": 2,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        83.875
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 21.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 83.875
+      },
+      "children": [
+        7,
+        9
+      ],
+      "contentBox": {
+        "height": 21.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "height": 21.0,
+      "id": 5,
+      "parent": 2,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        83.875
+      ],
+      "type": "box",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 41.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 21.4375
+      },
+      "children": [],
+      "element": {
+        "className": "title big",
+        "path": [
+          0,
+          0,
+          0
+        ],
+        "tagName": "h1"
+      },
+      "height": 41.0,
+      "id": 6,
+      "parent": 3,
+      "runs": [
+        {
+          "ascent": 32.15999984741211,
+          "descent": 9.440000534057617,
+          "font": 0,
+          "fontSize": 32.0,
+          "letterSpacing": 0.0,
+          "line": 0,
+          "lineHeight": 41.0,
+          "text": "Hello",
+          "width": 81.1199951171875,
+          "x": 0.0,
+          "y": 32.0
+        }
+      ],
+      "textAlign": "left",
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        21.4375
+      ],
+      "type": "text",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 21.0,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 83.875
+      },
+      "children": [],
+      "height": 21.0,
+      "id": 7,
+      "parent": 5,
+      "runs": [
+        {
+          "ascent": 16.079999923706055,
+          "descent": 4.720000267028809,
+          "element": {
+            "path": [
+              0,
+              0,
+              3,
+              2
+            ],
+            "tagName": "span"
+          },
+          "font": 1,
+          "fontSize": 16.0,
+          "letterSpacing": 0.0,
+          "line": 0,
+          "lineHeight": 21.0,
+          "text": "shown",
+          "width": 48.04801940917969,
+          "x": 0.0,
+          "y": 16.0
+        },
+        {
+          "ascent": 16.079999923706055,
+          "descent": 4.720000267028809,
+          "element": {
+            "path": [
+              0,
+              0,
+              3,
+              2,
+              1
+            ],
+            "tagName": "em"
+          },
+          "font": 2,
+          "fontSize": 16.0,
+          "letterSpacing": 0.0,
+          "line": 0,
+          "lineHeight": 21.0,
+          "text": "inline",
+          "width": 39.1199951171875,
+          "x": 48.0625,
+          "y": 16.0
+        },
+        {
+          "ascent": 16.079999923706055,
+          "descent": 4.720000267028809,
+          "element": {
+            "path": [
+              0,
+              0,
+              3,
+              2,
+              2
+            ],
+            "tagName": "i"
+          },
+          "font": 2,
+          "fontSize": 16.0,
+          "letterSpacing": 0.0,
+          "line": 0,
+          "lineHeight": 21.0,
+          "text": "hidden",
+          "width": 49.7760009765625,
+          "x": 87.1875,
+          "y": 16.0
+        }
+      ],
+      "textAlign": "left",
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        83.875
+      ],
+      "type": "text",
+      "width": 300.0
+    },
+    {
+      "bounds": {
+        "height": 20.0,
+        "width": 20.0,
+        "x": 900.0,
+        "y": 0.0
+      },
+      "children": [],
+      "contentBox": {
+        "height": 20.0,
+        "width": 20.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "className": "ghost",
+        "path": [
+          0,
+          0,
+          1
+        ],
+        "tagName": "div"
+      },
+      "height": 20.0,
+      "id": 8,
+      "parent": 2,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        900.0,
+        0.0
+      ],
+      "type": "box",
+      "width": 20.0
+    },
+    {
+      "bounds": {
+        "height": 21.0,
+        "width": 53.40625,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "children": [
+        10
+      ],
+      "contentBox": {
+        "height": 21.0,
+        "width": 53.40625,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "element": {
+        "className": "unseen",
+        "path": [
+          0,
+          0,
+          3,
+          1
+        ],
+        "tagName": "p"
+      },
+      "height": 21.0,
+      "id": 9,
+      "parent": 5,
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "type": "box",
+      "width": 53.40625
+    },
+    {
+      "bounds": {
+        "height": 21.0,
+        "width": 53.40625,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "children": [],
+      "element": {
+        "className": "unseen",
+        "path": [
+          0,
+          0,
+          3,
+          1
+        ],
+        "tagName": "p"
+      },
+      "height": 21.0,
+      "id": 10,
+      "parent": 9,
+      "runs": [
+        {
+          "ascent": 16.079999923706055,
+          "descent": 4.720000267028809,
+          "font": 1,
+          "fontSize": 16.0,
+          "letterSpacing": 0.0,
+          "line": 0,
+          "lineHeight": 21.0,
+          "text": "unseen",
+          "width": 53.391998291015625,
+          "x": 0.0,
+          "y": 16.0
+        }
+      ],
+      "textAlign": "left",
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "type": "text",
+      "width": 53.40625
+    }
+  ],
+  "unpainted": [
+    {
+      "element": {
+        "path": [
+          0,
+          0,
+          3,
+          0
+        ],
+        "tagName": "section"
+      },
+      "reason": "opacity-zero"
+    },
+    {
+      "element": {
+        "path": [
+          0,
+          0,
+          3,
+          2,
+          1
+        ],
+        "tagName": "em"
+      },
+      "reason": "opacity-zero"
+    }
+  ],
+  "width": 300.0
+}
