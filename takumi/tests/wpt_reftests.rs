@@ -25,7 +25,7 @@ use std::{
   process,
   rc::Rc,
   sync::{
-    Arc, Mutex, MutexGuard, PoisonError,
+    Arc, Mutex, MutexGuard, OnceLock, PoisonError,
     atomic::{AtomicBool, AtomicUsize, Ordering},
   },
   thread,
@@ -124,6 +124,8 @@ fn wpt_reftests() {
     only.is_none() || !tests.is_empty(),
     "WPT={only:?} selects no reftests"
   );
+  runner.expect_references(&tests);
+
   let started = Instant::now();
   let finished = AtomicUsize::new(0);
   let watchdog = Watchdog::default();
@@ -845,6 +847,16 @@ struct Runner {
   dump: Option<PathBuf>,
   fonts: Fonts,
   images: ResourceCache,
+  references: Mutex<HashMap<ReferenceKey, SharedReference>>,
+}
+
+/// A reference document rendered for a run: its path, whether it prints, and its page ranges.
+type ReferenceKey = (PathBuf, bool, Option<Vec<(usize, usize)>>);
+
+/// A reference that more than one test compares against, rendered once and dropped after the last.
+struct SharedReference {
+  uses_left: usize,
+  rendering: Arc<OnceLock<Result<Arc<Rendering>, String>>>,
 }
 
 impl Runner {
@@ -866,7 +878,100 @@ impl Runner {
       dump: env::var_os("WPT_DUMP").map(PathBuf::from),
       fonts,
       images: ResourceCache::default(),
+      references: Mutex::default(),
     }
+  }
+
+  /// The references the test at `path` with `source` compares against, each with whether it must
+  /// match, and the key its rendering is shared under, none for `about:blank`.
+  fn references_of(&self, path: &Path, source: &str) -> Vec<(String, bool, Option<ReferenceKey>)> {
+    let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
+    let page_ranges = reftest_pages(source);
+
+    references(source)
+      .into_iter()
+      .map(|(href, matches)| {
+        let key = (href != "about:blank").then(|| {
+          (
+            self.resolve(path, &href),
+            print,
+            page_ranges.get(&Some(href.clone())).cloned(),
+          )
+        });
+
+        (href, matches, key)
+      })
+      .collect()
+  }
+
+  /// Counts the tests in `tests` that compare against each reference, so a reference two or more
+  /// share renders once.
+  fn expect_references(&self, tests: &[&PathBuf]) {
+    let keys: Vec<ReferenceKey> = tests
+      .par_iter()
+      .flat_map_iter(|path| {
+        let source = fs::read_to_string(path).unwrap_or_default();
+
+        self
+          .references_of(path, &source)
+          .into_iter()
+          .filter_map(|(_, _, key)| key)
+      })
+      .collect();
+    let mut uses: HashMap<ReferenceKey, usize> = HashMap::new();
+
+    for key in keys {
+      *uses.entry(key).or_default() += 1;
+    }
+
+    *self.shared_references() = uses
+      .into_iter()
+      .filter(|&(_, uses)| uses > 1)
+      .map(|(key, uses_left)| {
+        (
+          key,
+          SharedReference {
+            uses_left,
+            rendering: Arc::default(),
+          },
+        )
+      })
+      .collect();
+  }
+
+  /// The reference under `key` as `render` renders it, rendered once for every test that shares it.
+  fn reference(
+    &self,
+    key: &ReferenceKey,
+    render: impl FnOnce() -> Result<Rendering, String>,
+  ) -> Result<Arc<Rendering>, String> {
+    let rendering = {
+      let mut references = self.shared_references();
+      let Some(shared) = references.get_mut(key) else {
+        drop(references);
+
+        return render().map(Arc::new);
+      };
+
+      shared.uses_left -= 1;
+
+      let rendering = Arc::clone(&shared.rendering);
+
+      if shared.uses_left == 0 {
+        references.remove(key);
+      }
+
+      rendering
+    };
+
+    rendering.get_or_init(|| render().map(Arc::new)).clone()
+  }
+
+  fn shared_references(&self) -> MutexGuard<'_, HashMap<ReferenceKey, SharedReference>> {
+    self
+      .references
+      .lock()
+      .unwrap_or_else(PoisonError::into_inner)
   }
 
   fn relative(&self, path: &Path) -> String {
@@ -930,15 +1035,20 @@ impl Runner {
     let mut has_match_reference = false;
     let mut matched = false;
 
-    for (href, matches) in references(&source) {
-      let reference_path = self.resolve(path, &href);
-      let reference_pages = page_ranges.get(&Some(href.clone()));
-      let reference = if href == "about:blank" {
-        self.render(path, "", print, reference_pages)?
-      } else {
-        fs::read_to_string(&reference_path)
-          .map_err(|error| format!("{href}: {error}"))
-          .and_then(|reference| self.render(&reference_path, &reference, print, reference_pages))?
+    for (href, matches, key) in self.references_of(path, &source) {
+      let reference = match key {
+        None => Arc::new(self.render(path, "", print, page_ranges.get(&Some(href.clone())))?),
+        Some(key) => {
+          let (reference_path, _, reference_pages) = &key;
+
+          self.reference(&key, || {
+            fs::read_to_string(reference_path)
+              .map_err(|error| format!("{href}: {error}"))
+              .and_then(|reference| {
+                self.render(reference_path, &reference, print, reference_pages.as_ref())
+              })
+          })?
+        }
       };
 
       let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href));
@@ -950,7 +1060,7 @@ impl Runner {
         if let Some(dump) = &self.dump {
           let name = self.relative(path).replace('/', "__");
 
-          for (suffix, rendering) in [("test", &test), ("ref", &reference)] {
+          for (suffix, rendering) in [("test", &test), ("ref", &*reference)] {
             for (index, rendered) in rendering.pages.iter().enumerate() {
               let (width, height) = rendered.size;
               let page = if print {
@@ -1220,26 +1330,27 @@ impl Rendering {
         .iter()
         .zip(&reference.pages)
         .all(|(test, reference)| {
-          test.size == reference.size && fuzzy.allows(&test.pixels, &reference.pixels)
+          test.size == reference.size
+            && (test.pixels == reference.pixels || fuzzy.allows(&test.pixels, &reference.pixels))
         })
   }
 }
 
 /// `bitmap`'s RGBA over white.
 fn over_white(bitmap: &Bitmap) -> Vec<u8> {
-  bitmap
-    .as_raw()
-    .as_chunks::<4>()
-    .0
-    .iter()
-    .flat_map(|&[red, green, blue, alpha]| {
-      let alpha = u32::from(alpha);
-      let over_white =
-        |channel: u8| ((u32::from(channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+  let mut pixels = bitmap.as_raw().to_vec();
 
-      [over_white(red), over_white(green), over_white(blue), 255]
-    })
-    .collect()
+  for pixel in pixels.as_chunks_mut::<4>().0 {
+    let alpha = u32::from(pixel[3]);
+
+    for channel in &mut pixel[..3] {
+      *channel = ((u32::from(*channel) * alpha + 255 * (255 - alpha)) / 255) as u8;
+    }
+
+    pixel[3] = 255;
+  }
+
+  pixels
 }
 
 #[test]
