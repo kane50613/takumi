@@ -278,7 +278,7 @@ Set the budget when you create the renderer. `0` turns caching off.
 ```ts twoslash title="Set the decode cache budget"
 import { Renderer } from "takumi-js/node";
 
-const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
+const renderer = new Renderer({ cache: { images: 64 * 1024 * 1024 } });
 ```
 
 The per-image `cache` mode takes two values.

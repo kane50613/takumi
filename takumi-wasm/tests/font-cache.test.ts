@@ -41,6 +41,17 @@ describe("fontCacheMaxBytes", () => {
     expect(Buffer.compare(again, first)).toBe(0);
   });
 
+  test("takes the budget from cache.fonts too", async () => {
+    const renderer = new Renderer({ cache: { fonts: 1 } });
+    const mono = counted("Mono", monoData);
+
+    await renderer.render(node("Mono"), { ...options, fonts: [mono] });
+    await renderer.render(node("Sans"), { ...options, fonts: [counted("Sans", sansData)] });
+    await renderer.render(node("Mono"), { ...options, fonts: [mono] });
+
+    expect(mono.loads).toBe(2);
+  });
+
   test("keeps fonts from registerFont", async () => {
     const renderer = new Renderer({ fontCacheMaxBytes: 1 });
 

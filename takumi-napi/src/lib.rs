@@ -43,7 +43,7 @@ use takumi_core::{
 /// Chinese re-rasterizes glyphs it just evicted.
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::options::set_glyph_cache_max_bytes(bytes);
+  takumi_bindings_common::renderer::set_glyph_cache_max_bytes(bytes);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.

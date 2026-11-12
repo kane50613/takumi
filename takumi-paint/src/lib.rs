@@ -11,7 +11,7 @@ use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css,
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
-  options::RendererOptions,
+  renderer::RendererOptions,
   source::read_source,
   source_cache::SourceCache,
   stylesheet,

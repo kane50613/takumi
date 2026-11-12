@@ -18,6 +18,7 @@ pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
+pub mod renderer;
 #[cfg(feature = "wasm")]
 pub mod source;
 pub mod source_cache;
