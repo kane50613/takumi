@@ -8,6 +8,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use clap::ValueHint;
 use takumi::prelude::{FontResource, Fonts};
 use url::Url;
 
@@ -31,11 +32,11 @@ pub(crate) struct InputArgs {
 
   /// The directory the document may read files from. Defaults to the input file's directory,
   /// and to none when the input is standard input.
-  #[arg(long, value_name = "DIR")]
+  #[arg(long, value_name = "DIR", value_hint = ValueHint::DirPath)]
   root: Option<PathBuf>,
 
   /// Another directory the document may read files from. Repeat it for more.
-  #[arg(long = "allow-read", value_name = "DIR")]
+  #[arg(long = "allow-read", value_name = "DIR", value_hint = ValueHint::DirPath)]
   allow_read: Vec<PathBuf>,
 }
 

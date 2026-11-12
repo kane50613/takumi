@@ -5,6 +5,7 @@
 ```sh
 cargo install --locked takumi-cli
 takumi upgrade   # later, to install the newest release
+takumi completions zsh > ~/.zfunc/_takumi   # zsh Tab completion. See the install guide for bash, fish, and PowerShell
 
 takumi image card.html -o card.png --width 1200 --height 630
 takumi pdf invoice.html -o invoice.pdf --page "letter landscape" --footer footer.html

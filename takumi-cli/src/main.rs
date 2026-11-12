@@ -1,6 +1,7 @@
 //! `takumi`: renders HTML and CSS to images and PDFs. See `DESIGN.md` for the conventions every
 //! command follows, and [`sandbox`] for what a document may read.
 
+mod completions;
 mod document;
 mod image;
 mod input;
@@ -14,9 +15,10 @@ mod upgrade;
 
 use std::{error::Error, process::ExitCode};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 use crate::{
+  completions::CompletionsArgs,
   image::ImageArgs,
   input::UsageError,
   logger::{LogLevel, Logger},
@@ -58,6 +60,7 @@ enum Command {
   Pdf(PdfArgs),
   Paint(PaintArgs),
   Upgrade(UpgradeArgs),
+  Completions(CompletionsArgs),
 }
 
 fn main() -> ExitCode {
@@ -82,6 +85,7 @@ fn main() -> ExitCode {
       cli.deny_warnings,
     ),
     Command::Upgrade(args) => args.run(),
+    Command::Completions(args) => args.run(Cli::command()),
   };
 
   match result {
