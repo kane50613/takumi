@@ -226,7 +226,7 @@ export type RenderNeeds = {
 };
 
 /** The byte budget of each kind of data a renderer keeps across renders, where `0` keeps none of
- * that kind. */
+ * that kind, except as `fonts` says. */
 export type CacheOptions = {
   /**
    * Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
