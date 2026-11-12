@@ -1511,15 +1511,22 @@ impl PageWindows {
       Some(&mut trace),
     )?;
     let mut reach = layers.reach();
+    // Every fragment of a parent visits the boxes it hoists, so this page reaches those of the
+    // parents it visits itself.
+    let reached: FxHashSet<NodeId> = trace.out_of_flow.iter().map(|&(child, _)| child).collect();
     // A box an earlier page's parent of it hoisted to a fragment of its containing block this page
     // visited paints with this page, wherever the parent is.
     let mut needs: Vec<usize> = trace
       .containing_blocks
       .iter()
       .flat_map(|&(container, fragment_index)| {
+        let reached = &reached;
+
         layout
           .hoisted_children(container)
-          .filter(move |&child| layout.fragments_in(child, fragment_index).next().is_some())
+          .filter(move |&child| {
+            !reached.contains(&child) && layout.fragments_in(child, fragment_index).next().is_some()
+          })
           .filter_map(|child| self.parents.get(&child))
           .flatten()
           .filter(move |&&(parent, _)| parent != container)
