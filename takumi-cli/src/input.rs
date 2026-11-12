@@ -174,6 +174,8 @@ impl OutputArgs {
       return Err(UsageError("the command needs `-o` to write its output.".into()).into());
     };
 
+    log::info!(target: "takumi::output", "writing {}", output.display());
+
     if !self.is_stdout() {
       return fs::write(output, bytes)
         .map_err(|error| format!("{}: {error}", output.display()).into());

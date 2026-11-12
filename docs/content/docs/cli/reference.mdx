@@ -17,11 +17,12 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
 ## Global flags
 
-| Flag              | Effect                       |
-| ----------------- | ---------------------------- |
-| `-q`, `--quiet`   | Hides warnings. <sup>1</sup> |
-| `-h`, `--help`    | Prints help for the command. |
-| `-V`, `--version` | Prints the version.          |
+| Flag              | Effect                                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `-q`, `--quiet`   | Hides warnings. <sup>1</sup>                                                                                                         |
+| `--log <level>`   | Prints what the render does to standard error, at `info` or `debug`. See [what a render did](/docs/cli/scripting#what-a-render-did). |
+| `-h`, `--help`    | Prints help for the command.                                                                                                         |
+| `-V`, `--version` | Prints the version.                                                                                                                  |
 
 <sup>1</sup> `--quiet` still prints errors.
 

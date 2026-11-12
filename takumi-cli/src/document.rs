@@ -154,7 +154,10 @@ impl Document {
             reason: error.to_string(),
           });
           failed.push(written);
+          continue;
         }
+
+        log::debug!(target: "takumi::font", "loaded {written}");
       }
 
       *fonts = fonts.with_failed_font_files(&failed);
@@ -308,6 +311,7 @@ impl ImageCache {
       }
     };
 
+    log::debug!(target: "takumi::image", "loaded {url}");
     self.resolved.insert(Arc::clone(&key), url);
     self.images.insert(key, image);
 

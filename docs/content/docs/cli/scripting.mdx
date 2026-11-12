@@ -33,6 +33,50 @@ takumi image card.html -o - --format svg | gzip > card.svg.gz
 
 Warnings and errors go to standard error, starting with `warning:` or `error:`. A warning means a file was skipped and the render went on, such as a missing image. `-q` hides warnings and keeps errors.
 
+### What a render did
+
+`--log info` prints one line to standard error for each stage, with the time since the command began:
+
+```sh
+takumi image card.html -o card.png --log info
+```
+
+```
+[     0.6ms] input: read file:///site/card.html, 290 bytes
+[     5.1ms] stylesheet: style sheets loaded: 1
+[    10.2ms] resource: images loaded: 1
+[    20.0ms] render: rendered 4339 bytes
+[    20.1ms] output: writing card.png
+```
+
+`--log debug` adds a line for each style sheet, font file, and image loaded, and for what the render dropped or did not find:
+
+```
+[     4.7ms] style: ignored the unknown property `widht`
+[     5.7ms] style: `bogus-utility` is not a utility takumi knows
+[     6.2ms] style: ignored `display: flexx` at line 2, column 32 of its style sheet or `style` attribute
+[     6.9ms] font: no face is loaded for font-family "Inter", so text uses Geist
+[     7.8ms] image: no image is loaded for "missing.png"
+[    11.6ms] layout: page 1 has a 718.1102x1046.9292px page area
+[    11.6ms] layout: page 1 ends at a forced break
+[    12.0ms] layout: page 2 is full, so its content continues on the next page
+[    12.2ms] paint: painting 12 chunks
+```
+
+| Stage    | What `debug` adds                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------- |
+| `style`  | Each property, value, rule, and utility class the parser dropped. <sup>1</sup>                              |
+| `font`   | Each font file loaded, and each `font-family` name with no loaded face, with the family text falls back to. |
+| `image`  | Each image loaded, and each one a box asked for that was not.                                               |
+| `layout` | The size of the canvas, or of each PDF page with why it ended.                                              |
+| `paint`  | How many chunks each paint pass draws.                                                                      |
+
+<sup>1</sup> A line number counts from the start of its `<style>` element or file. A vendor-prefixed property such as `-webkit-font-smoothing` is not listed.
+
+A missing font family is not a warning, since text falls back to the next family as CSS says. The `debug` line is where it shows. Each `debug` line prints once, however many boxes reach it. The word before the colon is the stage, so `grep '] font:'` keeps one stage.
+
+### Exit codes
+
 The exit code tells a script why a render failed:
 
 | Code | Meaning                                                                |

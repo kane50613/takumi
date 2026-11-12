@@ -62,6 +62,14 @@ pub(crate) fn run(
   quiet: bool,
 ) -> Result<(), Box<dyn Error>> {
   let loaded = input.read()?;
+
+  log::info!(
+    target: "takumi::input",
+    "read {}, {} bytes",
+    loaded.location,
+    loaded.html.len()
+  );
+
   let sandbox = &loaded.sandbox;
   let listing = output.list_resources;
   let mut loader = if listing {
@@ -86,6 +94,11 @@ pub(crate) fn run(
     .collect::<Result<Vec<_>, _>>()?;
   let report = loader.into_report();
   let mut warnings = report.skipped;
+
+  for url in &report.loaded {
+    log::debug!(target: "takumi::stylesheet", "loaded {url}");
+  }
+  log::info!(target: "takumi::stylesheet", "style sheets loaded: {}", report.loaded.len());
 
   document.share_style_sheet(&mut bands);
 
@@ -123,16 +136,18 @@ pub(crate) fn run(
 
   let images = images.into_images();
 
+  log::info!(target: "takumi::resource", "images loaded: {}", images.len());
+
   if !quiet {
     for warning in product.warnings(&document, &fonts, &images) {
       eprintln!("warning: {warning}");
     }
   }
 
-  output.write(
-    &product.render(document, bands, &fonts, images)?,
-    product.is_text(),
-  )
+  let rendered = product.render(document, bands, &fonts, images)?;
+
+  log::info!(target: "takumi::render", "rendered {} bytes", rendered.len());
+  output.write(&rendered, product.is_text())
 }
 
 /// Prints each warning to standard error, unless `-q` hides them.

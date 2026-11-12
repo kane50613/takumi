@@ -48,6 +48,15 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
+  /// Whether the break, or one inside a box it resumes, is forced.
+  pub(crate) fn has_forced_break(&self) -> bool {
+    self.is_forced_break
+      || self.child_break_tokens.iter().any(|child| match child {
+        BreakToken::Block(token) => token.has_forced_break(),
+        BreakToken::Inline(_) => false,
+      })
+  }
+
   /// Blink's `CreateRepeated`: where `node` repeats after its fragment `sequence_number`.
   pub(crate) fn repeated(node: NodeId, sequence_number: u32) -> Self {
     Self {

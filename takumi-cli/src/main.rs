@@ -4,6 +4,7 @@
 mod document;
 mod image;
 mod input;
+mod logger;
 mod pdf;
 mod product;
 mod sandbox;
@@ -15,7 +16,12 @@ use std::{error::Error, process::ExitCode};
 use clap::{Parser, Subcommand};
 
 use crate::{
-  image::ImageArgs, input::UsageError, pdf::PdfArgs, sandbox::ResourceError, upgrade::UpgradeArgs,
+  image::ImageArgs,
+  input::UsageError,
+  logger::{LogLevel, Logger},
+  pdf::PdfArgs,
+  sandbox::ResourceError,
+  upgrade::UpgradeArgs,
 };
 
 /// Renders HTML and CSS to images and PDFs.
@@ -33,6 +39,11 @@ struct Cli {
   /// Hides warnings, such as resources that failed to load.
   #[arg(short, long, global = true)]
   quiet: bool,
+
+  /// Prints what the render does to standard error: `info` for a line per stage, `debug` for
+  /// each resource, page, and missing font or image as well.
+  #[arg(long, global = true, value_name = "LEVEL")]
+  log: Option<LogLevel>,
 }
 
 #[derive(Subcommand)]
@@ -44,6 +55,12 @@ enum Command {
 
 fn main() -> ExitCode {
   let cli = Cli::parse();
+
+  if let Err(error) = Logger::install(cli.log, cli.quiet) {
+    eprintln!("error: {error}");
+    return ExitCode::FAILURE;
+  }
+
   let result = match &cli.command {
     Command::Image(args) => args
       .product()

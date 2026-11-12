@@ -439,7 +439,6 @@ impl Fonts {
 
   /// The registered family name of a face, by the font blob id and collection index a
   /// shaped run reports.
-  #[cfg(feature = "paint-tree")]
   pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
       .registry

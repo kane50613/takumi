@@ -19,8 +19,10 @@ use crate::{
   Error,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext, properties::*,
-    selector::StyleDeclarationParser, unexpected_token,
+    CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext,
+    properties::*,
+    selector::{StyleDeclarationParser, log_ignored},
+    unexpected_token,
   },
   viewport::Viewport,
 };
@@ -576,6 +578,11 @@ macro_rules! define_style {
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             Self::Ignored => {
+              // A vendor-prefixed property is written for another engine, not by mistake.
+              if !name.starts_with('-') {
+                log::debug!(target: "takumi::style", "ignored the unknown property `{name}`");
+              }
+
               while input.next_including_whitespace_and_comments().is_ok() {}
               Ok(ParsedDeclarations::new())
             }
@@ -2888,8 +2895,11 @@ impl StyleDeclarationBlock {
     let mut declaration_parser = StyleDeclarationParser;
     let mut block = Self::default();
 
-    for declarations in RuleBodyParser::new(&mut parser, &mut declaration_parser).flatten() {
-      block.append(declarations);
+    for result in RuleBodyParser::new(&mut parser, &mut declaration_parser) {
+      match result {
+        Ok(declarations) => block.append(declarations),
+        Err((_, source, location)) => log_ignored(source, location),
+      }
     }
     block
   }

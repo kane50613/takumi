@@ -249,7 +249,7 @@ impl AnimatedSource {
       .decode_frame(index, target)
       .or_else(|| self.decode_frame(0, target))
       .unwrap_or_else(|| {
-        log::warn!("Failed to decode any frame of an animated image, drawing nothing.");
+        log::warn!(target: "takumi::image", "Failed to decode any frame of an animated image, drawing nothing.");
         Arc::new(ImageBuffer::transparent_pixel())
       })
   }
@@ -274,7 +274,7 @@ impl AnimatedSource {
           frame = Some(decoded)
         })
     {
-      log::warn!("Failed to decode frame {index} of an animated image: {error}");
+      log::warn!(target: "takumi::image", "Failed to decode frame {index} of an animated image: {error}");
     }
 
     frame
