@@ -7457,16 +7457,21 @@ fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
     .collect()
 }
 
-/// An SVG image drawn many times is one form XObject the pages invoke, so the PDF holds its
-/// drawing once.
+/// An SVG image drawn many times is one form XObject from its second draw on, so the PDF holds
+/// its drawing twice, and an SVG drawn once draws in place.
 #[test]
-fn a_repeated_svg_image_draws_once() {
-  let svg = data_url(
+fn a_repeated_svg_image_draws_once_more() {
+  let repeated = data_url(
     "image/svg+xml",
     br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#0044ff"/></svg>"##,
   );
-  let html =
-    format!(r#"<img src="{svg}"><img src="{svg}"><img src="{svg}" width="48" height="48">"#);
+  let once = data_url(
+    "image/svg+xml",
+    br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="20" height="20" fill="#ff4400"/></svg>"##,
+  );
+  let html = format!(
+    r#"<img src="{repeated}"><img src="{repeated}"><img src="{repeated}"><img src="{once}">"#
+  );
   let fonts = fonts();
   let pdf = render_pinned(a4_options(&html, &fonts));
   let text = String::from_utf8_lossy(&pdf);
@@ -7480,7 +7485,6 @@ fn a_repeated_svg_image_draws_once() {
     })
     .sum();
 
-  // The image at another size lays out at another viewport, so it draws once more.
-  assert_eq!(text.matches("/Subtype/Form").count(), 2, "{text}");
-  assert_eq!(invocations, 3);
+  assert_eq!(text.matches("/Subtype/Form").count(), 1, "{text}");
+  assert_eq!(invocations, 2);
 }

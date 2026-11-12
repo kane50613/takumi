@@ -122,9 +122,11 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) lang: Option<&'a str>,
   #[cfg(feature = "images")]
   images: RasterizedImages,
-  /// Each image SVG drawn so far, which every later draw of it reuses as one form XObject.
+  /// Each image SVG drawn so far: none once drawn in place, then the form XObject every later
+  /// draw of it invokes. Waiting for a second draw keeps a document of unique SVGs from paying an
+  /// XObject for each.
   #[cfg(all(feature = "svg", feature = "images"))]
-  svgs: RefCell<FxHashMap<SvgKey, Graphic>>,
+  svgs: RefCell<FxHashMap<SvgKey, Option<Graphic>>>,
 }
 
 impl<'a> DocumentState<'a> {
@@ -1013,7 +1015,7 @@ impl Emitter<'_> {
       at.y,
     ));
 
-    // A color filter repaints the document, so only an unfiltered one draws as a shared XObject.
+    // A color filter repaints the document, so only an unfiltered one is shared.
     match svg
       .draw_hash(context)
       .filter(|_| self.color_filter.is_none())
@@ -1021,17 +1023,27 @@ impl Emitter<'_> {
       Some(hash) => {
         let key = (hash, viewport.width.to_bits(), viewport.height.to_bits());
         let drawn = self.document.svgs.borrow().get(&key).cloned();
-        let graphic = drawn.unwrap_or_else(|| {
-          let stream = draw_stream(surface, |content| {
-            self.paint_svg(svg, context, viewport, content);
-          });
-          let graphic = Graphic::new(stream, false);
 
-          self.document.svgs.borrow_mut().insert(key, graphic.clone());
-          graphic
-        });
+        match drawn {
+          None => {
+            self.document.svgs.borrow_mut().insert(key, None);
+            self.paint_svg(svg, context, viewport, surface);
+          }
+          Some(Some(graphic)) => surface.draw_graphic(graphic),
+          Some(None) => {
+            let stream = draw_stream(surface, |content| {
+              self.paint_svg(svg, context, viewport, content);
+            });
+            let graphic = Graphic::new(stream, false);
 
-        surface.draw_graphic(graphic);
+            self
+              .document
+              .svgs
+              .borrow_mut()
+              .insert(key, Some(graphic.clone()));
+            surface.draw_graphic(graphic);
+          }
+        }
       }
       None => self.paint_svg(svg, context, viewport, surface),
     }
