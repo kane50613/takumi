@@ -444,7 +444,7 @@ test("a using block frees the renderer", () => {
   const local = new Renderer();
 
   {
-    using disposed = local;
+    using _disposed = local;
   }
 
   expect(() => local.clearFonts()).toThrow();

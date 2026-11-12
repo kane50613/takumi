@@ -431,15 +431,27 @@ macro_rules! fixed_point_int32_operators {
 
 fixed_point!(
   /// A layout length in 1/64px.
-  LayoutUnit, 6, i32, u32, i64
+  LayoutUnit,
+  6,
+  i32,
+  u32,
+  i64
 );
 fixed_point!(
   /// A length within a run of text in 1/65536px, with 16 bits of whole px.
-  TextRunLayoutUnit, 16, i32, u32, i64
+  TextRunLayoutUnit,
+  16,
+  i32,
+  u32,
+  i64
 );
 fixed_point!(
   /// A length on a line in 1/65536px, with 48 bits of whole px.
-  InlineLayoutUnit, 16, i64, u64, i128
+  InlineLayoutUnit,
+  16,
+  i64,
+  u64,
+  i128
 );
 fixed_point_int32_operators!(LayoutUnit);
 fixed_point_int32_operators!(TextRunLayoutUnit);
