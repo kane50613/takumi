@@ -10,8 +10,8 @@ use std::{
 
 use serde::Deserialize;
 
-pub(crate) use self::image::{RecentImages, is_image_reference};
 pub use self::image::resolve_image;
+pub(crate) use self::image::{RecentImages, is_image_reference};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
