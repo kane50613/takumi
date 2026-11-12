@@ -9,6 +9,12 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 pub mod font_cache;
+#[cfg(all(
+  feature = "wasm",
+  target_arch = "wasm32",
+  not(target_feature = "atomics")
+))]
+pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
