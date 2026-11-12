@@ -11,6 +11,7 @@ use crate::{
   layout::{
     bfc_rect::BfcOffset,
     exclusions::exclusion_space::ExclusionSpace,
+    layout_style::{LayoutLength, LayoutStyle},
     line_clamp_data::{LineClampAncestorChain, LineClampData},
     logical_rect::AvailableLogicalSize,
     margin_strut::MarginStrut,
@@ -246,6 +247,61 @@ impl ConstraintSpace {
       }
   }
 
+  /// Blink's `MaySkipLayout`, with the BFC position and the floats equal too: whether this space
+  /// and `other` differ at most in the sizes `CalculateSizeBasedLayoutCacheStatus` compares.
+  pub(crate) fn differs_only_in_size(&self, other: &Self) -> bool {
+    *self
+      == Self {
+        available_inline_size: self.available_inline_size,
+        available_block_size: self.available_block_size,
+        percentage_resolution_inline_size: self.percentage_resolution_inline_size,
+        percentage_resolution_block_size: self.percentage_resolution_block_size,
+        is_fixed_inline_size: self.is_fixed_inline_size,
+        is_fixed_block_size: self.is_fixed_block_size,
+        inline_auto_behavior: self.inline_auto_behavior,
+        block_auto_behavior: self.block_auto_behavior,
+        is_initial_block_size_indefinite: self.is_initial_block_size_indefinite,
+        table_cell_alignment_baseline: self.table_cell_alignment_baseline,
+        ..other.clone()
+      }
+  }
+
+  /// Blink's `AreBlockSizeConstraintsEqual`.
+  pub(crate) fn are_block_size_constraints_equal(&self, other: &Self) -> bool {
+    self.block_auto_behavior == other.block_auto_behavior
+      && self.is_fixed_block_size == other.is_fixed_block_size
+      && self.is_initial_block_size_indefinite == other.is_initial_block_size_indefinite
+      && self.table_cell_alignment_baseline == other.table_cell_alignment_baseline
+  }
+
+  /// Blink's `BlockSizeMayChange` for a box laid out in `other` with `style`, whose fragment
+  /// `depends_on_percentage_block_size`.
+  pub(crate) fn block_size_may_change(
+    &self,
+    other: &Self,
+    style: &LayoutStyle,
+    depends_on_percentage_block_size: bool,
+  ) -> bool {
+    let available_block_size_changed = self.available_block_size != other.available_block_size;
+
+    if self.is_fixed_block_size {
+      return available_block_size_changed;
+    }
+
+    let may_change = |length: LayoutLength| {
+      available_block_size_changed
+        && (length == LayoutLength::Stretch
+          || (length.is_auto() && self.is_block_auto_behavior_stretch()))
+    };
+
+    may_change(style.size.height)
+      || may_change(style.min_size.height)
+      // A `max-height: none` lays out as `auto`, which Blink's `HasAuto` doesn't count.
+      || (available_block_size_changed && style.max_size.height == LayoutLength::Stretch)
+      || (depends_on_percentage_block_size
+        && self.percentage_resolution_block_size != other.percentage_resolution_block_size)
+  }
+
   /// Blink's `AvailableSize` and `PercentageResolutionSize`.
   pub(crate) fn available_and_percentage_sizes(
     &self,
@@ -310,5 +366,49 @@ impl ConstraintSpace {
   /// Blink's `ShouldPropagateChildBreakValues`.
   pub(crate) fn should_propagate_child_break_values(&self) -> bool {
     self.should_propagate_child_break_values
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_block_size_may_change_only_with_what_it_resolves_against() {
+    let space = |available_block_size: f32| ConstraintSpace {
+      available_block_size: Some(LayoutUnit::from_float(available_block_size)),
+      block_auto_behavior: AutoSizeBehavior::StretchImplicit,
+      ..ConstraintSpace::new(Some(LayoutUnit::from_float(100.0)), Direction::Ltr)
+    };
+    let style = |height: LayoutLength, max_height: LayoutLength| {
+      let mut style = LayoutStyle::default();
+
+      style.size.height = height;
+      style.min_size.height = LayoutLength::Fixed(0.0);
+      style.max_size.height = max_height;
+      style
+    };
+    let (short, tall) = (space(100.0), space(200.0));
+
+    assert!(tall.block_size_may_change(
+      &short,
+      &style(LayoutLength::Auto, LayoutLength::Auto),
+      false
+    ));
+    assert!(!tall.block_size_may_change(
+      &short,
+      &style(LayoutLength::Fixed(50.0), LayoutLength::Auto),
+      false
+    ));
+    assert!(tall.block_size_may_change(
+      &short,
+      &style(LayoutLength::Fixed(50.0), LayoutLength::Stretch),
+      false
+    ));
+    assert!(!tall.block_size_may_change(
+      &tall,
+      &style(LayoutLength::Auto, LayoutLength::Auto),
+      false
+    ));
   }
 }
