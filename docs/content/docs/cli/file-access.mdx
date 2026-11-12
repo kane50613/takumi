@@ -58,6 +58,6 @@ image	allowed	file:///home/me/site/img/logo.png
 font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/fonts` to allow it.
 ```
 
-Each line holds the kind, a status, the URL, and for a file that would not load the reason, separated by tabs. The status is `allowed` when the file would load, `missing` when it is not there, and `blocked` when takumi would not or could not load it. A blocked stylesheet does not stop the listing, but the files it would have loaded are missing from the list until you allow it.
+Each line holds the kind, a status, the URL, and for a file that would not load the reason, separated by tabs. The status is `allowed` when the file would load, `missing` when a granted directory does not hold it, `blocked` when takumi would not or could not load it, and `invalid` when the reference is not a URL takumi can resolve. A `missing` file outside the granted directories lists as `blocked`, since takumi does not look there. A blocked stylesheet does not stop the listing, but the files it would have loaded are missing from the list until you allow it.
 
 The listing checks each file on its own, including the 32 MiB limit. It does not add files up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders.
