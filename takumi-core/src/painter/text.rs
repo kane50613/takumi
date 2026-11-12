@@ -256,24 +256,76 @@ impl InlineLines<'_> {
     let runs = self.painted_runs(spans, style, frame, device);
 
     for fragment in &self.background_fragments {
-      device.with_opacity(fragment.opacity, None, |device| {
-        if let Some(background) = &fragment.background {
-          background.paint(fragment, frame, &runs, device);
-        }
-
-        let snapped = fragment.snapped_box();
-
-        device.set_role(PaintRole::Border);
-        BoxBorderPainter::new(&fragment.border, snapped.size()).paint(
-          Point {
-            x: frame.origin.x + fragment.x,
-            y: frame.origin.y + fragment.y,
-          } + snapped.offset(),
-          device,
-        );
-      });
+      Self::paint_fragment(fragment, &runs, frame, device);
     }
 
+    Self::paint_runs(&self.outline_rects, &runs, frame, device);
+  }
+
+  /// The span fragments that paint a background or a border, in paint order.
+  pub fn background_fragments(&self) -> &[&InlineBackgroundFragment<'_>] {
+    &self.background_fragments
+  }
+
+  /// Paints one span's background and border on `fragment`, which [`Self::background_fragments`]
+  /// lists.
+  pub fn paint_background(
+    &self,
+    fragment: &InlineBackgroundFragment,
+    spans: &[ProcessedInlineSpan<'_>],
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
+    let runs = self.painted_runs(spans, style, frame, device);
+
+    Self::paint_fragment(fragment, &runs, frame, device);
+  }
+
+  fn paint_fragment(
+    fragment: &InlineBackgroundFragment,
+    runs: &[PaintedRun],
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
+    device.with_opacity(fragment.opacity, None, |device| {
+      if let Some(background) = &fragment.background {
+        background.paint(fragment, frame, runs, device);
+      }
+
+      let snapped = fragment.snapped_box();
+
+      device.set_role(PaintRole::Border);
+      BoxBorderPainter::new(&fragment.border, snapped.size()).paint(
+        Point {
+          x: frame.origin.x + fragment.x,
+          y: frame.origin.y + fragment.y,
+        } + snapped.offset(),
+        device,
+      );
+    });
+  }
+
+  /// Paints the text of the block at `frame`, shadows then glyphs, and its outlines, without the
+  /// span backgrounds.
+  pub fn paint_glyphs(
+    &self,
+    spans: &[ProcessedInlineSpan<'_>],
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
+    let runs = self.painted_runs(spans, style, frame, device);
+
+    Self::paint_runs(&self.outline_rects, &runs, frame, device);
+  }
+
+  fn paint_runs(
+    outline_rects: &[InlineOutlineRect],
+    runs: &[PaintedRun],
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
     // Neighbouring runs that cast the same shadows at the same `text-fit` scale share each shadow
     // pass, so the passes stay as few as the element's distinct `text-shadow` lists.
     for batch in runs.chunk_by(|left, right| {
@@ -314,11 +366,11 @@ impl InlineLines<'_> {
       }
     }
 
-    for painted in &runs {
+    for painted in runs {
       painted.paint(GlyphFill::Text, frame, RunPass::Proper, device);
     }
 
-    for island in OutlineIsland::of(&self.outline_rects) {
+    for island in OutlineIsland::of(outline_rects) {
       island.paint(frame.origin, device);
     }
   }
