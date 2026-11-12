@@ -17,7 +17,7 @@
 mod test_utils;
 
 use std::{
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
   collections::{BTreeMap, BTreeSet, HashMap, HashSet},
   env, fs,
   panic::{self, AssertUnwindSafe},
@@ -50,6 +50,7 @@ use takumi_core::{
   style::{PageName, page_rule::PageContext},
 };
 use test_utils::{CONTEXT, matches_fragments};
+use xxhash_rust::xxh3::Xxh3;
 
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
@@ -124,7 +125,7 @@ fn wpt_reftests() {
     only.is_none() || !tests.is_empty(),
     "WPT={only:?} selects no reftests"
   );
-  runner.expect_references(&tests);
+  let runner = runner.sharing_references(&tests);
 
   let started = Instant::now();
   let finished = AtomicUsize::new(0);
@@ -847,17 +848,12 @@ struct Runner {
   dump: Option<PathBuf>,
   fonts: Fonts,
   images: ResourceCache,
-  references: Mutex<HashMap<ReferenceKey, SharedReference>>,
+  /// The digest of each reference the run's tests link, rendered by the first test to need it.
+  references: HashMap<ReferenceKey, OnceLock<Result<u128, String>>>,
 }
 
 /// A reference document rendered for a run: its path, whether it prints, and its page ranges.
 type ReferenceKey = (PathBuf, bool, Option<Vec<(usize, usize)>>);
-
-/// A reference that more than one test compares against, rendered once and dropped after the last.
-struct SharedReference {
-  uses_left: usize,
-  rendering: Arc<OnceLock<Result<Arc<Rendering>, String>>>,
-}
 
 impl Runner {
   fn new(root: &Path) -> Self {
@@ -878,7 +874,7 @@ impl Runner {
       dump: env::var_os("WPT_DUMP").map(PathBuf::from),
       fonts,
       images: ResourceCache::default(),
-      references: Mutex::default(),
+      references: HashMap::new(),
     }
   }
 
@@ -904,10 +900,9 @@ impl Runner {
       .collect()
   }
 
-  /// Counts the tests in `tests` that compare against each reference, so a reference two or more
-  /// share renders once.
-  fn expect_references(&self, tests: &[&PathBuf]) {
-    let keys: Vec<ReferenceKey> = tests
+  /// Keeps a digest slot for each reference `tests` link, so a reference renders once per run.
+  fn sharing_references(mut self, tests: &[&PathBuf]) -> Self {
+    self.references = tests
       .par_iter()
       .flat_map_iter(|path| {
         let source = fs::read_to_string(path).unwrap_or_default();
@@ -915,63 +910,10 @@ impl Runner {
         self
           .references_of(path, &source)
           .into_iter()
-          .filter_map(|(_, _, key)| key)
+          .filter_map(|(_, _, key)| Some((key?, OnceLock::new())))
       })
       .collect();
-    let mut uses: HashMap<ReferenceKey, usize> = HashMap::new();
-
-    for key in keys {
-      *uses.entry(key).or_default() += 1;
-    }
-
-    *self.shared_references() = uses
-      .into_iter()
-      .filter(|&(_, uses)| uses > 1)
-      .map(|(key, uses_left)| {
-        (
-          key,
-          SharedReference {
-            uses_left,
-            rendering: Arc::default(),
-          },
-        )
-      })
-      .collect();
-  }
-
-  /// The reference under `key` as `render` renders it, rendered once for every test that shares it.
-  fn reference(
-    &self,
-    key: &ReferenceKey,
-    render: impl FnOnce() -> Result<Rendering, String>,
-  ) -> Result<Arc<Rendering>, String> {
-    let rendering = {
-      let mut references = self.shared_references();
-      let Some(shared) = references.get_mut(key) else {
-        drop(references);
-
-        return render().map(Arc::new);
-      };
-
-      shared.uses_left -= 1;
-
-      let rendering = Arc::clone(&shared.rendering);
-
-      if shared.uses_left == 0 {
-        references.remove(key);
-      }
-
-      rendering
-    };
-
-    rendering.get_or_init(|| render().map(Arc::new)).clone()
-  }
-
-  fn shared_references(&self) -> MutexGuard<'_, HashMap<ReferenceKey, SharedReference>> {
     self
-      .references
-      .lock()
-      .unwrap_or_else(PoisonError::into_inner)
   }
 
   fn relative(&self, path: &Path) -> String {
@@ -1032,35 +974,48 @@ impl Runner {
     let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
     let page_ranges = reftest_pages(&source);
     let test = self.render(path, &source, print, page_ranges.get(&None))?;
+    let test_digest = OnceCell::new();
     let mut has_match_reference = false;
     let mut matched = false;
 
     for (href, matches, key) in self.references_of(path, &source) {
-      let reference = match key {
-        None => Arc::new(self.render(path, "", print, page_ranges.get(&Some(href.clone())))?),
-        Some(key) => {
-          let (reference_path, _, reference_pages) = &key;
+      let fuzzy = Fuzzy::of(&source, &href);
+      let render_reference = || match &key {
+        None => self.render(path, "", print, page_ranges.get(&Some(href.clone()))),
+        Some((reference_path, _, reference_pages)) => fs::read_to_string(reference_path)
+          .map_err(|error| format!("{href}: {error}"))
+          .and_then(|reference| {
+            self.render(reference_path, &reference, print, reference_pages.as_ref())
+          }),
+      };
+      // An exact match needs only the reference's digest, which every test linking it shares.
+      let shared_digest = key
+        .as_ref()
+        .and_then(|key| self.references.get(key))
+        .filter(|_| fuzzy == Fuzzy::EXACT && self.dump.is_none());
+      let (is_alike, reference) = match shared_digest {
+        Some(digest) => {
+          let digest = digest
+            .get_or_init(|| render_reference().map(|reference| reference.digest()))
+            .clone()?;
 
-          self.reference(&key, || {
-            fs::read_to_string(reference_path)
-              .map_err(|error| format!("{href}: {error}"))
-              .and_then(|reference| {
-                self.render(reference_path, &reference, print, reference_pages.as_ref())
-              })
-          })?
+          (*test_digest.get_or_init(|| test.digest()) == digest, None)
+        }
+        None => {
+          let reference = render_reference()?;
+
+          (test.is_alike(&reference, fuzzy), Some(reference))
         }
       };
-
-      let is_alike = test.is_alike(&reference, Fuzzy::of(&source, &href));
 
       has_match_reference |= matches;
       matched |= matches && is_alike;
 
       if is_alike != matches {
-        if let Some(dump) = &self.dump {
+        if let (Some(dump), Some(reference)) = (&self.dump, &reference) {
           let name = self.relative(path).replace('/', "__");
 
-          for (suffix, rendering) in [("test", &test), ("ref", &*reference)] {
+          for (suffix, rendering) in [("test", &test), ("ref", reference)] {
             for (index, rendered) in rendering.pages.iter().enumerate() {
               let (width, height) = rendered.size;
               let page = if print {
@@ -1322,6 +1277,21 @@ impl Page {
 }
 
 impl Rendering {
+  /// A digest of its page sizes and pixels, equal for renderings exactly alike.
+  fn digest(&self) -> u128 {
+    let mut hasher = Xxh3::new();
+
+    hasher.update(&self.pages.len().to_le_bytes());
+
+    for page in &self.pages {
+      hasher.update(&page.size.0.to_le_bytes());
+      hasher.update(&page.size.1.to_le_bytes());
+      hasher.update(&page.pixels);
+    }
+
+    hasher.digest128()
+  }
+
   /// Whether it renders like `reference` within `fuzzy`, page for page.
   fn is_alike(&self, reference: &Self, fuzzy: Fuzzy) -> bool {
     self.pages.len() == reference.pages.len()
