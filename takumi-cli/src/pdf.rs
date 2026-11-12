@@ -6,6 +6,7 @@ use std::{
   sync::Arc,
 };
 
+use cssparser::{Parser, Token};
 use takumi::prelude::{
   Color, ColorInput, Fonts, FromCssStr, PageName, RenderNeeds, StyleSheet, Viewport,
   page_rule::{PageContext, PageKind},
@@ -140,11 +141,9 @@ fn check_page_declaration(property: &str, value: &str) -> Result<String, String>
     ));
   }
 
-  // takumi reads a bare number as px, where CSS takes only `0` without a unit.
-  if let Some(number) = value
-    .split_ascii_whitespace()
-    .find(|token| token.parse::<f64>().is_ok_and(|number| number != 0.0))
-  {
+  // takumi reads a bare number as px, where CSS takes only `0` without a unit. A function such as
+  // `calc()` is one token here, so a factor inside it stays.
+  if let Some(number) = top_level_unitless_number(value) {
     return Err(format!(
       "`{number}` in `--{}` needs a unit, such as `{number}mm` or `{number}px`.",
       if property == "size" { "page" } else { property }
@@ -287,6 +286,21 @@ impl Product for Pdf {
   }
 }
 
+/// The first non-zero number `value` writes outside any function, as CSS writes it.
+fn top_level_unitless_number(value: &str) -> Option<String> {
+  let mut parser = Parser::new(value);
+
+  while let Ok(token) = parser.next() {
+    if let Token::Number { value: number, .. } = *token
+      && number != 0.0
+    {
+      return Some(number.to_string());
+    }
+  }
+
+  None
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -329,6 +343,7 @@ mod tests {
       "`5` in `--margin` needs a unit, such as `5mm` or `5px`."
     );
     assert!(check_page_declaration("size", "210 297mm").is_err());
+    assert!(check_page_declaration("margin", "calc(1mm * 2 + 1mm)").is_ok());
     assert!(check_page_declaration("margin", "1in !important").is_err());
     assert!(
       check_page_declaration("margin", "1cm } body { display: none } @page { margin: 1cm").is_err()

@@ -1,9 +1,7 @@
 //! Backend-agnostic paint scene: the stacking-context tree that decides paint order, grouping, and
 //! bounds.
 
-use rustc_hash::FxHashMap;
-#[cfg(feature = "fragmentation")]
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[cfg(feature = "fragmentation")]
 use crate::layout::page_sizes::{PageSizer, PageSizes};
@@ -914,6 +912,7 @@ impl SceneView<'_> {
   /// The characters of the scene's text that no font it can use draws, each once, in paint order.
   pub fn uncovered_characters(self) -> Vec<char> {
     let mut characters = Vec::new();
+    let mut seen = FxHashSet::default();
 
     self.for_each_paint(|paint| {
       let Some(node) = self.root.node_at_path(&paint.path) else {
@@ -927,7 +926,7 @@ impl SceneView<'_> {
       };
 
       for character in items.uncovered_characters() {
-        if !characters.contains(&character) {
+        if seen.insert(character) {
           characters.push(character);
         }
       }
