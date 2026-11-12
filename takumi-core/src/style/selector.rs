@@ -18,7 +18,7 @@ use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
 use crate::style::{
   PageName, PropertySyntax,
-  page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector},
+  page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector, PageStyles},
 };
 use crate::viewport::Viewport;
 use crate::{
@@ -1501,7 +1501,8 @@ impl StyleSheet {
     &self.rules
   }
 
-  /// Collects unique resource URLs referenced by the declarations of its rules and keyframes.
+  /// Collects unique resource URLs referenced by the declarations of its rules, keyframes, and
+  /// page-margin rules.
   pub fn image_urls(&self) -> impl Iterator<Item = &str> {
     let rules = self
       .rules
@@ -1515,6 +1516,7 @@ impl StyleSheet {
     let urls: Xxh3HashSet<&str> = rules
       .chain(keyframes)
       .flat_map(StyleDeclarationBlock::image_urls)
+      .chain(self.page_rules.iter().flat_map(PageRule::image_urls))
       .collect();
 
     urls.into_iter()
@@ -1553,6 +1555,35 @@ impl StyleSheet {
       name,
       context,
     )
+  }
+
+  /// The declarations that style the boxes of a `kind` page named `name` in `context`, with
+  /// `@media` read at `viewport`.
+  pub fn page_styles(
+    &self,
+    viewport: Viewport,
+    kind: PageKind,
+    name: &PageName,
+    context: &PageContext,
+  ) -> PageStyles {
+    PageRule::styles(
+      &self.page_rules,
+      self.layer_count,
+      viewport,
+      kind,
+      name,
+      context,
+    )
+  }
+
+  /// Whether an `@page` rule nests a page-margin rule.
+  pub fn has_page_margin_rules(&self) -> bool {
+    self.page_rules.iter().any(|rule| !rule.margins.is_empty())
+  }
+
+  /// Whether a page-margin rule's `content` reads `counter(pages)`, the document's page count.
+  pub fn page_margins_count_pages(&self) -> bool {
+    self.page_rules.iter().any(PageRule::counts_pages)
   }
 
   /// The page names the `@page` rules select, each once, in the order they first appear.

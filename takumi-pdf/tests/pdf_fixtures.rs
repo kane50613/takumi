@@ -4569,6 +4569,81 @@ fn a_float_breaks_only_when_it_does_not_fit_its_page() {
   assert_eq!(float_heights(120), [75.0, 45.0]);
 }
 
+/// CSS Paged Media §4: the page-margin rules nested in `@page` draw their content in the page's
+/// margins, with `counter(page)` and `counter(pages)`, sized and placed as Chromium prints them.
+#[test]
+fn page_margin_boxes_draw_in_the_margins() {
+  const CSS: &str = "
+    @page {
+      size: 420px 300px;
+      margin: 50px 40px;
+      font-size: 11px;
+      color: #475569;
+
+      @top-left { content: 'Quarterly report'; font-weight: 700 }
+      @top-right { content: 'Confidential'; color: #b91c1c }
+      @bottom-center { content: 'Page ' counter(page) ' of ' counter(pages) }
+      @left-middle { content: ''; width: 6px; margin: 0 auto; background: #93c5fd }
+      @bottom-right-corner { content: counter(page, upper-roman); background: #e2e8f0 }
+    }
+    @page :first {
+      @top-left { content: none }
+      @top-center { content: 'Cover'; border-bottom: 1px solid #94a3b8 }
+    }
+    p { margin: 0 0 8px; font-size: 12px; line-height: 16px }
+  ";
+  let paragraphs: String = (1..=30)
+    .map(|index| format!("<p>Paragraph {index} of the report body.</p>"))
+    .collect();
+  let html = format!("<html><body>{paragraphs}</body></html>");
+  let pdf = run_pdf_fixture("page-margin-boxes", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the document"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(page_count(&pdf), 4);
+}
+
+/// CSS Paged Media §5: the page context's `background` covers the page, its `border` and
+/// `padding` lie inside the margins around the page area, and a `width` narrower than the page
+/// centers the area between `auto` margins, as Chromium prints them.
+#[test]
+fn the_page_box_has_a_background_border_padding_and_width() {
+  const CSS: &str = "
+    @page {
+      size: 420px 300px;
+      margin: 30px auto;
+      width: 300px;
+      padding: 12px 16px;
+      border: 4px solid #1d4ed8;
+      background: #eff6ff;
+      box-sizing: border-box;
+
+      @top-center { content: 'Page ' counter(page); font-size: 11px; color: #1e3a8a }
+    }
+    @page :first { border-color: #b91c1c; background: #fef2f2 }
+    p { margin: 0 0 8px; font-size: 12px; line-height: 16px }
+  ";
+  let paragraphs: String = (1..=20)
+    .map(|index| format!("<p>Paragraph {index} of the report body.</p>"))
+    .collect();
+  let html = format!("<html><body>{paragraphs}</body></html>");
+  let pdf = run_pdf_fixture("page-box-model", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the document"))
+      .stylesheet(Arc::new(StyleSheet::parse(CSS).expect("parse @page")))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(page_count(&pdf), 3);
+}
+
 /// `@page` reads the root element, as Blink's `StyleForPage` inherits its style: under
 /// `direction: rtl` the first page is a left page, and `em` and `var()` take the root's font size
 /// and custom properties.

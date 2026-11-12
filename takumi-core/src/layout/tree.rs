@@ -18,6 +18,8 @@ use crate::layout::{
   releases::{Finished, Releases},
 };
 
+#[cfg(feature = "fragmentation")]
+use crate::layout::counters::PageObject;
 use crate::{
   context::{BoxId, RenderContext},
   font_style::SizedFontStyle,
@@ -2077,6 +2079,54 @@ impl RenderNode {
     Self::text_item(context, text)
   }
 
+  /// Blink's `CreateAnonymousPageLayoutObject`: an anonymous block of the page context, styled as
+  /// `context` and laid out as `layout_style`, holding `children`.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn page_box(
+    context: RenderContext,
+    children: Box<[Self]>,
+    layout_style: LayoutStyle,
+  ) -> Self {
+    Self::anonymous(
+      context,
+      Some(Node::container([])),
+      Some(children),
+      Rc::new(layout_style),
+    )
+  }
+
+  /// Blink's `CreateBlockNodeIfNeeded`: the children the `content` of a page-margin box styled
+  /// as `context` generates, `None` when it is `normal` or `none`.
+  #[cfg(feature = "fragmentation")]
+  pub(super) fn page_margin_content(
+    context: &RenderContext,
+    counters: &mut CountersAttachmentContext,
+  ) -> Option<Box<[Self]>> {
+    let ContentValue::Items(items) = &context.style.misc1_data.content else {
+      return None;
+    };
+
+    counters.enter_page_object(&context.style, PageObject::MarginBox);
+
+    let mut children =
+      Self::pseudo_content_children(&Node::container([]), context, items.clone(), counters);
+
+    counters.leave_page_object(&context.style, PageObject::MarginBox);
+
+    // The box is a block container, where generated images sit in the text's lines.
+    for child in &mut children {
+      if child.anonymous_text_content.is_none() {
+        child.context.style_mut().base_data_mut().display = Display::Inline;
+
+        if let Some(style) = &mut child.layout_style_override {
+          Rc::make_mut(style).display = Display::Inline;
+        }
+      }
+    }
+
+    Some(children)
+  }
+
   /// The children `items` generate: an image each, and the text between them as one anonymous
   /// text item, as Blink wraps adjacent generated text in one anonymous flex or grid item.
   fn pseudo_content_children(
@@ -3180,6 +3230,20 @@ impl RenderContext {
     registered_custom_property_parent_style(&self.style, &registrations)
   }
 
+  /// The context of a box of the page context that `declarations` style under this one, as
+  /// Blink's `StyleForPage` and `StyleForPageMargins` cascade them.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn for_page_box(&self, declarations: StyleDeclarationBlock) -> Self {
+    let layers = NodeStyleLayers {
+      inline: Some(Box::new(NodeStyle::from(declarations))),
+      ..NodeStyleLayers::default()
+    };
+    let (style, sizing, current_color) =
+      self.resolve_uncached_child_style(layers, &MatchedDeclarationsView::default(), false);
+
+    Self::from_parent(self, style, sizing, current_color)
+  }
+
   /// Resolves a generated box's style and sizing from its matched declarations.
   pub(super) fn resolve_pseudo_style(
     &self,
@@ -3495,18 +3559,19 @@ impl PageContext {
     source_order: usize,
     matched: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
-    let (style, sizing, _) =
+    let (style, sizing, current_color) =
       context.resolve_child_style(&mut root.without_children(), source_order, matched);
 
     if style.base_data.display == Display::None {
-      return Self::default();
+      return Self::of_hidden_root();
     }
 
-    Self::new(
-      style.inherited_data.direction,
+    Self::of_root_context(RenderContext::from_parent(
+      context,
+      style,
       sizing,
-      style.custom_properties.inherited(),
-    )
+      current_color,
+    ))
   }
 }
 

@@ -2,7 +2,7 @@ use std::{fs::File, sync::Arc};
 
 use takumi::{prelude::*, unstable::raster::render_pages, write_image};
 use takumi_core::{
-  geometry::{Rect, Size},
+  geometry::Size,
   layout::page_sizes::{PageBox, PageRules},
   style::page_rule::PageContext,
 };
@@ -30,26 +30,29 @@ fn page_rules() {
     )
     .unwrap(),
   );
-  let options = RenderOptions::builder()
-    .viewport(Viewport::new((200, 200)))
-    .node(node)
-    .fonts(&CONTEXT)
-    .stylesheet(Arc::clone(&stylesheet))
-    .build();
+  let options = || {
+    RenderOptions::builder()
+      .viewport(Viewport::new((200, 200)))
+      .node(node.clone())
+      .fonts(&CONTEXT)
+      .stylesheet(Arc::clone(&stylesheet))
+      .build()
+  };
   let rules = PageRules::new(
-    stylesheet,
+    Arc::clone(&stylesheet),
     PageBox {
       size: Size {
         width: 200.0,
         height: 200.0,
       },
-      margin: Rect::default(),
+      ..PageBox::default()
     },
     PageContext::default(),
+    &options().take_render_context(),
   );
   let mut pages = Vec::new();
 
-  render_pages(options, rules, 8, |page| {
+  render_pages(options(), rules, 8, |page| {
     pages.push(page);
     Ok(())
   })
@@ -77,26 +80,29 @@ fn page_rules() {
 #[test]
 fn page_rules_viewport_units() {
   let stylesheet = Arc::new(StyleSheet::parse("@page { size: 100vw 100vh; margin: 0 }").unwrap());
-  let options = RenderOptions::builder()
-    .viewport(Viewport::new((200, 200)))
-    .node(Node::container([]))
-    .fonts(&CONTEXT)
-    .stylesheet(Arc::clone(&stylesheet))
-    .build();
+  let options = || {
+    RenderOptions::builder()
+      .viewport(Viewport::new((200, 200)))
+      .node(Node::container([]))
+      .fonts(&CONTEXT)
+      .stylesheet(Arc::clone(&stylesheet))
+      .build()
+  };
   let rules = PageRules::new(
-    stylesheet,
+    Arc::clone(&stylesheet),
     PageBox {
       size: Size {
         width: 200.9,
         height: 100.9,
       },
-      margin: Rect::default(),
+      ..PageBox::default()
     },
     PageContext::default(),
+    &options().take_render_context(),
   );
   let mut sizes = Vec::new();
 
-  render_pages(options, rules, 1, |page| {
+  render_pages(options(), rules, 1, |page| {
     sizes.push((page.width(), page.height()));
     Ok(())
   })

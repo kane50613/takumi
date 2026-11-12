@@ -2186,8 +2186,15 @@ css/css-overflow/scroll-markers/targeted-column-scroll-marker-selection-004.html
 !css/css-page/fixedpos-011-print.html
 !css/css-page/fixedpos-with-link-with-inline-child-print.html
 !css/css-page/layers-003-print.html
-!css/css-page/margin-boxes/
-css/css-page/margin-boxes/content-002-print.html
+!css/css-page/margin-boxes/auto-margins-002-print.html
+!css/css-page/margin-boxes/content-001-print.html
+!css/css-page/margin-boxes/dimensions-004-print.html
+!css/css-page/margin-boxes/dimensions-006-print.html
+!css/css-page/margin-boxes/dimensions-012-print.html
+!css/css-page/margin-boxes/dimensions-013-print.html
+!css/css-page/margin-boxes/dimensions-014-print.html
+!css/css-page/margin-boxes/dimensions-015-print.tentative.html
+!css/css-page/margin-boxes/paint-order-003-print.html
 !css/css-page/media-queries-001-print.html
 !css/css-page/media-queries-002-print.html
 !css/css-page/media-queries-003-print.html
@@ -2205,11 +2212,9 @@ css/css-page/margin-boxes/content-002-print.html
 !css/css-page/page-background-004-print.html
 !css/css-page/page-background-005-print.html
 !css/css-page/page-background-image-print.html
-!css/css-page/page-box-000-print.html
 !css/css-page/page-box-001-print.html
 !css/css-page/page-box-002-print.html
 !css/css-page/page-box-003-print.html
-!css/css-page/page-box-004-print.html
 !css/css-page/page-box-005-print.html
 !css/css-page/page-box-006-print.html
 !css/css-page/page-box-007-print.html
@@ -2220,7 +2225,6 @@ css/css-page/margin-boxes/content-002-print.html
 !css/css-page/page-left-right-001-print.html
 !css/css-page/page-left-right-002-print.html
 !css/css-page/page-margin-002-print.html
-!css/css-page/page-margin-006-print.html
 !css/css-page/page-margin-auto-and-non-zero-print.html
 !css/css-page/page-margin-auto-negative-print.tentative.html
 !css/css-page/page-margin-auto-print.html
@@ -2238,8 +2242,6 @@ css/css-page/margin-boxes/content-002-print.html
 !css/css-page/page-orientation-on-portrait-001-print.html
 !css/css-page/page-orientation-on-square-001-print.html
 !css/css-page/page-size-012-print.html
-!css/css-page/page-size-013-print.html
-!css/css-page/page-size-014-print.html
 !css/css-page/page-size-016-print.tentative.html
 !css/css-page/page-size-017-print.tentative.html
 !css/css-page/tentative/
