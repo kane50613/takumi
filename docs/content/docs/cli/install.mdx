@@ -71,6 +71,7 @@ takumi upgrade --dry-run
 
 ```sh
 # bash
+mkdir -p ~/.local/share/bash-completion/completions
 takumi completions bash > ~/.local/share/bash-completion/completions/takumi
 
 # zsh: add `fpath+=~/.zfunc` before `compinit` in ~/.zshrc
@@ -78,6 +79,7 @@ mkdir -p ~/.zfunc
 takumi completions zsh > ~/.zfunc/_takumi
 
 # fish
+mkdir -p ~/.config/fish/completions
 takumi completions fish > ~/.config/fish/completions/takumi.fish
 
 # PowerShell: add `. ~/takumi.ps1` to $PROFILE once
