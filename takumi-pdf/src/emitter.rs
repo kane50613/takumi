@@ -1034,6 +1034,8 @@ impl Emitter<'_> {
             let stream = draw_stream(surface, |content| {
               self.paint_svg(svg, context, viewport, content);
             });
+            // A form XObject, ISO 32000-2:2020 section 8.10, holds a drawing every page that
+            // invokes it shares.
             let graphic = Graphic::new(stream, false);
 
             self
