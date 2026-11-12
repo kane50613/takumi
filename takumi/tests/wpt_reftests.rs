@@ -125,9 +125,8 @@ fn wpt_reftests() {
     only.is_none() || !tests.is_empty(),
     "WPT={only:?} selects no reftests"
   );
-  let runner = runner.sharing_references(&tests);
-
   let started = Instant::now();
+  let runner = runner.sharing_references(&tests);
   let finished = AtomicUsize::new(0);
   let watchdog = Watchdog::default();
   let runs: BTreeMap<String, TestRun> = thread::scope(|scope| {
@@ -848,12 +847,17 @@ struct Runner {
   dump: Option<PathBuf>,
   fonts: Fonts,
   images: ResourceCache,
-  /// The digest of each reference the run's tests link, rendered by the first test to need it.
-  references: HashMap<ReferenceKey, OnceLock<Result<u128, String>>>,
+  /// The digest of each reference document, filled by the first exact comparison against it.
+  references: HashMap<ReferenceDocument, OnceLock<Result<u128, String>>>,
 }
 
-/// A reference document rendered for a run: its path, whether it prints, and its page ranges.
-type ReferenceKey = (PathBuf, bool, Option<Vec<(usize, usize)>>);
+/// A reference document as a test renders it.
+#[derive(PartialEq, Eq, Hash)]
+struct ReferenceDocument {
+  path: PathBuf,
+  print: bool,
+  page_ranges: Option<Vec<(usize, usize)>>,
+}
 
 impl Runner {
   fn new(root: &Path) -> Self {
@@ -878,29 +882,30 @@ impl Runner {
     }
   }
 
-  /// The references the test at `path` with `source` compares against, each with whether it must
-  /// match, and the key its rendering is shared under, none for `about:blank`.
-  fn references_of(&self, path: &Path, source: &str) -> Vec<(String, bool, Option<ReferenceKey>)> {
+  /// Each reference `source` links, whether it must match, and its document unless `about:blank`.
+  fn references_of(
+    &self,
+    path: &Path,
+    source: &str,
+  ) -> Vec<(String, bool, Option<ReferenceDocument>)> {
     let print = is_print_reftest(path.strip_prefix(&self.root).unwrap_or(path));
     let page_ranges = reftest_pages(source);
 
     references(source)
       .into_iter()
       .map(|(href, matches)| {
-        let key = (href != "about:blank").then(|| {
-          (
-            self.resolve(path, &href),
-            print,
-            page_ranges.get(&Some(href.clone())).cloned(),
-          )
+        let document = (href != "about:blank").then(|| ReferenceDocument {
+          path: self.resolve(path, &href),
+          print,
+          page_ranges: page_ranges.get(&Some(href.clone())).cloned(),
         });
 
-        (href, matches, key)
+        (href, matches, document)
       })
       .collect()
   }
 
-  /// Keeps a digest slot for each reference `tests` link, so a reference renders once per run.
+  /// Gives each reference document `tests` link an empty digest slot.
   fn sharing_references(mut self, tests: &[&PathBuf]) -> Self {
     self.references = tests
       .par_iter()
@@ -910,7 +915,7 @@ impl Runner {
         self
           .references_of(path, &source)
           .into_iter()
-          .filter_map(|(_, _, key)| Some((key?, OnceLock::new())))
+          .filter_map(|(_, _, document)| Some((document?, OnceLock::new())))
       })
       .collect();
     self
@@ -978,20 +983,25 @@ impl Runner {
     let mut has_match_reference = false;
     let mut matched = false;
 
-    for (href, matches, key) in self.references_of(path, &source) {
+    for (href, matches, document) in self.references_of(path, &source) {
       let fuzzy = Fuzzy::of(&source, &href);
-      let render_reference = || match &key {
+      let render_reference = || match &document {
         None => self.render(path, "", print, page_ranges.get(&Some(href.clone()))),
-        Some((reference_path, _, reference_pages)) => fs::read_to_string(reference_path)
+        Some(document) => fs::read_to_string(&document.path)
           .map_err(|error| format!("{href}: {error}"))
           .and_then(|reference| {
-            self.render(reference_path, &reference, print, reference_pages.as_ref())
+            self.render(
+              &document.path,
+              &reference,
+              document.print,
+              document.page_ranges.as_ref(),
+            )
           }),
       };
-      // An exact match needs only the reference's digest, which every test linking it shares.
-      let shared_digest = key
+      // An exact comparison without a dump needs only the digest, which renders once per run.
+      let shared_digest = document
         .as_ref()
-        .and_then(|key| self.references.get(key))
+        .and_then(|document| self.references.get(document))
         .filter(|_| fuzzy == Fuzzy::EXACT && self.dump.is_none());
       let (is_alike, reference) = match shared_digest {
         Some(digest) => {
