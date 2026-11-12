@@ -1,6 +1,6 @@
 ---
 title: Performance
-description: Reuse renderers, size the image and glyph caches, and keep memory and render time down on a server.
+description: Reuse renderers, measure before you size the caches, and keep memory and render time down on a server.
 ---
 
 Reuse the renderer, size the caches, and measure before you change a budget. Each section below covers one of these steps and the limits that go with it.
@@ -16,59 +16,11 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders.
-
-## Know what is cached
-
-The table lists each kind of cached work, how long it lives, and how to configure it.
-
-| Work                                           | Lifetime              | Configuration                                                      |
-| :--------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
-| Decoded images and the rasters drawn from them | Renderer              | `cache.images`, 64 MiB by default                                  |
-| SVG images laid out to drawing ops             | Renderer              | `cache.pictures`, 16 MiB by default                                |
-| Parsed stylesheets                             | Renderer              | `cache.stylesheets`, 4 MiB by default                              |
-| Glyph outlines and rasterized masks            | Renderer              | `cache.glyphs`, 8 MiB by default                                   |
-| Compiled Tailwind classes                      | Renderer              | `cache.tailwind`, 1 MiB by default                                 |
-| Faces that `@font-face` rules add              | Renderer              | `cache.fontFaces`, 16 MiB by default                               |
-| Fonts that renders' `fonts` lists load         | Renderer              | `cache.fonts`, unbounded by default                                |
-| Resolved Tailwind declarations                 | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
-| Google Fonts CSS                               | Fetch implementation  | Automatic, bounded internally                                      |
-| Downloaded image bytes                         | Caller-provided cache | Optional `images.fetchCache`                                       |
-
-Cache budgets count retained entries, not total process memory. Fonts, active renders, output buffers, and allocator overhead use memory too. See [image caching](/docs/images#decode-caching) and [Google Fonts](/docs/fonts#from-google-fonts) for resource-specific behavior.
+`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders. [Caching](/docs/caching) lists what a renderer keeps and how to size each budget.
 
 ## Measure cold and repeated renders
 
-Measure the first render separately from repeated renders, because font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer. Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a budget. A larger cache helps only when later renders reuse what it keeps.
-
-### Set a renderer's budgets
-
-```ts twoslash title="Cache budgets"
-import { Renderer } from "takumi-js/node";
-
-const renderer = new Renderer({
-  cache: { images: 128 * 1024 * 1024, glyphs: 32 * 1024 * 1024 }, // [!code highlight]
-});
-```
-
-Each budget you leave out keeps its default. Raise `images` when reused images get evicted. For an image used once, [`cache: "none"`](/docs/images#decode-caching) keeps it from pushing out reusable entries. Large glyph sets, such as CJK text, can need a larger `glyphs` budget, so benchmark your content first. No budget covers `images.fetchCache`, so bound that cache yourself.
-
-`PdfRenderer` and `Painter` take the same `cache` option.
-
-### Set the default renderer's budgets
-
-`render` and the other functions of `takumi-js` share one renderer, created on the first call. `setCacheOptions` sets its budgets.
-
-```ts twoslash title="Default renderer budgets"
-import { setCacheOptions } from "takumi-js";
-
-setCacheOptions({ glyphs: 64 * 1024 * 1024 }); // [!code highlight]
-```
-
-<Callout type="warn">
-  Call `setCacheOptions` before the first render. The renderer keeps the budgets it was created
-  with.
-</Callout>
+Measure the first render separately from repeated renders, because font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer. Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a [cache budget](/docs/caching#set-a-renderers-budgets). A larger cache helps only when later renders reuse what it keeps.
 
 ## Keep memory flat on Linux servers
 
@@ -90,7 +42,7 @@ These figures come from one test setup, described in [PR #1862](https://github.c
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/images#external-images), since the renderer's decode cache does not replace a download cache.
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/caching#downloaded-image-bytes), since the renderer's decode cache does not replace a download cache.
 
 ## Reduce painting work
 
