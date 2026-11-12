@@ -33,6 +33,11 @@ use wasm_bindgen::prelude::*;
 
 use crate::options::{BandInput, PdfRenderOptions, page_background, resolve_geometry};
 
+/// The heap, grown a part of the memory at a time.
+#[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+#[global_allocator]
+static HEAP: takumi_bindings_common::heap::Heap = takumi_bindings_common::heap::Heap::new();
+
 pub(crate) fn map_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
 }
