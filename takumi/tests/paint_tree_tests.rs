@@ -237,7 +237,18 @@ fn paint_tree_records_used_values() {
     .map(|&child| &document.nodes[child])
     .find(|node| matches!(node.kind, NodeKind::Text { .. }))
     .expect("paragraph text");
-  assert!(text.drawables.iter().any(|drawable| matches!(
+  let mark = document
+    .nodes
+    .iter()
+    .find(|node| {
+      node
+        .element
+        .as_ref()
+        .is_some_and(|element| element.class_name.as_deref() == Some("mark"))
+    })
+    .expect("the span's own box");
+  assert_eq!(mark.parent, Some(paragraph.id));
+  assert!(mark.drawables.iter().any(|drawable| matches!(
     drawable,
     Drawable::Group { opacity, drawables }
       if *opacity == 0.5 && matches!(
@@ -251,6 +262,7 @@ fn paint_tree_records_used_values() {
         }]
       )
   )));
+  assert!(!roles(text).contains(&Role::InlineBackground));
   assert!(text.drawables.iter().any(|drawable| matches!(
     drawable,
     Drawable::Glyphs {
@@ -548,4 +560,48 @@ fn a_negative_calc_padding_does_not_shift_an_inline_block() {
   );
 
   assert_eq!(find(&document, "i").bounds.x, find(&document, "a").bounds.x);
+}
+
+#[test]
+fn an_inline_span_with_a_background_and_border_gets_a_box_per_line() {
+  let css = "p { width: 60px; font-size: 16px; margin: 0 } \
+     .s { background: #eaf0f9; border: 1px solid #7fa6d9 }";
+  let boxes = |text: &str| {
+    let document = paint_tree(
+      PaintTreeOptions::builder()
+        .viewport(Viewport::new((300, 300)))
+        .node(
+          Node::container([
+            Node::text("Hello "),
+            Node::container([Node::text(text)]).with_class_name("s"),
+          ])
+          .with_tag_name("p"),
+        )
+        .fonts(&CONTEXT)
+        .images(TEST_IMAGES.clone())
+        .stylesheet(StyleSheet::parse_loosy(css).into())
+        .build(),
+    )
+    .unwrap()
+    .document;
+
+    document
+      .nodes
+      .iter()
+      .filter(|node| {
+        matches!(node.kind, NodeKind::Box { .. })
+          && node
+            .element
+            .as_ref()
+            .is_some_and(|element| element.class_name.as_deref() == Some("s"))
+      })
+      .map(|node| (node.width, roles(node)))
+      .collect::<Vec<_>>()
+  };
+  let one = boxes("tag");
+
+  assert_eq!(one.len(), 1);
+  assert_eq!(one[0].1, [Role::InlineBackground, Role::Border]);
+  // A span that wraps has a box on each line it sits on.
+  assert!(boxes("tag tag tag tag").len() > 1);
 }

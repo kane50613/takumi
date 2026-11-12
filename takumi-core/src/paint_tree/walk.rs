@@ -18,7 +18,7 @@ use crate::{
   geometry::{ComputedLayout, Point, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
-    inline::{InlineBoxKind, ProcessedInlineSpan},
+    inline::{InlineBackgroundFragment, InlineBoxKind, ProcessedInlineSpan},
     inline_box::{ReplacedInlineBox, resolve_inline_box},
     node::{ImageData, ImageSourceInput},
     tree::RenderNode,
@@ -26,8 +26,8 @@ use crate::{
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, OverflowClip, OwnContent,
-    PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
+    BackgroundClipArea, BoxFrame, BoxPainter, CellBackground, FillShape, InlineLines, OverflowClip,
+    OwnContent, PaintDevice, PaintedInline, TableDecorations, TextClip, paint_collapsed_borders,
   },
   resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
@@ -375,6 +375,69 @@ impl Walker {
     Ok(())
   }
 
+  /// Records an inline span's background and border on one line as a box node under the block in
+  /// `placed`, and draws it.
+  fn inline_fragment(
+    &mut self,
+    placed: &Placed<'_>,
+    lines: &InlineLines<'_>,
+    fragment: &InlineBackgroundFragment<'_>,
+    spans: &[ProcessedInlineSpan<'_>],
+    font_style: &SizedFontStyle,
+  ) {
+    let Placed {
+      node,
+      layout,
+      transform,
+      path,
+      parent,
+    } = *placed;
+    let local = transform * Affine::translation(fragment.x, fragment.y);
+    let mut recorder = Recorder::text(local);
+
+    // The fragment draws at the block's origin, so shift the frame to put it at its own.
+    lines.paint_background(
+      fragment,
+      spans,
+      font_style,
+      BoxFrame::new(layout, Point::new(-fragment.x, -fragment.y)),
+      &mut recorder,
+    );
+
+    let drawables = recorder.finish();
+
+    if drawables.is_empty() {
+      return;
+    }
+
+    let element = node
+      .path_to(fragment.owner)
+      .and_then(|relative| ElementInfo::of(fragment.owner, [path, &relative].concat()));
+    let id = self.nodes.len();
+
+    self.add(
+      PaintNode {
+        id,
+        parent: Some(parent),
+        element,
+        transform: local.to_cols_array(),
+        width: fragment.width,
+        height: fragment.height,
+        bounds: PaintRect::bounding(fragment.width, fragment.height, local),
+        drawables,
+        children: Vec::new(),
+        kind: NodeKind::Box {
+          content_box: PaintRect::sized(Point::ZERO, Size::ZERO),
+          outline: Vec::new(),
+          effects: None,
+          overflow_clip: None,
+        },
+      },
+      None,
+    );
+    self.draw(id);
+  }
+
   /// Records the node's text: the runs `painted` lays out, painted in the style `font_style`.
   fn text(&mut self, placed: Placed<'_>, painted: &PaintedInline<'_>, font_style: &SizedFontStyle) {
     let Placed {
@@ -388,8 +451,15 @@ impl Walker {
     let text = painted.text();
     let context = &node.context;
     let mut recorder = Recorder::text(transform);
+    let lines = runs.lines(layout, |_| true);
 
-    runs.paint(
+    // A span's background and border get a box node of their own on each line the span sits on,
+    // drawn under the text.
+    for &fragment in lines.background_fragments() {
+      self.inline_fragment(&placed, &lines, fragment, spans, font_style);
+    }
+
+    lines.paint_glyphs(
       spans,
       font_style,
       BoxFrame::new(layout, Point::ZERO),
