@@ -4,7 +4,7 @@ description: Turn an HTML file into a PNG, JPEG, WebP, SVG, or PDF with the taku
 index: true
 ---
 
-The `takumi` command renders an HTML file to an image or a PDF. It loads the stylesheets, fonts, and images the file links, lays the page out with the same engine as [image output](/docs) and [takumi-pdf](/docs/pdf), and writes the result. It reads only the directories you allow, so an HTML file you did not write cannot put your private files into its output.
+The `takumi` command renders an HTML file to an image or a PDF. It loads the stylesheets, fonts, and images the file links, lays the page out with the same engine as [image output](/docs) and [takumi-pdf](/docs/pdf), and writes the result. It reads only the directories you allow, so an HTML file you did not write cannot put files from outside them into its output. The input file's directory is allowed by default, so keep an untrusted HTML file in a directory of its own.
 
 ## Install
 
