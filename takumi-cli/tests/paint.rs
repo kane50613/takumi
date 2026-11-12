@@ -130,3 +130,26 @@ fn the_outline_and_its_json_write_their_goldens() {
   )
   .unwrap();
 }
+
+#[test]
+fn drawables_open_groups_and_name_each_draw_part() {
+  let html = r#"<div style="outline: 2px solid red; width: 100px; height: 20px">x</div><p><span style="visibility: hidden; font-size: 40px">big</span><span style="font-size: 12px">small</span></p><p>a <span style="opacity: 0.5">half</span></p>"#;
+  let full = paint_html("parts", html, &["--detail", "full"]);
+  let line = |needle: &str| {
+    full
+      .lines()
+      .find(|line| line.contains(needle))
+      .unwrap_or_else(|| panic!("nothing holds {needle:?} in:\n{full}"))
+  };
+
+  assert!(line("\"small\" Geist").contains("Geist 12px"), "{full}");
+  assert!(
+    line("- group opacity 0.5").starts_with("        - group"),
+    "{full}"
+  );
+  assert!(
+    line("\"half\" at").starts_with("          - glyphs"),
+    "{full}"
+  );
+  assert!(line(" draw outline ").ends_with("box div"), "{full}");
+}

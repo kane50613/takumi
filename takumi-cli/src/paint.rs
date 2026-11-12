@@ -6,8 +6,9 @@ use clap::ValueEnum;
 use serde_json::Value;
 use takumi::prelude::{Fonts, RenderNeeds};
 use takumi_core::paint_tree::{
-  Drawable, Effects, ElementInfo, NodeKind, Paint, PaintDocument, PaintNode, PaintRect, PaintStep,
-  PaintTreeOptions, Rgba, Role, Shape, TextRun, UnpaintedReason, paint_tree, paint_tree_needs,
+  DrawPart, Drawable, Effects, ElementInfo, NodeKind, Paint, PaintDocument, PaintNode, PaintRect,
+  PaintStep, PaintTreeOptions, Rgba, Role, Shape, TextRun, UnpaintedReason, paint_tree,
+  paint_tree_needs,
 };
 
 use crate::{
@@ -381,7 +382,12 @@ impl Outline<'_> {
           .collect();
         let _ = write!(self.text, " {content:?}");
 
-        if let Some(run) = runs.first() {
+        if let Some(run) = runs
+          .iter()
+          .enumerate()
+          .find(|(index, _)| !draws_any || draws_run(&node.drawables, *index))
+          .map(|(_, run)| run)
+        {
           let _ = write!(self.text, " {}", self.font(run));
         }
         if let Some(fill) = first_paint(&node.drawables, Role::Text) {
@@ -593,22 +599,29 @@ impl Outline<'_> {
         );
       }
       Drawable::Masked {
-        role: of, content, ..
+        role: of,
+        mask,
+        content,
       } => {
-        let _ = write!(
-          self.text,
-          "- masked {} ({} drawables)",
-          role(*of),
-          content.len()
-        );
+        let _ = writeln!(self.text, "- masked {}", role(*of));
+
+        for drawable in content {
+          self.drawable(node, drawable, depth + 1);
+        }
+        self.indent(depth + 1);
+        self.text.push_str("- mask\n");
+        for drawable in mask {
+          self.drawable(node, drawable, depth + 2);
+        }
+        return;
       }
       Drawable::Group { opacity, drawables } => {
-        let _ = write!(
-          self.text,
-          "- group opacity {} ({} drawables)",
-          number(*opacity),
-          drawables.len()
-        );
+        let _ = writeln!(self.text, "- group opacity {}", number(*opacity));
+
+        for drawable in drawables {
+          self.drawable(node, drawable, depth + 1);
+        }
+        return;
       }
     }
 
@@ -621,7 +634,14 @@ impl Outline<'_> {
 
     for (index, step) in self.document.steps.iter().enumerate() {
       let (action, node) = match step {
-        PaintStep::Draw { node, .. } => ("draw", node),
+        PaintStep::Draw {
+          node,
+          part: DrawPart::Drawables,
+        } => ("draw", node),
+        PaintStep::Draw {
+          node,
+          part: DrawPart::Outline,
+        } => ("draw outline", node),
         PaintStep::BeginGroup { node } => ("begin group", node),
         PaintStep::EndGroup { node } => ("end group", node),
         PaintStep::BeginClip { node } => ("begin clip", node),
@@ -662,7 +682,10 @@ fn drawable_role(drawable: &Drawable) -> Option<Role> {
 fn draws_run(drawables: &[Drawable], index: usize) -> bool {
   drawables.iter().any(|drawable| match drawable {
     Drawable::Glyphs { run, .. } => *run == index,
-    Drawable::Group { drawables, .. } => draws_run(drawables, index),
+    Drawable::Group { drawables, .. }
+    | Drawable::Masked {
+      content: drawables, ..
+    } => draws_run(drawables, index),
     _ => false,
   })
 }
@@ -680,6 +703,10 @@ fn first_paint(drawables: &[Drawable], role: Role) -> Option<String> {
       paint: fill,
       ..
     } if *of == role => Some(paint(fill)),
+    Drawable::Group { drawables, .. }
+    | Drawable::Masked {
+      content: drawables, ..
+    } => first_paint(drawables, role),
     _ => None,
   })
 }

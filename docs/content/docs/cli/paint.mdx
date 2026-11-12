@@ -109,7 +109,7 @@ A later step draws over an earlier one, and a step between `begin clip` and `end
 
 ## Write JSON
 
-`--format json`, or an output that ends in `.json`, writes the same paint tree [takumi-paint](/docs/paint) returns. `--detail` trims it: `nodes` leaves out the drawables and the paint order, `drawables` keeps them without each glyph, and `full` holds everything.
+`--format json`, or an output that ends in `.json`, writes the same paint tree [takumi-paint](/docs/paint) returns. `--detail` trims it: `nodes` leaves out the drawables and the paint order, `drawables` keeps the drawables but still leaves out each glyph and the paint order, and `full` holds everything.
 
 ```sh
 takumi paint card.html -o card.json --detail full
