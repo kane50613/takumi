@@ -97,3 +97,14 @@ fn an_image_named_as_a_pdf_points_to_the_pdf_command() {
   assert_eq!(output.status.code(), Some(2));
   assert!(String::from_utf8_lossy(&output.stderr).contains("Use `takumi pdf`"));
 }
+
+#[test]
+fn an_svg_refuses_a_device_pixel_ratio() {
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .args(["image", "page.html", "-o", "page.svg", "--dpr", "2"])
+    .output()
+    .expect("runs takumi");
+
+  assert_eq!(output.status.code(), Some(2));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("Drop `--dpr`"));
+}
