@@ -7,7 +7,7 @@ use takumi_bindings_common::{
   default_fonts,
   font_cache::FontCache,
   input::{ListedFont, ListedFonts},
-  options::RendererOptions,
+  renderer::RendererOptions,
   source_cache::SourceCache,
 };
 use takumi_core::{Cache, Fonts};

@@ -17,5 +17,5 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 /// Chinese re-rasterizes glyphs it just evicted.
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::options::set_glyph_cache_max_bytes(bytes);
+  takumi_bindings_common::renderer::set_glyph_cache_max_bytes(bytes);
 }

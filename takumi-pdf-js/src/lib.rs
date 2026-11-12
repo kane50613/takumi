@@ -13,8 +13,8 @@ use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css,
   input::{ListedFonts, decode_images, retain_svg},
-  options::RendererOptions,
   parse_lang,
+  renderer::RendererOptions,
   source::read_source,
   source_cache::SourceCache,
   stylesheet,

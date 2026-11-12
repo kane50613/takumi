@@ -27,7 +27,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 <sup>2</sup> A descriptor's fields override what the file reports.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the `cache.fonts` budget evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -244,7 +244,7 @@ renderer.clearFonts(); // back to the built-in Geist
 A later render that lists a released font loads it again. To release fonts automatically, cap the decoded bytes that `fonts` lists may keep:
 
 ```ts
-const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
+const renderer = new Renderer({ cache: { fonts: 64 * 1024 * 1024 } });
 ```
 
 Past the cap, the least recently used families go first. Fonts from `registerFont` always stay. The font loaded last also stays, even if it alone exceeds the cap. Set the cap above what one render needs.
