@@ -114,22 +114,24 @@ impl FontFallbackList {
 
     font_list.extend(standard);
 
-    if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
-      Self::log_missing_families(fonts, key, font_list.first());
-    }
-
-    Self {
+    let list = Self {
       font_list,
       font_cache,
       shape_cache: ShapeCache::default(),
       primary_with_space: OnceCell::new(),
       primary_with_digit_zero: OnceCell::new(),
       has_pending_faces: fonts.has_pending_faces(),
+    };
+
+    if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+      Self::log_missing_families(fonts, key, list.primary_simple_font_data().as_deref());
     }
+
+    list
   }
 
   /// Logs the families `key` names that no loaded face has, with the family text falls back to.
-  fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&FontData>) {
+  fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&SimpleFontData>) {
     let missing: Vec<String> = key
       .family
       .tokens()
@@ -150,13 +152,11 @@ impl FontFallbackList {
       return;
     }
 
-    let used = primary
-      .and_then(|font_data| font_data.font_data_for_character(' '))
-      .and_then(|font_data| {
-        let typeface = &font_data.face.typeface;
+    let used = primary.and_then(|font_data| {
+      let typeface = &font_data.face.typeface;
 
-        fonts.face_family(typeface.id, typeface.index)
-      });
+      fonts.face_family(typeface.id, typeface.index)
+    });
 
     log::debug!(
       target: "takumi::font",

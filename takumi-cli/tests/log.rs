@@ -94,6 +94,10 @@ fn debug_names_each_page_of_a_pdf() {
     "{steps}"
   );
   assert!(steps.contains("layout: page 2 has a "), "{steps}");
+  assert!(
+    steps.contains("layout: page 2 ends the document"),
+    "{steps}"
+  );
   assert!(!steps.contains("layout: page 3 has a "), "{steps}");
 }
 

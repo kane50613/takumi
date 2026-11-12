@@ -166,18 +166,16 @@ impl<'r> PagedLayout<'r> {
         self.sizes.push(laid_page.size, laid_page.name);
         self.break_token = result.break_info.break_token.clone();
 
-        if let Some(token) = &self.break_token {
-          log::debug!(
-            target: "takumi::layout",
-            "page {} {}",
-            page + 1,
-            if token.has_forced_break() {
-              "ends at a forced break"
-            } else {
-              "is full, so its content continues on the next page"
-            }
-          );
-        }
+        log::debug!(
+          target: "takumi::layout",
+          "page {} {}",
+          page + 1,
+          match &self.break_token {
+            Some(token) if token.has_forced_break() => "ends at a forced break",
+            Some(_) => "is full, so its content continues on the next page",
+            None => "ends the document",
+          }
+        );
 
         (
           (fragment_index, root_origin),
