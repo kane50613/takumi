@@ -1,4 +1,6 @@
-import type { CssInput, Node } from "@takumi-rs/helpers";
+import type { CacheOptions, CssInput, Node, RendererOptions } from "@takumi-rs/helpers";
+
+export type { CacheOptions, RendererOptions };
 
 export type ByteBuf = Uint8Array | ArrayBuffer;
 
@@ -402,65 +404,6 @@ export type RawPaintTree = {
   readonly nodes: readonly RawPaintNode[];
   readonly fonts: readonly RawFont[];
   readonly steps: readonly RawPaintStep[];
-};
-
-/** The byte budget of each kind of data a renderer keeps across renders, where `0` keeps none of
- * that kind, except as `fonts` says. */
-export type CacheOptions = {
-  /**
-   * Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
-   * @default 64 MiB
-   */
-  images?: number;
-  /**
-   * SVG images laid out to drawing ops, which rasters and PDF and SVG output draw from.
-   * @default 16 MiB
-   */
-  pictures?: number;
-  /**
-   * Parsed stylesheets.
-   * @default 4 MiB
-   */
-  stylesheets?: number;
-  /**
-   * The rules `tw` classes compile to.
-   * @default 1 MiB
-   */
-  tailwind?: number;
-  /**
-   * Resolved glyphs, and the masks rasterized from glyphs and shapes. Raise it for CJK text,
-   * whose glyphs outgrow the default.
-   * @default 8 MiB
-   */
-  glyphs?: number;
-  /**
-   * Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
-   * @default 1 MiB
-   */
-  intercepts?: number;
-  /**
-   * The faces `@font-face` rules add, weighed by the font files they hold.
-   * @default 16 MiB
-   */
-  fontFaces?: number;
-  /**
-   * Decoded fonts that renders' `fonts` lists may keep registered. Past it, the least recently
-   * used families are released and load again when a render lists them. Fonts from `registerFont`
-   * stay, and so does the font loaded last, even past the budget alone. A running render keeps the
-   * fonts it started with.
-   * @default unbounded
-   */
-  fonts?: number;
-};
-
-/** Options for constructing a renderer. */
-export type RendererOptions = {
-  /** The byte budget of each kind of data the renderer keeps across renders. */
-  cache?: CacheOptions;
-  /** @deprecated Use `cache.images`. */
-  cacheMaxBytes?: number;
-  /** @deprecated Use `cache.fonts`. */
-  fontCacheMaxBytes?: number;
 };
 
 /** @deprecated Use `RendererOptions`. */
