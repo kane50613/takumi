@@ -28,6 +28,10 @@ use crate::{
 /// recurse once per level. Blink's `HTMLConstructionSite::kMaximumHTMLParserDOMTreeDepth`.
 pub const MAXIMUM_DOM_TREE_DEPTH: usize = 512;
 
+/// An element's attributes as name and value pairs, in name order: a slice, since a `BTreeMap`
+/// leaf takes 368 bytes for even one attribute.
+pub(crate) type Attributes = Box<[(Box<str>, Box<str>)]>;
+
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {
@@ -38,7 +42,7 @@ pub(crate) struct NodeMetadata {
   /// The element's id.
   pub id: Option<Box<str>>,
   /// Additional element attributes for selector matching and serialization.
-  pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
+  pub attributes: Option<Attributes>,
   /// Default style presets from HTML element type (lowest priority).
   pub preset: Option<Arc<Style>>,
   /// Presentation attributes as declarations, which the cascade places between the preset and
@@ -449,7 +453,7 @@ impl Node {
 
   /// Sets the element attributes and returns the updated node.
   pub fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self {
-    self.metadata.attributes = Some(attributes);
+    self.metadata.attributes = Some(attributes.into_iter().collect());
     self
   }
 
@@ -521,7 +525,7 @@ impl Node {
     };
 
     if let Some(attributes) = &self.metadata.attributes {
-      for (k, v) in attributes {
+      for (k, v) in attributes.iter() {
         // An image's own width and height win over an attribute of the same name.
         let is_image_size = image.is_some_and(|image| match k.as_ref() {
           "width" => image.width.is_some(),
@@ -792,7 +796,7 @@ impl Node {
       .metadata
       .attributes
       .iter()
-      .flat_map(|attributes| attributes.keys().map(AsRef::as_ref))
+      .flat_map(|attributes| attributes.iter().map(|(name, _)| name.as_ref()))
   }
 
   /// The rules the element's `tw` utilities compile to, in the order they were written.

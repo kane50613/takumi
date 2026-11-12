@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc};
+use std::{collections::BTreeMap, fmt, sync::Arc};
 
 use serde::{
   Deserialize, Deserializer,
@@ -186,7 +186,11 @@ impl<'de> Visitor<'de> for NodeVisitor {
         NodeField::TagName => metadata.tag_name = map.next_value()?,
         NodeField::ClassName => metadata.class_name = map.next_value()?,
         NodeField::Id => metadata.id = map.next_value()?,
-        NodeField::Attributes => metadata.attributes = map.next_value()?,
+        NodeField::Attributes => {
+          metadata.attributes = map
+            .next_value::<Option<BTreeMap<Box<str>, Box<str>>>>()?
+            .map(|attributes| attributes.into_iter().collect());
+        }
         NodeField::Preset => metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new),
         NodeField::Style => metadata.style = map.next_value()?,
         NodeField::Tw => metadata.tw = map.next_value()?,
