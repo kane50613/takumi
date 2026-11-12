@@ -143,10 +143,7 @@ fn drawables_open_groups_and_name_each_draw_part() {
   };
 
   assert!(line("\"small\" Geist").contains("Geist 12px"), "{full}");
-  assert!(
-    line("- group opacity 0.5").starts_with("        - group"),
-    "{full}"
-  );
+  assert!(line(" opacity 0.5").starts_with("      box span"), "{full}");
   assert!(
     line("\"half\" at").starts_with("          - glyphs"),
     "{full}"

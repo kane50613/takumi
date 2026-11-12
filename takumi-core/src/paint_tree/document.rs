@@ -361,8 +361,8 @@ pub enum Drawable {
     /// The masked drawables.
     content: Vec<Drawable>,
   },
-  /// Drawables composited into one layer at `opacity`, as a translucent inline element or a
-  /// translucent outline paints.
+  /// Drawables composited into one layer at `opacity`, as a translucent outline or a text node
+  /// with an `opacity` of its own paints.
   Group {
     /// The layer's opacity.
     opacity: f32,
@@ -525,7 +525,8 @@ pub struct PaintFont {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum NodeKind {
-  /// A CSS box.
+  /// A CSS box, one line's fragment of an inline element, or the group a translucent inline
+  /// element composites its fragments and text in.
   #[serde(rename_all = "camelCase")]
   Box {
     /// The box inset by border and padding, in local space.
@@ -539,7 +540,7 @@ pub enum NodeKind {
     #[serde(skip_serializing_if = "Option::is_none")]
     overflow_clip: Option<Shape>,
   },
-  /// One paragraph of laid-out text.
+  /// The laid-out text of one paragraph, or of the translucent inline element its parent groups.
   #[serde(rename_all = "camelCase")]
   Text {
     /// `start` and `end` resolved against the direction.
@@ -562,7 +563,7 @@ pub struct PaintNode {
   /// The parent box's index.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub parent: Option<usize>,
-  /// The element the node belongs to.
+  /// The element the node belongs to, which an inline element that wraps shares among its boxes.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub element: Option<ElementInfo>,
   /// Maps local space onto the canvas.
@@ -575,7 +576,7 @@ pub struct PaintNode {
   pub bounds: PaintRect,
   /// What the node draws itself, bottom to top.
   pub drawables: Vec<Drawable>,
-  /// The children's indices, in document order.
+  /// The children's indices, in document order, which `steps` need not paint them in.
   pub children: Vec<usize>,
   /// What kind of node this is.
   #[serde(flatten)]

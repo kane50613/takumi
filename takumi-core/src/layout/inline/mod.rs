@@ -82,8 +82,6 @@ pub(crate) struct StaticPosition {
 pub struct InlineBrush {
   /// Span this run originated from, if any.
   pub source_span_id: Option<u64>,
-  /// Run opacity.
-  pub opacity: f32,
   /// Text fill color.
   pub color: Color,
   /// The decorations the run paints.
@@ -102,7 +100,6 @@ impl Default for InlineBrush {
   fn default() -> Self {
     Self {
       source_span_id: None,
-      opacity: 1.0,
       color: Color::black(),
       decorations: AppliedTextDecorations::default(),
       decoration_skip_ink: TextDecorationSkipInk::default(),

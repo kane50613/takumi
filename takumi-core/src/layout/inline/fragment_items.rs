@@ -144,7 +144,7 @@ pub(crate) struct InkBox {
 
 impl InkBox {
   /// `ink` grown to take the rectangle at `origin` of `size`.
-  fn include(ink: &mut Option<Self>, origin: Point<f32>, size: Size<f32>) {
+  pub(crate) fn include(ink: &mut Option<Self>, origin: Point<f32>, size: Size<f32>) {
     let max = Point {
       x: origin.x + size.width,
       y: origin.y + size.height,

@@ -224,23 +224,19 @@ describe("Painter.paint", () => {
 
   it("keeps a translucent span's opacity on its group, not its colors", async () => {
     const tree = await painter.paint(
-      `<p>plain <span id="faded" style="opacity: 0.5; background-color: rgb(255, 0, 0)">faded</span></p>`,
+      `<p>plain <span style="opacity: 0.5; background-color: rgb(255, 0, 0)">faded</span></p>`,
       { width: 200 },
     );
-    const background = box(tree, "faded")?.drawables.find((drawable) => drawable.type === "group");
-    const text = tree.nodes.find((node) => node.type === "text");
-    const glyphs = text?.drawables.find((drawable) => drawable.type === "group");
+    const group = tree.nodes.find(
+      (node): node is BoxNode => node.type === "box" && node.effects?.opacity === 0.5,
+    );
+    const [fragment, faded] = group?.children ?? [];
 
-    expect(background).toMatchObject({ type: "group", opacity: 0.5 });
-    expect(background?.type === "group" && background.drawables[0]).toMatchObject({
-      role: "inline-background",
-      paint: { type: "color", color: [255, 0, 0, 255] },
-    });
-    expect(glyphs).toMatchObject({ type: "group", opacity: 0.5 });
-    expect(glyphs?.type === "group" && glyphs.drawables[0]).toMatchObject({
-      role: "text",
-      paint: { type: "color", color: [0, 0, 0, 255] },
-    });
+    expect(group?.element?.tagName).toBe("span");
+    expect(fragment?.drawables).toMatchObject([
+      { role: "inline-background", paint: { type: "color", color: [255, 0, 0, 255] } },
+    ]);
+    expect(faded?.type === "text" && faded.runs.map((run) => run.text)).toEqual(["faded"]);
   });
 
   it("masks a text-clipped background with the outlines of the text inside it, keeping its blend modes", async () => {

@@ -65,7 +65,10 @@ export type PaintNode = BoxNode | TextNode | ImageNode;
 
 /** Every node is a rectangle placed on the canvas. Its local space runs from (0, 0) to (width, height). */
 interface NodeBase {
-  /** The element the node belongs to. A text node belongs to the element whose text it lays out. */
+  /**
+   * The element the node belongs to. A text node belongs to the element whose text it lays out, and
+   * an inline element that wraps shares its element among its boxes.
+   */
   readonly element: ElementInfo | undefined;
   /** Maps local space onto the canvas. */
   readonly transform: Matrix;
@@ -77,7 +80,7 @@ interface NodeBase {
   readonly drawables: readonly Drawable[];
 }
 
-/** A CSS box. */
+/** A CSS box, one line's fragment of an inline element, or the group a translucent inline element composites its fragments and text in. */
 export interface BoxNode extends NodeBase {
   readonly type: "box";
   /** The box inset by border and padding, in local space. */
@@ -88,11 +91,14 @@ export interface BoxNode extends NodeBase {
   readonly effects: Effects | undefined;
   /** Clips the descendants, from `overflow`. */
   readonly overflowClip: Shape | undefined;
-  /** Boxes, text, and images the element contains, in document order. */
+  /** Boxes, text, and images the element contains, in document order, which `steps` need not paint them in. */
   readonly children: readonly PaintNode[];
 }
 
-/** One paragraph of laid-out text. Its local space is the border box of the block its lines fill. */
+/**
+ * The laid-out text of one paragraph, or of the translucent inline element its parent groups. Its
+ * local space is the border box of the block its lines fill.
+ */
 export interface TextNode extends NodeBase {
   readonly type: "text";
   /** `start` and `end` resolved against the direction. */
@@ -148,7 +154,7 @@ export interface PaintTree {
   readonly root: BoxNode;
   /**
    * Every node in document order: a box before its descendants, and a paragraph's text node
-   * before the inline boxes inside it.
+   * before the inline-blocks and images inside it.
    */
   readonly nodes: readonly PaintNode[];
   /** The steps a renderer takes, in paint order. */

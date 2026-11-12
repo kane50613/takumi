@@ -851,8 +851,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-color/relative-currentcolor-rgb-02.html
 !css/css-color/relative-currentcolor-xyzd50-01.html
 !css/css-color/relative-currentcolor-xyzd65-01.html
-!css/css-color/t32-opacity-offscreen-multiple-boxes-1-c.xht
-!css/css-color/t32-opacity-offscreen-multiple-boxes-2-c.xht
 !css/css-color/t421-rgb-func-no-mixed-f.xht
 !css/css-color/t421-rgb-func-whitespace-b.xht
 !css/css-color/t422-rgba-func-no-mixed-f.xht

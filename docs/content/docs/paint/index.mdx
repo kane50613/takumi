@@ -47,11 +47,11 @@ for (const node of tree.nodes) {
 }
 ```
 
-| Node    | Holds                                                    |
-| ------- | -------------------------------------------------------- |
-| `box`   | A CSS box: its background, border, shadows, and children |
-| `text`  | One paragraph, as shaped runs in visual order            |
-| `image` | A replaced image, such as `<img>` or an SVG              |
+| Node    | Holds                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------- |
+| `box`   | A CSS box with its background, border, shadows, and children, or one line of an inline element |
+| `text`  | One paragraph, or a translucent inline element's text, as shaped runs in visual order          |
+| `image` | A replaced image, such as `<img>` or an SVG                                                    |
 
 <Callout type="info">
   Lengths are in device pixels. `devicePixelRatio` scales CSS lengths during layout.
