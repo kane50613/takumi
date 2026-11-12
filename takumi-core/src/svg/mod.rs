@@ -24,7 +24,7 @@ use crate::{
   context::RenderContext,
   geometry::Size,
   html::markup::parse_svg_image,
-  layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
+  layout::node::{MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind},
   resources::{
     font::FontsSnapshot,
     image::{ImageError, SvgOp},
@@ -278,6 +278,7 @@ struct TreeBuilder {
   first_ids: HashMap<Box<str>, usize>,
   last_ids: HashMap<Box<str>, usize>,
   mentions_current_color: bool,
+  names: Names,
 }
 
 impl TreeBuilder {
@@ -333,7 +334,7 @@ impl TreeBuilder {
       SvgElementKind::Unknown
     };
     let index = self.push_entry(kind, parent);
-    let mut node = Node::container([]).with_tag_name(name);
+    let mut node = Node::container([]).with_tag_name(self.names.get(name));
     let mut attributes = BTreeMap::new();
     let mut href = None;
 
@@ -358,7 +359,7 @@ impl TreeBuilder {
           href = Some(value);
         }
         (Some(XML_NAMESPACE), "space") => {
-          attributes.insert("xml:space".into(), value.into());
+          attributes.insert(self.names.get("xml:space"), value.into());
         }
         (Some(XML_NAMESPACE), "lang") | (None, "lang") => {
           if let Ok(lang) = Lang::parse(value) {
@@ -367,14 +368,14 @@ impl TreeBuilder {
         }
         (None, name) => {
           self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
-          attributes.insert(name.into(), value.into());
+          attributes.insert(self.names.get(name), value.into());
         }
         _ => {}
       }
     }
 
     if let Some(href) = href {
-      attributes.insert("href".into(), href.into());
+      attributes.insert(self.names.get("href"), href.into());
     }
 
     if let Some(preset) = kind.preset(parent.is_none()) {
@@ -384,7 +385,7 @@ impl TreeBuilder {
     node.metadata.presentation = kind.presentation(&attributes);
 
     if !attributes.is_empty() {
-      node = node.with_attributes(attributes);
+      node = node.with_named_attributes(attributes);
     }
 
     let children = markup

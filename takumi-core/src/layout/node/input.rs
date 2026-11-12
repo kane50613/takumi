@@ -6,13 +6,23 @@ use serde::{
 };
 
 use crate::{
-  layout::node::{ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData},
+  layout::node::{
+    ImageData, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, NodeMetadata, TextData,
+  },
   style::{ParsedValues, Style},
 };
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    ParsedValues::scope(|| NodeSeed { depth: 0 }.deserialize(deserializer))
+    let names = Names::default();
+
+    ParsedValues::scope(|| {
+      NodeSeed {
+        depth: 0,
+        names: &names,
+      }
+      .deserialize(deserializer)
+    })
   }
 }
 
@@ -22,17 +32,19 @@ impl<'de> Deserialize<'de> for NodeKind {
       .deserialize_map(NodeVisitor {
         reads_metadata: false,
         depth: 0,
+        names: &Names::default(),
       })
       .map(|(_, kind)| kind)
   }
 }
 
 /// A node `depth` levels below the root, refused past [`MAXIMUM_DOM_TREE_DEPTH`].
-struct NodeSeed {
+struct NodeSeed<'n> {
   depth: usize,
+  names: &'n Names,
 }
 
-impl<'de> DeserializeSeed<'de> for NodeSeed {
+impl<'de> DeserializeSeed<'de> for NodeSeed<'_> {
   type Value = Node;
 
   fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Node, D::Error> {
@@ -45,6 +57,7 @@ impl<'de> DeserializeSeed<'de> for NodeSeed {
     let (metadata, kind) = deserializer.deserialize_map(NodeVisitor {
       reads_metadata: true,
       depth: self.depth,
+      names: self.names,
     })?;
 
     Ok(Node { metadata, kind })
@@ -52,11 +65,12 @@ impl<'de> DeserializeSeed<'de> for NodeSeed {
 }
 
 /// A container's children, one level below it: absent, `null`, or a list.
-struct Children {
+struct Children<'n> {
   depth: usize,
+  names: &'n Names,
 }
 
-impl<'de> DeserializeSeed<'de> for Children {
+impl<'de> DeserializeSeed<'de> for Children<'_> {
   type Value = Option<Vec<Node>>;
 
   fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
@@ -64,7 +78,7 @@ impl<'de> DeserializeSeed<'de> for Children {
   }
 }
 
-impl<'de> Visitor<'de> for Children {
+impl<'de> Visitor<'de> for Children<'_> {
   type Value = Option<Vec<Node>>;
 
   fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -86,7 +100,10 @@ impl<'de> Visitor<'de> for Children {
   fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
     let mut children = Vec::new();
 
-    while let Some(child) = seq.next_element_seed(NodeSeed { depth: self.depth })? {
+    while let Some(child) = seq.next_element_seed(NodeSeed {
+      depth: self.depth,
+      names: self.names,
+    })? {
       children.push(child);
     }
 
@@ -142,14 +159,16 @@ enum NodeType {
   Text,
 }
 
-struct NodeVisitor {
+struct NodeVisitor<'n> {
   /// Whether metadata keys are read, or skipped unread as a bare [`NodeKind`] ignores them.
   reads_metadata: bool,
   /// How many levels below the root the node sits.
   depth: usize,
+  /// The tree's element and attribute names read so far.
+  names: &'n Names,
 }
 
-impl<'de> Visitor<'de> for NodeVisitor {
+impl<'de> Visitor<'de> for NodeVisitor<'_> {
   type Value = (NodeMetadata, NodeKind);
 
   fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -177,19 +196,29 @@ impl<'de> Visitor<'de> for NodeVisitor {
         NodeField::Children if owns(NodeType::Container) => {
           children = map.next_value_seed(Children {
             depth: self.depth + 1,
+            names: self.names,
           })?;
         }
         NodeField::Text if owns(NodeType::Text) => text = Some(map.next_value()?),
         NodeField::Src if owns(NodeType::Image) => src = Some(map.next_value()?),
         NodeField::Width if owns(NodeType::Image) => width = map.next_value()?,
         NodeField::Height if owns(NodeType::Image) => height = map.next_value()?,
-        NodeField::TagName => metadata.tag_name = map.next_value()?,
+        NodeField::TagName => {
+          metadata.tag_name = map
+            .next_value::<Option<Box<str>>>()?
+            .map(|name| self.names.get(&name));
+        }
         NodeField::ClassName => metadata.class_name = map.next_value()?,
         NodeField::Id => metadata.id = map.next_value()?,
         NodeField::Attributes => {
           metadata.attributes = map
             .next_value::<Option<BTreeMap<Box<str>, Box<str>>>>()?
-            .map(|attributes| attributes.into_iter().collect());
+            .map(|attributes| {
+              attributes
+                .into_iter()
+                .map(|(name, value)| (self.names.get(&name), value))
+                .collect()
+            });
         }
         NodeField::Preset => metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new),
         NodeField::Style => metadata.style = map.next_value()?,

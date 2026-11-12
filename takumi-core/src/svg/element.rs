@@ -3,6 +3,7 @@
 use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use crate::{
+  layout::node::Name,
   path_data::PathData,
   style::{CssInput, PropertyId, Style, StyleDeclaration, SvgPath, Transforms},
 };
@@ -166,10 +167,7 @@ impl SvgElementKind {
 
   /// The declarations the element's presentation attributes stand for, as Blink's
   /// `SVGElement::CollectStyleForPresentationAttribute`.
-  pub(crate) fn presentation(
-    self,
-    attributes: &BTreeMap<Box<str>, Box<str>>,
-  ) -> Option<Box<Style>> {
+  pub(crate) fn presentation(self, attributes: &BTreeMap<Name, Box<str>>) -> Option<Box<Style>> {
     let mut style = Style::default();
 
     for (name, value) in attributes {
