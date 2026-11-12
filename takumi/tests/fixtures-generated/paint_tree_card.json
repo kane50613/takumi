@@ -490,7 +490,7 @@
           }
         }
       ],
-      "children": [1, 3, 5, 7],
+      "children": [1, 3, 6, 8],
       "type": "box",
       "contentBox": {
         "x": 24.0,
@@ -922,7 +922,7 @@
         "height": 34.0
       },
       "drawables": [],
-      "children": [4],
+      "children": [5, 4],
       "type": "box",
       "contentBox": {
         "x": 0.0,
@@ -934,6 +934,57 @@
     },
     {
       "id": 4,
+      "parent": 3,
+      "element": {
+        "className": "mark",
+        "path": [1, 3]
+      },
+      "transform": [1.0, 0.0, 0.0, 1.0, 217.57812, 76.0],
+      "width": 89.6875,
+      "height": 34.0,
+      "bounds": {
+        "x": 217.57812,
+        "y": 76.0,
+        "width": 89.6875,
+        "height": 34.0
+      },
+      "drawables": [
+        {
+          "type": "group",
+          "opacity": 0.5,
+          "drawables": [
+            {
+              "type": "fill",
+              "role": "inline-background",
+              "shape": {
+                "type": "rect",
+                "rect": {
+                  "x": 0.421875,
+                  "y": 0.0,
+                  "width": 89.0,
+                  "height": 34.0
+                }
+              },
+              "paint": {
+                "type": "color",
+                "color": [255, 255, 0, 255]
+              }
+            }
+          ]
+        }
+      ],
+      "children": [],
+      "type": "box",
+      "contentBox": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 89.6875,
+        "height": 34.0
+      },
+      "outline": []
+    },
+    {
+      "id": 5,
       "parent": 3,
       "element": {
         "id": "paragraph",
@@ -950,29 +1001,6 @@
         "height": 34.0
       },
       "drawables": [
-        {
-          "type": "group",
-          "opacity": 0.5,
-          "drawables": [
-            {
-              "type": "fill",
-              "role": "inline-background",
-              "shape": {
-                "type": "rect",
-                "rect": {
-                  "x": 194.0,
-                  "y": 0.0,
-                  "width": 89.0,
-                  "height": 34.0
-                }
-              },
-              "paint": {
-                "type": "color",
-                "color": [255, 255, 0, 255]
-              }
-            }
-          ]
-        },
         {
           "type": "glyphs",
           "role": "text",
@@ -1237,7 +1265,7 @@
       ]
     },
     {
-      "id": 5,
+      "id": 6,
       "parent": 0,
       "element": {
         "className": "pic",
@@ -1253,7 +1281,7 @@
         "height": 80.0
       },
       "drawables": [],
-      "children": [6],
+      "children": [7],
       "type": "box",
       "contentBox": {
         "x": 0.0,
@@ -1264,8 +1292,8 @@
       "outline": []
     },
     {
-      "id": 6,
-      "parent": 5,
+      "id": 7,
+      "parent": 6,
       "element": {
         "className": "pic",
         "path": [2]
@@ -1333,7 +1361,7 @@
       }
     },
     {
-      "id": 7,
+      "id": 8,
       "parent": 0,
       "element": {
         "className": "glass",
@@ -1422,16 +1450,21 @@
     },
     {
       "type": "draw",
-      "node": 6,
+      "node": 5,
+      "part": "drawables"
+    },
+    {
+      "type": "draw",
+      "node": 7,
       "part": "drawables"
     },
     {
       "type": "begin-group",
-      "node": 7
+      "node": 8
     },
     {
       "type": "end-group",
-      "node": 7
+      "node": 8
     },
     {
       "type": "end-clip",

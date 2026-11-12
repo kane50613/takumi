@@ -28,6 +28,8 @@ pub struct InlineBackgroundFragment<'c> {
   pub height: f32,
   /// The border, without the sides a line wraps at, its radii clamped to the fragment.
   pub border: BorderProperties,
+  /// The padding, without the sides a line wraps at.
+  pub padding: Rect<f32>,
   /// Fill color.
   pub color: Color,
   /// The span's `opacity`.
@@ -161,6 +163,13 @@ fn resolve_fragment<'c>(
     return;
   }
 
+  let side = |has: bool, width: f32| if has { width } else { 0.0 };
+  let padding = Rect {
+    left: side(has_left, decoration.padding.left),
+    right: side(has_right, decoration.padding.right),
+    ..decoration.padding
+  };
+
   let style = &decoration.owner.context.style;
   let has_images = style
     .background_data
@@ -171,12 +180,6 @@ fn resolve_fragment<'c>(
     || has_images
     || style.background_data.background_clip == BackgroundClip::Text)
     .then(|| {
-      let side = |has: bool, width: f32| if has { width } else { 0.0 };
-      let padding = Rect {
-        left: side(has_left, decoration.padding.left),
-        right: side(has_right, decoration.padding.right),
-        ..decoration.padding
-      };
       let fragment = ComputedLayout::new(
         Point { x, y },
         Size { width, height },
@@ -217,6 +220,7 @@ fn resolve_fragment<'c>(
       width,
       height,
       border,
+      padding,
       color: decoration.color,
       opacity: decoration.opacity,
       baseline,
