@@ -194,9 +194,6 @@ pub enum ProcessedInlineSpan<'c> {
     link: Option<Arc<str>>,
     /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
-    /// The `opacity` of an inline text node styled itself, which opens no span to group it, so
-    /// each of its runs composites at it alone.
-    opacity: f32,
     /// Source order of the element the text belongs to, absent for text of the formatting
     /// context itself or of generated content.
     element: Option<usize>,
@@ -242,7 +239,8 @@ pub(crate) struct InlineDecoration<'c> {
   /// The corner radii as specified, since a percentage resolves against each fragment.
   pub(crate) radius: Sides<SpacePair<Length>>,
   pub(crate) outline: Option<InlineOutline>,
-  pub(crate) opacity: f32,
+  /// Whether the span paints as a layer of its own; see [`ComputedStyle::paints_inline_layer`].
+  pub(crate) layer: bool,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
   /// The span's sizing, which each fragment resolves its radii against.
@@ -250,11 +248,6 @@ pub(crate) struct InlineDecoration<'c> {
 }
 
 impl InlineDecoration<'_> {
-  /// Whether the span composites what it holds as one group, as an `opacity` below 1 makes it.
-  pub(crate) fn composites(&self) -> bool {
-    self.opacity < 1.0
-  }
-
   /// How far the span's fragments and outline reach past its glyph boxes.
   pub(crate) fn reach(&self) -> f32 {
     if !self.paints {
@@ -287,18 +280,13 @@ impl<'c> DecorationLink<'c> {
     successors(Some(self), |link| link.parent.as_deref())
   }
 
-  /// The id of the innermost span around this one, itself included, that composites what it
-  /// holds as one group.
-  pub(crate) fn group(&self) -> Option<usize> {
+  /// The id of the innermost span around this one, itself included, that paints as a layer of
+  /// its own, which paints what this span holds.
+  pub(crate) fn layer(&self) -> Option<usize> {
     self
       .ancestors()
-      .find(|link| link.decoration.composites())
+      .find(|link| link.decoration.layer)
       .map(|link| link.decoration.id)
-  }
-
-  /// The group this span's own group sits in.
-  pub(crate) fn outer_group(&self) -> Option<usize> {
-    self.parent.as_deref().and_then(Self::group)
   }
 }
 
@@ -352,7 +340,7 @@ fn inline_span_decoration(
       style.surround_data.border_bottom_left_radius,
     ]),
     outline,
-    opacity: style.svg_data.opacity.0,
+    layer: style.paints_inline_layer(),
     direction: style.inherited_data.direction,
     sizing: node.context.sizing.clone(),
   })
@@ -475,20 +463,14 @@ impl<'c> InlineSpans<'c> {
               index
             }
             _ => {
-              let style = &node.context.style;
-
               spans.push(ProcessedInlineSpan::Text {
                 text: items_data.text_content[range.clone()].to_owned(),
                 byte_range: range,
-                style: Box::new(SizedFontStyle::from_style(style, &node.context)),
+                style: Box::new(SizedFontStyle::from_style(
+                  &node.context.style,
+                  &node.context,
+                )),
                 link: link_of(node).or(link),
-                opacity: if style.base_data.display == Display::Inline
-                  && !node_decorations.contains_key(&node.context.box_id())
-                {
-                  style.svg_data.opacity.0
-                } else {
-                  1.0
-                },
                 decorations: chain,
                 element: node
                   .source_order()

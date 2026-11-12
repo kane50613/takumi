@@ -5,7 +5,9 @@ use std::{ops::Range, rc::Rc};
 
 use rustc_hash::FxHashMap;
 
-use super::{BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, RunPlacement};
+use super::{
+  BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, InlineLayerRect, RunPlacement,
+};
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
@@ -97,6 +99,7 @@ impl FragmentItems {
       inline_boxes: Vec::new(),
       outline_rects: Vec::new(),
       backgrounds: Vec::new(),
+      layers: Vec::new(),
     };
     let mut ink = Ink::default();
     let mut first_baseline = None;
@@ -282,6 +285,8 @@ impl FragmentItems {
       atomic_inline,
     );
     let span_fragments = line_span_fragments(lines, spans, content);
+
+    items.layers = InlineLayerRect::of(&span_fragments);
 
     let (backgrounds, outline_rects) = resolve_span_fragments(&span_fragments);
 
@@ -772,6 +777,35 @@ impl FragmentItems {
       Size::new(inline_box.width, inline_box.height),
     );
     self.inline_boxes.push(inline_box);
+  }
+}
+
+impl InlineLayerRect {
+  /// The layers among the spans of `fragments`, which come grouped by span.
+  fn of(fragments: &[(Rc<DecorationLink<'_>>, SpanFragment)]) -> Vec<Self> {
+    fragments
+      .chunk_by(|(_, a), (_, b)| a.id == b.id)
+      .filter(|span| span[0].0.decoration.layer)
+      .filter_map(|span| {
+        let mut extent = None;
+
+        for (_, fragment) in span {
+          InkBox::include(
+            &mut extent,
+            Point::new(fragment.x, fragment.y),
+            Size::new(fragment.width, fragment.height),
+          );
+        }
+
+        let (origin, size) = extent?.rect();
+
+        Some(Self {
+          span: span[0].1.id,
+          origin,
+          size,
+        })
+      })
+      .collect()
   }
 }
 

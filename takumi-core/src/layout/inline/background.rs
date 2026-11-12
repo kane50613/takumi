@@ -139,7 +139,7 @@ fn resolve_fragment<'c>(
       height,
       radius: fitted_radii(radii, width, height),
       outline,
-      opacity: decoration.opacity,
+      layer: link.layer(),
     });
   }
 

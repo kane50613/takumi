@@ -5,8 +5,7 @@
 use std::rc::Rc;
 
 use super::{
-  BoxBorderPainter, BoxFrame, FillShape, OpacityLayer, PaintDevice, PaintRole, SnappedBox,
-  StrokeStyle,
+  BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole, SnappedBox, StrokeStyle,
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
@@ -22,7 +21,6 @@ use crate::{
     tree::RenderNode,
   },
   shadow::SizedShadow,
-  sort_key::sort_by_key,
   style::{Affine, BackgroundClip, Color, SpacePair},
 };
 
@@ -109,8 +107,6 @@ struct PaintedRun<'r> {
   chain: Option<&'r DecorationLink<'r>>,
   /// The run's baseline in the block's border box.
   baseline: f32,
-  /// The opacity it composites at alone, outside any group.
-  opacity: f32,
 }
 
 /// A pass over a line's runs, and which of their pieces it draws.
@@ -231,28 +227,29 @@ impl InlineRunLayout<'_> {
         .collect(),
     }
   }
-
-  /// Paints every line of the block at `frame`; see [`InlineLines::paint`].
-  pub fn paint(
-    &self,
-    spans: &[ProcessedInlineSpan<'_>],
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    device: &mut dyn GlyphDevice,
-  ) {
-    self
-      .lines(frame.layout, |_| true)
-      .paint(spans, style, frame, device);
-  }
 }
 
 impl InlineLines<'_> {
-  /// Paints the text of the block at `frame`: each group's span backgrounds, then its shadows
-  /// before any of its glyphs, as css-text-decor-3 asks, then the groups inside it, then the
-  /// outlines.
-  ///
-  /// Approximate: an outline paints after every group, where Blink paints a translucent span's
-  /// outline inside its group.
+  /// The items the layer of the span `layer` among `spans` paints, or the block itself for
+  /// `None`: those whose innermost span painting as a layer of its own is that one.
+  pub fn in_layer(mut self, spans: &[ProcessedInlineSpan<'_>], layer: Option<usize>) -> Self {
+    self
+      .runs
+      .retain(|run| run.span_chain(spans).and_then(DecorationLink::layer) == layer);
+    self
+      .background_fragments
+      .retain(|fragment| fragment.link.layer() == layer);
+    self.outline_rects.retain(|rect| rect.layer == layer);
+    self
+  }
+
+  /// The runs on these lines, in visual order.
+  pub fn runs(&self) -> &[&PositionedInlineRun] {
+    &self.runs
+  }
+
+  /// Paints the text of the block at `frame`: span backgrounds, every shadow before any glyph, as
+  /// css-text-decor-3 asks, then outlines.
   pub fn paint(
     &self,
     spans: &[ProcessedInlineSpan<'_>],
@@ -260,56 +257,13 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let runs = self.painted_runs(spans, style, frame, device, |_, _| true);
+    let runs = self.painted_runs(spans, style, frame, device, None);
 
-    self.paint_group(None, &self.groups(spans), &runs, frame, device);
-    self.paint_outlines(frame, device);
-  }
-
-  /// Paints what `group` holds, then each group inside it composited at its span's opacity.
-  fn paint_group(
-    &self,
-    group: Option<usize>,
-    groups: &[&DecorationLink],
-    runs: &[PaintedRun],
-    frame: BoxFrame,
-    device: &mut dyn GlyphDevice,
-  ) {
-    for fragment in self.fragments_in(group) {
-      Self::paint_fragment(fragment, runs, frame, device);
+    for fragment in &self.background_fragments {
+      Self::paint_fragment(fragment, &runs, frame, device);
     }
 
-    let held: Vec<&PaintedRun> = runs.iter().filter(|run| run.group() == group).collect();
-
-    Self::paint_runs(&held, frame, device);
-
-    for inner in groups.iter().filter(|link| link.outer_group() == group) {
-      device.with_opacity(inner.decoration.opacity, None, |device| {
-        self.paint_group(Some(inner.decoration.id), groups, runs, frame, device);
-      });
-    }
-  }
-
-  /// The spans on these lines that composite as a group, as CSS Color 4 makes `opacity` apply to
-  /// an element and not to each of its boxes, outer ones first.
-  pub fn groups<'s>(&'s self, spans: &'s [ProcessedInlineSpan<'_>]) -> Vec<&'s DecorationLink<'s>> {
-    let mut groups: Vec<&DecorationLink> = self
-      .runs
-      .iter()
-      .filter_map(|run| run.span_chain(spans))
-      .chain(
-        self
-          .background_fragments
-          .iter()
-          .map(|fragment| &*fragment.link),
-      )
-      .flat_map(DecorationLink::ancestors)
-      .filter(|link| link.decoration.composites())
-      .collect();
-
-    sort_by_key(&mut groups, |link| link.decoration.id);
-    groups.dedup_by_key(|link| link.decoration.id);
-    groups
+    Self::paint_runs(&self.outline_rects, &runs, frame, device);
   }
 
   /// The span fragments that paint a background or a border, in paint order.
@@ -317,19 +271,8 @@ impl InlineLines<'_> {
     &self.background_fragments
   }
 
-  /// The span fragments painting a background or a border in `group` itself, in paint order.
-  pub fn fragments_in(
-    &self,
-    group: Option<usize>,
-  ) -> impl Iterator<Item = &InlineBackgroundFragment<'_>> {
-    self
-      .background_fragments
-      .iter()
-      .copied()
-      .filter(move |fragment| fragment.link.group() == group)
-  }
-
-  /// Paints one span's background and border on `fragment`.
+  /// Paints one span's background and border on `fragment`, which [`Self::background_fragments`]
+  /// lists.
   pub fn paint_background(
     &self,
     fragment: &InlineBackgroundFragment,
@@ -344,9 +287,7 @@ impl InlineLines<'_> {
       .background
       .is_some_and(|background| background.clips_text())
     {
-      self.painted_runs(spans, style, frame, device, |chain, baseline| {
-        PaintedRun::lies_within(chain, baseline, fragment)
-      })
+      self.painted_runs(spans, style, frame, device, Some(fragment))
     } else {
       Vec::new()
     };
@@ -377,37 +318,27 @@ impl InlineLines<'_> {
     );
   }
 
-  /// Paints the text `group` itself holds in the block at `frame`, shadows then glyphs.
-  pub fn paint_text(
+  /// Paints the text of the block at `frame`, shadows then glyphs, and its outlines, without the
+  /// span backgrounds.
+  pub fn paint_glyphs(
     &self,
-    group: Option<usize>,
     spans: &[ProcessedInlineSpan<'_>],
     style: &SizedFontStyle,
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let runs = self.painted_runs(spans, style, frame, device, |chain, _| {
-      chain.and_then(DecorationLink::group) == group
-    });
-    let held: Vec<&PaintedRun> = runs.iter().collect();
+    let runs = self.painted_runs(spans, style, frame, device, None);
 
-    Self::paint_runs(&held, frame, device);
+    Self::paint_runs(&self.outline_rects, &runs, frame, device);
   }
 
-  /// Paints the outline islands of the spans on these lines in the block at `frame`.
-  pub fn paint_outlines(&self, frame: BoxFrame, device: &mut dyn GlyphDevice) {
-    for island in OutlineIsland::of(&self.outline_rects) {
-      island.paint(frame.origin, device);
-    }
-  }
-
-  /// Whether any span on these lines draws an outline.
-  pub fn has_outlines(&self) -> bool {
-    !self.outline_rects.is_empty()
-  }
-
-  /// Paints `runs`' shadows, then their glyphs.
-  fn paint_runs(runs: &[&PaintedRun], frame: BoxFrame, device: &mut dyn GlyphDevice) {
+  /// Paints `runs`' shadows, then their glyphs, then the outline islands of `outline_rects`.
+  fn paint_runs(
+    outline_rects: &[InlineOutlineRect],
+    runs: &[PaintedRun],
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
     // Neighbouring runs that cast the same shadows at the same `text-fit` scale share each shadow
     // pass, so the passes stay as few as the element's distinct `text-shadow` lists.
     for batch in runs.chunk_by(|left, right| {
@@ -451,6 +382,10 @@ impl InlineLines<'_> {
     for painted in runs {
       painted.paint(GlyphFill::Text, frame, RunPass::Proper, device);
     }
+
+    for island in OutlineIsland::of(outline_rects) {
+      island.paint(frame.origin, device);
+    }
   }
 }
 
@@ -464,21 +399,21 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    for painted in self.painted_runs(spans, style, frame, device, |_, _| true) {
+    for painted in self.painted_runs(spans, style, frame, device, None) {
       painted.paint_mask(frame, device);
     }
   }
 
-  /// The runs that paint, `visibility: hidden` ones left out, each in its span's style or `style`:
-  /// only those `keep` accepts by the spans around them and their baseline, left out before their
-  /// decorations are built.
+  /// The runs that paint, `visibility: hidden` ones left out, each in its span's style or `style`.
+  /// With `within`, only the runs that lie in that fragment, left out before their decorations are
+  /// built.
   fn painted_runs<'r>(
     &'r self,
     spans: &'r [ProcessedInlineSpan<'_>],
     style: &'r SizedFontStyle,
     frame: BoxFrame,
     device: &dyn GlyphDevice,
-    keep: impl Fn(Option<&DecorationLink>, f32) -> bool,
+    within: Option<&InlineBackgroundFragment>,
   ) -> Vec<PaintedRun<'r>> {
     let at = frame.translation();
     let device_transform = device.transform();
@@ -497,7 +432,7 @@ impl InlineLines<'_> {
         let chain = run.span_chain(spans);
         let baseline = run.glyph_offset(frame.layout).y + run.glyph_run.baseline;
 
-        if !keep(chain, baseline) {
+        if within.is_some_and(|fragment| !PaintedRun::lies_within(chain, baseline, fragment)) {
           return None;
         }
 
@@ -507,7 +442,6 @@ impl InlineLines<'_> {
           style,
           chain,
           baseline,
-          opacity: run.opacity(spans),
         })
       })
       .collect()
@@ -602,27 +536,9 @@ impl PositionedInlineRun {
       .text_chain()
       .map(Rc::as_ref)
   }
-
-  /// The opacity the run composites at alone, which only an inline text node styled itself sets.
-  fn opacity(&self, spans: &[ProcessedInlineSpan<'_>]) -> f32 {
-    self
-      .glyph_run
-      .brush
-      .source_span_id
-      .and_then(|id| match spans.get(id as usize)? {
-        ProcessedInlineSpan::Text { opacity, .. } => Some(*opacity),
-        ProcessedInlineSpan::Box(_) => None,
-      })
-      .unwrap_or(1.0)
-  }
 }
 
 impl PaintedRun<'_> {
-  /// The group the run paints in.
-  fn group(&self) -> Option<usize> {
-    self.chain.and_then(DecorationLink::group)
-  }
-
   /// Whether the run sits inside `fragment`: within its span, on its line.
   fn lies_in(&self, fragment: &InlineBackgroundFragment) -> bool {
     Self::lies_within(self.chain, self.baseline, fragment)
@@ -660,7 +576,6 @@ impl PaintedRun<'_> {
       run,
       decorations,
       style,
-      opacity,
       ..
     } = self;
     let shadow_pass = pass != RunPass::Proper;
@@ -670,40 +585,36 @@ impl PaintedRun<'_> {
     // decoration.
     if let Some(symbol_marker) = run.glyph_run.symbol_marker {
       if !shadow_pass {
-        device.with_opacity(*opacity, None, |device| {
-          device.set_role(PaintRole::Text);
-          symbol_marker.paint(run, run.glyph_run.brush.color, frame, device);
-        });
+        device.set_role(PaintRole::Text);
+        symbol_marker.paint(run, run.glyph_run.brush.color, frame, device);
       }
       return;
     }
 
-    device.with_opacity(*opacity, None, |device| {
-      if paints_decorations {
-        if !shadow_pass {
-          device.set_role(PaintRole::TextDecoration);
-        }
-        for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-          decoration.paint(device);
-        }
+    if paints_decorations {
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
       }
+      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
+        decoration.paint(device);
+      }
+    }
 
-      if pass.paints_glyphs() {
-        if !shadow_pass {
-          device.set_role(PaintRole::Text);
-        }
-        device.draw_glyph_run(run, style, fill, frame);
+    if pass.paints_glyphs() {
+      if !shadow_pass {
+        device.set_role(PaintRole::Text);
       }
+      device.draw_glyph_run(run, style, fill, frame);
+    }
 
-      if paints_decorations {
-        if !shadow_pass {
-          device.set_role(PaintRole::TextDecoration);
-        }
-        for decoration in decorations.iter().filter(|decoration| decoration.over) {
-          decoration.paint(device);
-        }
+    if paints_decorations {
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
       }
-    });
+      for decoration in decorations.iter().filter(|decoration| decoration.over) {
+        decoration.paint(device);
+      }
+    }
   }
 }
 

@@ -80,7 +80,10 @@ interface NodeBase {
   readonly drawables: readonly Drawable[];
 }
 
-/** A CSS box, one line's fragment of an inline element, or the group a translucent inline element composites its fragments and text in. */
+/**
+ * A CSS box, one line's fragment of an inline element, or an inline element painting as a layer
+ * of its own, which holds the fragments and text it paints.
+ */
 export interface BoxNode extends NodeBase {
   readonly type: "box";
   /** The box inset by border and padding, in local space. */
@@ -96,8 +99,8 @@ export interface BoxNode extends NodeBase {
 }
 
 /**
- * The laid-out text of one paragraph, or of the translucent inline element its parent groups. Its
- * local space is the border box of the block its lines fill.
+ * The laid-out text of one paragraph, or the part of it an inline element painting as a layer of
+ * its own paints. Its local space is the border box of the block its lines fill.
  */
 export interface TextNode extends NodeBase {
   readonly type: "text";

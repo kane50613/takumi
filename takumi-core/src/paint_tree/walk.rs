@@ -18,10 +18,7 @@ use crate::{
   geometry::{ComputedLayout, Point, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
-    inline::{
-      DecorationLink, InkBox, InlineBackgroundFragment, InlineBoxKind, PositionedInlineRun,
-      ProcessedInlineSpan,
-    },
+    inline::{InlineBackgroundFragment, InlineBoxKind, ProcessedInlineSpan},
     inline_box::{ReplacedInlineBox, resolve_inline_box},
     node::{ImageData, ImageSourceInput},
     tree::RenderNode,
@@ -35,19 +32,23 @@ use crate::{
   resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
-  style::{Affine, BackgroundImage, BlendMode, Display, Filter, Isolation, TextAlign, ToCss},
+  style::{Affine, BackgroundImage, Display, Filter, Isolation, TextAlign, ToCss},
 };
 use rustc_hash::FxHashMap;
 
-/// A block's inline text as the walker records it: the lines it paints, the groups its
-/// translucent spans make, and the baselines that number its lines.
+/// What one box paints of a block's inline text, as the walker records it: the block, the lines,
+/// where the block sits, and the baselines that number its lines.
 #[derive(Clone, Copy)]
 struct InlineText<'t> {
-  placed: Placed<'t>,
+  block: &'t RenderNode,
+  block_path: &'t [usize],
   painted: &'t PaintedInline<'t>,
   lines: &'t InlineLines<'t>,
-  groups: &'t [&'t DecorationLink<'t>],
   font_style: &'t SizedFontStyle<'t>,
+  /// Maps the block's border box onto the page.
+  transform: Affine,
+  /// The block, at its border box's origin.
+  frame: BoxFrame,
   baselines: &'t [f32],
 }
 
@@ -124,7 +125,7 @@ impl Walker {
   fn record_box(
     &mut self,
     node: &RenderNode,
-    layout: ComputedLayout,
+    (layout, inline_layer): (ComputedLayout, bool),
     transform: Affine,
     path: Vec<usize>,
     text_clip: Option<&TextClip>,
@@ -133,13 +134,15 @@ impl Walker {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
-    let drawables = if node.paints_own_box() {
+    // An inline layer's fragments paint its backgrounds, borders, and outline as its content.
+    let drawables = if node.paints_own_box() && !inline_layer {
       decorations(&painter, layout, transform, text_clip, table)?
     } else {
       Vec::new()
     };
     let outline = painter
       .pending_outline(Point::ZERO)
+      .filter(|_| !inline_layer)
       .map(|pending| {
         let mut recorder = Recorder::new(transform);
 
@@ -189,10 +192,10 @@ impl Walker {
     Ok(id)
   }
 
-  /// Records the text or image the node lays out.
-  fn own_content(&mut self, placed: Placed<'_>) -> Result<()> {
-    match OwnContent::of(placed.node) {
-      OwnContent::Inline(_) => self.inline(placed),
+  /// Records `content`, the text or image the node at `placed` paints.
+  fn own_content(&mut self, placed: Placed<'_>, content: OwnContent<'_>) -> Result<()> {
+    match content {
+      OwnContent::Inline(_) | OwnContent::InlineLayer(..) => self.inline(placed, content),
       OwnContent::Image(image) => {
         self.image(image, placed);
         Ok(())
@@ -294,8 +297,9 @@ impl Walker {
     self.draw(id);
   }
 
-  /// Records the node's inline content: its text, then its inline boxes.
-  fn inline(&mut self, placed: Placed<'_>) -> Result<()> {
+  /// Records the inline `content` the node at `placed` paints: its text, then the block's own
+  /// inline boxes.
+  fn inline(&mut self, placed: Placed<'_>, content: OwnContent<'_>) -> Result<()> {
     let Placed {
       node,
       layout,
@@ -303,14 +307,21 @@ impl Walker {
       path,
       ..
     } = placed;
-    let context = &node.context;
-    let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, layout) else {
+    let block = match content {
+      OwnContent::InlineLayer(block, layer) => (block, &path[..path.len() - layer.span_depth]),
+      _ => (node, path),
+    };
+    let font_style = content.font_style(&node.context);
+    let Some(painted) = content.lay_out_inline(&font_style, layout) else {
       return Ok(());
     };
     let painted = painted?;
 
-    self.text(placed, &painted, &font_style);
+    self.text(placed, block, &painted, &font_style);
+
+    if !matches!(content, OwnContent::Inline(_)) {
+      return Ok(());
+    }
 
     for inline_box in painted
       .runs
@@ -338,7 +349,7 @@ impl Walker {
       let placed = transform * Affine::translation(layout.location.x, layout.location.y) * local;
       let id = self.record_box(
         node,
-        layout,
+        (layout, false),
         placed,
         box_path.clone(),
         None,
@@ -367,13 +378,16 @@ impl Walker {
       if clip {
         self.steps.push(PaintStep::BeginClip { node: id });
       }
-      self.own_content(Placed {
-        node,
-        layout,
-        transform: placed,
-        path: &box_path,
-        parent: id,
-      })?;
+      self.own_content(
+        Placed {
+          node,
+          layout,
+          transform: placed,
+          path: &box_path,
+          parent: id,
+        },
+        OwnContent::of(node),
+      )?;
       if clip {
         self.steps.push(PaintStep::EndClip { node: id });
       }
@@ -390,11 +404,18 @@ impl Walker {
     Ok(())
   }
 
-  /// Records the node's inline text: the runs and span fragments `painted` lays out, painted in
-  /// the style `font_style`, the content of each translucent span in a group of its own.
-  fn text(&mut self, placed: Placed<'_>, painted: &PaintedInline<'_>, font_style: &SizedFontStyle) {
-    let lines = painted.runs.lines(placed.layout, |_| true);
-    let groups = lines.groups(&painted.spans);
+  /// Records the inline content `painted` the box at `placed` paints of the block `block` at
+  /// `block_path`: each span fragment with a background or border as a box, then the text, in the
+  /// style `font_style`.
+  fn text(
+    &mut self,
+    placed: Placed<'_>,
+    (block, block_path): (&RenderNode, &[usize]),
+    painted: &PaintedInline<'_>,
+    font_style: &SizedFontStyle,
+  ) {
+    let lines = painted.lines(|_| true);
+    let (transform, frame) = painted.block_placement(placed.transform);
     let mut baselines: Vec<f32> = painted
       .runs
       .runs
@@ -406,172 +427,26 @@ impl Walker {
     baselines.dedup_by(|a, b| (*a - *b).abs() < 0.01);
 
     let inline = InlineText {
-      placed,
+      block,
+      block_path,
       painted,
       lines: &lines,
-      groups: &groups,
       font_style,
+      transform,
+      frame,
       baselines: &baselines,
     };
-    let frame = BoxFrame::new(placed.layout, Point::ZERO);
+    let mut fragments = Vec::new();
 
-    self.inline_group(&inline, None, placed.parent, &mut Vec::new());
+    for &fragment in lines.background_fragments() {
+      let parent = enclosing_fragment(fragment, &fragments).unwrap_or(placed.parent);
 
-    // An outline paints over every group, so it takes a node of its own when any group drew.
-    if !groups.is_empty() && lines.has_outlines() {
-      self.text_node(&inline, placed.parent, &[], |recorder| {
-        lines.paint_outlines(frame, recorder);
-      });
-    }
-  }
-
-  /// Records what `group` holds under the box `parent`: its span fragments, its text, then each
-  /// group inside it as a box compositing at its span's opacity.
-  fn inline_group<'t>(
-    &mut self,
-    inline: &InlineText<'t>,
-    group: Option<usize>,
-    parent: usize,
-    fragments: &mut Vec<(&'t InlineBackgroundFragment<'t>, usize)>,
-  ) {
-    let InlineText {
-      placed,
-      painted,
-      lines,
-      groups,
-      font_style,
-      ..
-    } = *inline;
-    let frame = BoxFrame::new(placed.layout, Point::ZERO);
-
-    for fragment in lines.fragments_in(group) {
-      let parent = enclosing_fragment(fragment, fragments).unwrap_or(parent);
-
-      if let Some(id) = self.inline_fragment(inline, fragment, parent) {
+      if let Some(id) = self.inline_fragment(&inline, fragment, parent) {
         fragments.push((fragment, id));
       }
     }
 
-    let runs: Vec<&PositionedInlineRun> = painted
-      .runs
-      .runs
-      .iter()
-      .filter(|run| {
-        run
-          .span_chain(&painted.spans)
-          .and_then(DecorationLink::group)
-          == group
-      })
-      .collect();
-
-    self.text_node(inline, parent, &runs, |recorder| {
-      lines.paint_text(group, &painted.spans, font_style, frame, recorder);
-
-      if groups.is_empty() {
-        lines.paint_outlines(frame, recorder);
-      }
-    });
-
-    // A group at `opacity: 0` paints nothing, so it and what it holds take no node, as
-    // `PaintDocument::unpainted` promises.
-    for inner in groups
-      .iter()
-      .filter(|link| link.outer_group() == group && link.decoration.opacity > 0.0)
-    {
-      let Some(id) = self.inline_group_box(inline, inner, parent) else {
-        continue;
-      };
-
-      self.steps.push(PaintStep::BeginGroup { node: id });
-      self.inline_group(inline, Some(inner.decoration.id), id, fragments);
-      self.steps.push(PaintStep::EndGroup { node: id });
-    }
-  }
-
-  /// Records a box for the translucent span `group` under the box `parent`, around its fragments
-  /// and the ascent and descent of its text, compositing what it holds at the span's opacity.
-  fn inline_group_box(
-    &mut self,
-    inline: &InlineText<'_>,
-    group: &DecorationLink<'_>,
-    parent: usize,
-  ) -> Option<usize> {
-    let InlineText {
-      placed,
-      painted,
-      lines,
-      ..
-    } = *inline;
-    let layout = placed.layout;
-    let id = group.decoration.id;
-    let holds = |link: &DecorationLink| link.ancestors().any(|link| link.decoration.id == id);
-    let fragments = lines
-      .background_fragments()
-      .iter()
-      .filter(|fragment| holds(&fragment.link))
-      .map(|fragment| {
-        (
-          Point::new(fragment.x, fragment.y),
-          Size::new(fragment.width, fragment.height),
-        )
-      });
-    let runs = painted
-      .runs
-      .runs
-      .iter()
-      .filter(|run| run.span_chain(&painted.spans).is_some_and(holds))
-      .map(|run| {
-        let origin = run.origin(layout);
-        let metrics = run.glyph_run.metrics;
-
-        (
-          Point::new(origin.x, origin.y - metrics.ascent),
-          Size::new(run.glyph_run.advance, metrics.ascent + metrics.descent),
-        )
-      });
-    let mut extent = None;
-
-    for (origin, size) in fragments.chain(runs) {
-      InkBox::include(&mut extent, origin, size);
-    }
-
-    let (min, size) = extent?.rect();
-    let local = placed.transform * Affine::translation(min.x, min.y);
-    let (element, element_path) = span_element(placed, group.decoration.owner);
-    let node = self.nodes.len();
-
-    self.add(
-      PaintNode {
-        id: node,
-        parent: Some(parent),
-        element,
-        transform: local.to_cols_array(),
-        width: size.width,
-        height: size.height,
-        bounds: PaintRect::bounding(size.width, size.height, local),
-        drawables: Vec::new(),
-        children: Vec::new(),
-        kind: NodeKind::Box {
-          content_box: PaintRect::sized(Point::ZERO, size),
-          outline: Vec::new(),
-          effects: Some(Box::new(Effects {
-            opacity: group.decoration.opacity,
-            blend_mode: BlendMode::Normal.to_css_string(),
-            isolation: false,
-            filters: Vec::new(),
-            backdrop_filters: Vec::new(),
-            backdrop_clip: None,
-            clip: None,
-            mask: None,
-          })),
-          overflow_clip: None,
-        },
-      },
-      // The span's path orders the box among its siblings; its parent is already set.
-      element_path,
-    );
-
-    Some(node)
+    self.text_node(&inline, placed.parent);
   }
 
   /// Records an inline span's background and border on one line as a box node under the box
@@ -586,13 +461,16 @@ impl Walker {
     parent: usize,
   ) -> Option<usize> {
     let InlineText {
-      placed,
+      block,
+      block_path,
       painted,
       lines,
       font_style,
+      transform,
+      frame,
       ..
     } = *inline;
-    let local = placed.transform * Affine::translation(fragment.x, fragment.y);
+    let local = transform * Affine::translation(fragment.x, fragment.y);
     let mut recorder = Recorder::new(local);
 
     // The fragment draws at the block's origin, so shift the frame to put it at its own.
@@ -600,7 +478,7 @@ impl Walker {
       fragment,
       &painted.spans,
       font_style,
-      BoxFrame::new(placed.layout, Point::new(-fragment.x, -fragment.y)),
+      BoxFrame::new(frame.layout, Point::new(-fragment.x, -fragment.y)),
       &mut recorder,
     );
 
@@ -610,7 +488,12 @@ impl Walker {
       return None;
     }
 
-    let (element, element_path) = span_element(placed, fragment.owner());
+    let element_path = block
+      .path_to(fragment.owner())
+      .map(|relative| [block_path, &relative].concat());
+    let element = element_path
+      .clone()
+      .and_then(|element_path| ElementInfo::of(fragment.owner(), element_path));
     let size = Size {
       width: fragment.width,
       height: fragment.height,
@@ -651,35 +534,27 @@ impl Walker {
     Some(id)
   }
 
-  /// Records a text node of the block's runs `runs` under the box `parent`, drawing what `paint`
-  /// draws, and draws it.
-  fn text_node(
-    &mut self,
-    inline: &InlineText<'_>,
-    parent: usize,
-    runs: &[&PositionedInlineRun],
-    paint: impl FnOnce(&mut Recorder),
-  ) {
+  /// Records a text node of the runs `inline` paints under the box `parent`, with the outlines,
+  /// and draws it.
+  fn text_node(&mut self, inline: &InlineText<'_>, parent: usize) {
     let InlineText {
-      placed,
+      block,
+      block_path,
       painted,
+      lines,
       font_style,
-      baselines,
-      ..
-    } = *inline;
-    let Placed {
-      node,
-      layout,
       transform,
-      path,
-      ..
-    } = placed;
+      frame,
+      baselines,
+    } = *inline;
+    let layout = frame.layout;
     let spans = &painted.spans;
     let text = painted.text();
-    let context = &node.context;
+    let context = &block.context;
+    let runs = lines.runs();
     let mut recorder = Recorder::text(transform, runs.iter().map(|run| run.index).collect());
 
-    paint(&mut recorder);
+    lines.paint_glyphs(spans, font_style, frame, &mut recorder);
 
     let drawables = recorder.finish();
 
@@ -697,7 +572,7 @@ impl Walker {
 
         TextRun {
           text: run.text(text, spans),
-          element: ElementInfo::authored(node, run.element(spans), path),
+          element: ElementInfo::authored(block, run.element(spans), block_path),
           x: origin.x,
           y: origin.y,
           width: shaped.advance,
@@ -909,7 +784,7 @@ impl StepWriter<'_, '_> {
           .walker
           .record_box(
             node,
-            layout,
+            (layout, paint.inline_layer.is_some()),
             paint.transform,
             [self.prefix, &paint.path].concat(),
             text_clip.as_ref(),
@@ -949,13 +824,16 @@ impl StepWriter<'_, '_> {
             return Ok(());
           };
 
-          walker.own_content(Placed {
-            node: render_node,
-            layout,
-            transform: chunk.node.transform,
-            path: &[self.prefix, &chunk.node.path].concat(),
-            parent: node,
-          })
+          walker.own_content(
+            Placed {
+              node: render_node,
+              layout,
+              transform: chunk.node.transform,
+              path: &[self.prefix, &chunk.node.path].concat(),
+              parent: node,
+            },
+            OwnContent::of_paint(&self.scene.root, render_node, chunk.node),
+          )
         });
 
         if let Err(error) = result {
@@ -1075,9 +953,7 @@ pub(super) fn recorded<'s>(
   let Some(node) = scene.root.node_at_path(&paint.path) else {
     return Ok(None);
   };
-  let layout = scene
-    .results
-    .fragment_layout(paint.node_id, paint.fragment_index)?;
+  let layout = paint.layout(scene.results.view())?;
 
   Ok(
     (!node.context.style.is_invisible() && paint.transform.is_invertible())
@@ -1394,24 +1270,8 @@ impl ElementInfo {
   }
 }
 
-/// The span `owner` inside the block `placed`, and its element path, which orders its nodes.
-fn span_element(
-  placed: Placed<'_>,
-  owner: &RenderNode,
-) -> (Option<ElementInfo>, Option<Vec<usize>>) {
-  let path = placed
-    .node
-    .path_to(owner)
-    .map(|relative| [placed.path, &relative].concat());
-
-  (
-    path.clone().and_then(|path| ElementInfo::of(owner, path)),
-    path,
-  )
-}
-
 /// The node of the fragment, among `fragments`, of the innermost span around `fragment` on its
-/// line, looking no further out than the group `fragment` paints in.
+/// line, looking no further out than the inline layer `fragment` paints in.
 fn enclosing_fragment(
   fragment: &InlineBackgroundFragment<'_>,
   fragments: &[(&InlineBackgroundFragment<'_>, usize)],
@@ -1426,7 +1286,7 @@ fn enclosing_fragment(
       return Some(id);
     }
 
-    if link.decoration.composites() {
+    if link.decoration.layer {
       return None;
     }
   }

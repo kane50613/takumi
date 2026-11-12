@@ -683,25 +683,12 @@ impl RenderNode {
 
   /// Whether this is a DOM text node, without a box of its own: Blink's `LayoutText` alone.
   fn is_dom_text(&self) -> bool {
-    self.node.as_ref().is_some_and(|node| {
-      let metadata = &node.metadata;
-
-      // A `<br>` is Blink's `LayoutBR`, a text, whatever styles it.
-      if node.is_br() {
-        return true;
-      }
-
-      matches!(node.kind, NodeKind::Text(_))
-        && metadata.tag_name.is_none()
-        && metadata.class_name.is_none()
-        && metadata.id.is_none()
-        && metadata.attributes.is_none()
-        && metadata.preset.is_none()
-        && metadata.style.is_none()
-        && metadata.tw.is_none()
-        && metadata.dir.is_none()
-        && metadata.lang.is_none()
-    })
+    // A `<br>` is Blink's `LayoutBR`, a text, whatever styles it. Generated text has no node,
+    // and opens a box of its own for the style it carries.
+    self
+      .node
+      .as_ref()
+      .is_some_and(|node| node.is_br() || self.is_text_run)
   }
 
   /// Blink's `IsAtomicInline`.

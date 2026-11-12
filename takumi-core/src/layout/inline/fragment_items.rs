@@ -64,6 +64,17 @@ pub struct FragmentItems {
   inline_boxes: Vec<VisualInlineBox>,
   outline_rects: Vec<InlineOutlineRect>,
   backgrounds: Vec<BackgroundItem>,
+  layers: Vec<InlineLayerRect>,
+}
+
+/// A span painting as a layer of its own: the border boxes of its fragments on these lines,
+/// united, in border-box space.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct InlineLayerRect {
+  /// The span's decoration id.
+  pub(crate) span: usize,
+  pub(crate) origin: Point<f32>,
+  pub(crate) size: Size<f32>,
 }
 
 /// An [`InlineBackgroundFragment`] naming its span by decoration id instead of holding its node.
@@ -403,6 +414,7 @@ impl FragmentItems {
     self.inline_boxes.shrink_to_fit();
     self.outline_rects.shrink_to_fit();
     self.backgrounds.shrink_to_fit();
+    self.layers.shrink_to_fit();
   }
 
   /// Adds `run` as a text item, first passing it to `ink` with its face's glyphs resolved.
@@ -491,6 +503,11 @@ impl FragmentItems {
   /// The in-flow and out-of-flow inline boxes, sorted by id.
   pub fn inline_boxes(&self) -> &[VisualInlineBox] {
     &self.inline_boxes
+  }
+
+  /// The spans on these lines painting as layers of their own, in the order they open.
+  pub(crate) fn inline_layers(&self) -> &[InlineLayerRect] {
+    &self.layers
   }
 
   /// Each run's text, link, and box, and each inline box's border box, all in the content box of

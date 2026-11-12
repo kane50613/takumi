@@ -716,31 +716,27 @@ fn a_span_inside_another_records_its_fragment_and_group_inside_the_outer_ones() 
 }
 
 #[test]
-fn an_inline_outline_paints_after_the_groups_of_its_block() {
+fn a_translucent_spans_outline_paints_inside_its_group() {
   let document = build_with(
     Node::container([
-      Node::container([Node::text("a")]).with_class_name("ring"),
-      Node::text(" "),
+      Node::text("a "),
       Node::container([Node::text("b")]).with_class_name("fade"),
     ])
     .with_tag_name("p"),
     "p { font-size: 16px; margin: 0 } \
-     .ring { outline: 2px solid red } \
-     .fade { opacity: 0.5 }",
+     .fade { opacity: 0.5; outline: 2px solid red }",
   );
   let group = document
     .nodes
     .iter()
     .find(|node| has_class(node, "fade"))
     .expect("the translucent span's group");
-  let outlines = document
-    .nodes
+  let outlined = group
+    .children
     .iter()
-    .find(|node| {
-      matches!(&node.kind, NodeKind::Text { runs, .. } if runs.is_empty())
-        && roles(node).contains(&Role::Outline)
-    })
-    .expect("the outlines' own node");
+    .map(|&child| &document.nodes[child])
+    .find(|node| roles(node).contains(&Role::Outline))
+    .expect("the group's text, with the outline");
   let position = |wanted: &PaintStep| {
     document
       .steps
@@ -748,12 +744,53 @@ fn an_inline_outline_paints_after_the_groups_of_its_block() {
       .position(|step| step == wanted)
       .expect("a step")
   };
+  let drawn = position(&PaintStep::Draw {
+    node: outlined.id,
+    part: DrawPart::Drawables,
+  });
 
-  assert!(
-    position(&PaintStep::EndGroup { node: group.id })
-      < position(&PaintStep::Draw {
-        node: outlines.id,
-        part: DrawPart::Drawables,
-      })
+  assert!(position(&PaintStep::BeginGroup { node: group.id }) < drawn);
+  assert!(drawn < position(&PaintStep::EndGroup { node: group.id }));
+}
+
+#[test]
+fn an_inline_block_inside_a_translucent_span_paints_in_its_group() {
+  let document = build_with(
+    Node::container([
+      Node::text("a "),
+      Node::container([
+        Node::text("b "),
+        Node::container([]).with_class_name("chip"),
+      ])
+      .with_class_name("fade"),
+    ])
+    .with_tag_name("p"),
+    "p { font-size: 16px; margin: 0 } \
+     .fade { opacity: 0.5 } \
+     .chip { display: inline-block; width: 20px; height: 10px; background: green }",
   );
+  let group = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "fade"))
+    .expect("the translucent span's group");
+  let chip = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "chip"))
+    .expect("the inline-block's box");
+  let position = |wanted: &PaintStep| {
+    document
+      .steps
+      .iter()
+      .position(|step| step == wanted)
+      .expect("a step")
+  };
+  let drawn = position(&PaintStep::Draw {
+    node: chip.id,
+    part: DrawPart::Drawables,
+  });
+
+  assert!(position(&PaintStep::BeginGroup { node: group.id }) < drawn);
+  assert!(drawn < position(&PaintStep::EndGroup { node: group.id }));
 }
