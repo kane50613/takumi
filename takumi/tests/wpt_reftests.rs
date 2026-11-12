@@ -474,8 +474,12 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
       let stem = path.file_stem().unwrap_or_default().to_string_lossy();
       let is_reference =
         stem.ends_with("-ref") || stem.ends_with("-notref") || stem.contains("-ref-");
+      // WPT's manifest takes a `-manual` or `-visual` name for its own test type before a reftest.
+      let is_other_type = stem
+        .rsplit_once('-')
+        .is_some_and(|(_, flag)| flag == "manual" || flag == "visual");
 
-      if is_document && !is_reference {
+      if is_document && !is_reference && !is_other_type {
         documents.push(path);
       }
     }
@@ -629,6 +633,13 @@ fn positioned_tags(source: &str, name: &str) -> Vec<(usize, HashMap<String, Stri
     };
 
     from = end;
+
+    if lower[..start]
+      .rfind("<!--")
+      .is_some_and(|comment| !lower[comment..start].contains("-->"))
+    {
+      continue;
+    }
 
     if !source[after..]
       .chars()
@@ -931,6 +942,7 @@ impl Runner {
 
   /// Where `href`, as written in the document at `from`, points.
   fn resolve(&self, from: &Path, href: &str) -> PathBuf {
+    let href = href.trim_ascii();
     let href = href.split(['?', '#']).next().unwrap_or(href);
 
     match href.strip_prefix('/') {
