@@ -81,7 +81,9 @@
 /// that breadth is intentional for a prelude.
 pub mod prelude {
   #[cfg(feature = "from-html")]
-  pub use takumi_core::html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
+  pub use takumi_core::html::{
+    FromHtml, FromHtmlOptions, HtmlError, ParsedHtml, StylePresets, StyleSheetLink,
+  };
   #[cfg(feature = "from-html")]
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
@@ -106,7 +108,7 @@ pub mod prelude {
 }
 
 #[cfg(feature = "from-html")]
-pub use takumi_core::html::from_html;
+pub use takumi_core::html::{from_html, parse_html};
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
   measure, needs, render, render_animation, write_animated_gif, write_animated_png,
