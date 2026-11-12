@@ -1,5 +1,5 @@
 import { loadBackend } from "#backend";
-import { applyGlyphCacheMaxBytes } from "../glyph-cache";
+import { managedCacheOptions } from "../cache";
 import { initWasm } from "./wasm-init";
 import type { Backend, BackendModule, LoadBackend } from "./types";
 
@@ -20,12 +20,10 @@ export class RendererProvider {
       throw error;
     });
     const backend = await this.backend;
-    return (this.renderer ??= new backend.Renderer());
+    return (this.renderer ??= new backend.Renderer({ cache: managedCacheOptions() }));
   }
 }
 
-export const defaultRenderer: RendererProvider = new RendererProvider(async (module) => {
-  const backend = await (module === undefined ? loadBackend() : initWasm(module));
-  applyGlyphCacheMaxBytes(backend);
-  return backend;
-});
+export const defaultRenderer: RendererProvider = new RendererProvider((module) =>
+  module === undefined ? loadBackend() : initWasm(module),
+);

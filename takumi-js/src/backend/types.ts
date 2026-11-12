@@ -1,7 +1,7 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 
-type RendererBindings = "Renderer" | "setGlyphCacheMaxBytes";
+type RendererBindings = "Renderer";
 
 /** The bindings a renderer needs, from whichever backend the import conditions selected. */
 export type Backend = Pick<typeof napi, RendererBindings> | Pick<typeof wasm, RendererBindings>;
