@@ -22,7 +22,10 @@ pub(crate) struct InputArgs {
   /// The HTML file to render, or `-` to read it from standard input.
   input: PathBuf,
 
-  /// A font file to register. Repeat it for more fonts.
+  /// A font file to register, such as a `.ttf`, `.ttc`, or `.woff2`, which CSS names by the
+  /// family name inside the file. Fonts installed on the system are not read. Without this
+  /// flag or an `@font-face` rule, text draws in the built-in Geist, which covers Latin. Repeat
+  /// it for more fonts.
   #[arg(long = "font", value_name = "FILE")]
   fonts: Vec<PathBuf>,
 
