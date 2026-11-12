@@ -49,7 +49,9 @@ impl Document {
     location: &Url,
     loader: &mut StyleSheetLoader<'_>,
   ) -> Result<Self, Box<dyn Error>> {
-    Self::parse(html, location, FromHtmlOptions::default(), None, loader)
+    let options = FromHtmlOptions::builder().fragment(true).build();
+
+    Self::parse(html, location, options, None, loader)
   }
 
   /// Parses `html` with `options`, then loads the style sheets it links and imports.
