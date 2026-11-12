@@ -1,5 +1,7 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
+#[cfg(all(feature = "svg", feature = "images"))]
+use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
 
 use rustc_hash::FxHashMap;
@@ -44,8 +46,6 @@ use takumi_core::{
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
-#[cfg(all(feature = "svg", feature = "images"))]
-use crate::svg::SvgPainter;
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
@@ -75,6 +75,8 @@ use crate::{
   tree::draws,
   window::{LineFrame, Window},
 };
+#[cfg(all(feature = "svg", feature = "images"))]
+use crate::{krilla::graphic::Graphic, svg::SvgPainter};
 #[cfg(all(feature = "svg", feature = "images"))]
 use takumi_core::resources::image::SvgPicture;
 #[cfg(feature = "images")]
@@ -120,6 +122,18 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) lang: Option<&'a str>,
   #[cfg(feature = "images")]
   images: RasterizedImages,
+  /// How the document has drawn each SVG picture so far, by its key.
+  #[cfg(all(feature = "svg", feature = "images"))]
+  pictures: RefCell<FxHashMap<u64, PictureDraws>>,
+}
+
+/// How a document has drawn one SVG picture.
+#[cfg(all(feature = "svg", feature = "images"))]
+enum PictureDraws {
+  /// Drawn once, in place, so a picture the document shows once costs no form XObject.
+  Once,
+  /// Drawn more than once, each time by invoking this form XObject.
+  Shared(Graphic),
 }
 
 impl<'a> DocumentState<'a> {
@@ -134,6 +148,8 @@ impl<'a> DocumentState<'a> {
       lang,
       #[cfg(feature = "images")]
       images: RasterizedImages::default(),
+      #[cfg(all(feature = "svg", feature = "images"))]
+      pictures: RefCell::default(),
     }
   }
 
@@ -1008,7 +1024,34 @@ impl Emitter<'_> {
       at.x,
       at.y,
     ));
-    self.paint_picture(&picture, viewport, surface);
+
+    // A color filter repaints the picture, so only an unfiltered one is shared.
+    match picture.key().filter(|_| self.color_filter.is_none()) {
+      Some(key) => match self.document.pictures.borrow_mut().entry(key) {
+        Entry::Vacant(entry) => {
+          entry.insert(PictureDraws::Once);
+          self.paint_picture(&picture, viewport, surface);
+        }
+        Entry::Occupied(mut entry) => {
+          let graphic = match entry.get() {
+            PictureDraws::Shared(graphic) => graphic.clone(),
+            PictureDraws::Once => {
+              let stream = draw_stream(surface, |content| {
+                self.paint_picture(&picture, viewport, content);
+              });
+              let graphic = Graphic::new(stream, false);
+
+              entry.insert(PictureDraws::Shared(graphic.clone()));
+              graphic
+            }
+          };
+
+          surface.draw_graphic(graphic);
+        }
+      },
+      None => self.paint_picture(&picture, viewport, surface),
+    }
+
     surface.pop();
   }
 
