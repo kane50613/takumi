@@ -625,6 +625,25 @@ pub enum PaintStep {
   },
 }
 
+/// Why painting skips an element and everything under it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnpaintedReason {
+  /// Its `opacity` is `0`.
+  OpacityZero,
+  /// Its `display` is `none`.
+  DisplayNone,
+}
+
+/// An element in the input that painting skips, with everything under it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Unpainted {
+  /// The element skipped.
+  pub element: ElementInfo,
+  /// Why it is skipped.
+  pub reason: UnpaintedReason,
+}
+
 /// A painted document.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PaintDocument {
@@ -638,4 +657,7 @@ pub struct PaintDocument {
   pub fonts: Vec<PaintFont>,
   /// The steps a renderer takes, in paint order.
   pub steps: Vec<PaintStep>,
+  /// The elements painting skips, in document order, none of which has a node.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub unpainted: Vec<Unpainted>,
 }

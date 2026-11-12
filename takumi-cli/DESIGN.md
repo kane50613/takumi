@@ -9,6 +9,7 @@ Each product is one subcommand named by the noun it writes, and rendering is imp
 ```sh
 takumi image <input> -o card.png
 takumi pdf <input> -o invoice.pdf
+takumi paint <input> -o -
 ```
 
 A product gets its own subcommand when its options differ from every other product's, so no flag is accepted and then ignored. `takumi animation` will follow the same shape. An action other than rendering becomes a top-level verb, never a third word under a product: `takumi upgrade` reinstalls takumi, and measuring would be `takumi measure`. There is one word per action, so no `update` beside `upgrade`. An action that reaches the network or changes the install runs only when asked, and takes `-n`/`--dry-run` to print what it would do. Subcommands are never matched by prefix, so adding one cannot change what an existing abbreviation means.
@@ -16,8 +17,8 @@ A product gets its own subcommand when its options differ from every other produ
 ## Arguments and flags
 
 - The input is the one positional argument. Everything else is a flag, and every flag has a long form. Only `-o`, `-q`, `-h`, and `-V` have short ones.
-- `-` means standard input for the input and standard output for `-o`. Writing to standard output needs `--format`, since there is no extension to read. A binary format is never written to a terminal.
-- Flags shared by products come from one clap group each, flattened into every product that takes them: the input and its permissions (`--font`, `--root`, `--allow-read`), the output (`-o`, `--list-resources`), and the viewport (`--width`, `--height`, `--dpr`) for the raster products.
+- `-` means standard input for the input and standard output for `-o`. Writing to standard output needs `--format`, since there is no extension to read, unless the product has a text format to default to, as `takumi paint` does. A binary format is never written to a terminal.
+- Flags shared by products come from one clap group each, flattened into every product that takes them: the input and its permissions (`--font`, `--root`, `--allow-read`), the output (`-o`, `--list-resources`), and the viewport (`--width`, `--height`, `--dpr`) for the products that lay the document out on a canvas, `takumi image` and `takumi paint`.
 - A value that CSS can express is written in CSS and parsed by takumi's own parser: `--page "A4 landscape"`, `--margin "20mm 15mm"`, `--background "#fafafa"`. A flag that sets what the document can also set is a default, and the document wins, as the document's `@page` rule wins over Chrome's print dialog.
 - A flag name says what it sets, in the words CSS or the output format uses: `--page` for the page size, `--pages` for the pages kept.
 

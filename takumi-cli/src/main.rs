@@ -5,6 +5,7 @@ mod document;
 mod image;
 mod input;
 mod logger;
+mod paint;
 mod pdf;
 mod product;
 mod sandbox;
@@ -19,6 +20,7 @@ use crate::{
   image::ImageArgs,
   input::UsageError,
   logger::{LogLevel, Logger},
+  paint::PaintArgs,
   pdf::PdfArgs,
   sandbox::ResourceError,
   upgrade::UpgradeArgs,
@@ -54,6 +56,7 @@ struct Cli {
 enum Command {
   Image(ImageArgs),
   Pdf(PdfArgs),
+  Paint(PaintArgs),
   Upgrade(UpgradeArgs),
 }
 
@@ -72,6 +75,12 @@ fn main() -> ExitCode {
     Command::Pdf(args) => args
       .product()
       .and_then(|pdf| product::run(&pdf, &args.input, &args.output, cli.deny_warnings)),
+    Command::Paint(args) => product::run(
+      &args.product(),
+      &args.input,
+      &args.output,
+      cli.deny_warnings,
+    ),
     Command::Upgrade(args) => args.run(),
   };
 

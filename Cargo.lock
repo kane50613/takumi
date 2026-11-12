@@ -1820,6 +1820,7 @@ dependencies = [
  "log",
  "serde_json",
  "takumi",
+ "takumi-core",
  "takumi-pdf",
  "url",
 ]

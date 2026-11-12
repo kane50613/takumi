@@ -4,7 +4,8 @@
 use super::{
   document::{
     DrawPart, Drawable, Effects, ElementInfo, ImageSource, NodeKind, Paint, PaintFilter,
-    PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
+    PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun, Unpainted,
+    UnpaintedReason,
   },
   fonts::FontTable,
   outlines::Outlines,
@@ -31,7 +32,7 @@ use crate::{
   resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
-  style::{Affine, BackgroundImage, Filter, Isolation, TextAlign, ToCss},
+  style::{Affine, BackgroundImage, Display, Filter, Isolation, TextAlign, ToCss},
 };
 use rustc_hash::FxHashMap;
 
@@ -1058,6 +1059,41 @@ impl ElementInfo {
       class_name: input.class_name().map(str::to_owned),
       path,
     })
+  }
+}
+
+impl Unpainted {
+  /// The outermost elements under `root` that painting skips, in document order.
+  pub(super) fn under(root: &RenderNode) -> Vec<Self> {
+    let mut unpainted = Vec::new();
+    let mut pending = vec![(root, Vec::new())];
+
+    while let Some((node, path)) = pending.pop() {
+      let style = &node.context.style;
+      let reason = if style.base_data.display == Display::None {
+        Some(UnpaintedReason::DisplayNone)
+      } else if style.is_invisible() {
+        Some(UnpaintedReason::OpacityZero)
+      } else {
+        None
+      };
+
+      if let Some(reason) = reason {
+        unpainted.extend(ElementInfo::of(node, path).map(|element| Self { element, reason }));
+        continue;
+      }
+
+      let children = node.children.as_deref().unwrap_or_default();
+
+      pending.extend(children.iter().enumerate().rev().map(|(index, child)| {
+        let mut child_path = path.clone();
+
+        child_path.push(index);
+        (child, child_path)
+      }));
+    }
+
+    unpainted
   }
 }
 
