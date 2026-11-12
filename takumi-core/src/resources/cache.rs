@@ -13,24 +13,36 @@ use quick_cache::{
 use typed_builder::TypedBuilder;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "font-face")]
+use crate::resources::font::DocumentRegistries;
 use crate::{
+  layout::intercept::InterceptCache,
   resources::{
+    glyph_cache::GlyphCache,
     image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{ImageScalingAlgorithm, StyleSheet},
+  style::{ImageScalingAlgorithm, StyleSheet, tw::TailwindCache},
 };
 
 /// Bytes each shard holds, enough for one decoded photo, since `quick_cache` rejects an entry over
 /// 97% of its shard.
 const SHARD_BYTES: u64 = 64 << 20;
 
-/// What renders keep across renders: decoded images, the rasters drawn from them, and parsed
-/// stylesheets. Clones share the same data.
+/// What renders keep across renders: decoded images and the rasters drawn from them, parsed
+/// stylesheets and Tailwind classes, glyphs and their masks, and the faces of `@font-face` rules.
+/// Clones share the same data.
 #[derive(Clone)]
-pub struct Cache {
-  images: Arc<Store<ImageKey, ImageEntry, ByBytes>>,
-  stylesheets: Arc<Store<u64, SheetEntry, ByBytes>>,
+pub struct Cache(Arc<Caches>);
+
+struct Caches {
+  images: Store<ImageKey, ImageEntry, ByBytes>,
+  stylesheets: Store<u64, SheetEntry, ByBytes>,
+  tailwind: TailwindCache,
+  glyphs: GlyphCache,
+  intercepts: InterceptCache,
+  #[cfg(feature = "font-face")]
+  font_faces: DocumentRegistries,
 }
 
 /// The byte budget of each kind of data a [`Cache`] keeps, where `0` keeps none of that kind.
@@ -38,21 +50,54 @@ pub struct Cache {
 #[builder(builder_type(name = CacheBuilder), build_method(into = Cache))]
 pub struct CacheOptions {
   /// Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
-  #[builder(default = 64 << 20)]
+  #[builder(default = CacheOptions::DEFAULT_IMAGES)]
   images: u64,
   /// Parsed stylesheets.
-  #[builder(default = 4 << 20)]
+  #[builder(default = CacheOptions::DEFAULT_STYLESHEETS)]
   stylesheets: u64,
+  /// The rules Tailwind classes compile to.
+  #[builder(default = CacheOptions::DEFAULT_TAILWIND)]
+  tailwind: u64,
+  /// Resolved glyphs, and the masks rasterized from glyphs and shapes.
+  #[builder(default = CacheOptions::DEFAULT_GLYPHS)]
+  glyphs: u64,
+  /// Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
+  #[builder(default = CacheOptions::DEFAULT_INTERCEPTS)]
+  intercepts: u64,
+  /// The faces `@font-face` rules add, weighed by the font files they hold.
+  #[builder(default = CacheOptions::DEFAULT_FONT_FACES)]
+  #[cfg_attr(not(feature = "font-face"), allow(dead_code))]
+  font_faces: u64,
+}
+
+impl CacheOptions {
+  /// The default budget for images.
+  pub const DEFAULT_IMAGES: u64 = 64 << 20;
+  /// The default budget for stylesheets.
+  pub const DEFAULT_STYLESHEETS: u64 = 4 << 20;
+  /// The default budget for tailwind.
+  pub const DEFAULT_TAILWIND: u64 = 1 << 20;
+  /// The default budget for glyphs.
+  pub const DEFAULT_GLYPHS: u64 = 8 << 20;
+  /// The default budget for intercepts.
+  pub const DEFAULT_INTERCEPTS: u64 = 1 << 20;
+  /// The default budget for font faces.
+  pub const DEFAULT_FONT_FACES: u64 = 16 << 20;
 }
 
 impl From<CacheOptions> for Cache {
   fn from(options: CacheOptions) -> Self {
-    Self {
+    Self(Arc::new(Caches {
       // ~64 KiB average decoded image ⇒ an item-count hint for the budget.
-      images: Arc::new(store(options.images, 64 << 10)),
+      images: store(options.images, 64 << 10),
       // ~16 KiB average sheet ⇒ an item-count hint for the budget.
-      stylesheets: Arc::new(store(options.stylesheets, 16 << 10)),
-    }
+      stylesheets: store(options.stylesheets, 16 << 10),
+      tailwind: TailwindCache::new(options.tailwind),
+      glyphs: GlyphCache::new(options.glyphs),
+      intercepts: InterceptCache::new(options.intercepts),
+      #[cfg(feature = "font-face")]
+      font_faces: DocumentRegistries::new(options.font_faces),
+    }))
   }
 }
 
@@ -82,13 +127,13 @@ impl Cache {
     let key = ImageKey::source(hash);
 
     if matches!(mode, ImageCacheMode::None) {
-      return match self.images.get(&key) {
+      return match self.0.images.get(&key) {
         Some(ImageEntry::Source(source)) => Ok(source),
         _ => ImageSource::from_bytes_uncached(bytes),
       };
     }
 
-    match self.images.get_value_or_guard(&key, None) {
+    match self.0.images.get_value_or_guard(&key, None) {
       GuardResult::Value(ImageEntry::Source(source)) => Ok(source),
       GuardResult::Guard(guard) => {
         let source = ImageSource::from_bytes_keyed(bytes, hash)?;
@@ -117,7 +162,11 @@ impl Cache {
       .saturating_mul(3);
     let parse = || Arc::new(StyleSheet::parse_owned_list_loosy(sources));
 
-    match self.stylesheets.get_value_or_guard(&hasher.digest(), None) {
+    match self
+      .0
+      .stylesheets
+      .get_value_or_guard(&hasher.digest(), None)
+    {
       GuardResult::Value(entry) => entry.sheet,
       GuardResult::Guard(guard) => {
         let sheet = parse();
@@ -154,6 +203,24 @@ impl Cache {
     self.parse_stylesheet(sources)
   }
 
+  /// The glyphs and masks the cache keeps.
+  pub fn glyphs(&self) -> &GlyphCache {
+    &self.0.glyphs
+  }
+
+  pub(crate) fn tailwind(&self) -> &TailwindCache {
+    &self.0.tailwind
+  }
+
+  pub(crate) fn intercepts(&self) -> &InterceptCache {
+    &self.0.intercepts
+  }
+
+  #[cfg(feature = "font-face")]
+  pub(crate) fn font_faces(&self) -> &DocumentRegistries {
+    &self.0.font_faces
+  }
+
   /// The buffer an image with the cache key `source` draws at a size, `compute`d once across
   /// concurrent misses. A source with no key computes on every call.
   pub(crate) fn sized(
@@ -167,7 +234,7 @@ impl Cache {
     };
     let key = ImageKey::sized(source, sized);
 
-    match self.images.get_value_or_guard(&key, None) {
+    match self.0.images.get_value_or_guard(&key, None) {
       GuardResult::Value(ImageEntry::Sized(buffer)) => Ok(buffer),
       GuardResult::Guard(guard) => {
         let buffer = compute()?;
@@ -181,7 +248,7 @@ impl Cache {
 }
 
 /// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`.
-fn store<K, V>(max_bytes: u64, entry_bytes: u64) -> Store<K, V, ByBytes>
+pub(crate) fn store<K, V>(max_bytes: u64, entry_bytes: u64) -> Store<K, V, ByBytes>
 where
   K: Eq + Hash + Clone,
   V: Clone + Weighed,
@@ -277,7 +344,7 @@ struct SheetEntry {
 }
 
 /// An entry's approximate retained size in bytes.
-trait Weighed {
+pub(crate) trait Weighed {
   fn bytes(&self) -> usize;
 }
 
@@ -297,7 +364,7 @@ impl Weighed for SheetEntry {
 }
 
 #[derive(Clone)]
-struct ByBytes;
+pub(crate) struct ByBytes;
 
 impl<K, V: Weighed> Weighter<K, V> for ByBytes {
   fn weight(&self, _key: &K, entry: &V) -> u64 {
@@ -454,7 +521,7 @@ mod tests {
       });
     }
 
-    assert!(cache.images.weight() <= max_bytes);
+    assert!(cache.0.images.weight() <= max_bytes);
   }
 
   #[test]

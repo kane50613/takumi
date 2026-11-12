@@ -289,6 +289,7 @@ impl SvgLayout<'_> {
     let host = SvgHost::Image {
       current_color: self.styles.root_context().current_color,
       fonts: self.fonts,
+      cache: Some(self.styles.root_context().cache()),
     };
     let mut layout = SvgLayout::nested(document, host, container, self.image_depth + 1);
 

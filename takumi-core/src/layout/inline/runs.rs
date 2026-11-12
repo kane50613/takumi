@@ -4,6 +4,7 @@ use crate::{
   geometry::{ComputedLayout, PathCommand, Point},
   layout::{intercept::skips_ink, list_marker::SymbolMarker},
   resources::{
+    cache::Cache,
     font::{
       ExactFontMetrics, FontBlob, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
       em_box_descent, zero_inline_size,
@@ -228,11 +229,13 @@ impl PositionedInlineRun {
   /// at `device`.
   pub fn decorations(
     &self,
+    cache: &Cache,
     layout: ComputedLayout,
     base: Affine,
     device: Affine,
   ) -> Vec<DecorationLine> {
     self.glyph_run.decorations(
+      cache,
       &self.resolved_glyphs,
       layout,
       &self.decoration_placement,
@@ -296,6 +299,8 @@ pub struct InlineRunLayout<'c> {
   pub outline_rects: Vec<InlineOutlineRect>,
   /// Inline-span background fragments, in paint order (outer spans first).
   pub background_fragments: Vec<InlineBackgroundFragment<'c>>,
+  /// The cache of the render that laid the runs out, which their decorations consult.
+  pub(crate) cache: Cache,
 }
 
 /// A measured glyph run: its text (borrowed from the layout) and local bounding box, with text-fit

@@ -80,10 +80,7 @@ impl Renderer {
 
     Ok(Renderer {
       fonts: FontStore::new(options.font_cache_bytes()).map_err(map_error)?,
-      cache: match options.cache_bytes() {
-        Some(bytes) => Cache::builder().images(bytes).stylesheets(bytes).build(),
-        None => Cache::default(),
-      },
+      cache: options.cache(),
       sources: SourceCache::default(),
     })
   }

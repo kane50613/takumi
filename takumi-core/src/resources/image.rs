@@ -209,6 +209,7 @@ impl SvgSource {
       SvgHost::Image {
         current_color: host.current_color,
         fonts: Some(host.fonts()),
+        cache: Some(host.cache()),
       }
     }
   }

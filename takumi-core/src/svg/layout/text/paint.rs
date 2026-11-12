@@ -12,7 +12,7 @@ use super::{
 use crate::{
   geometry::{PathCommand, Rect},
   resources::{
-    font::FontsSnapshot,
+    cache::Cache,
     glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
     image::{SvgImageData, SvgLineCap, SvgLineJoin},
   },
@@ -36,20 +36,20 @@ struct TextPainter<'b> {
   /// The box of the text, which every object reports as its bounds.
   bounds: Rect<f32>,
   abs_transform: Affine,
-  fonts: FontsSnapshot,
+  cache: Cache,
 }
 
 impl SvgLayout<'_> {
   /// Paints the laid out text into `parent`.
   pub(super) fn paint_text(&mut self, text: &LaidOutText, parent: &mut Container) {
-    let fonts = self.styles.root_context().fonts().clone();
+    let cache = self.styles.root_context().cache().clone();
     let mut painter = TextPainter {
       budget: &mut self.budget,
       exhausted: false,
       objects: Vec::new(),
       bounds: text.bounds,
       abs_transform: parent.abs_transform,
-      fonts,
+      cache,
     };
 
     for span in &text.spans {
@@ -190,8 +190,9 @@ impl TextPainter<'_> {
       return;
     };
     let Some(resolved) = self
-      .fonts
-      .resolve_glyph(glyph.font.face(), font.clone(), glyph.id)
+      .cache
+      .glyphs()
+      .resolve(glyph.font.face(), font.clone(), glyph.id)
     else {
       return;
     };

@@ -45,7 +45,7 @@ use crate::{
   layout_unit::LayoutUnit,
   resources::{
     glyph::{GlyphResolveContext, ResolvedGlyphs},
-    glyph_cache::resolved_glyph,
+    glyph_cache::GlyphCache,
     unicode_range::UnicodeRangeSet,
   },
   style::{FontFamily, FontFamilyToken, FontStyle as CssFontStyle, GenericFamilyType},
@@ -338,6 +338,8 @@ pub struct FontsSnapshot(Fonts);
 #[cfg(feature = "font-face")]
 mod font_face_set;
 #[cfg(feature = "font-face")]
+pub(crate) use font_face_set::DocumentRegistries;
+#[cfg(feature = "font-face")]
 use font_face_set::FontFile;
 
 impl Deref for FontsSnapshot {
@@ -474,67 +476,6 @@ impl Fonts {
       registry: Arc::clone(&self.registry),
       fallback_families,
     })
-  }
-
-  #[cfg(feature = "svg")]
-  pub(crate) fn resolve_glyph(
-    &self,
-    face: RunFace<'_>,
-    font_ref: FontRef,
-    glyph_id: u32,
-  ) -> Option<Arc<ResolvedGlyph>> {
-    let mut resolved = ResolvedGlyphs::default();
-
-    self.resolve_glyphs_into(&mut resolved, face, font_ref, once(glyph_id));
-    resolved.remove(&glyph_id)
-  }
-
-  /// Adds the glyphs among `glyph_ids` that `resolved` lacks, drawn in `face`.
-  pub(crate) fn resolve_glyphs_into(
-    &self,
-    resolved: &mut ResolvedGlyphs,
-    face: RunFace<'_>,
-    font_ref: FontRef,
-    glyph_ids: impl Iterator<Item = u32>,
-  ) {
-    let RunFace {
-      font_id,
-      font_index,
-      font_size,
-      normalized_coords,
-      synthesis: RunSynthesis { embolden, skew },
-    } = face;
-    // Built on the first cache miss; a run whose glyphs are all cached never needs it.
-    let resolver = OnceCell::new();
-    let resolver = || {
-      resolver.get_or_init(|| GlyphResolveContext {
-        outline_glyphs: font_ref.outline_glyphs(),
-        color_glyphs: font_ref.color_glyphs(),
-        bitmap_strikes: font_ref.bitmap_strikes(),
-        font_size,
-        size: Size::new(font_size),
-        location: LocationRef::new(normalized_coords),
-        embolden,
-        skew,
-      })
-    };
-
-    let key_prefix = glyph_cache_key_prefix(
-      font_id,
-      font_index,
-      font_size,
-      normalized_coords,
-      embolden,
-      skew,
-    );
-    for glyph_id in glyph_ids {
-      if let Entry::Vacant(slot) = resolved.entry(glyph_id) {
-        let key = resolved_glyph_cache_key(key_prefix, glyph_id);
-        if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
-          slot.insert(glyph);
-        }
-      }
-    }
   }
 
   /// `font` resolved to the bytes a face from the same source holds, decoding nothing.
@@ -1250,6 +1191,68 @@ impl<'a> FontResource<'a> {
     FontResource {
       source: self.source.into_owned(),
       ..self
+    }
+  }
+}
+impl GlyphCache {
+  #[cfg(feature = "svg")]
+  pub(crate) fn resolve(
+    &self,
+    face: RunFace<'_>,
+    font_ref: FontRef,
+    glyph_id: u32,
+  ) -> Option<Arc<ResolvedGlyph>> {
+    let mut resolved = ResolvedGlyphs::default();
+
+    self.resolve_into(&mut resolved, face, font_ref, once(glyph_id));
+    resolved.remove(&glyph_id)
+  }
+
+  /// Adds the glyphs among `glyph_ids` that `resolved` lacks, drawn in `face`.
+  pub(crate) fn resolve_into(
+    &self,
+    resolved: &mut ResolvedGlyphs,
+    face: RunFace<'_>,
+    font_ref: FontRef,
+    glyph_ids: impl Iterator<Item = u32>,
+  ) {
+    let RunFace {
+      font_id,
+      font_index,
+      font_size,
+      normalized_coords,
+      synthesis: RunSynthesis { embolden, skew },
+    } = face;
+    // Built on the first cache miss; a run whose glyphs are all cached never needs it.
+    let resolver = OnceCell::new();
+    let resolver = || {
+      resolver.get_or_init(|| GlyphResolveContext {
+        outline_glyphs: font_ref.outline_glyphs(),
+        color_glyphs: font_ref.color_glyphs(),
+        bitmap_strikes: font_ref.bitmap_strikes(),
+        font_size,
+        size: Size::new(font_size),
+        location: LocationRef::new(normalized_coords),
+        embolden,
+        skew,
+      })
+    };
+
+    let key_prefix = glyph_cache_key_prefix(
+      font_id,
+      font_index,
+      font_size,
+      normalized_coords,
+      embolden,
+      skew,
+    );
+    for glyph_id in glyph_ids {
+      if let Entry::Vacant(slot) = resolved.entry(glyph_id) {
+        let key = resolved_glyph_cache_key(key_prefix, glyph_id);
+        if let Some(glyph) = self.resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
+          slot.insert(glyph);
+        }
+      }
     }
   }
 }

@@ -7,6 +7,7 @@ use super::{
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
+  Cache,
   context::RenderContext,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
@@ -132,6 +133,7 @@ impl RunPass {
 
 /// Some of an inline layout's lines: the runs, span backgrounds, and outline rects on them.
 pub struct InlineLines<'l> {
+  cache: &'l Cache,
   runs: Vec<&'l PositionedInlineRun>,
   background_fragments: Vec<&'l InlineBackgroundFragment<'l>>,
   outline_rects: Vec<InlineOutlineRect>,
@@ -195,6 +197,7 @@ impl InlineRunLayout<'_> {
   /// a page keeps the items it shows.
   pub fn lines(&self, layout: ComputedLayout, keep: impl Fn(LineItem) -> bool) -> InlineLines<'_> {
     InlineLines {
+      cache: &self.cache,
       runs: self
         .runs
         .iter()
@@ -436,7 +439,7 @@ impl InlineLines<'_> {
 
         Some(PaintedRun {
           run,
-          decorations: run.decorations(frame.layout, at, device_transform),
+          decorations: run.decorations(self.cache, frame.layout, at, device_transform),
           style,
           chain,
           baseline,

@@ -197,7 +197,8 @@ pub fn render_scene(scene: &Scene) -> Result<Bitmap> {
     return Err(Error::InvalidViewport);
   }
 
-  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+  let mut canvas =
+    Canvas::try_new(size, scene.root.context.cache().clone()).ok_or(Error::InvalidViewport)?;
 
   paint_scene(scene, &mut canvas)?;
   canvas.into_inner()
@@ -244,7 +245,7 @@ pub(crate) fn render_pages_settling<'g>(
       let sizes = stream.sizes();
       let size = sizes.size(index).map(|length| length.round() as u32);
       let origin = sizes.origin(index).map(|length| length.round() as i32);
-      let mut canvas = Canvas::try_new(size)
+      let mut canvas = Canvas::try_new(size, scene.view().root.context.cache().clone())
         .ok_or(Error::InvalidViewport)?
         .with_origin(origin);
 

@@ -605,6 +605,7 @@ fn composite_bordered_source(
     .append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
   let (mask, placement) = render_cached_mask(
+    target.glyphs,
     &paths,
     size.map(|v| v as f32),
     options.transform,
