@@ -284,31 +284,36 @@ impl Sandbox {
       .ok()
       .and_then(|path| lexical(&path))
       .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
-    // The deepest grant holding the file reads it, so a symlink granted inside another grant
-    // still opens through its own handle.
-    let Some((root, relative)) = self
+    let mut grants: Vec<(&Root, PathBuf)> = self
       .roots
       .iter()
       .filter_map(|root| Some((root, root.relative(&path)?)))
       .filter(|(_, relative)| !relative.as_os_str().is_empty())
-      .min_by_key(|(_, relative)| relative.components().count())
-    else {
-      return Err(ResourceError::Denied {
-        url: url.clone(),
-        path,
-      });
+      .collect();
+
+    // The deepest grant tries first, so a symlink granted inside another grant opens through its
+    // own handle, and an outer grant still reads a symlink whose target leaves the inner one.
+    grants.sort_by_key(|(_, relative)| relative.components().count());
+
+    let mut escaped = ResourceError::Denied {
+      url: url.clone(),
+      path,
     };
 
-    let metadata = root
-      .dir
-      .metadata(&relative)
-      .map_err(|error| open_error(url, error))?;
-
-    if !metadata.is_file() {
-      return Err(not_a_file(url));
+    for (root, relative) in grants {
+      match root
+        .dir
+        .metadata(&relative)
+        .map_err(|error| open_error(url, error))
+      {
+        Ok(metadata) if metadata.is_file() => return Ok((root, relative, metadata.len())),
+        Ok(_) => return Err(not_a_file(url)),
+        Err(error @ ResourceError::Escapes(_)) => escaped = error,
+        Err(error) => return Err(error),
+      }
     }
 
-    Ok((root, relative, metadata.len()))
+    Err(escaped)
   }
 
   /// Counts `bytes` read from `url` against the budget, failing once it runs out.
@@ -510,6 +515,31 @@ mod tests {
     let url = directory_url(&link).unwrap().join("logo.css").unwrap();
 
     assert_eq!(sandbox.read(&url).unwrap(), b"a{}");
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn an_outer_grant_reads_a_symlink_that_leaves_an_inner_grant() {
+    let site = temp_dir("outer-grant-site");
+    let assets = site.join("assets");
+    let link = assets.join("logo.css");
+
+    fs::create_dir_all(&assets).unwrap();
+    fs::create_dir_all(site.join("shared")).unwrap();
+    fs::write(site.join("shared/logo.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink("../shared/logo.css", &link).unwrap();
+
+    let url = directory_url(&assets).unwrap().join("logo.css").unwrap();
+
+    for roots in [
+      [site.clone(), assets.clone()],
+      [assets.clone(), site.clone()],
+    ] {
+      let sandbox = Sandbox::new(roots).unwrap();
+
+      assert_eq!(sandbox.read(&url).unwrap(), b"a{}");
+    }
   }
 
   #[cfg(unix)]
