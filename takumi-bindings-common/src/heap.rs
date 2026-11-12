@@ -18,8 +18,10 @@ const PAGE: usize = 64 * 1024;
 /// The fewest pages a growth adds: 16 MiB.
 const MIN_STEP: usize = 256;
 
-/// The most pages a growth adds beyond what an allocation needs: 256 MiB.
-const MAX_STEP: usize = 4096;
+/// The most pages a growth adds beyond what an allocation needs: 64 MiB, which bounds the memory
+/// grown and never used. A larger step renders no faster, since a 1 GiB heap already grows in about
+/// 30 steps.
+const MAX_STEP: usize = 1024;
 
 /// A global allocator for a single-threaded wasm binding.
 pub struct Heap(UnsafeCell<Dlmalloc<GrowInSteps>>);
