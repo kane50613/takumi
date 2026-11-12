@@ -93,8 +93,7 @@ pub struct SvgSource {
   /// Canvas size and CSS intrinsic sizing read from the root element.
   #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
-  /// Whether rendering depends on the host `color`: the markup references
-  /// `currentColor` and the root element sets no `color` of its own.
+  /// Whether rendering depends on the host `color`.
   #[cfg(feature = "svg")]
   uses_current_color: bool,
   /// The document, drawn through the CSS cascade.
@@ -103,9 +102,9 @@ pub struct SvgSource {
   /// Whether the document is an inline `svg` element, which draws in the style of its box.
   #[cfg(feature = "svg")]
   inline: bool,
-  /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
+  /// Whether rendering depends on the registered fonts.
   #[cfg(feature = "svg")]
-  has_text: bool,
+  uses_fonts: bool,
   #[cfg(feature = "svg")]
   hash: u64,
   #[cfg(feature = "svg")]
@@ -166,7 +165,7 @@ impl SvgSource {
   /// Markup for embedding in a vector backend, with the host `color` injected
   /// as a root presentation attribute when `currentColor` depends on it.
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
-    if !self.uses_current_color {
+    if !self.document.needs_color_attribute() {
       return Cow::Borrowed(&self.source);
     }
 
@@ -251,7 +250,7 @@ impl SvgSource {
   /// The source of `document`, parsed from `src`, as an image that no cache holds.
   fn from_document(document: SvgDocument, src: &str) -> Self {
     Self {
-      has_text: document.has_text(),
+      uses_fonts: document.uses_fonts(),
       uses_current_color: document.uses_current_color(),
       document: Arc::new(document),
       inline: false,
@@ -307,8 +306,7 @@ impl SvgSource {
       self.hash
     };
 
-    // Text draws with the fonts registered.
-    if self.has_text {
+    if self.uses_fonts {
       hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
     }
 
@@ -2221,6 +2219,61 @@ mod tests {
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [0, 255, 0, 255]);
+    Ok(())
+  }
+
+  // A root `color` that takes the host's, or a nested SVG image, draws in the host color, so
+  // hosts of different colors do not share a drawing.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_draw_hash_follows_the_host_color_it_draws_in() -> Result<(), ImageError> {
+    let nested = to_data_url(
+      "image/svg+xml",
+      br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#,
+    );
+    let follows = [
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
+      format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image width="4" height="4" href="{nested}"/></svg>"#
+      ),
+    ];
+    let own = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##;
+    let red = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let blue = RenderContext::with_current_color(Color([0, 0, 255, 255]));
+
+    for svg in &follows {
+      let source: SvgSource = svg.parse()?;
+
+      assert_ne!(source.draw_hash(&red), source.draw_hash(&blue), "{svg}");
+    }
+
+    let source: SvgSource = own.parse()?;
+
+    assert_eq!(source.draw_hash(&red), source.draw_hash(&blue));
+
+    let rendered = ImageSource::from_bytes(follows[0].as_bytes())?.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      &blue,
+    )?;
+
+    assert_eq!(premul_at(&rendered, 2, 2), [0, 0, 255, 255]);
+    Ok(())
+  }
+
+  // A root `color` attribute already present is not added a second time.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_source_with_current_color_keeps_one_color_attribute() -> Result<(), ImageError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#;
+    let source: SvgSource = svg.parse()?;
+
+    assert!(matches!(
+      source.source_with_current_color(Color([255, 0, 0, 255])),
+      Cow::Borrowed(_)
+    ));
     Ok(())
   }
 

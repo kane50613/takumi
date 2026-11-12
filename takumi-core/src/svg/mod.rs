@@ -89,7 +89,12 @@ pub(crate) struct SvgDocument {
   /// The size of the canvas, which the extent of the content gives when the root sets none.
   canvas: Size<f32>,
   mentions_current_color: bool,
+  /// Whether the root has a `color` attribute.
   has_color: bool,
+  /// Whether the root's `color` names a color, not one that takes the host's.
+  has_own_color: bool,
+  /// Whether an `image` may load an SVG document, which lays out in the host's color and fonts.
+  nests_svg: bool,
 }
 
 impl SvgDocument {
@@ -132,6 +137,12 @@ impl SvgDocument {
           .iter()
           .any(|sheet| contains_ignore_case(sheet, "currentcolor")),
       has_color: root.attribute("color").is_some(),
+      has_own_color: root.attribute("color").is_some_and(|color| {
+        !["currentcolor", "inherit", "unset", "revert", "revert-layer"]
+          .iter()
+          .any(|keyword| color.trim().eq_ignore_ascii_case(keyword))
+      }),
+      nests_svg: builder.nests_svg,
       root: root_node,
       elements: builder.elements,
       first_ids: builder.first_ids,
@@ -155,12 +166,14 @@ impl SvgDocument {
     self.size.intrinsic
   }
 
-  /// Whether the document holds a `text` element, which draws with the registered fonts.
-  pub(crate) fn has_text(&self) -> bool {
-    self
-      .elements
-      .iter()
-      .any(|element| element.kind == SvgElementKind::Text)
+  /// Whether the rendering depends on the registered fonts: the document holds a `text` element
+  /// or may nest an SVG document.
+  pub(crate) fn uses_fonts(&self) -> bool {
+    self.nests_svg
+      || self
+        .elements
+        .iter()
+        .any(|element| element.kind == SvgElementKind::Text)
   }
 
   /// The displayed text of the `text` elements, each with its styled context; approximate, ignoring `use`.
@@ -235,8 +248,14 @@ impl SvgDocument {
   }
 
   /// Whether the rendering depends on the host `color`: the markup names `currentColor` and the
-  /// root sets no `color` of its own.
+  /// root sets no `color` of its own, or the document may nest an SVG document.
   pub(crate) fn uses_current_color(&self) -> bool {
+    self.nests_svg || (self.mentions_current_color && !self.has_own_color)
+  }
+
+  /// Whether markup a vector backend embeds needs the host `color` as a root attribute: it names
+  /// `currentColor`, and its root has no `color` attribute that a second would make malformed.
+  pub(crate) fn needs_color_attribute(&self) -> bool {
     self.mentions_current_color && !self.has_color
   }
 
@@ -270,6 +289,33 @@ fn contains_ignore_case(text: &str, needle: &str) -> bool {
     .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
 }
 
+/// Whether `href`, an `image` reference, may load an SVG document. Only `data:` URLs load, and an
+/// image decodes as SVG unless its type names a bitmap.
+fn may_load_svg(href: &str) -> bool {
+  let Some((header, _)) = href.trim_start().split_once(',') else {
+    return false;
+  };
+  let Some((scheme, mime)) = header.split_at_checked(5) else {
+    return false;
+  };
+
+  if !scheme.eq_ignore_ascii_case("data:") {
+    return false;
+  }
+
+  let mime = mime.split(';').next().unwrap_or_default().trim();
+
+  ![
+    "image/jpg",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ]
+  .iter()
+  .any(|bitmap| mime.eq_ignore_ascii_case(bitmap))
+}
+
 /// Builds the node tree and the element table together, numbering each node as the matcher will.
 #[derive(Default)]
 struct TreeBuilder {
@@ -277,6 +323,7 @@ struct TreeBuilder {
   first_ids: HashMap<Box<str>, usize>,
   last_ids: HashMap<Box<str>, usize>,
   mentions_current_color: bool,
+  nests_svg: bool,
 }
 
 impl TreeBuilder {
@@ -373,6 +420,7 @@ impl TreeBuilder {
     }
 
     if let Some(href) = href {
+      self.nests_svg |= kind == SvgElementKind::Image && may_load_svg(href);
       attributes.insert("href".into(), href.into());
     }
 
