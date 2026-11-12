@@ -536,3 +536,16 @@ fn a_negative_calc_padding_clamps_to_zero() {
     assert_eq!(find(&document, "a").height, 20.0, "padding-top: {padding}");
   }
 }
+
+#[test]
+fn a_negative_calc_padding_does_not_shift_an_inline_block() {
+  let document = build_with(
+    Node::container([Node::container([]).with_class_name("i").with_id("i")])
+      .with_class_name("a")
+      .with_id("a"),
+    ".a { width: 200px; padding-left: calc(10px - 20px) } \
+     .i { display: inline-block; width: 20px; height: 20px }",
+  );
+
+  assert_eq!(find(&document, "i").bounds.x, find(&document, "a").bounds.x);
+}
