@@ -17,12 +17,13 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
 ## Global flags
 
-| Flag              | Effect                                                                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `-q`, `--quiet`   | Hides warnings. <sup>1</sup>                                                                                                         |
-| `--log <level>`   | Prints what the render does to standard error, at `info` or `debug`. See [what a render did](/docs/cli/scripting#what-a-render-did). |
-| `-h`, `--help`    | Prints help for the command.                                                                                                         |
-| `-V`, `--version` | Prints the version.                                                                                                                  |
+| Flag              | Effect                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-q`, `--quiet`   | Hides warnings. <sup>1</sup>                                                                                                                      |
+| `--deny-warnings` | Fails with exit code `1` when the command raises a warning, and writes no output. See [fail on a warning](/docs/cli/scripting#fail-on-a-warning). |
+| `--log <level>`   | Prints what the render does to standard error, at `info` or `debug`. See [what a render did](/docs/cli/scripting#what-a-render-did).              |
+| `-h`, `--help`    | Prints help for the command.                                                                                                                      |
+| `-V`, `--version` | Prints the version.                                                                                                                               |
 
 <sup>1</sup> `--quiet` still prints errors.
 
@@ -91,7 +92,7 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 | Code | Meaning                                                            |
 | ---- | ------------------------------------------------------------------ |
 | `0`  | The output was written, or the listing printed.                    |
-| `1`  | The render failed.                                                 |
+| `1`  | The render failed, or raised a warning under `--deny-warnings`.    |
 | `2`  | The command line is wrong. <sup>1</sup>                            |
 | `3`  | The document tried to read a file outside the granted directories. |
 

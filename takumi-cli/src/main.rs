@@ -44,6 +44,10 @@ struct Cli {
   /// each resource, page, and missing font or image as well.
   #[arg(long, global = true, value_name = "LEVEL")]
   log: Option<LogLevel>,
+
+  /// Fails when the command raises a warning, and writes no output.
+  #[arg(long, global = true)]
+  deny_warnings: bool,
 }
 
 #[derive(Subcommand)]
@@ -64,10 +68,10 @@ fn main() -> ExitCode {
   let result = match &cli.command {
     Command::Image(args) => args
       .product()
-      .and_then(|image| product::run(&image, &args.input, &args.output, cli.quiet)),
+      .and_then(|image| product::run(&image, &args.input, &args.output, cli.deny_warnings)),
     Command::Pdf(args) => args
       .product()
-      .and_then(|pdf| product::run(&pdf, &args.input, &args.output, cli.quiet)),
+      .and_then(|pdf| product::run(&pdf, &args.input, &args.output, cli.deny_warnings)),
     Command::Upgrade(args) => args.run(),
   };
 

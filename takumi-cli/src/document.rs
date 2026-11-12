@@ -181,12 +181,13 @@ impl Document {
     product: &impl Product,
     fonts: &Fonts,
     sandbox: &Sandbox,
+    listing: &mut Vec<String>,
   ) -> Result<(), Box<dyn Error>> {
     let mut fonts = fonts.clone();
     let images = product.needs(self, &fonts, &Images::new())?.images;
 
     for written in &images {
-      self.print_resource("image", written, sandbox);
+      listing.push(self.listing_line("image", written, sandbox));
     }
 
     // Marking every source failed reaches the next one, as a font that fails to load would.
@@ -202,7 +203,7 @@ impl Document {
       }
 
       for written in &font_files {
-        self.print_resource("font", written, sandbox);
+        listing.push(self.listing_line("font", written, sandbox));
       }
 
       fonts = fonts.with_failed_font_files(&font_files);
@@ -211,14 +212,14 @@ impl Document {
     Ok(())
   }
 
-  /// Prints one listing line for the resource written as `written`.
-  fn print_resource(&self, kind: &str, written: &str, sandbox: &Sandbox) {
+  /// The listing line of the resource written as `written`.
+  fn listing_line(&self, kind: &str, written: &str, sandbox: &Sandbox) -> String {
     match self.base.join(written) {
       Ok(url) => match sandbox.check(&url) {
-        Ok(()) => println!("{kind}\tallowed\t{url}"),
-        Err(error) => println!("{kind}\t{}\t{url}\t{error}", error.listing_status()),
+        Ok(()) => format!("{kind}\tallowed\t{url}"),
+        Err(error) => format!("{kind}\t{}\t{url}\t{error}", error.listing_status()),
       },
-      Err(_) => println!("{kind}\tinvalid\t{written}"),
+      Err(_) => format!("{kind}\tinvalid\t{written}"),
     }
   }
 
