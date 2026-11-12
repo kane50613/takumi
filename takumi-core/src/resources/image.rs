@@ -246,6 +246,12 @@ impl SvgSource {
     self.document.node_count() * size_of::<Node>()
   }
 
+  /// The ops of [`Self::picture`], copied out of the cache.
+  #[deprecated(note = "use `picture`, whose ops the cache shares")]
+  pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
+    self.picture(host, viewport).ops().to_vec()
+  }
+
   /// The SVG laid out at `viewport`, the size it is drawn at in device pixels, in the box `host`
   /// styles, from `host`'s cache when a box that draws it the same laid it out before.
   pub fn picture(&self, host: &RenderContext, viewport: Size<f32>) -> Arc<SvgPicture> {
