@@ -188,7 +188,7 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
       };
       let command = command_line(&install_arguments(&unpinned, root)?);
 
-      return Err(format!("takumi was installed from {} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.", without_userinfo(url)).into());
+      return Err(format!("takumi was installed from {} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.", without_credentials(url)).into());
     }
     // Without `--registry`, Cargo installs from a configured `registry.default`, not crates.io.
     Source::Registry { index } => arguments.extend(match index {
@@ -219,42 +219,83 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
 fn command_line(arguments: &[OsString]) -> String {
   arguments
     .iter()
-    .map(|argument| {
-      let argument = without_userinfo(&argument.to_string_lossy());
-
-      if !argument.is_empty()
-        && argument
-          .chars()
-          .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,".contains(c))
-      {
-        argument
-      } else if cfg!(windows) {
-        powershell_quote(&argument)
-      } else {
-        format!("'{}'", argument.replace('\'', r"'\''"))
-      }
-    })
+    .map(|argument| Shell::NATIVE.quote(&without_credentials(&argument.to_string_lossy())))
     .collect::<Vec<_>>()
     .join(" ")
 }
 
-/// `text` with the user name and password of a URL it holds removed, so a shown command carries
-/// no credential.
-fn without_userinfo(text: &str) -> String {
-  match Url::parse(text) {
-    Ok(mut url) if !url.username().is_empty() || url.password().is_some() => {
-      let _ = url.set_username("");
-      let _ = url.set_password(None);
-      url.to_string()
-    }
-    _ => text.to_owned(),
+/// `text` with the password of a URL it holds removed, and its user name unless it is an SSH
+/// URL, so a shown command carries no credential.
+fn without_credentials(text: &str) -> String {
+  let Ok(mut url) = Url::parse(text) else {
+    return text.to_owned();
+  };
+  // An SSH user name, such as GitHub's `git`, names the account to log in as, not a secret.
+  let drops_username = !url.username().is_empty() && url.scheme() != "ssh";
+
+  if !drops_username && url.password().is_none() {
+    return text.to_owned();
   }
+
+  if drops_username {
+    let _ = url.set_username("");
+  }
+
+  let _ = url.set_password(None);
+  url.to_string()
 }
 
-/// `argument` in PowerShell's single quotes, which expand nothing, so `$` and backticks stay.
-/// <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules>
-fn powershell_quote(argument: &str) -> String {
-  format!("'{}'", argument.replace('\'', "''"))
+/// The shell a shown command is quoted for.
+#[derive(Clone, Copy)]
+enum Shell {
+  /// A POSIX shell such as bash or zsh.
+  Posix,
+  /// PowerShell, whose single quotes expand nothing, so `$` and backticks stay.
+  /// <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules>
+  PowerShell,
+}
+
+/// The characters PowerShell reads as a single quote.
+const POWERSHELL_SINGLE_QUOTES: [char; 5] = ['\'', '\u{2018}', '\u{2019}', '\u{201A}', '\u{201B}'];
+
+impl Shell {
+  /// The shell takumi quotes shown commands for on this platform.
+  const NATIVE: Self = if cfg!(windows) {
+    Self::PowerShell
+  } else {
+    Self::Posix
+  };
+
+  /// `argument` as one word that this shell reads back unchanged.
+  fn quote(self, argument: &str) -> String {
+    let plain = !argument.is_empty()
+      && argument
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,".contains(c));
+
+    match self {
+      Self::Posix if plain => argument.to_owned(),
+      Self::Posix => format!("'{}'", argument.replace('\'', r"'\''")),
+      // A leading `@` splats a variable, and a comma joins words into an array.
+      Self::PowerShell if plain && !argument.starts_with('@') && !argument.contains(',') => {
+        argument.to_owned()
+      }
+      Self::PowerShell => {
+        let mut quoted = String::from("'");
+
+        for c in argument.chars() {
+          if POWERSHELL_SINGLE_QUOTES.contains(&c) {
+            quoted.push(c);
+          }
+
+          quoted.push(c);
+        }
+
+        quoted.push('\'');
+        quoted
+      }
+    }
+  }
 }
 
 #[cfg(test)]
@@ -350,19 +391,31 @@ mod tests {
     );
   }
 
-  #[cfg(not(windows))]
   #[test]
-  fn quotes_what_a_shell_would_split() {
-    assert_eq!(
-      command_line(&["--root".into(), "/opt/it's here".into(), "".into()]),
-      r#"--root '/opt/it'\''s here' ''"#
-    );
+  fn quotes_what_a_posix_shell_would_split() {
+    assert_eq!(Shell::Posix.quote("/opt/it's here"), r"'/opt/it'\''s here'");
+    assert_eq!(Shell::Posix.quote(""), "''");
+    assert_eq!(Shell::Posix.quote("@release,next"), "@release,next");
   }
 
   #[test]
   fn a_powershell_quote_expands_nothing() {
-    assert_eq!(powershell_quote(r"C:\tools\$build"), r"'C:\tools\$build'");
-    assert_eq!(powershell_quote("it's"), "'it''s'");
+    assert_eq!(
+      Shell::PowerShell.quote(r"C:\tools\$build"),
+      r"'C:\tools\$build'"
+    );
+    assert_eq!(Shell::PowerShell.quote("it's"), "'it''s'");
+    assert_eq!(
+      Shell::PowerShell.quote("C:\\Users\\O\u{2019}Connor\\.cargo"),
+      "'C:\\Users\\O\u{2019}\u{2019}Connor\\.cargo'"
+    );
+  }
+
+  #[test]
+  fn powershell_quotes_a_splat_or_an_array() {
+    assert_eq!(Shell::PowerShell.quote("@release"), "'@release'");
+    assert_eq!(Shell::PowerShell.quote("a,b"), "'a,b'");
+    assert_eq!(Shell::PowerShell.quote("--branch"), "--branch");
   }
 
   #[test]
@@ -401,6 +454,18 @@ mod tests {
         "https://user:secret@example.com/takumi".into()
       ]),
       "--git https://example.com/takumi"
+    );
+  }
+
+  #[test]
+  fn a_shown_ssh_command_keeps_its_user_name() {
+    assert_eq!(
+      without_credentials("ssh://git@github.com/kane50613/takumi"),
+      "ssh://git@github.com/kane50613/takumi"
+    );
+    assert_eq!(
+      without_credentials("ssh://git:secret@github.com/kane50613/takumi"),
+      "ssh://git@github.com/kane50613/takumi"
     );
   }
 }
