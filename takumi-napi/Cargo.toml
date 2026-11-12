@@ -31,6 +31,15 @@ features = ["svg", "rayon"]
 [dependencies.takumi-svg]
 path = "../takumi-svg"
 
+# musl's allocator maps and unmaps every large buffer and takes one lock across threads, and a
+# render allocates a canvas, its layers, and its encoder buffers on every call. Under Node.js on
+# Alpine, Linux aarch64, rendering a card to PNG four at a time: 259 renders a second with musl's
+# allocator, 546 with this one as `src/allocator.rs` sets it up, for 207KB of binding and 34MiB
+# more held at the peak.
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc.workspace = true
+libmimalloc-sys.workspace = true
+
 [build-dependencies]
 napi-build.workspace = true
 

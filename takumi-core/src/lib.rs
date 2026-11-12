@@ -52,6 +52,7 @@ pub mod paint_property;
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
+pub mod parallel;
 pub mod path_data;
 /// Font and image resource management.
 pub mod resources;

@@ -8,6 +8,7 @@ use takumi_core::{
   page_stream::{PageStream, SETTLED_PAGES, Settle, Settled},
 };
 use takumi_core::{
+  parallel::ActiveRender,
   scene::Scene,
   style::{ComputedStyle, Lang},
 };
@@ -174,6 +175,7 @@ pub fn needs(mut options: RenderOptions<'_>) -> RenderNeeds {
 
 /// Renders a node to an image.
 pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
+  let _active = ActiveRender::begin();
   let render_context = options.take_render_context();
 
   render_with_context(render_context, options.node, options.viewport)
@@ -222,6 +224,7 @@ pub(crate) fn render_pages_settling<'g>(
   settle: Settle<'_>,
   mut page: impl FnMut(Bitmap) -> Result<()>,
 ) -> Result<()> {
+  let _active = ActiveRender::begin();
   let render_context = options.take_render_context();
   let root = RenderNode::from_node(&render_context, options.node);
   let mut stream = PageStream::new(&root, pages, max_pages);
@@ -253,6 +256,9 @@ fn render_with_context(
   node: Node,
   viewport: Viewport,
 ) -> Result<Bitmap> {
+  // A frame of an animation counts as a render too, so frames drawn side by side each keep to
+  // their own thread.
+  let _active = ActiveRender::begin();
   let scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
 
   render_scene(&scene)

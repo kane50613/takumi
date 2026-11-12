@@ -136,6 +136,7 @@ pub(super) fn source(
   source_general(pixmap, mask, source, &options, region);
 }
 
+/// [`constant_general`]'s normal-mode source-over, a run of pixels at a time.
 #[inline]
 fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: DestRegion) {
   for dest_y in region.bounds.y_min..region.bounds.y_max {
@@ -148,11 +149,20 @@ fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: 
       match u64::from_ne_bytes(*mask) {
         0 => {}
         u64::MAX if color[3] == u8::MAX => dst.fill(color),
+        u64::MAX => constant_full_over(dst, color),
         _ => constant_over(dst, mask, color),
       }
     }
     constant_over(dst_tail, mask_tail, color);
   }
+}
+
+/// `color` over a run of `dst` it covers whole. A mask of 255 scales a colour to itself, so this
+/// is [`constant_over`] under one without the scaling: what the inside of a translucent box
+/// paints.
+#[inline(always)]
+fn constant_full_over(dst: &mut [[u8; 4]; MASK_RUN], color: [u8; 4]) {
+  composite_premultiplied_over_row(dst, &[color; MASK_RUN]);
 }
 
 /// `color` scaled by `mask` over `dst`, both at most a [`MASK_RUN`] long.
@@ -186,6 +196,7 @@ fn constant_clipped(
       match (u64::from_ne_bytes(*mask), u64::from_ne_bytes(*clip)) {
         (0, _) | (_, 0) => {}
         (u64::MAX, u64::MAX) if color[3] == u8::MAX => dst.fill(color),
+        (u64::MAX, u64::MAX) => constant_full_over(dst, color),
         _ => constant_clipped_over(dst, mask, clip, color),
       }
     }

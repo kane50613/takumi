@@ -57,12 +57,14 @@ impl Turbulence {
     };
 
     #[cfg(feature = "rayon")]
-    rows
-      .par_chunks_mut(width)
-      .with_min_len(16)
-      .enumerate()
-      .for_each(fill_row);
-    #[cfg(not(feature = "rayon"))]
+    if crate::parallel::spreads() {
+      rows
+        .par_chunks_mut(width)
+        .with_min_len(16)
+        .enumerate()
+        .for_each(fill_row);
+      return;
+    }
     rows.chunks_mut(width).enumerate().for_each(fill_row);
   }
 }

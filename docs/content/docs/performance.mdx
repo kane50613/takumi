@@ -78,7 +78,23 @@ glibc raises its mmap threshold after a large block is freed, so later canvases 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
+These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first.
+
+### Alpine and other musl images
+
+These settings belong to glibc and do nothing on musl. There the Node.js binding allocates with [mimalloc](https://github.com/microsoft/mimalloc) instead of musl's own allocator, which doubles the renders a second when several run at once. mimalloc keeps freed memory for a moment before it returns it to the system, so the process holds a little more than it would under musl's allocator. The binding sets that wait to 2 milliseconds, and `MIMALLOC_PURGE_DELAY` changes it:
+
+```bash title="Return freed memory at once"
+MIMALLOC_PURGE_DELAY=0 node server.js
+```
+
+| Setting                     | Peak RSS | Renders a second |
+| :-------------------------- | :------- | :--------------- |
+| `MIMALLOC_PURGE_DELAY=0`    | 161 MiB  | 515              |
+| Default                     | 178 MiB  | 546              |
+| `MIMALLOC_PURGE_DELAY=1000` | 244 MiB  | 576              |
+
+These figures come from one test setup: Node.js 24 on Alpine 3.24, Linux arm64, rendering a 1200 × 630 card with two box shadows to PNG, four at a time. With musl's own allocator the same test peaked at 144 MiB and drew 259 renders a second.
 
 ## Keep network requests out of repeated work
 

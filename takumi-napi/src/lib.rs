@@ -4,6 +4,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 
+#[cfg(target_env = "musl")]
+mod allocator;
 mod load_font_file_task;
 mod load_font_task;
 mod measure_task;

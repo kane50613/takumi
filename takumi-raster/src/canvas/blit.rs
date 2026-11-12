@@ -301,10 +301,21 @@ pub(super) fn composite_run_over(dst: &mut [[u8; 4]], sources: impl Iterator<Ite
   composite_premultiplied_over_row(dst, &run[..dst.len()]);
 }
 
-/// `row` over `dst` in `mode`, the row compositor's vectorized source-over in normal mode.
+/// Whether every pixel of `row` is opaque, which makes source-over of it a copy.
+#[inline(always)]
+fn is_opaque_row(row: &[[u8; 4]]) -> bool {
+  row.iter().fold(u8::MAX, |all, pixel| all & pixel[3]) == u8::MAX
+}
+
+/// `row` over `dst` in `mode`, the row compositor's vectorized source-over in normal mode. An
+/// opaque row, as every row of a photograph is, copies instead.
 fn blend_row(dst: &mut [[u8; 4]], row: &[[u8; 4]], mode: BlendMode) {
   if mode == BlendMode::Normal {
-    composite_premultiplied_over_row(dst, row);
+    if is_opaque_row(row) {
+      dst.copy_from_slice(row);
+    } else {
+      composite_premultiplied_over_row(dst, row);
+    }
     return;
   }
 
@@ -706,6 +717,54 @@ mod tests {
   /// Bytes from a fixed hash of `index`, so every run sees the same noise.
   fn noise(index: usize, salt: u32) -> u8 {
     ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+  }
+
+  #[test]
+  fn an_opaque_row_blends_to_the_bytes_it_copies() {
+    // Destinations of every alpha, under rows that are opaque, opaque but for one pixel, and
+    // translucent throughout.
+    for (case, width) in [1, 7, 8, 9, 64, 97].into_iter().enumerate() {
+      for translucent_at in [None, Some(0), Some(width / 2), Some(width - 1)] {
+        let dst: Vec<[u8; 4]> = (0..width)
+          .map(|index| {
+            let alpha = noise(index + case, 3);
+
+            [
+              noise(index, 4) % alpha.saturating_add(1),
+              noise(index, 5) % alpha.saturating_add(1),
+              noise(index, 6) % alpha.saturating_add(1),
+              alpha,
+            ]
+          })
+          .collect();
+        let row: Vec<[u8; 4]> = (0..width)
+          .map(|index| {
+            let alpha = if translucent_at == Some(index) {
+              noise(index, 7) / 2
+            } else {
+              u8::MAX
+            };
+
+            [
+              noise(index, 8) % alpha.saturating_add(1),
+              noise(index, 9) % alpha.saturating_add(1),
+              noise(index, 10) % alpha.saturating_add(1),
+              alpha,
+            ]
+          })
+          .collect();
+        let mut blended = dst.clone();
+        let mut composited = dst.clone();
+
+        blend_row(&mut blended, &row, BlendMode::Normal);
+        composite_premultiplied_over_row(&mut composited, &row);
+        assert_eq!(is_opaque_row(&row), translucent_at.is_none());
+        assert_eq!(
+          blended, composited,
+          "width {width}, hole {translucent_at:?}"
+        );
+      }
+    }
   }
 
   #[test]
