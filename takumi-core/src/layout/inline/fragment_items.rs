@@ -465,6 +465,22 @@ impl FragmentItems {
     });
   }
 
+  /// The characters shaped to `.notdef`, which no font their text can use draws. A run whose
+  /// clusters do not line up with its glyphs names none.
+  pub fn uncovered_characters(&self) -> impl Iterator<Item = char> + '_ {
+    self.text_items.iter().flat_map(|item| {
+      let (glyphs, cluster_ranges) = self.glyphs.get(&item.glyphs);
+      let aligned = glyphs.len() == cluster_ranges.len();
+
+      glyphs
+        .into_iter()
+        .zip(cluster_ranges)
+        .filter(move |(glyph, _)| aligned && glyph.id == 0)
+        .flat_map(|(_, cluster)| self.text.get(cluster).unwrap_or_default().chars())
+        .collect::<Vec<_>>()
+    })
+  }
+
   /// The text layout shaped.
   pub fn text(&self) -> &str {
     &self.text

@@ -6,11 +6,12 @@ use std::{
   sync::Arc,
 };
 
+use cssparser::{Parser, Token};
 use takumi::prelude::{
   Color, ColorInput, Fonts, FromCssStr, PageName, RenderNeeds, StyleSheet, Viewport,
   page_rule::{PageContext, PageKind},
 };
-use takumi_pdf::{MeasureOptions, PageOptions, PageRange, PdfMetadata, PdfOptions};
+use takumi_pdf::{MeasureOptions, PageOptions, PageRange, PdfError, PdfMetadata, PdfOptions};
 
 use crate::{
   document::Document,
@@ -140,6 +141,15 @@ fn check_page_declaration(property: &str, value: &str) -> Result<String, String>
     ));
   }
 
+  // takumi reads a bare number as px, where CSS takes only `0` without a unit. A function such as
+  // `calc()` is one token here, so a factor inside it stays.
+  if let Some(number) = top_level_unitless_number(value) {
+    return Err(format!(
+      "`{number}` in `--{}` needs a unit, such as `{number}mm` or `{number}px`.",
+      if property == "size" { "page" } else { property }
+    ));
+  }
+
   let declaration = format!("{property}: {value}");
   let descriptors = StyleSheet::parse_loosy(&format!("@page {{ {declaration} }}"))
     .page_descriptors(
@@ -262,12 +272,33 @@ impl Product for Pdf {
     options.header = header;
     options.footer = footer;
 
-    Ok(takumi_pdf::render(options)?)
+    takumi_pdf::render(options).map_err(|error| match error {
+      PdfError::UncoveredCharacters(characters) => format!(
+        "no font draws {characters}. Pass a font that does with `--font`, or check the `font-family` of that text."
+      )
+      .into(),
+      error => error.into(),
+    })
   }
 
   fn is_text(&self) -> bool {
     false
   }
+}
+
+/// The first non-zero number `value` writes outside any function, as CSS writes it.
+fn top_level_unitless_number(value: &str) -> Option<String> {
+  let mut parser = Parser::new(value);
+
+  while let Ok(token) = parser.next() {
+    if let Token::Number { value: number, .. } = *token
+      && number != 0.0
+    {
+      return Some(number.to_string());
+    }
+  }
+
+  None
 }
 
 #[cfg(test)]
@@ -305,7 +336,14 @@ mod tests {
   fn a_page_flag_takes_what_css_takes() {
     assert!(check_page_declaration("size", "letter landscape").is_ok());
     assert!(check_page_declaration("margin", "1in 0.5in").is_ok());
+    assert!(check_page_declaration("margin", "0 1cm").is_ok());
     assert!(check_page_declaration("size", "bogus").is_err());
+    assert_eq!(
+      check_page_declaration("margin", "5").unwrap_err(),
+      "`5` in `--margin` needs a unit, such as `5mm` or `5px`."
+    );
+    assert!(check_page_declaration("size", "210 297mm").is_err());
+    assert!(check_page_declaration("margin", "calc(1mm * 2 + 1mm)").is_ok());
     assert!(check_page_declaration("margin", "1in !important").is_err());
     assert!(
       check_page_declaration("margin", "1cm } body { display: none } @page { margin: 1cm").is_err()

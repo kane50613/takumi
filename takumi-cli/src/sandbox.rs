@@ -31,8 +31,12 @@ const MAX_RESOURCES: usize = 1024;
 /// Why a resource did not load.
 #[derive(Debug)]
 pub(crate) enum ResourceError {
-  /// The file is outside every granted root.
-  Denied { url: Url, path: PathBuf },
+  /// The file is outside every granted root. `has_roots` says whether any directory is granted.
+  Denied {
+    url: Url,
+    path: PathBuf,
+    has_roots: bool,
+  },
   /// The file is named under a granted root, but a symlink in its path leads outside it.
   Escapes(Url),
   /// The URL needs the network, which the CLI never reaches.
@@ -67,6 +71,15 @@ impl ResourceError {
     )
   }
 
+  /// What `--list-resources` calls the failure: `missing` for a file that is not there, and
+  /// `blocked` for one takumi would not or could not load.
+  pub(crate) fn listing_status(&self) -> &'static str {
+    match self {
+      Self::Io { error, .. } if error.kind() == io::ErrorKind::NotFound => "missing",
+      _ => "blocked",
+    }
+  }
+
   /// The URL that failed to load, none for a failure that names no single URL.
   pub(crate) fn url(&self) -> Option<&Url> {
     match self {
@@ -86,11 +99,25 @@ impl ResourceError {
 impl fmt::Display for ResourceError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::Denied { url, path } => write!(
-        f,
-        "{url} is outside the readable directories. Pass `--allow-read {}` to allow it.",
-        path.parent().unwrap_or(path).display()
-      ),
+      Self::Denied {
+        url,
+        path,
+        has_roots,
+      } => {
+        let directory = path.parent().unwrap_or(path).display();
+
+        if *has_roots {
+          write!(
+            f,
+            "{url} is outside the readable directories. Pass `--allow-read {directory}` to allow it."
+          )
+        } else {
+          write!(
+            f,
+            "{url} cannot be read, as standard input grants no directory. Pass `--root {directory}` to allow it."
+          )
+        }
+      }
       Self::Escapes(url) => write!(
         f,
         "{url} is an absolute symlink, or one that leads out of its readable directory, and takumi follows neither, even into another readable directory. Make the symlink relative, reference the file it points to, or pass a `--root` that holds both."
@@ -298,6 +325,7 @@ impl Sandbox {
     let mut escaped = ResourceError::Denied {
       url: url.clone(),
       path,
+      has_roots: !self.roots.is_empty(),
     };
 
     for (root, relative) in grants {

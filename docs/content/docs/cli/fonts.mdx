@@ -5,6 +5,8 @@ description: Load fonts with @font-face or --font, and know which font the takum
 
 `takumi` never reads the fonts installed on your system. Text uses the fonts the document loads, and falls back to Geist, the one font built into takumi, which covers Latin. Load a font for every other script your text uses, such as Chinese or Arabic.
 
+When no loaded font draws a character, `takumi image` prints a warning that names it and draws an empty box in its place. `takumi pdf` stops with an error instead, since the character would be missing from the PDF's text.
+
 ## Load a font from the document
 
 An `@font-face` rule loads a font file the way a browser does. A relative URL resolves against the stylesheet that writes it:

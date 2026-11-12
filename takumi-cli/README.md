@@ -24,6 +24,6 @@ A document reads files only from the directories it is granted, and it never rea
 - One resource may hold at most 32 MiB, all of them together 256 MiB, and a render may load at most 1024 of them.
 - A symlink must be relative and stay inside its granted directory. An absolute symlink is refused even when it points back inside.
 
-`--list-resources` prints the stylesheets, images, and fonts a document would load and whether each is allowed, without rendering. It needs no `-o`, and a stylesheet that would not load is listed as blocked while the listing goes on. It checks each file on its own, so a document past the total limits can list as allowed and still stop when it renders.
+`--list-resources` prints the stylesheets, images, and fonts a document would load and whether each is allowed, without rendering. It needs no `-o`, and a stylesheet that would not load is listed as `blocked`, or `missing` when the file is not there, while the listing goes on. It checks each file on its own, so a document past the total limits can list as allowed and still stop when it renders.
 
 The input and the files named with `--font`, `--header`, and `--footer` are trusted, since you name them on the command line. What they reference goes through the same checks. When the document loads no font, text falls back to Geist.
