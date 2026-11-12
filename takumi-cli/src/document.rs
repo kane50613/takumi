@@ -5,7 +5,9 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 
 use takumi::{
   parse_html,
-  prelude::{FontSource, Fonts, FromHtmlOptions, ImageSource, Node, StyleSheet},
+  prelude::{
+    FontSource, Fonts, FromHtmlOptions, ImageSource, ImageSourceInput, Node, NodeKind, StyleSheet,
+  },
 };
 use url::Url;
 
@@ -47,7 +49,9 @@ impl Document {
     location: &Url,
     loader: &mut StyleSheetLoader<'_>,
   ) -> Result<Self, Box<dyn Error>> {
-    Self::parse(html, location, FromHtmlOptions::default(), None, loader)
+    let options = FromHtmlOptions::builder().fragment(true).build();
+
+    Self::parse(html, location, options, None, loader)
   }
 
   /// Parses `html` with `options`, then loads the style sheets it links and imports.
@@ -68,6 +72,8 @@ impl Document {
     for css in &mut parsed.css {
       *css = loader.rewrite(css, &base)?;
     }
+
+    resolve_image_sources(&mut parsed.node, &base);
 
     let mut denied = None;
     let mut css: Vec<String> = default_css.into_iter().collect();
@@ -235,6 +241,28 @@ impl Document {
     };
 
     read_or_skip(&url, sandbox, warnings)
+  }
+}
+
+/// Resolves each image `src` under `node` against `base`, so the render tells apart two documents
+/// that write the same `src` for different files, as a page and its header can.
+fn resolve_image_sources(node: &mut Node, base: &Url) {
+  match &mut node.kind {
+    NodeKind::Container { children } => {
+      for child in children {
+        resolve_image_sources(child, base);
+      }
+    }
+    // A `data:` URL is already absolute, and can be far too long to parse again.
+    NodeKind::Image(image) => {
+      if let ImageSourceInput::Url(src) = &mut image.src
+        && !src.starts_with("data:")
+        && let Ok(url) = base.join(src)
+      {
+        *src = Arc::from(url.as_str());
+      }
+    }
+    _ => {}
   }
 }
 

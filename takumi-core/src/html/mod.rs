@@ -293,6 +293,11 @@ pub struct FromHtmlOptions {
   /// such a source as a fragment.
   #[builder(default)]
   pub(crate) document: bool,
+  /// Parses the source as a fragment even when it opens with a doctype or `<html>`, dropping the
+  /// `html`, `head`, and `body` tags as Chromium does when it inserts a header template into an
+  /// element. Ignored when `document` is set.
+  #[builder(default)]
+  pub(crate) fragment: bool,
 }
 
 impl Default for FromHtmlOptions {
@@ -388,7 +393,10 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
     styles: RefCell::default(),
     disabling_fieldsets: Cell::new(0),
   };
-  let dom = markup::parse(source, options.document || is_document(source));
+  let dom = markup::parse(
+    source,
+    options.document || (!options.fragment && is_document(source)),
+  );
   let mut nodes = Vec::new();
 
   builder.build_nodes(dom.document(), 0, &mut nodes)?;
@@ -1190,6 +1198,19 @@ mod tests {
       html.contains("<body ") && html.contains(">hi</p></body>"),
       "{html}"
     );
+  }
+
+  #[test]
+  fn the_fragment_option_drops_a_documents_html_and_body() {
+    let options = FromHtmlOptions::builder().fragment(true).build();
+    let node = parse_html(
+      "<!doctype html><html><body><p>hi</p></body></html>",
+      options,
+    )
+    .unwrap()
+    .node;
+
+    assert_eq!(node.tag_name(), Some("p"));
   }
 
   /// Tag names are ASCII case-insensitive, so a document is a document however
