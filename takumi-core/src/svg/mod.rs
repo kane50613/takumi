@@ -110,7 +110,7 @@ pub(crate) struct SvgDocument {
   pub(super) size: SvgSize,
   /// The size of the canvas, which the extent of the content gives when the root sets none.
   canvas: Size<f32>,
-  mentions_current_color: bool,
+  /// Whether the root has a `color` attribute.
   has_color: bool,
 }
 
@@ -149,10 +149,6 @@ impl SvgDocument {
 
     let mut document = Self {
       stylesheet: Arc::new(StyleSheet::parse_list_loosy(&sheets)),
-      mentions_current_color: builder.mentions_current_color
-        || sheets
-          .iter()
-          .any(|sheet| contains_ignore_case(sheet, "currentcolor")),
       has_color: root.attribute("color").is_some(),
       root: root_node,
       elements: builder.elements,
@@ -248,10 +244,9 @@ impl SvgDocument {
       .collect()
   }
 
-  /// Whether the rendering depends on the host `color`: the markup names `currentColor` and the
-  /// root sets no `color` of its own.
-  pub(crate) fn uses_current_color(&self) -> bool {
-    self.mentions_current_color && !self.has_color
+  /// Whether the root has a `color` attribute.
+  pub(crate) fn has_color(&self) -> bool {
+    self.has_color
   }
 
   /// How many nodes the document retains, for cache weighing.
@@ -282,20 +277,12 @@ impl SvgDocument {
   }
 }
 
-fn contains_ignore_case(text: &str, needle: &str) -> bool {
-  text
-    .as_bytes()
-    .windows(needle.len())
-    .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
-}
-
 /// Builds the node tree and the element table together, numbering each node as the matcher will.
 #[derive(Default)]
 struct TreeBuilder {
   elements: Vec<ElementEntry>,
   first_ids: HashMap<Box<str>, usize>,
   last_ids: HashMap<Box<str>, usize>,
-  mentions_current_color: bool,
   names: Names,
 }
 
@@ -367,7 +354,6 @@ impl TreeBuilder {
           self.last_ids.insert(value.into(), index);
         }
         (None, "style") => {
-          self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value)));
         }
         (Some(XLINK_NAMESPACE), "href") => {
@@ -385,7 +371,6 @@ impl TreeBuilder {
           }
         }
         (None, name) => {
-          self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           attributes.insert(self.names.get(name), value.into());
         }
         _ => {}
