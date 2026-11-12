@@ -44,7 +44,20 @@ pub struct RenderOptions<'g> {
   #[builder(default)]
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
-  #[builder(default = Cache::shared())]
+  #[builder(
+    via_mutators(init = Cache::shared()),
+    mutators(
+      /// Keeps what the render reuses in `cache` instead of [`Cache::shared`].
+      pub fn cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+
+      /// The old name of `cache`, kept so code written for it still builds.
+      pub fn resource_cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+    )
+  )]
   pub(crate) cache: Cache,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]

@@ -387,7 +387,20 @@ pub struct PdfOptions<'g> {
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
   /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
-  #[builder(default = Cache::shared())]
+  #[builder(
+    via_mutators(init = Cache::shared()),
+    mutators(
+      /// Keeps what the render reuses in `cache` instead of [`Cache::shared`].
+      pub fn cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+
+      /// The old name of `cache`, kept so code written for it still builds.
+      pub fn resource_cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+    )
+  )]
   pub cache: Cache,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
@@ -1084,7 +1097,20 @@ pub struct MeasureOptions<'g> {
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
   /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
-  #[builder(default = Cache::shared())]
+  #[builder(
+    via_mutators(init = Cache::shared()),
+    mutators(
+      /// Keeps what the render reuses in `cache` instead of [`Cache::shared`].
+      pub fn cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+
+      /// The old name of `cache`, kept so code written for it still builds.
+      pub fn resource_cache(&mut self, cache: Cache) {
+        self.cache = cache;
+      }
+    )
+  )]
   pub cache: Cache,
   /// Lays out at the full page width with unbounded height, exactly how
   /// [`crate::render`] measures a header/footer band. Margins do not affect the

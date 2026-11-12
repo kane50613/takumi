@@ -132,6 +132,28 @@ impl Cache {
     }
   }
 
+  /// The old `ResourceCache::new`. Approximate: gives images and stylesheets a budget of
+  /// `max_bytes` each, where the old cache shared one between them.
+  #[deprecated(note = "use `Cache::builder().images(max_bytes).build()`")]
+  pub fn new(max_bytes: u64) -> Self {
+    Self::builder()
+      .images(max_bytes)
+      .stylesheets(max_bytes)
+      .build()
+  }
+
+  /// The old name of [`Self::decode_image`].
+  #[deprecated(note = "use `decode_image`")]
+  pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
+    self.decode_image(bytes, mode)
+  }
+
+  /// The old name of [`Self::parse_stylesheet`].
+  #[deprecated(note = "use `parse_stylesheet`")]
+  pub fn get_or_parse_stylesheet(&self, sources: Vec<String>) -> Arc<StyleSheet> {
+    self.parse_stylesheet(sources)
+  }
+
   /// The buffer an image with the cache key `source` draws at a size, `compute`d once across
   /// concurrent misses. A source with no key computes on every call.
   pub(crate) fn sized(

@@ -852,6 +852,10 @@ impl ImageError {
   }
 }
 
+/// The old name of [`Cache`].
+#[deprecated(note = "use `Cache`")]
+pub type ResourceCache = Cache;
+
 /// Cache policy for a decoded image, applied per [`Cache::decode_image`] call.
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
