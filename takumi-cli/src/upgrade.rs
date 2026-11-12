@@ -60,6 +60,12 @@ impl UpgradeArgs {
       return Ok(());
     }
 
+    // Windows keeps a running executable locked, so `cargo install` cannot replace takumi.exe
+    // while this process waits for it. <https://github.com/rust-lang/cargo/issues/3486>
+    if cfg!(windows) {
+      return Err(format!("Windows cannot replace takumi while it runs. Run `cargo {shown}` in PowerShell once this command exits.").into());
+    }
+
     eprintln!("Running: cargo {shown}");
 
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -100,10 +106,21 @@ fn installed_source(root: &Path) -> Result<Source, Box<dyn Error>> {
         && install
           .get("bins")
           .and_then(serde_json::Value::as_array)
-          .is_some_and(|bins| bins.iter().any(|bin| bin == "takumi"))
+          .is_some_and(|bins| {
+            bins
+              .iter()
+              .filter_map(serde_json::Value::as_str)
+              .any(|bin| is_takumi(bin, env::consts::EXE_SUFFIX))
+          })
     })
     .and_then(|(id, _)| Source::from_package_id(id))
     .ok_or_else(not_from_cargo)
+}
+
+/// Whether `bin`, a file name Cargo records, is takumi's executable on a platform whose
+/// executables end in `suffix`, such as `.exe`.
+fn is_takumi(bin: &str, suffix: &str) -> bool {
+  bin.strip_suffix(suffix) == Some("takumi")
 }
 
 impl Source {
@@ -171,13 +188,13 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
       };
       let command = command_line(&install_arguments(&unpinned, root)?);
 
-      return Err(format!("takumi was installed from {url} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.").into());
+      return Err(format!("takumi was installed from {} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.", without_userinfo(url)).into());
     }
-    Source::Registry { index } => {
-      if let Some(index) = index {
-        arguments.extend(["--index".into(), index.into()]);
-      }
-    }
+    // Without `--registry`, Cargo installs from a configured `registry.default`, not crates.io.
+    Source::Registry { index } => arguments.extend(match index {
+      Some(index) => ["--index".into(), index.into()],
+      None => ["--registry".into(), "crates-io".into()],
+    }),
     Source::Path(path) => {
       let command = command_line(&[
         "install".into(),
@@ -197,22 +214,22 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
   Ok(arguments)
 }
 
-/// `arguments` joined into one line the platform's shell splits back into the same arguments:
-/// a POSIX shell, or on Windows `cmd` and PowerShell, which both read double quotes.
+/// `arguments` joined into one line to show, with any URL's credentials left out, that a POSIX
+/// shell, or PowerShell on Windows, splits back into the same arguments.
 fn command_line(arguments: &[OsString]) -> String {
   arguments
     .iter()
     .map(|argument| {
-      let argument = argument.to_string_lossy();
+      let argument = without_userinfo(&argument.to_string_lossy());
 
       if !argument.is_empty()
         && argument
           .chars()
-          .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,%".contains(c))
+          .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,".contains(c))
       {
-        argument.into_owned()
+        argument
       } else if cfg!(windows) {
-        windows_quote(&argument)
+        powershell_quote(&argument)
       } else {
         format!("'{}'", argument.replace('\'', r"'\''"))
       }
@@ -221,33 +238,23 @@ fn command_line(arguments: &[OsString]) -> String {
     .join(" ")
 }
 
-/// `argument` in double quotes, read back whole by the Windows argument rules Cargo parses with,
-/// where backslashes escape only a quote, or the closing quote when they end the argument.
-/// <https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>
-fn windows_quote(argument: &str) -> String {
-  let mut quoted = String::from('"');
-  let mut backslashes = 0;
-
-  for c in argument.chars() {
-    if c == '\\' {
-      backslashes += 1;
-      continue;
+/// `text` with the user name and password of a URL it holds removed, so a shown command carries
+/// no credential.
+fn without_userinfo(text: &str) -> String {
+  match Url::parse(text) {
+    Ok(mut url) if !url.username().is_empty() || url.password().is_some() => {
+      let _ = url.set_username("");
+      let _ = url.set_password(None);
+      url.to_string()
     }
-
-    if c == '"' {
-      quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
-    } else {
-      quoted.push_str(&"\\".repeat(backslashes));
-    }
-
-    quoted.push(c);
-    backslashes = 0;
+    _ => text.to_owned(),
   }
+}
 
-  quoted.push_str(&"\\".repeat(backslashes * 2));
-  quoted.push('"');
-
-  quoted
+/// `argument` in PowerShell's single quotes, which expand nothing, so `$` and backticks stay.
+/// <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules>
+fn powershell_quote(argument: &str) -> String {
+  format!("'{}'", argument.replace('\'', "''"))
 }
 
 #[cfg(test)]
@@ -353,21 +360,47 @@ mod tests {
   }
 
   #[test]
-  fn a_windows_quote_keeps_backslashes_before_a_quote() {
-    assert_eq!(windows_quote(r"C:\"), r#""C:\\""#);
-    assert_eq!(windows_quote(r#"a\"b"#), r#""a\\\"b""#);
+  fn a_powershell_quote_expands_nothing() {
+    assert_eq!(powershell_quote(r"C:\tools\$build"), r"'C:\tools\$build'");
+    assert_eq!(powershell_quote("it's"), "'it''s'");
+  }
+
+  #[test]
+  fn names_takumi_with_the_platform_suffix() {
+    assert!(is_takumi("takumi", ""));
+    assert!(is_takumi("takumi.exe", ".exe"));
+    assert!(!is_takumi("takumi", ".exe"));
+    assert!(!is_takumi("takumi-other", ""));
+  }
+
+  #[test]
+  fn reinstalls_from_crates_io_by_name() {
+    let arguments =
+      install_arguments(&Source::Registry { index: None }, Path::new("/opt/takumi")).unwrap();
+
     assert_eq!(
-      windows_quote(r"C:\Program Files\tools"),
-      r#""C:\Program Files\tools""#
+      arguments,
+      [
+        "install",
+        "--locked",
+        "--registry",
+        "crates-io",
+        "takumi-cli",
+        "--root",
+        "/opt/takumi"
+      ]
+      .map(OsString::from)
     );
   }
 
-  #[cfg(windows)]
   #[test]
-  fn quotes_what_cmd_would_split() {
+  fn a_shown_command_leaves_out_credentials() {
     assert_eq!(
-      command_line(&["--root".into(), r"C:\Program Files\tools".into()]),
-      r#"--root "C:\Program Files\tools""#
+      command_line(&[
+        "--git".into(),
+        "https://user:secret@example.com/takumi".into()
+      ]),
+      "--git https://example.com/takumi"
     );
   }
 }

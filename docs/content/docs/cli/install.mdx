@@ -65,6 +65,8 @@ takumi upgrade --dry-run
 - An install from a local clone upgrades after you pull the clone. The printed command rebuilds from it.
 - A binary that `cargo install` did not install, such as one copied from another machine, upgrades the way you installed it.
 
+On Windows, a running program cannot be replaced, so `takumi upgrade` prints the `cargo install` command and exits with code `1`. Run the command in PowerShell once takumi has exited. The commands takumi prints on Windows are quoted for PowerShell, and on other systems for a POSIX shell such as bash or zsh.
+
 ## Shell completion
 
 `takumi completions` writes a script that completes takumi's commands, flags, and their values when you press Tab. Save it where your shell reads completions, then open a new shell:
