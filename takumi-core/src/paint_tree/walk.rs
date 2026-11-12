@@ -396,7 +396,7 @@ impl Walker {
       parent,
     } = *placed;
     let local = transform * Affine::translation(fragment.x, fragment.y);
-    let mut recorder = Recorder::text(local);
+    let mut recorder = Recorder::new(local);
 
     // The fragment draws at the block's origin, so shift the frame to put it at its own.
     lines.paint_background(
@@ -414,11 +414,11 @@ impl Walker {
     }
 
     let element_path = node
-      .path_to(fragment.owner)
+      .path_to(fragment.owner())
       .map(|relative| [path, &relative].concat());
     let element = element_path
       .clone()
-      .and_then(|element_path| ElementInfo::of(fragment.owner, element_path));
+      .and_then(|element_path| ElementInfo::of(fragment.owner(), element_path));
     let size = Size {
       width: fragment.width,
       height: fragment.height,

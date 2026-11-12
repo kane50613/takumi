@@ -16,7 +16,7 @@ use smallvec::SmallVec;
 use super::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
-  items::{InlineSpans, ProcessedInlineSpan},
+  items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
@@ -30,7 +30,6 @@ use crate::{
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
   resources::{font::FontError, glyph::ResolvedGlyphs},
-  style::Color,
 };
 
 /// The laid-out content of an inline formatting context.
@@ -75,8 +74,6 @@ struct BackgroundItem {
   height: f32,
   border: BorderProperties,
   padding: Rect<f32>,
-  color: Color,
-  opacity: f32,
   baseline: f32,
   /// The strip's origin, the strip, and the fragment of the span's background.
   background: Option<(Point<f32>, ComputedLayout, ComputedLayout)>,
@@ -92,8 +89,6 @@ impl BackgroundItem {
       height: fragment.height,
       border: fragment.border,
       padding: fragment.padding,
-      color: fragment.color,
-      opacity: fragment.opacity,
       baseline: fragment.baseline,
       background: fragment.background.map(|background| {
         (
@@ -102,12 +97,14 @@ impl BackgroundItem {
           background.fragment,
         )
       }),
-      span: fragment.span,
+      span: fragment.link.decoration.id,
     }
   }
 
-  /// The fragment, its span being `owner`.
-  fn resolve<'c>(&self, owner: &'c RenderNode) -> InlineBackgroundFragment<'c> {
+  /// The fragment, its span opening `link`.
+  fn resolve<'c>(&self, link: &Rc<DecorationLink<'c>>) -> InlineBackgroundFragment<'c> {
+    let owner = link.decoration.owner;
+
     InlineBackgroundFragment {
       x: self.x,
       y: self.y,
@@ -115,8 +112,6 @@ impl BackgroundItem {
       height: self.height,
       border: self.border,
       padding: self.padding,
-      color: self.color,
-      opacity: self.opacity,
       baseline: self.baseline,
       background: self
         .background
@@ -126,8 +121,7 @@ impl BackgroundItem {
           strip,
           fragment,
         }),
-      owner,
-      span: self.span,
+      link: Rc::clone(link),
     }
   }
 }
@@ -609,12 +603,12 @@ impl FragmentItems {
     let background_fragments = if self.backgrounds.is_empty() {
       Vec::new()
     } else {
-      let owners = spans.owners();
+      let links = spans.links();
 
       self
         .backgrounds
         .iter()
-        .filter_map(|item| Some(item.resolve(*owners.get(&item.span)?)))
+        .filter_map(|item| Some(item.resolve(links.get(&item.span)?)))
         .collect()
     };
 
