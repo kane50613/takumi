@@ -1,14 +1,15 @@
 //! Runs `takumi image` on documents whose files are missing or blocked, or whose text no font
 //! draws.
 
-use std::{
-  env, fs,
-  process::{self, Command},
-};
+use std::{env, fs, process::Command};
+
+mod common;
+
+use common::TempDir;
 
 #[test]
 fn a_file_that_would_not_load_is_listed_as_blocked_or_missing() {
-  let dir = env::temp_dir().join(format!("takumi-cli-listing-{}", process::id()));
+  let dir = TempDir::new("listing");
   let site = dir.join("site");
 
   fs::create_dir_all(&site).unwrap();
@@ -54,9 +55,8 @@ fn a_file_that_would_not_load_is_listed_as_blocked_or_missing() {
 
 #[test]
 fn an_image_warns_of_the_characters_no_font_draws() {
-  let dir = env::temp_dir().join(format!("takumi-cli-uncovered-{}", process::id()));
+  let dir = TempDir::new("uncovered");
 
-  fs::create_dir_all(&dir).unwrap();
   fs::write(dir.join("page.html"), "<p>Hello \u{4F60}\u{597D}</p>").unwrap();
 
   let run = |quiet: bool| {
