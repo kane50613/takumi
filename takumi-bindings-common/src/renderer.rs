@@ -11,8 +11,7 @@ use takumi_core::resources::{
 #[serde(rename_all = "camelCase")]
 pub struct RendererOptions {
   /// The byte budget of each kind of data the renderer keeps across renders.
-  #[serde(default)]
-  pub cache: CacheBudgets,
+  pub cache: Option<CacheBudgets>,
   /// The old name of [`CacheBudgets::images`].
   pub cache_max_bytes: Option<f64>,
   /// The old name of [`CacheBudgets::fonts`].
@@ -21,7 +20,7 @@ pub struct RendererOptions {
 
 /// The byte budget of each kind of data a renderer keeps, in JavaScript byte counts, each the
 /// default of [`CacheOptions`] when absent.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheBudgets {
   /// [`CacheOptions`]'s `images`.
@@ -46,13 +45,17 @@ pub struct CacheBudgets {
 impl RendererOptions {
   /// The font budget, unbounded when neither name sets one.
   pub fn font_cache_bytes(&self) -> Option<u64> {
-    self.cache.fonts.or(self.font_cache_max_bytes).map(bytes)
+    self
+      .cache
+      .and_then(|budgets| budgets.fonts)
+      .or(self.font_cache_max_bytes)
+      .map(bytes)
   }
 
   /// The cache a renderer built with these options keeps. A glyph budget it leaves out is the one
   /// the last [`set_glyph_cache_max_bytes`] set.
   pub fn cache(&self) -> Cache {
-    let budgets = &self.cache;
+    let budgets = self.cache.unwrap_or_default();
     let budget = |value: Option<f64>, default: u64| value.map_or(default, bytes);
 
     Cache::builder()
@@ -82,4 +85,26 @@ pub fn set_glyph_cache_max_bytes(value: f64) {
 /// A JavaScript byte count, negative ones read as zero.
 fn bytes(value: f64) -> u64 {
   value.max(0.0) as u64
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // JavaScript's `{ cache: undefined }` reaches serde as a unit value, as JSON's `null` does.
+  #[test]
+  fn an_absent_cache_keeps_every_default() {
+    let options: RendererOptions = serde_json::from_str(r#"{ "cache": null }"#).unwrap();
+
+    assert!(options.cache.is_none());
+    assert_eq!(options.font_cache_bytes(), None);
+  }
+
+  #[test]
+  fn the_cache_fonts_budget_wins_over_the_old_name() {
+    let options: RendererOptions =
+      serde_json::from_str(r#"{ "cache": { "fonts": 1 }, "fontCacheMaxBytes": 2 }"#).unwrap();
+
+    assert_eq!(options.font_cache_bytes(), Some(1));
+  }
 }
