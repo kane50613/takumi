@@ -7,7 +7,7 @@
 
 use std::{
   cell::Cell,
-  fmt,
+  fmt, fs,
   io::{self, Read},
   path::{self, Component, Path, PathBuf, Prefix},
 };
@@ -129,7 +129,21 @@ impl std::error::Error for ResourceError {}
 #[derive(Debug)]
 struct Root {
   path: PathBuf,
+  /// The path with its symlinks followed, when that differs: a document named through the
+  /// working directory carries this name, as macOS reports `/private/tmp` for `/tmp`.
+  resolved: Option<PathBuf>,
   dir: Dir,
+}
+
+impl Root {
+  /// The path of `file` inside the directory, under either name of the directory.
+  fn relative(&self, file: &Path) -> Option<PathBuf> {
+    file
+      .strip_prefix(&self.path)
+      .ok()
+      .or_else(|| file.strip_prefix(self.resolved.as_ref()?).ok())
+      .map(Path::to_path_buf)
+  }
 }
 
 /// The directories a document may read and what it has read so far.
@@ -150,8 +164,16 @@ impl Sandbox {
           |error: io::Error| io::Error::new(error.kind(), format!("{}: {error}", root.display()));
         let path = absolute_path(&root).map_err(with_path)?;
         let dir = Dir::open_ambient_dir(&path, ambient_authority()).map_err(with_path)?;
+        let resolved = fs::canonicalize(&path)
+          .ok()
+          .and_then(|resolved| lexical(&resolved))
+          .filter(|resolved| *resolved != path);
 
-        Ok(Root { path, dir })
+        Ok(Root {
+          path,
+          resolved,
+          dir,
+        })
       })
       .collect::<io::Result<_>>()?;
 
@@ -262,28 +284,36 @@ impl Sandbox {
       .ok()
       .and_then(|path| lexical(&path))
       .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
-    let Some((root, relative)) = self
+    let mut grants: Vec<(&Root, PathBuf)> = self
       .roots
       .iter()
-      .find_map(|root| Some((root, path.strip_prefix(&root.path).ok()?.to_path_buf())))
+      .filter_map(|root| Some((root, root.relative(&path)?)))
       .filter(|(_, relative)| !relative.as_os_str().is_empty())
-    else {
-      return Err(ResourceError::Denied {
-        url: url.clone(),
-        path,
-      });
+      .collect();
+
+    // The deepest grant tries first, so a symlink granted inside another grant opens through its
+    // own handle, and an outer grant still reads a symlink whose target leaves the inner one.
+    grants.sort_by_key(|(_, relative)| relative.components().count());
+
+    let mut escaped = ResourceError::Denied {
+      url: url.clone(),
+      path,
     };
 
-    let metadata = root
-      .dir
-      .metadata(&relative)
-      .map_err(|error| open_error(url, error))?;
-
-    if !metadata.is_file() {
-      return Err(not_a_file(url));
+    for (root, relative) in grants {
+      match root
+        .dir
+        .metadata(&relative)
+        .map_err(|error| open_error(url, error))
+      {
+        Ok(metadata) if metadata.is_file() => return Ok((root, relative, metadata.len())),
+        Ok(_) => return Err(not_a_file(url)),
+        Err(error @ ResourceError::Escapes(_)) => escaped = error,
+        Err(error) => return Err(error),
+      }
     }
 
-    Ok((root, relative, metadata.len()))
+    Err(escaped)
   }
 
   /// Counts `bytes` read from `url` against the budget, failing once it runs out.
@@ -391,8 +421,6 @@ pub(crate) fn directory_url(directory: &Path) -> io::Result<Url> {
 
 #[cfg(test)]
 mod tests {
-  use std::fs;
-
   use super::*;
 
   fn temp_dir(name: &str) -> PathBuf {
@@ -451,6 +479,67 @@ mod tests {
     let url = directory_url(&root).unwrap().join("link.txt").unwrap();
 
     assert!(matches!(sandbox.read(&url), Err(ResourceError::Escapes(_))));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_root_named_through_a_symlink_holds_files_named_through_its_target() {
+    let target = fs::canonicalize(temp_dir("resolved-target")).unwrap();
+    let link = temp_dir("resolved-links").join("link");
+
+    fs::write(target.join("a.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let sandbox = Sandbox::new([link.clone()]).unwrap();
+
+    for named in [&target, &link] {
+      let url = directory_url(named).unwrap().join("a.css").unwrap();
+
+      assert_eq!(sandbox.read(&url).unwrap(), b"a{}", "{url}");
+    }
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_symlink_granted_inside_another_grant_reads_through_its_own_grant() {
+    let outer = temp_dir("nested-grant-outer");
+    let shared = temp_dir("nested-grant-shared");
+    let link = outer.join("assets");
+
+    fs::write(shared.join("logo.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink(&shared, &link).unwrap();
+
+    let sandbox = Sandbox::new([outer.clone(), link.clone()]).unwrap();
+    let url = directory_url(&link).unwrap().join("logo.css").unwrap();
+
+    assert_eq!(sandbox.read(&url).unwrap(), b"a{}");
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn an_outer_grant_reads_a_symlink_that_leaves_an_inner_grant() {
+    let site = temp_dir("outer-grant-site");
+    let assets = site.join("assets");
+    let link = assets.join("logo.css");
+
+    fs::create_dir_all(&assets).unwrap();
+    fs::create_dir_all(site.join("shared")).unwrap();
+    fs::write(site.join("shared/logo.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink("../shared/logo.css", &link).unwrap();
+
+    let url = directory_url(&assets).unwrap().join("logo.css").unwrap();
+
+    for roots in [
+      [site.clone(), assets.clone()],
+      [assets.clone(), site.clone()],
+    ] {
+      let sandbox = Sandbox::new(roots).unwrap();
+
+      assert_eq!(sandbox.read(&url).unwrap(), b"a{}");
+    }
   }
 
   #[cfg(unix)]
