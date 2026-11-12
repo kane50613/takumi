@@ -1838,7 +1838,7 @@ impl RenderNode {
 
   /// Blink's `DependsOnPercentageBlockSize` of the box's fragment laid out with `style`: its block
   /// size resolves a percentage, or the content of an inline or anonymous box does.
-  fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
+  pub(crate) fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
     if self.is_inline_span() {
       return self.has_descendant_that_depends_on_percentage_block_size();
     }

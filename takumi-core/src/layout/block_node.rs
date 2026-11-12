@@ -10,6 +10,7 @@ use crate::{
   layout::{
     block_layout_algorithm::{BlockLayoutAlgorithm, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
+    content_alignment::BlockContentAlignment,
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     grid::grid_layout_algorithm::GridLayoutAlgorithm,
@@ -427,10 +428,6 @@ impl<'r> LayoutTree<'r> {
 
   /// Blink's `CalculateSizeBasedLayoutCacheStatus` returning `kHit`: whether `space` gives `node`
   /// the border box and padding `result` has from `cached`.
-  ///
-  /// Approximate: without Blink's `DependsOnPercentageBlockSize` and
-  /// `HasDescendantThatDependsOnPercentageBlockSize`, a change of the %-block-size misses for an
-  /// anonymous box, whose children resolve against it, and for flex and grid. Tables always miss.
   fn size_matches(
     &mut self,
     node: NodeId,
@@ -439,20 +436,18 @@ impl<'r> LayoutTree<'r> {
     space: &ConstraintSpace,
   ) -> bool {
     let algorithm = self.algorithm(node);
-    let is_flex_or_grid = matches!(algorithm, Algorithm::Flex | Algorithm::Grid);
 
-    if matches!(algorithm, Algorithm::Table | Algorithm::Hidden)
+    if matches!(algorithm, Algorithm::Hidden)
       || cached.available_inline_size.is_none() != space.available_inline_size.is_none()
-      || (cached.percentage_resolution_block_size != space.percentage_resolution_block_size
-        && (is_flex_or_grid || self.is_anonymous(node)))
     {
       return false;
     }
 
     let style = Rc::clone(self.layout_style_rc(node));
     let resolver = LengthResolver::new(space, &style);
+    let cached_resolver = LengthResolver::new(cached, &style);
 
-    if resolver.border_padding != LengthResolver::new(cached, &style).border_padding {
+    if resolver.border_padding != cached_resolver.border_padding {
       return false;
     }
 
@@ -463,23 +458,78 @@ impl<'r> LayoutTree<'r> {
       return false;
     }
 
-    let block_size = match resolver.initial_block_size_for_fragment(None, Some(inline_size)) {
+    let render_node = self.render_node(node);
+    let depends_on_percentage_block_size = render_node.depends_on_percentage_block_size(&style);
+    let percentage_block_size_changed =
+      cached.percentage_resolution_block_size != space.percentage_resolution_block_size;
+
+    // A table's block size is known only after layout, so it hits only on equal constraints.
+    if matches!(algorithm, Algorithm::Table) {
+      return space.are_block_size_constraints_equal(cached)
+        && !space.block_size_may_change(cached, &style, depends_on_percentage_block_size);
+    }
+
+    let is_flex_or_grid = matches!(algorithm, Algorithm::Flex | Algorithm::Grid);
+    let initial_block_size = resolver.initial_block_size_for_fragment(None, Some(inline_size));
+    let block_size = match initial_block_size {
       Some(block_size) => Some(block_size),
-      // Flex and grid items can size against the final block size of a box that stretched or had
-      // a fixed one, so its intrinsic block size no longer predicts it.
-      None
+      None => {
+        #[cfg(feature = "fragmentation")]
+        if !result.break_info.is_first_for_node || result.break_info.break_token.is_some() {
+          return false;
+        }
+
+        // Flex and grid items can size against the final block size of a box that stretched or
+        // had a fixed one, or resolve the %-block-size, so its intrinsic block size no longer
+        // predicts it.
         if is_flex_or_grid
           && (cached.is_fixed_block_size
-            || (cached.is_block_auto_behavior_stretch() && style.size.height.is_auto())) =>
-      {
-        return false;
-      }
-      None => {
+            || (cached.is_block_auto_behavior_stretch() && style.size.height.is_auto())
+            || (depends_on_percentage_block_size && percentage_block_size_changed))
+        {
+          return false;
+        }
         resolver.block_size_for_fragment(Some(result.intrinsic_block_size), Some(inline_size), None)
       }
     };
 
-    block_size == Some(result.size.block_size)
+    if block_size != Some(result.size.block_size) {
+      return false;
+    }
+
+    let has_descendant_that_depends_on_percentage_block_size =
+      render_node.has_descendant_that_depends_on_percentage_block_size();
+    let was_initial_block_size_indefinite = cached_resolver
+      .initial_block_size_for_fragment(None, Some(result.size.inline_size))
+      .is_none();
+    let is_initial_block_size_indefinite = initial_block_size.is_none();
+
+    if was_initial_block_size_indefinite != is_initial_block_size_indefinite
+      && (is_flex_or_grid || has_descendant_that_depends_on_percentage_block_size)
+    {
+      return false;
+    }
+
+    if has_descendant_that_depends_on_percentage_block_size
+      && is_initial_block_size_indefinite
+      && depends_on_percentage_block_size
+      && percentage_block_size_changed
+    {
+      return false;
+    }
+
+    !space.is_table_cell
+      || BlockContentAlignment::for_table_cell(&render_node.context.style)
+        != BlockContentAlignment::Baseline
+      || match (
+        space.table_cell_alignment_baseline,
+        cached.table_cell_alignment_baseline,
+      ) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(baseline), None) => Some(baseline) == result.first_baseline,
+        (Some(baseline), Some(cached_baseline)) => baseline == cached_baseline,
+      }
   }
 
   /// Blink's `DetermineAlgorithmAndRun`.
