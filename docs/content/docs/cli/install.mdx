@@ -1,0 +1,74 @@
+---
+title: Install and upgrade
+description: Install the takumi CLI from crates.io with Cargo, keep it up to date with takumi upgrade, and remove it.
+---
+
+Cargo downloads the CLI from crates.io and builds it on your machine. You need Rust 1.91 or later.
+
+## Install Rust
+
+Skip this step if `cargo --version` prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Run `rustup update` if you already have an older Rust.
+
+## Install takumi
+
+```sh
+cargo install --locked takumi-cli
+```
+
+Cargo builds the `takumi` binary in release mode and puts it in `~/.cargo/bin`. The first build takes a few minutes. Check that it runs:
+
+```sh
+takumi --version
+```
+
+`--locked` builds with the dependency versions takumi was tested with. To install a particular release, add `--version <version>`.
+
+## Install the latest unreleased version
+
+Changes reach the GitHub repository before they reach a release. To build from the repository's default branch instead of crates.io:
+
+```sh
+cargo install --locked --git https://github.com/kane50613/takumi takumi-cli
+```
+
+To follow another branch, add `--branch <name>`. To pin a commit or tag, add `--rev <commit>` or `--tag <tag>`.
+
+To build from a clone of the repository, run this in its root:
+
+```sh
+cargo install --locked --path takumi-cli
+```
+
+## Upgrade
+
+```sh
+takumi upgrade
+```
+
+`takumi upgrade` reinstalls takumi from the source Cargo recorded when you installed it, into the same directory. An install from crates.io moves to the newest release, and an install that followed a branch moves to that branch's latest commit. It never checks for updates on its own.
+
+To see the `cargo install` command it would run without running it, add `--dry-run`:
+
+```sh
+takumi upgrade --dry-run
+```
+
+`takumi upgrade` does not run when it cannot move the install forward. It prints the command to run instead, to standard error, and exits with code `1`, with or without `--dry-run`:
+
+- A Git install pinned with `--tag` or `--rev` stays at that pin. The printed command follows the default branch instead.
+- An install from a local clone upgrades after you pull the clone. The printed command rebuilds from it.
+- A binary that `cargo install` did not install, such as one copied from another machine, upgrades the way you installed it.
+
+## Uninstall
+
+```sh
+cargo uninstall takumi-cli
+```
+
+This removes the `takumi` binary and Cargo's record of it, whichever source it came from.

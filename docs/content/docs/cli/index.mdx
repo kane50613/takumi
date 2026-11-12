@@ -1,0 +1,82 @@
+---
+title: Render from the command line
+description: Turn an HTML file into a PNG, JPEG, WebP, SVG, or PDF with the takumi CLI, without writing code.
+index: true
+---
+
+The `takumi` command renders an HTML file to an image or a PDF. It loads the stylesheets, fonts, and images the file links, lays the page out with the same engine as [image output](/docs) and [takumi-pdf](/docs/pdf), and writes the result. It reads only the directories you allow, so an HTML file you did not write cannot put your private files into its output.
+
+## Install
+
+Cargo installs the CLI from crates.io and builds it with Rust 1.91 or later:
+
+```sh
+cargo install --locked takumi-cli
+```
+
+[Install and upgrade](/docs/cli/install) covers installing Rust, the latest unreleased version, and keeping takumi up to date.
+
+## Render your first image
+
+Save this as `card.html`:
+
+```html title="card.html"
+<style>
+  body {
+    margin: 0;
+    font-family: sans-serif;
+  }
+
+  .card {
+    height: 630px;
+    padding: 64px;
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #0f172a, #4338ca);
+    color: white;
+    font-size: 64px;
+    font-weight: 700;
+  }
+</style>
+<div class="card">Hello from takumi</div>
+```
+
+Then render it at 1200×630, the usual size of a social card:
+
+```sh
+takumi image card.html -o card.png --width 1200 --height 630
+```
+
+`takumi` writes `card.png` and prints nothing else. A warning, such as a stylesheet that failed to load, goes to standard error and does not stop the render.
+
+## Render your first PDF
+
+The same file becomes a PDF with the `pdf` command:
+
+```sh
+takumi pdf card.html -o card.pdf
+```
+
+Pages default to A4. A long document flows onto as many pages as it needs, and `--page`, `--margin`, `--header`, and `--footer` set the rest. [Render PDFs](/docs/cli/pdf) walks through them.
+
+## How the CLI reads a file
+
+`takumi` opens an HTML file the way a browser does. A file without `<html>` or `<body>` still gets both, so rules such as `body { font-family: … }` apply. Relative URLs in `<link>`, `<img>`, `url()`, and `@import` resolve against the file that writes them.
+
+The CSS a document can use is the same as in the rest of takumi. [Styles](/docs/styles) lists what it supports, and [How Takumi works](/docs/concepts#where-it-differs-from-a-browser) covers where it differs from a browser. Two things differ from a browser on purpose: `takumi` never loads `http` or `https` URLs, and it reads only the directories you allow. [Control file access](/docs/cli/file-access) explains both.
+
+## Next steps
+
+<Cards>
+  <Card title="Render images" href="/docs/cli/images">
+    Size, pixel density, formats, and quality.
+  </Card>
+  <Card title="Render PDFs" href="/docs/cli/pdf">
+    Page size, margins, headers, footers, and bookmarks.
+  </Card>
+  <Card title="Use takumi in scripts" href="/docs/cli/scripting">
+    Pipes, exit codes, and checking a document before you render it.
+  </Card>
+  <Card title="CLI reference" href="/docs/cli/reference">
+    Every command and flag.
+  </Card>
+</Cards>

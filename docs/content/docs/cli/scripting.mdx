@@ -1,0 +1,76 @@
+---
+title: Use takumi in scripts
+description: Pipe HTML in and images out, read the exit codes, and fail a build on a file a document cannot load.
+---
+
+`takumi` is built to sit in a pipeline. The rendered file is the only thing it writes to standard output, messages go to standard error, and the exit code tells a script what went wrong.
+
+## Read from standard input
+
+`-` as the input reads the HTML from standard input. Here `generate-card` stands for any program that prints HTML:
+
+```sh
+generate-card --title "Launch day" | takumi image - -o card.png
+```
+
+A document read from standard input gets no readable directory, since it has no file to sit beside. If it references stylesheets, images, or fonts, grant their directory with `--root`. Relative URLs then resolve against the working directory:
+
+```sh
+generate-card | takumi image - -o card.png --root assets
+```
+
+## Write to standard output
+
+`-o -` writes the output to standard output. There is no file extension to read the format from, so an image needs `--format`. This example compresses the image with `gzip` on its way to a file:
+
+```sh
+takumi image card.html -o - --format svg | gzip > card.svg.gz
+```
+
+`takumi pdf` always writes PDF, so it needs no `--format`. Neither command writes binary output to a terminal. Redirect it to a file or a pipe.
+
+## Messages and exit codes
+
+Warnings and errors go to standard error, starting with `warning:` or `error:`. A warning means a file was skipped and the render went on, such as a missing image. `-q` hides warnings and keeps errors.
+
+The exit code tells a script why a render failed:
+
+| Code | Meaning                                                                |
+| ---- | ---------------------------------------------------------------------- |
+| `0`  | The output was written, or the listing printed.                        |
+| `1`  | The render failed. <sup>1</sup>                                        |
+| `2`  | The command line is wrong. <sup>2</sup>                                |
+| `3`  | The document tried to read a file outside the directories you granted. |
+
+<sup>1</sup> For example, an input that does not exist, or a file past the size limits.
+
+<sup>2</sup> For example, an unknown flag, a value CSS does not accept, or an output format takumi
+does not write.
+
+Code `3` separates a policy failure from a broken document, so a script can retry with `--allow-read`, or report the document as untrusted. See [Control file access](/docs/cli/file-access).
+
+## Check a document in CI
+
+`--list-resources` prints one tab-separated line for each file the document would load, with `blocked` in the second field for a file that would not load. This step fails when any file would be blocked:
+
+```sh
+listing=$(takumi image page.html --list-resources) || exit
+blocked=$(printf '%s\n' "$listing" | awk -F '\t' '$2 == "blocked"')
+
+if [ -n "$blocked" ]; then
+  printf '%s\n' "$blocked"
+  exit 1
+fi
+```
+
+## Render many files
+
+Each run renders one file, so a shell loop covers a directory:
+
+```sh
+for page in pages/*.html; do
+  takumi image "$page" -o "out/$(basename "$page" .html).png" --width 1200 --height 630 || exit
+done
+```
+
+`|| exit` stops the loop at the first failure and keeps its exit code.

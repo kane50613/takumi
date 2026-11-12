@@ -1,0 +1,19 @@
+{
+  "title": "CLI",
+  "description": "Render HTML files from a terminal or a script",
+  "root": true,
+  "icon": "Terminal",
+  "pages": [
+    "index",
+    "install",
+    "---[BookOpen]Guides---",
+    "images",
+    "pdf",
+    "fonts",
+    "file-access",
+    "scripting",
+    "---[Library]Reference---",
+    "reference",
+    "[Styles](/docs/styles)"
+  ]
+}

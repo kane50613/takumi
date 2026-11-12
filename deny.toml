@@ -4,7 +4,8 @@ all-features = true
 [bans]
 multiple-versions = "deny"
 # syn 1 and 2 both live in the proc-macro graph and never reach a binary.
-skip = [{ crate = "syn" }]
+# cap-std still pins windows-sys 0.59, which only builds for Windows.
+skip = [{ crate = "syn" }, { crate = "windows-sys@0.59.0" }]
 
 [sources]
 unknown-registry = "deny"
