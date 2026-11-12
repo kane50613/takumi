@@ -201,6 +201,9 @@ fn parse_page_ranges(value: &str) -> Result<PageRanges, String> {
       };
 
       match (range.from, range.to) {
+        (None, None) => Err(format!(
+          "`{span}` names no page. Write a page on at least one side of `-`."
+        )),
         (Some(from), Some(to)) if from > to => Err(format!("`{span}` runs backwards.")),
         _ => Ok(range),
       }
@@ -330,6 +333,7 @@ mod tests {
     assert!(parse_page_ranges("0").is_err());
     assert!(parse_page_ranges("3-1").is_err());
     assert!(parse_page_ranges("1,,2").is_err());
+    assert!(parse_page_ranges("1,-").is_err());
   }
 
   #[test]
