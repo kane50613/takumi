@@ -9,7 +9,7 @@ use crate::{
   layout::node::Node,
   matching::{NodeMatchedDeclarations, match_stylesheets_view},
   resources::{cache::Cache, font::Fonts},
-  style::{ColorInput, ComputedStyle, LonghandId, SizingContext},
+  style::{ComputedStyle, LonghandId, SizingContext},
   viewport::Viewport,
 };
 use rustc_hash::FxHashMap;
@@ -53,10 +53,8 @@ impl<'a> StyleResolver<'a> {
           viewport.width.round() as u32,
           viewport.height.round() as u32,
         ));
-        let mut parent_style = ComputedStyle::default();
-
-        parent_style.inherited_data_mut().color = ColorInput::Value(current_color);
-
+        // The parent's `color` stays `currentColor`, so an element whose own `color` is still
+        // `currentColor` takes the host's, which `SvgLayout::resolve_color` notes.
         let root_context = RenderContext::builder()
           .fonts(
             fonts
@@ -65,7 +63,7 @@ impl<'a> StyleResolver<'a> {
           )
           .sizing(SizingContext::builder().viewport(viewport).build())
           .current_color(current_color)
-          .style(parent_style)
+          .style(ComputedStyle::default())
           .cache(cache.cloned().unwrap_or_else(Cache::shared))
           .stylesheet(Arc::clone(&document.stylesheet))
           .build();

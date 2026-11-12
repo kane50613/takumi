@@ -429,7 +429,7 @@ impl Fonts {
   }
 
   /// Registration revision of the font registry.
-  #[cfg(feature = "svg-raster")]
+  #[cfg(feature = "svg")]
   pub(crate) fn revision(&self) -> u64 {
     self.registry.revision
   }

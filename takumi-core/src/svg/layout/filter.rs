@@ -187,7 +187,7 @@ impl SvgLayout<'_> {
         }
       }
       Filter::DropShadow(shadow) => {
-        let Color([red, green, blue, alpha]) = shadow.color.resolve(styled.context.current_color);
+        let Color([red, green, blue, alpha]) = self.resolve_color(styled, shadow.color);
 
         Kind::DropShadow(DropShadow {
           input,
@@ -454,7 +454,7 @@ impl SvgLayout<'_> {
     Some(match tag {
       "feDropShadow" => {
         let (std_dev_x, std_dev_y) = self.std_deviation(fe, scale, "2 2");
-        let (color, opacity) = styled.flood();
+        let (color, opacity) = self.flood(&styled);
 
         Kind::DropShadow(DropShadow {
           input: input(self, "in"),
@@ -489,7 +489,7 @@ impl SvgLayout<'_> {
           .unwrap_or_default(),
       },
       "feFlood" => {
-        let (color, opacity) = styled.flood();
+        let (color, opacity) = self.flood(&styled);
 
         Kind::Flood { color, opacity }
       }
@@ -550,7 +550,7 @@ impl SvgLayout<'_> {
             input: input(self, "in"),
             surface_scale: number("surfaceScale").unwrap_or(1.0),
             diffuse_constant: number("diffuseConstant").unwrap_or(1.0),
-            lighting_color: styled.lighting_color(),
+            lighting_color: self.lighting_color(&styled),
             light_source,
           })
         })
@@ -565,7 +565,7 @@ impl SvgLayout<'_> {
             surface_scale: number("surfaceScale").unwrap_or(1.0),
             specular_constant: number("specularConstant").unwrap_or(1.0),
             specular_exponent: exponent,
-            lighting_color: styled.lighting_color(),
+            lighting_color: self.lighting_color(&styled),
             light_source,
           }),
           _ => Self::dummy_primitive(),
@@ -875,30 +875,22 @@ impl SvgLayout<'_> {
     root.finish();
     SvgPainter::paint(&root, &mut self.budget)
   }
-}
 
-impl Styled {
-  /// The color and opacity of the flood a primitive makes, from `flood-color` and `flood-opacity`.
-  fn flood(&self) -> (Color, f32) {
-    let style = self.style();
-    let Color([red, green, blue, alpha]) = style
-      .svg_misc_data
-      .flood_color
-      .resolve(self.context.current_color);
+  /// The color and opacity of the flood `styled` makes, from `flood-color` and `flood-opacity`.
+  fn flood(&self, styled: &Styled) -> (Color, f32) {
+    let data = &styled.style().svg_misc_data;
+    let Color([red, green, blue, alpha]) = self.resolve_color(styled, data.flood_color);
 
     (
       Color([red, green, blue, 255]),
-      f32::from(alpha) / 255.0 * style.svg_misc_data.flood_opacity.0.clamp(0.0, 1.0),
+      f32::from(alpha) / 255.0 * data.flood_opacity.0.clamp(0.0, 1.0),
     )
   }
 
-  /// The color of a lighting primitive, whose alpha does not matter.
-  fn lighting_color(&self) -> Color {
-    let Color([red, green, blue, _]) = self
-      .style()
-      .svg_misc_data
-      .lighting_color
-      .resolve(self.context.current_color);
+  /// The color of the lighting primitive `styled`, whose alpha does not matter.
+  fn lighting_color(&self, styled: &Styled) -> Color {
+    let Color([red, green, blue, _]) =
+      self.resolve_color(styled, styled.style().svg_misc_data.lighting_color);
 
     Color([red, green, blue, 255])
   }
