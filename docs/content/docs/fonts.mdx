@@ -27,7 +27,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 <sup>2</sup> A descriptor's fields override what the file reports.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the `cache.fonts` budget evicts it.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the [`fonts` budget](/docs/caching#release-fonts) evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -151,7 +151,7 @@ const fonts = await googleFonts({
 
 `googleFonts` also takes the [fetch options](/docs/images#fetch-limits): `timeout`, `signal`, `maxBytes`, `allowUrl`, and `fetch`. The timeout covers each request on its own, first the CSS request and then each font file. It does not cover the whole render.
 
-The default CSS cache is bounded and shares concurrent requests for the same URL. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
+[Caching](/docs/caching#google-fonts-css) covers how the default CSS cache bounds its responses and when a request skips it.
 
 ### From `@font-face` rules
 
@@ -241,13 +241,7 @@ renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
 renderer.clearFonts(); // back to the built-in Geist
 ```
 
-A later render that lists a released font loads it again. To release fonts automatically, cap the decoded bytes that `fonts` lists may keep:
-
-```ts
-const renderer = new Renderer({ cache: { fonts: 64 * 1024 * 1024 } });
-```
-
-Past the cap, the least recently used families go first. Fonts from `registerFont` always stay. The font loaded last also stays, even if it alone exceeds the cap. Set the cap above what one render needs.
+A later render that lists a released font loads it again. To release fonts automatically, cap them with the [`fonts` budget](/docs/caching#release-fonts).
 
 ## Choosing a font
 
