@@ -169,7 +169,7 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Format generated fixtures
-        run: bunx oxfmt --write takumi/tests/fixtures-generated
+        run: bunx oxfmt --write takumi/tests/fixtures-generated takumi-cli/tests/fixtures-generated
 
       - name: Check for git changes and prepare artifact
         id: check_changes
