@@ -94,10 +94,6 @@ pub struct SvgSource {
   /// Canvas size and CSS intrinsic sizing read from the root element.
   #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
-  /// Whether a vector backend embedding the markup adds the host `color` to it: the markup names
-  /// `currentColor` and the root element sets no `color` of its own.
-  #[cfg(feature = "svg")]
-  uses_current_color: bool,
   /// The document, drawn through the CSS cascade.
   #[cfg(feature = "svg")]
   document: Arc<SvgDocument>,
@@ -246,10 +242,10 @@ impl SvgSource {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
-  /// Markup for embedding in a vector backend, with the host `color` injected
-  /// as a root presentation attribute when `currentColor` depends on it.
+  /// Markup for embedding in a vector backend, with the host `color` as a root presentation
+  /// attribute unless the root sets one, which a second would make malformed.
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
-    if !self.uses_current_color {
+    if self.document.has_color() {
       return Cow::Borrowed(&self.source);
     }
 
@@ -372,7 +368,6 @@ impl SvgSource {
   /// The source of `document`, parsed from `src`, as an image that no cache holds.
   fn from_document(document: SvgDocument, src: &str) -> Self {
     Self {
-      uses_current_color: document.uses_current_color(),
       document: Arc::new(document),
       inline: false,
       source: Box::from(src),
@@ -2171,8 +2166,18 @@ mod tests {
     let injected = source.source_with_current_color(Color([255, 0, 0, 255]));
     assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
 
-    let plain = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
-    let source: SvgSource = plain.parse()?;
+    // A stylesheet that escapes the keyword still takes the host color.
+    let escaped = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>rect { fill: currentcol\6f r }</style><rect width="4" height="4"/></svg>"#;
+    let source: SvgSource = escaped.parse()?;
+
+    assert!(
+      source
+        .source_with_current_color(Color([255, 0, 0, 255]))
+        .starts_with(r##"<svg color="#ff0000ff""##)
+    );
+
+    let own = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##;
+    let source: SvgSource = own.parse()?;
 
     assert!(matches!(
       source.source_with_current_color(Color([255, 0, 0, 255])),
