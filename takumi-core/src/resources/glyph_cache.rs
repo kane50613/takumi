@@ -28,7 +28,7 @@ pub fn set_glyph_cache_max_bytes(bytes: usize) {
 }
 
 /// The glyph budget of a cache built without one of its own.
-pub(crate) fn default_max_bytes() -> u64 {
+pub fn default_max_bytes() -> u64 {
   DEFAULT_MAX_BYTES.load(Ordering::Relaxed)
 }
 

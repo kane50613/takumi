@@ -11,8 +11,9 @@ use std::{collections::HashMap, fmt::Display, iter::once, rc::Rc, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore, NeedsOutput, append_css,
+  FontStore, NeedsOutput, append_css,
   input::{ListedFonts, decode_images, retain_svg},
+  options::RendererOptions,
   parse_lang,
   source::read_source,
   source_cache::SourceCache,
@@ -56,8 +57,8 @@ extern "C" {
   pub type FontType;
 
   /// JavaScript object holding the font cache budget.
-  #[wasm_bindgen(typescript_type = "FontCacheOptions")]
-  pub type FontCacheOptionsType;
+  #[wasm_bindgen(typescript_type = "RendererOptions")]
+  pub type RendererOptionsType;
 
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
@@ -202,15 +203,15 @@ impl PdfRenderer {
 impl PdfRenderer {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new(options: Option<FontCacheOptionsType>) -> Result<PdfRenderer, js_sys::Error> {
-    let options: FontCacheOptions = options
+  pub fn new(options: Option<RendererOptionsType>) -> Result<PdfRenderer, js_sys::Error> {
+    let options: RendererOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
     Ok(PdfRenderer {
-      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
-      cache: Cache::default(),
+      fonts: FontStore::new(options.font_cache_bytes()).map_err(map_error)?,
+      cache: options.cache(),
       sources: SourceCache::default(),
       bands: SourceCache::default(),
     })
