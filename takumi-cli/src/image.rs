@@ -54,8 +54,8 @@ struct ViewportArgs {
   #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
   height: Option<u32>,
 
-  /// The device pixel ratio. `--dpr 2` writes an image twice as wide and twice as tall, for
-  /// high-density screens.
+  /// The device pixel ratio, the image pixels per CSS pixel. `--dpr 2` draws each CSS pixel as
+  /// two image pixels across, for high-density screens.
   #[arg(long, default_value_t = 1.0, value_parser = parse_device_pixel_ratio)]
   dpr: f32,
 }
