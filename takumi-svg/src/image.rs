@@ -13,7 +13,7 @@ use takumi_core::{
   geometry::Size,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
   painter::{BoxFrame, BoxPainter, PaintDevice},
-  resources::image::{ImageSource, SvgOp, SvgSource, sniff_mime, to_data_url},
+  resources::image::{ImageSource, SvgOp, SvgPicture, SvgSource, sniff_mime, to_data_url},
   style::{Affine, FillRule, ImageScalingAlgorithm},
 };
 
@@ -86,7 +86,10 @@ fn intrinsic_size(source: &ImageSource, context: &RenderContext) -> Option<(f32,
 /// What an image draws as in SVG output.
 pub(crate) enum Drawing {
   /// An SVG image's vector ops, drawn on `canvas`.
-  Ops { ops: Vec<SvgOp>, canvas: Frame },
+  Ops {
+    picture: Arc<SvgPicture>,
+    canvas: Frame,
+  },
   /// A `data:` URL for an `<image>`, with the key and pixel size it can be defined once under.
   Raster {
     href: Rc<str>,
@@ -178,11 +181,13 @@ fn pixel_size(source: &ImageSource) -> Option<(f32, f32)> {
 /// `svg`'s ops laid out at `viewport`, Blink's container size, when SVG elements can express every
 /// op.
 fn vector_ops(svg: &SvgSource, context: &RenderContext, viewport: Size<f32>) -> Option<Drawing> {
-  let ops = svg.vector_ops(context, viewport);
+  let picture = svg.picture(context, viewport);
 
-  (viewport.width > 0.0 && viewport.height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
-    ops,
-    canvas: Frame::new(0.0, 0.0, viewport.width, viewport.height),
+  (viewport.width > 0.0 && viewport.height > 0.0 && is_vector(picture.ops())).then(|| {
+    Drawing::Ops {
+      picture,
+      canvas: Frame::new(0.0, 0.0, viewport.width, viewport.height),
+    }
   })
 }
 
@@ -190,7 +195,7 @@ impl SvgDocument {
   /// Draws `drawing` stretched over `rect`, an `<image>` keeping `aspect`.
   pub(crate) fn draw(&mut self, drawing: &Drawing, rect: Frame, aspect: &str) -> io::Result<()> {
     match drawing {
-      Drawing::Ops { ops, canvas } => self.svg_image(ops, *canvas, rect),
+      Drawing::Ops { picture, canvas } => self.svg_image(picture.ops(), *canvas, rect),
       Drawing::Raster {
         href,
         definition: Some((key, natural)),
