@@ -18,7 +18,7 @@ use crate::resources::font::DocumentRegistries;
 use crate::{
   layout::intercept::InterceptCache,
   resources::{
-    glyph_cache::GlyphCache,
+    glyph_cache::{self, GlyphCache},
     image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
@@ -59,7 +59,7 @@ pub struct CacheOptions {
   #[builder(default = CacheOptions::DEFAULT_TAILWIND)]
   tailwind: u64,
   /// Resolved glyphs, and the masks rasterized from glyphs and shapes.
-  #[builder(default = CacheOptions::DEFAULT_GLYPHS)]
+  #[builder(default = glyph_cache::default_max_bytes())]
   glyphs: u64,
   /// Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
   #[builder(default = CacheOptions::DEFAULT_INTERCEPTS)]

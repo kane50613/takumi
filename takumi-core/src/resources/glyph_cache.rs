@@ -1,7 +1,10 @@
 //! Resolved glyphs and the masks rasterized from them and from shapes, sharing one byte budget so
 //! the split follows the workload.
 
-use std::sync::Arc;
+use std::sync::{
+  Arc,
+  atomic::{AtomicU64, Ordering},
+};
 
 use quick_cache::{
   Weighter,
@@ -9,7 +12,25 @@ use quick_cache::{
 };
 use rustc_hash::FxBuildHasher;
 
-use crate::{geometry::Placement, resources::glyph::ResolvedGlyph};
+use crate::{
+  geometry::Placement,
+  resources::{cache::CacheOptions, glyph::ResolvedGlyph},
+};
+
+/// The glyph budget of caches built without one of their own.
+static DEFAULT_MAX_BYTES: AtomicU64 = AtomicU64::new(CacheOptions::DEFAULT_GLYPHS);
+
+/// Sets the glyph budget of the caches built after this call without one of their own, which
+/// includes [`Cache::shared`](crate::Cache::shared) when nothing used it yet. `0` stops caching.
+#[deprecated(note = "use `Cache::builder().glyphs(bytes)`")]
+pub fn set_glyph_cache_max_bytes(bytes: usize) {
+  DEFAULT_MAX_BYTES.store(bytes as u64, Ordering::Relaxed);
+}
+
+/// The glyph budget of a cache built without one of its own.
+pub(crate) fn default_max_bytes() -> u64 {
+  DEFAULT_MAX_BYTES.load(Ordering::Relaxed)
+}
 
 /// Bytes charged for an entry's own bookkeeping on top of its payload.
 pub(crate) const ENTRY_OVERHEAD: usize = 64;
