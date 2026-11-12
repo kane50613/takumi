@@ -323,7 +323,8 @@ macro_rules! push_four_side_declarations {
 fn is_inert_property(name: &str) -> bool {
   let name = name.to_ascii_lowercase();
 
-  ["transition", "scroll", "overscroll-behavior"]
+  // `scroll-` leaves out `scrollbar-gutter` and `scrollbar-width`, which change the layout.
+  ["transition", "scroll-", "overscroll-behavior"]
     .iter()
     .any(|prefix| name.starts_with(prefix))
     || matches!(
@@ -331,14 +332,12 @@ fn is_inert_property(name: &str) -> bool {
       "cursor"
         | "pointer-events"
         | "user-select"
-        | "will-change"
         | "touch-action"
         | "resize"
         | "caret-color"
         | "accent-color"
         | "appearance"
         | "text-size-adjust"
-        | "text-rendering"
         | "print-color-adjust"
         | "forced-color-adjust"
         | "interpolate-size"

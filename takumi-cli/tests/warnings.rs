@@ -89,3 +89,53 @@ fn deny_warnings_passes_a_document_that_raises_none() {
   assert!(output.status.success());
   assert!(image.exists());
 }
+
+#[test]
+fn quiet_hides_warnings_under_log() {
+  let (output, image) = render("quiet-log", PAGE, &["-q", "--log", "info"]);
+  let messages = String::from_utf8(output.stderr).unwrap();
+
+  assert!(output.status.success(), "{messages}");
+  assert!(image.exists());
+  assert!(!messages.contains("warning: "), "{messages}");
+  assert!(messages.contains("render: "), "{messages}");
+}
+
+#[test]
+fn a_property_that_can_change_a_static_render_warns() {
+  for property in [
+    "scrollbar-gutter: stable",
+    "will-change: transform",
+    "text-rendering: optimizeSpeed",
+  ] {
+    let (output, _) = render(
+      "static",
+      &format!("<p style=\"{property}; scroll-behavior: smooth\">One</p>"),
+      &[],
+    );
+    let messages = String::from_utf8(output.stderr).unwrap();
+
+    assert_eq!(messages.lines().count(), 1, "{property}: {messages}");
+  }
+}
+
+#[test]
+fn deny_warnings_writes_no_resource_listing() {
+  let dir = env::temp_dir().join(format!("takumi-cli-warnings-listing-{}", process::id()));
+
+  fs::create_dir_all(&dir).unwrap();
+  fs::write(
+    dir.join("page.html"),
+    format!("{PAGE}<img src=\"logo.png\">"),
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .args(["image", "--list-resources", "--deny-warnings"])
+    .arg(dir.join("page.html"))
+    .output()
+    .expect("runs takumi");
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(output.stdout.is_empty(), "{:?}", output.stdout);
+}

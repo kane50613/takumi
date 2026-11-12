@@ -106,24 +106,34 @@ pub(crate) fn run(
   let mut fonts = input.fonts()?;
 
   if listing {
-    for url in &report.loaded {
-      println!("stylesheet\tallowed\t{url}");
-    }
+    let mut lines: Vec<String> = report
+      .loaded
+      .iter()
+      .map(|url| format!("stylesheet\tallowed\t{url}"))
+      .collect();
 
     // A stylesheet that would not load is a listing line like any other resource.
     warnings.retain(|error| match error.url() {
       Some(url) => {
-        println!("stylesheet\t{}\t{url}\t{error}", error.listing_status());
+        lines.push(format!(
+          "stylesheet\t{}\t{url}\t{error}",
+          error.listing_status()
+        ));
         false
       }
       None => true,
     });
 
     for each in std::iter::once(&document).chain(&bands) {
-      each.list_resources(product, &fonts, sandbox)?;
+      each.list_resources(product, &fonts, sandbox, &mut lines)?;
     }
     warn(&warnings);
+    // `--deny-warnings` writes nothing on a warning, the listing included.
     Logger::deny_warnings(deny_warnings)?;
+
+    for line in lines {
+      println!("{line}");
+    }
 
     return Ok(());
   }
