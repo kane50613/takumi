@@ -18,8 +18,9 @@ pub struct RendererOptions {
   pub font_cache_max_bytes: Option<f64>,
 }
 
-/// The byte budget of each kind of data a renderer keeps, in JavaScript byte counts, each the
-/// default of [`CacheOptions`] when absent.
+/// The byte budget of each kind of data a renderer keeps, in JavaScript byte counts. An absent
+/// budget takes the default of [`CacheOptions`], except `glyphs`, which takes the budget the last
+/// [`set_glyph_cache_max_bytes`] set, and `fonts`, which leaves the fonts unbounded.
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheBudgets {
