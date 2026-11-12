@@ -73,15 +73,18 @@ takumi upgrade --dry-run
 # bash
 takumi completions bash > ~/.local/share/bash-completion/completions/takumi
 
-# zsh, into a directory on $fpath
-takumi completions zsh > "${fpath[1]}/_takumi"
+# zsh: add `fpath+=~/.zfunc` before `compinit` in ~/.zshrc
+mkdir -p ~/.zfunc
+takumi completions zsh > ~/.zfunc/_takumi
 
 # fish
 takumi completions fish > ~/.config/fish/completions/takumi.fish
 
-# PowerShell
-takumi completions powershell >> $PROFILE
+# PowerShell: add `. ~/takumi.ps1` to $PROFILE once
+takumi completions powershell > ~/takumi.ps1
 ```
+
+PowerShell needs the script in a file of its own, since it starts with `using` statements that must come first in a script.
 
 Run the command again after `takumi upgrade`, so the script knows the new commands and flags.
 
