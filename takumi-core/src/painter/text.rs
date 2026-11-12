@@ -253,7 +253,7 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let runs = self.painted_runs(spans, style, frame, device);
+    let runs = self.painted_runs(spans, style, frame, device, None);
 
     for fragment in &self.background_fragments {
       Self::paint_fragment(fragment, &runs, frame, device);
@@ -277,14 +277,13 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    // Only a background clipped to the text paints through the runs.
-    // ponytail: a text-clipped span still prepares every run per fragment, O(fragments × runs);
-    // prepare the runs once in `Walker::text` if long text-clipped spans get slow.
+    // Only a background clipped to the text paints through the runs, and only through the ones
+    // inside the fragment.
     let runs = if fragment
       .background
       .is_some_and(|background| background.clips_text())
     {
-      self.painted_runs(spans, style, frame, device)
+      self.painted_runs(spans, style, frame, device, Some(fragment))
     } else {
       Vec::new()
     };
@@ -326,7 +325,7 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let runs = self.painted_runs(spans, style, frame, device);
+    let runs = self.painted_runs(spans, style, frame, device, None);
 
     Self::paint_runs(&self.outline_rects, &runs, frame, device);
   }
@@ -398,18 +397,21 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    for painted in self.painted_runs(spans, style, frame, device) {
+    for painted in self.painted_runs(spans, style, frame, device, None) {
       painted.paint_mask(frame, device);
     }
   }
 
   /// The runs that paint, `visibility: hidden` ones left out, each in its span's style or `style`.
+  /// With `within`, only the runs that lie in that fragment, left out before their decorations are
+  /// built.
   fn painted_runs<'r>(
     &'r self,
     spans: &'r [ProcessedInlineSpan<'_>],
     style: &'r SizedFontStyle,
     frame: BoxFrame,
     device: &dyn GlyphDevice,
+    within: Option<&InlineBackgroundFragment>,
   ) -> Vec<PaintedRun<'r>> {
     let at = frame.translation();
     let device_transform = device.transform();
@@ -421,12 +423,23 @@ impl InlineLines<'_> {
         let style = run.style(spans).unwrap_or(style);
 
         // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
-        style.parent.is_visible().then(|| PaintedRun {
+        if !style.parent.is_visible() {
+          return None;
+        }
+
+        let chain = run.span_chain(spans);
+        let baseline = run.glyph_offset(frame.layout).y + run.glyph_run.baseline;
+
+        if within.is_some_and(|fragment| !PaintedRun::lies_within(chain, baseline, fragment)) {
+          return None;
+        }
+
+        Some(PaintedRun {
           run,
           decorations: run.decorations(frame.layout, at, device_transform),
           style,
-          chain: run.span_chain(spans),
-          baseline: run.glyph_offset(frame.layout).y + run.glyph_run.baseline,
+          chain,
+          baseline,
         })
       })
       .collect()
@@ -526,11 +539,20 @@ impl PositionedInlineRun {
 impl PaintedRun<'_> {
   /// Whether the run sits inside `fragment`: within its span, on its line.
   fn lies_in(&self, fragment: &InlineBackgroundFragment) -> bool {
-    self.chain.is_some_and(|chain| {
+    Self::lies_within(self.chain, self.baseline, fragment)
+  }
+
+  /// Whether a run around `chain` with its baseline at `baseline` sits inside `fragment`.
+  fn lies_within(
+    chain: Option<&DecorationLink>,
+    baseline: f32,
+    fragment: &InlineBackgroundFragment,
+  ) -> bool {
+    chain.is_some_and(|chain| {
       chain
         .ancestors()
         .any(|link| link.decoration.id == fragment.span)
-    }) && (fragment.y..=fragment.y + fragment.height).contains(&self.baseline)
+    }) && (fragment.y..=fragment.y + fragment.height).contains(&baseline)
   }
 
   /// Paints the run's glyphs and decorations into a `background-clip: text` mask, as Blink's
