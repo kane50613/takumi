@@ -302,7 +302,7 @@ mod tests {
     }
 
     let stylesheet = StyleSheet::parse(&format!("{selector} {{ width: 1px }}")).unwrap();
-    let matched = match_stylesheets_view(root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(root, &[&stylesheet], Viewport::default(), None);
     tree_order(root)
       .iter()
       .zip(&matched)

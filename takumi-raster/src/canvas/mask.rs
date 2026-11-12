@@ -6,7 +6,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
   painter::{BackgroundClipArea, FillShape},
-  resources::glyph_cache::{glyph_mask, max_entry_bytes},
+  resources::glyph_cache::GlyphCache,
   scene::SceneBounds,
 };
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
@@ -586,14 +586,15 @@ pub(crate) fn render_mask(
 
 /// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
 /// pixel, within [`max_entry_bytes`].
-fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
+fn fits_glyph_cache(glyphs: &GlyphCache, size: Size<f32>, transform: Affine) -> bool {
   transformed_placement(Point::ZERO, size, transform).is_some_and(|placement| {
-    u64::from(placement.width) * u64::from(placement.height) <= max_entry_bytes()
+    u64::from(placement.width) * u64::from(placement.height) <= glyphs.max_entry_bytes()
   })
 }
 
 /// [`render_mask`] of `paths`, cached when it [fits](fits_glyph_cache).
 pub(crate) fn render_cached_mask(
+  glyphs: &GlyphCache,
   paths: &[Command],
   size: Size<f32>,
   transform: Affine,
@@ -601,7 +602,7 @@ pub(crate) fn render_cached_mask(
 ) -> (Arc<Vec<u8>>, Placement) {
   let render = || render_mask(paths, Some(transform), None, Some(cull));
 
-  if !fits_glyph_cache(size, transform) {
+  if !fits_glyph_cache(glyphs, size, transform) {
     let (mask, placement) = render();
 
     return (Arc::new(mask), placement);
@@ -622,7 +623,7 @@ pub(crate) fn render_cached_mask(
   for value in [cull.size.width, cull.size.height] {
     hasher.update(&value.to_le_bytes());
   }
-  glyph_mask(hasher.digest(), render)
+  glyphs.glyph_mask(hasher.digest(), render)
 }
 
 /// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
@@ -872,6 +873,7 @@ impl<'a> MaskRow<'a> {
 #[cfg(test)]
 mod tests {
   use takumi_core::{
+    Cache,
     layout::border::BorderProperties,
     style::{Angle, Sides, SpacePair},
   };
@@ -895,8 +897,9 @@ mod tests {
       size: Size::new(200, 100),
     };
     let fresh = render_mask(&paths, Some(transform), None, Some(cull));
-    let (first, placement) = render_cached_mask(&paths, size, transform, cull);
-    let (second, _) = render_cached_mask(&paths, size, transform, cull);
+    let glyphs = Cache::default();
+    let (first, placement) = render_cached_mask(glyphs.glyphs(), &paths, size, transform, cull);
+    let (second, _) = render_cached_mask(glyphs.glyphs(), &paths, size, transform, cull);
 
     assert_eq!((first.as_slice(), placement), (fresh.0.as_slice(), fresh.1));
     assert!(Arc::ptr_eq(&first, &second));
@@ -904,14 +907,28 @@ mod tests {
 
   #[test]
   fn the_cache_takes_a_fill_by_its_rasterized_bounds() {
+    let cache = Cache::default();
+    let glyphs = cache.glyphs();
     let strip = Size::new(1_000.0, 1.0);
-    let widest = Size::new(max_entry_bytes() as f32, 1.0);
+    let widest = Size::new(glyphs.max_entry_bytes() as f32, 1.0);
 
-    assert!(fits_glyph_cache(Size::new(270.0, 70.0), Affine::IDENTITY));
-    assert!(fits_glyph_cache(strip, Affine::IDENTITY));
-    assert!(!fits_glyph_cache(strip, Affine::rotation(Angle::new(45.0))));
-    assert!(fits_glyph_cache(widest, Affine::IDENTITY));
-    assert!(!fits_glyph_cache(widest, Affine::translation(0.5, 0.5)));
+    assert!(fits_glyph_cache(
+      glyphs,
+      Size::new(270.0, 70.0),
+      Affine::IDENTITY
+    ));
+    assert!(fits_glyph_cache(glyphs, strip, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(
+      glyphs,
+      strip,
+      Affine::rotation(Angle::new(45.0))
+    ));
+    assert!(fits_glyph_cache(glyphs, widest, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(
+      glyphs,
+      widest,
+      Affine::translation(0.5, 0.5)
+    ));
   }
 
   #[test]

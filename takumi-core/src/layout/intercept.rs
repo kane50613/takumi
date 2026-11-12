@@ -1,13 +1,14 @@
 //! Where a glyph outline crosses a decoration's band, which Chromium asks Skia's
 //! `SkFont::getIntercepts` for and this answers from the outline so every backend can.
 
-use std::{ops::RangeInclusive, sync::LazyLock};
+use std::{mem::size_of, ops::RangeInclusive};
 
-use quick_cache::sync::Cache;
+use quick_cache::sync::Cache as Store;
 use smallvec::SmallVec;
 
 use crate::{
   geometry::{PathCommand, Point},
+  resources::cache::{ByBytes, Weighed, store},
   resources::glyph::ResolvedOutlineGlyph,
   sort_key::sort_by_key,
   text::character::is_cjk_ideograph_or_symbol,
@@ -49,6 +50,7 @@ const MIN_INTERSECTION: f32 = 0.5;
 /// The x-ranges a decoration of `thickness` gives up to `glyphs` between `top` and `bottom`,
 /// dilated as Blink's `TextPainter::ClipDecorationLine` dilates them.
 pub(crate) fn skip_ink_ranges<'g>(
+  cache: &InterceptCache,
   glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   top: f32,
   bottom: f32,
@@ -66,7 +68,8 @@ pub(crate) fn skip_ink_ranges<'g>(
     let band_bottom = bottom - MIN_INTERSECTION - origin.y;
 
     ranges.extend(
-      cached_intercepts(outline, band_top, band_bottom)
+      cache
+        .intercepts(outline, band_top, band_bottom)
         .into_iter()
         .map(|(low, high)| (origin.x + low - dilation, origin.x + high + dilation)),
     );
@@ -94,25 +97,52 @@ const NO_SKIP_INK_BLOCKS: &[RangeInclusive<u32>] = &[
   0x10080..=0x100FF,
 ];
 
-/// Intercepts keyed by outline signature and band, shared across runs and renders.
-const INTERCEPT_CACHE_ITEMS: usize = 8192;
+/// The intercepts a [`Cache`](crate::Cache) keeps, by outline signature and band.
+pub(crate) struct InterceptCache {
+  store: Store<(u64, u32, u32), CachedSpans, ByBytes>,
+}
 
-static INTERCEPTS: LazyLock<Cache<(u64, u32, u32), Spans>> =
-  LazyLock::new(|| Cache::new(INTERCEPT_CACHE_ITEMS));
+#[derive(Clone)]
+struct CachedSpans(Spans);
 
-fn cached_intercepts(outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> Spans {
-  let key = (outline.cache_signature(), top.to_bits(), bottom.to_bits());
-  if let Some(spans) = INTERCEPTS.get(&key) {
-    return spans;
+impl Weighed for CachedSpans {
+  fn bytes(&self) -> usize {
+    let heap = if self.0.spilled() {
+      self.0.capacity() * size_of::<(f32, f32)>()
+    } else {
+      0
+    };
+
+    size_of::<Spans>() + heap
   }
-  let paths = outline.paths();
-  let spans = if reaches_band(paths, top, bottom) {
-    text_intercepts(paths, top, bottom)
-  } else {
-    Spans::new()
-  };
-  INTERCEPTS.insert(key, spans.clone());
-  spans
+}
+
+impl InterceptCache {
+  /// A cache holding at most `max_bytes`.
+  pub(crate) fn new(max_bytes: u64) -> Self {
+    Self {
+      store: store(max_bytes, size_of::<Spans>() as u64),
+    }
+  }
+
+  /// The intercepts of `outline` between `top` and `bottom`.
+  fn intercepts(&self, outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> Spans {
+    let key = (outline.cache_signature(), top.to_bits(), bottom.to_bits());
+
+    if let Some(CachedSpans(spans)) = self.store.get(&key) {
+      return spans;
+    }
+
+    let paths = outline.paths();
+    let spans = if reaches_band(paths, top, bottom) {
+      text_intercepts(paths, top, bottom)
+    } else {
+      Spans::new()
+    };
+
+    self.store.insert(key, CachedSpans(spans.clone()));
+    spans
+  }
 }
 
 /// Whether any point, control points included, lies in the band, which a flattened edge must.
@@ -309,7 +339,10 @@ fn flatten_cubic(
 
 #[cfg(test)]
 mod tests {
-  use super::{NO_SKIP_INK_BLOCKS, remaining_spans, skip_ink_ranges, skips_ink, text_intercepts};
+  use super::{
+    InterceptCache, NO_SKIP_INK_BLOCKS, remaining_spans, skip_ink_ranges, skips_ink,
+    text_intercepts,
+  };
   use crate::{
     geometry::{PathCommand, Point},
     resources::glyph::{ResolvedOutlineGlyph, outline_ink},
@@ -427,7 +460,13 @@ mod tests {
     // A 3-wide bar at x 2..5 under a 2px-thick line: the range grows 2 each
     // side, so the line loses 0..7.
     let glyph = outline(rect(2.0, -10.0, 5.0, 10.0), 1);
-    let ranges = skip_ink_ranges([(point(0.0, 0.0), &glyph)].into_iter(), -2.0, 2.0, 2.0);
+    let ranges = skip_ink_ranges(
+      &InterceptCache::new(1 << 20),
+      [(point(0.0, 0.0), &glyph)].into_iter(),
+      -2.0,
+      2.0,
+      2.0,
+    );
 
     assert_eq!(ranges.as_slice(), [(0.0, 7.0)]);
   }
@@ -436,7 +475,16 @@ mod tests {
   fn a_line_thinner_than_the_ignored_slice_skips_nothing() {
     let glyph = outline(rect(2.0, -10.0, 5.0, 10.0), 2);
 
-    assert!(skip_ink_ranges([(point(0.0, 0.0), &glyph)].into_iter(), -0.5, 0.5, 1.0).is_empty());
+    assert!(
+      skip_ink_ranges(
+        &InterceptCache::new(1 << 20),
+        [(point(0.0, 0.0), &glyph)].into_iter(),
+        -0.5,
+        0.5,
+        1.0
+      )
+      .is_empty()
+    );
   }
 
   #[test]

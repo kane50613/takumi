@@ -206,10 +206,7 @@ impl Renderer {
           fonts: Arc::new(default_fonts().map_err(map_error)?),
           cache: FontCache::new(options.font_cache_bytes()),
         }),
-        cache: match options.cache_bytes() {
-          Some(bytes) => Cache::builder().images(bytes).stylesheets(bytes).build(),
-          None => Cache::default(),
-        },
+        cache: options.cache(),
         sources: SourceCache::default(),
       }),
     })

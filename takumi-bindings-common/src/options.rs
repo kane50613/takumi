@@ -1,13 +1,22 @@
 //! The render options every image binding reads from JavaScript.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::HashMap,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
+};
 
 use serde::Deserialize;
 use takumi_core::{
   Error, Fonts,
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::{cache::Cache, image::ImageSource as DecodedImage},
+  resources::{
+    cache::{Cache, CacheOptions},
+    image::ImageSource as DecodedImage,
+  },
   style::{CssSource, FontFamily, KeyframesRule, StyleSheet},
   viewport::Viewport,
 };
@@ -39,6 +48,23 @@ impl RendererOptions {
   pub fn font_cache_bytes(&self) -> Option<u64> {
     self.font_cache_max_bytes.map(bytes)
   }
+
+  /// The cache a renderer built with these options keeps, with the glyph budget the last
+  /// [`set_glyph_cache_max_bytes`] set.
+  pub fn cache(&self) -> Cache {
+    Cache::builder()
+      .images(self.cache_bytes().unwrap_or(CacheOptions::DEFAULT_IMAGES))
+      .glyphs(GLYPH_CACHE_MAX_BYTES.load(Ordering::Relaxed))
+      .build()
+  }
+}
+
+/// The glyph budget of the renderers created next.
+static GLYPH_CACHE_MAX_BYTES: AtomicU64 = AtomicU64::new(CacheOptions::DEFAULT_GLYPHS);
+
+/// Sets the glyph budget of the renderers created after this call, from a JavaScript byte count.
+pub fn set_glyph_cache_max_bytes(value: f64) {
+  GLYPH_CACHE_MAX_BYTES.store(bytes(value), Ordering::Relaxed);
 }
 
 /// A JavaScript byte count, negative ones read as zero.

@@ -25,8 +25,8 @@ The table lists each kind of cached work, how long it lives, and how to configur
 | Work                                            | Lifetime              | Configuration                                                      |
 | :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
 | Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 64 MiB by default                                 |
-| Glyph outlines and rasterized masks             | Loaded backend module | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
-| Parsed Tailwind classes                         | Loaded backend module | Automatic, bounded internally                                      |
+| Glyph outlines and rasterized masks             | Renderer              | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
+| Parsed Tailwind classes                         | Renderer              | Automatic, bounded internally                                      |
 | Resolved Tailwind declarations                  | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
 | Google Fonts CSS                                | Fetch implementation  | Automatic, bounded internally                                      |
 | Downloaded image bytes                          | Caller-provided cache | Optional `images.fetchCache`                                       |
@@ -56,11 +56,11 @@ setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
 <Callout type="warn">
-  Call `setGlyphCacheMaxBytes` before the first render. A later call does not resize a cache already
-  in use.
+  Call `setGlyphCacheMaxBytes` before you create the renderer. A renderer keeps the budget it was
+  created with.
 </Callout>
 
-Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space, so benchmark your content first.
+Each renderer keeps its own glyph cache under this budget. Large glyph sets, such as CJK text, can need more space, so benchmark your content first.
 
 ## Keep memory flat on Linux servers
 

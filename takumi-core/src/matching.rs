@@ -23,6 +23,7 @@ use crate::{
   style::{
     BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
     selector::{CssRule, FormState, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
+    tw::TailwindCache,
   },
   viewport::Viewport,
 };
@@ -1014,6 +1015,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheets: &[&'a StyleSheet],
   viewport: Viewport,
+  tailwind: Option<&TailwindCache>,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
   let (mut rule_offset, mut layer_offset) = (0, 0);
@@ -1037,7 +1039,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   let arena = StyleArena::new(root);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
-  let tw_order = tw_rule_order(&arena);
+  let tw_order = tw_rule_order(&arena, tailwind);
   // The named layers, then the `tw` layer, declared last.
   let layers = layer_offset + 1;
 
@@ -1155,7 +1157,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       }
     }
 
-    for rule in arena.nodes[i].node.tw_rules() {
+    for rule in arena.nodes[i].node.tw_rules(tailwind) {
       let target = match &rule.pseudo_element {
         None => SelectorTarget::Element,
         Some(PseudoElement::Before) => SelectorTarget::Before,
@@ -1320,11 +1322,14 @@ fn take_pseudo_bucket<'a>(
 
 /// The places of the rules `tw` utilities in `arena` compile to, in Tailwind's sort of them: the
 /// stylesheet a render's utilities would compile to.
-fn tw_rule_order(arena: &StyleArena<'_>) -> FxHashMap<u64, usize> {
+fn tw_rule_order(
+  arena: &StyleArena<'_>,
+  tailwind: Option<&TailwindCache>,
+) -> FxHashMap<u64, usize> {
   let mut rules: FxHashMap<u64, &TwRule> = FxHashMap::default();
 
   for style_node in &arena.nodes {
-    for rule in style_node.node.tw_rules() {
+    for rule in style_node.node.tw_rules(tailwind) {
       rules.entry(rule.id).or_insert(rule);
     }
   }

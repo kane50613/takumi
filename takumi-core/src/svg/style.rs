@@ -8,7 +8,7 @@ use crate::{
   geometry::Size,
   layout::node::Node,
   matching::{NodeMatchedDeclarations, match_stylesheets_view},
-  resources::font::Fonts,
+  resources::{cache::Cache, font::Fonts},
   style::{ColorInput, ComputedStyle, LonghandId, SizingContext},
   viewport::Viewport,
 };
@@ -47,6 +47,7 @@ impl<'a> StyleResolver<'a> {
       SvgHost::Image {
         current_color,
         fonts,
+        cache,
       } => {
         let viewport = Viewport::new((
           viewport.width.round() as u32,
@@ -65,14 +66,18 @@ impl<'a> StyleResolver<'a> {
           .sizing(SizingContext::builder().viewport(viewport).build())
           .current_color(current_color)
           .style(parent_style)
+          .cache(cache.cloned().unwrap_or_else(Cache::shared))
           .stylesheet(Arc::clone(&document.stylesheet))
           .build();
 
-        (
-          root_context,
-          match_stylesheets_view(&document.root, &[&document.stylesheet], viewport),
-          false,
-        )
+        let matched = match_stylesheets_view(
+          &document.root,
+          &[&document.stylesheet],
+          viewport,
+          Some(root_context.cache().tailwind()),
+        );
+
+        (root_context, matched, false)
       }
       SvgHost::Inline(host) => {
         let page = host.stylesheet();
@@ -81,19 +86,19 @@ impl<'a> StyleResolver<'a> {
           .sizing(host.sizing.in_css_pixels())
           .current_color(host.current_color)
           .style(Rc::clone(&host.style))
+          .cache(host.cache().clone())
           .stylesheet(Arc::clone(page))
           .time_ms(host.time_ms())
           .build();
 
-        (
-          root_context,
-          match_stylesheets_view(
-            &document.root,
-            &[page, &document.stylesheet],
-            host.sizing.viewport,
-          ),
-          true,
-        )
+        let matched = match_stylesheets_view(
+          &document.root,
+          &[page, &document.stylesheet],
+          host.sizing.viewport,
+          Some(root_context.cache().tailwind()),
+        );
+
+        (root_context, matched, true)
       }
     };
 

@@ -18,7 +18,7 @@ pub(crate) mod selector;
 mod sizing;
 mod stylesheets;
 mod supports;
-mod tw;
+pub(crate) mod tw;
 
 pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use animation::{

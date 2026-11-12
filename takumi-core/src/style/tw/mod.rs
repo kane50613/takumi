@@ -11,17 +11,22 @@ mod variant;
 use std::{
   borrow::Cow,
   convert::Infallible,
+  mem::size_of,
   str::FromStr,
-  sync::{Arc, LazyLock},
+  sync::{Arc, OnceLock},
 };
 
 pub(crate) use namespace::Namespace;
-use quick_cache::{Weighter, sync::Cache};
+use quick_cache::sync::Cache as Store;
 pub(crate) use rule::TwRule;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 pub(crate) use variant::{Breakpoint, BreakpointOverrides};
 
-use crate::{style::*, viewport::Viewport};
+use crate::{
+  resources::cache::{ByBytes, Weighed, store},
+  style::*,
+  viewport::Viewport,
+};
 
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
@@ -65,82 +70,109 @@ fn cascaded_block<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> StyleDecla
   block
 }
 
-/// Represents a collection of tailwind properties.
+/// The classes of a `tw` attribute, compiled to rules the first time a render reads them.
 #[derive(Debug, Clone)]
 pub struct TailwindValues {
-  inner: Arc<Vec<Arc<TwRule>>>,
+  source: Arc<str>,
+  compiled: OnceLock<Rules>,
 }
 
-const TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20;
+/// The rules a class list compiles to, in the order they were written.
+type Rules = Arc<Vec<Arc<TwRule>>>;
 
 /// Bytes charged for an entry's own bookkeeping on top of its payload.
 const ENTRY_OVERHEAD: usize = 64;
 
-#[derive(Clone)]
-struct ByBytes;
+/// The rules a [`Cache`](crate::Cache) keeps, by the class list they compile from.
+pub(crate) struct TailwindCache {
+  store: Store<String, CompiledClasses, ByBytes>,
+}
 
-impl Weighter<String, TailwindValues> for ByBytes {
-  fn weight(&self, source: &String, values: &TailwindValues) -> u64 {
-    (source.len() + values.estimated_bytes() + ENTRY_OVERHEAD).max(1) as u64
+#[derive(Clone)]
+struct CompiledClasses {
+  rules: Rules,
+  bytes: usize,
+}
+
+impl Weighed for CompiledClasses {
+  fn bytes(&self) -> usize {
+    self.bytes
   }
 }
 
-static PARSED: LazyLock<Cache<String, TailwindValues, ByBytes>> = LazyLock::new(|| {
-  let max_bytes = TAILWIND_CACHE_MAX_BYTES as u64;
-  // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
-  let estimated_items = (max_bytes / 256).max(1) as usize;
+impl TailwindCache {
+  /// A cache holding at most `max_bytes`.
+  pub(crate) fn new(max_bytes: u64) -> Self {
+    Self {
+      // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
+      store: store(max_bytes, 256),
+    }
+  }
 
-  Cache::with_weighter(estimated_items, max_bytes, ByBytes)
-});
+  /// The rules `source` compiles to, compiled once across the renders that send it.
+  fn compile(&self, source: &str) -> Rules {
+    self
+      .store
+      .get_or_insert_with::<str, Infallible>(source, || {
+        let rules = compile(source);
+        // Counts the compiled rules, not the heap their declarations own.
+        let bytes = source.len()
+          + rules.capacity() * size_of::<Arc<TwRule>>()
+          + rules.len() * size_of::<TwRule>()
+          + ENTRY_OVERHEAD;
+
+        Ok(CompiledClasses {
+          rules: Arc::new(rules),
+          bytes,
+        })
+      })
+      .unwrap_or_else(|never| match never {})
+      .rules
+  }
+}
+
+/// The rules of the classes in `source` takumi knows, in the order they were written.
+fn compile(source: &str) -> Vec<Arc<TwRule>> {
+  source
+    .split_whitespace()
+    .filter_map(|class| {
+      let rule = TwRule::parse(class);
+
+      if rule.is_none() {
+        log::debug!(target: "takumi::style", "`{class}` is not a utility takumi knows");
+      }
+
+      rule
+    })
+    .map(Arc::new)
+    .collect()
+}
 
 impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(source: &str) -> Result<Self, Self::Err> {
-    Ok(
-      PARSED
-        .get_or_insert_with::<str, Infallible>(source, || Ok(Self::parse(source)))
-        .unwrap_or_else(|never| match never {}),
-    )
+    Ok(Self {
+      source: source.into(),
+      compiled: OnceLock::new(),
+    })
   }
 }
 
 impl PartialEq for TailwindValues {
   fn eq(&self, other: &Self) -> bool {
-    Arc::ptr_eq(&self.inner, &other.inner) || self.inner == other.inner
+    self.source == other.source || self.rules(None) == other.rules(None)
   }
 }
 
 impl TailwindValues {
-  /// Approximate retained size in bytes, for cache budgeting. Counts the
-  /// compiled rules, not the heap their declarations own.
-  fn estimated_bytes(&self) -> usize {
-    self.inner.capacity() * size_of::<Arc<TwRule>>() + self.inner.len() * size_of::<TwRule>()
-  }
-
-  fn parse(source: &str) -> Self {
-    TailwindValues {
-      inner: Arc::new(
-        source
-          .split_whitespace()
-          .filter_map(|class| {
-            let rule = TwRule::parse(class);
-
-            if rule.is_none() {
-              log::debug!(target: "takumi::style", "`{class}` is not a utility takumi knows");
-            }
-
-            rule
-          })
-          .map(Arc::new)
-          .collect(),
-      ),
-    }
-  }
-
-  /// The utilities' rules, in the order they were written.
-  pub(crate) fn rules(&self) -> &[Arc<TwRule>] {
-    &self.inner
+  /// The utilities' rules, in the order they were written, compiled the first time through
+  /// `cache`, or in place without one.
+  pub(crate) fn rules(&self, cache: Option<&TailwindCache>) -> &[Arc<TwRule>] {
+    self.compiled.get_or_init(|| match cache {
+      Some(cache) => cache.compile(&self.source),
+      None => Arc::new(compile(&self.source)),
+    })
   }
 
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
@@ -150,7 +182,7 @@ impl TailwindValues {
     breakpoints: &BreakpointOverrides,
   ) -> impl Iterator<Item = &str> {
     self
-      .inner
+      .rules(None)
       .iter()
       .filter(|rule| rule.is_active(viewport, breakpoints))
       .flat_map(|rule| rule.declarations.image_urls())
@@ -168,7 +200,7 @@ impl TailwindValues {
   ) -> StyleDeclarationBlock {
     cascaded_block(
       self
-        .inner
+        .rules(None)
         .iter()
         .map(Arc::as_ref)
         .filter(|rule| rule.is_active(viewport, breakpoints)),
