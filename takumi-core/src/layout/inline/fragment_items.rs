@@ -27,7 +27,7 @@ use super::{
 };
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout, Point, Size},
+  geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
   resources::{font::FontError, glyph::ResolvedGlyphs},
   style::Color,
@@ -74,6 +74,7 @@ struct BackgroundItem {
   width: f32,
   height: f32,
   border: BorderProperties,
+  padding: Rect<f32>,
   color: Color,
   opacity: f32,
   baseline: f32,
@@ -90,6 +91,7 @@ impl BackgroundItem {
       width: fragment.width,
       height: fragment.height,
       border: fragment.border,
+      padding: fragment.padding,
       color: fragment.color,
       opacity: fragment.opacity,
       baseline: fragment.baseline,
@@ -112,6 +114,7 @@ impl BackgroundItem {
       width: self.width,
       height: self.height,
       border: self.border,
+      padding: self.padding,
       color: self.color,
       opacity: self.opacity,
       baseline: self.baseline,

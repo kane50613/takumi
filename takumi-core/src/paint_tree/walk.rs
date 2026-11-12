@@ -377,6 +377,9 @@ impl Walker {
 
   /// Records an inline span's background and border on one line as a box node under the block in
   /// `placed`, and draws it.
+  ///
+  /// Blink paints each line's fragment of an inline box on its own, in
+  /// `InlineBoxFragmentPainter::Paint`, so each fragment is a box here.
   fn inline_fragment(
     &mut self,
     placed: &Placed<'_>,
@@ -410,9 +413,18 @@ impl Walker {
       return;
     }
 
-    let element = node
+    let element_path = node
       .path_to(fragment.owner)
-      .and_then(|relative| ElementInfo::of(fragment.owner, [path, &relative].concat()));
+      .map(|relative| [path, &relative].concat());
+    let element = element_path
+      .clone()
+      .and_then(|element_path| ElementInfo::of(fragment.owner, element_path));
+    let size = Size {
+      width: fragment.width,
+      height: fragment.height,
+    };
+    let fragment_box =
+      ComputedLayout::new(Point::ZERO, size, fragment.border.width, fragment.padding);
     let id = self.nodes.len();
 
     self.add(
@@ -427,13 +439,20 @@ impl Walker {
         drawables,
         children: Vec::new(),
         kind: NodeKind::Box {
-          content_box: PaintRect::sized(Point::ZERO, Size::ZERO),
+          content_box: PaintRect::sized(
+            fragment_box.content_box_offset(),
+            Size {
+              width: fragment_box.content_box_width(),
+              height: fragment_box.content_box_height(),
+            },
+          ),
           outline: Vec::new(),
           effects: None,
           overflow_clip: None,
         },
       },
-      None,
+      // The span's path orders the box among its siblings; its parent is already set.
+      element_path,
     );
     self.draw(id);
   }
@@ -603,8 +622,12 @@ impl Walker {
   pub(super) fn link(&mut self) {
     let mut boxes: FxHashMap<&[usize], usize> = FxHashMap::default();
 
-    for (id, path) in self.paths.iter().enumerate() {
-      if let Some(path) = path {
+    // A node with its parent already set, such as an inline span's fragment, keeps its path only
+    // for ordering, so it never becomes the parent of another node.
+    for (id, (node, path)) in self.nodes.iter().zip(&self.paths).enumerate() {
+      if let Some(path) = path
+        && node.parent.is_none()
+      {
         boxes.entry(path).or_insert(id);
       }
     }

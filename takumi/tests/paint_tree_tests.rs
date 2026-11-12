@@ -565,14 +565,15 @@ fn a_negative_calc_padding_does_not_shift_an_inline_block() {
 #[test]
 fn an_inline_span_with_a_background_and_border_gets_a_box_per_line() {
   let css = "p { width: 60px; font-size: 16px; margin: 0 } \
-     .s { background: #eaf0f9; border: 1px solid #7fa6d9 }";
-  let boxes = |text: &str| {
-    let document = paint_tree(
+     img { width: 8px; height: 8px } \
+     .s { background: #eaf0f9; border: 1px solid #7fa6d9; padding: 0 2px }";
+  let document = |lead: Node, text: &str| {
+    paint_tree(
       PaintTreeOptions::builder()
         .viewport(Viewport::new((300, 300)))
         .node(
           Node::container([
-            Node::text("Hello "),
+            lead,
             Node::container([Node::text(text)]).with_class_name("s"),
           ])
           .with_tag_name("p"),
@@ -583,25 +584,54 @@ fn an_inline_span_with_a_background_and_border_gets_a_box_per_line() {
         .build(),
     )
     .unwrap()
-    .document;
-
-    document
-      .nodes
-      .iter()
-      .filter(|node| {
-        matches!(node.kind, NodeKind::Box { .. })
-          && node
-            .element
-            .as_ref()
-            .is_some_and(|element| element.class_name.as_deref() == Some("s"))
-      })
-      .map(|node| (node.width, roles(node)))
-      .collect::<Vec<_>>()
+    .document
   };
-  let one = boxes("tag");
+  let has_class = |node: &PaintNode, class: &str| {
+    node
+      .element
+      .as_ref()
+      .is_some_and(|element| element.class_name.as_deref() == Some(class))
+  };
+  let is_span =
+    |node: &&PaintNode| matches!(node.kind, NodeKind::Box { .. }) && has_class(node, "s");
+  let one = document(Node::text("Hello "), "tag");
+  let boxes: Vec<_> = one.nodes.iter().filter(is_span).collect();
 
-  assert_eq!(one.len(), 1);
-  assert_eq!(one[0].1, [Role::InlineBackground, Role::Border]);
+  assert_eq!(boxes.len(), 1);
+  assert_eq!(roles(boxes[0]), [Role::InlineBackground, Role::Border]);
+  // The content box sits inside the 1px border and 2px inline padding.
+  let NodeKind::Box { content_box, .. } = &boxes[0].kind else {
+    unreachable!()
+  };
+  assert_eq!((content_box.x, content_box.y), (3.0, 1.0));
+  assert_eq!(content_box.width, boxes[0].width - 6.0);
+  assert!(content_box.width > 0.0 && content_box.height > 0.0);
+
   // A span that wraps has a box on each line it sits on.
-  assert!(boxes("tag tag tag tag").len() > 1);
+  let wrapped = document(Node::text("Hello "), "tag tag tag tag");
+  assert!(wrapped.nodes.iter().filter(is_span).count() > 1);
+
+  // The span's box follows an inline image before it among the paragraph's children.
+  let after_image = document(
+    Node::image("assets/images/yeecord.png").with_class_name("pic"),
+    "tag",
+  );
+  let paragraph = after_image
+    .nodes
+    .iter()
+    .find(|node| {
+      node
+        .children
+        .iter()
+        .any(|&child| is_span(&&after_image.nodes[child]))
+    })
+    .expect("the span's parent");
+  let position = |class: &str| {
+    paragraph
+      .children
+      .iter()
+      .position(|&child| has_class(&after_image.nodes[child], class))
+      .expect(class)
+  };
+  assert!(position("pic") < position("s"));
 }

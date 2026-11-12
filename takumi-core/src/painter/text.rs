@@ -277,11 +277,22 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let runs = self.painted_runs(spans, style, frame, device);
+    // Only a background clipped to the text paints through the runs.
+    // ponytail: a text-clipped span still prepares every run per fragment, O(fragments × runs);
+    // prepare the runs once in `Walker::text` if long text-clipped spans get slow.
+    let runs = if fragment
+      .background
+      .is_some_and(|background| background.clips_text())
+    {
+      self.painted_runs(spans, style, frame, device)
+    } else {
+      Vec::new()
+    };
 
     Self::paint_fragment(fragment, &runs, frame, device);
   }
 
+  /// Paints `fragment`'s background, then its border, at its span's opacity.
   fn paint_fragment(
     fragment: &InlineBackgroundFragment,
     runs: &[PaintedRun],
@@ -320,6 +331,7 @@ impl InlineLines<'_> {
     Self::paint_runs(&self.outline_rects, &runs, frame, device);
   }
 
+  /// Paints `runs`' shadows, then their glyphs, then the outline islands of `outline_rects`.
   fn paint_runs(
     outline_rects: &[InlineOutlineRect],
     runs: &[PaintedRun],
