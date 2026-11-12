@@ -1,6 +1,9 @@
 //! The drawing ops every backend draws an SVG image from.
 
-use std::sync::Arc;
+use std::{
+  mem::{size_of, size_of_val},
+  sync::Arc,
+};
 
 #[cfg(feature = "svg-raster")]
 use crate::svg::filter::SvgFilter;
@@ -76,6 +79,47 @@ pub enum SvgOp {
     /// How the bitmap resamples.
     rendering: ImageScalingAlgorithm,
   },
+}
+
+impl SvgOp {
+  /// The bytes `ops` retain, for cache budgeting. Approximate: leaves out gradient stops, dashes,
+  /// and filters.
+  pub(crate) fn estimated_bytes(ops: &[SvgOp]) -> usize {
+    ops
+      .iter()
+      .map(|op| {
+        size_of::<SvgOp>()
+          + match op {
+            Self::PushClip { path, .. } => size_of_val(path.as_slice()),
+            Self::PushMask { ops, .. } => Self::estimated_bytes(ops),
+            Self::Draw {
+              path, fill, stroke, ..
+            } => {
+              size_of_val(path.as_slice())
+                + fill.as_ref().map_or(0, |fill| fill.paint.estimated_bytes())
+                + stroke
+                  .as_ref()
+                  .map_or(0, |stroke| stroke.paint.estimated_bytes())
+            }
+            Self::Image { data, .. } => match data {
+              SvgImageData::Encoded(bytes) => bytes.len(),
+              SvgImageData::Bitmap(buffer) => buffer.data().len(),
+            },
+            _ => 0,
+          }
+      })
+      .sum()
+  }
+}
+
+impl SvgOpPaint {
+  /// The bytes the ops of a pattern retain, none for another paint.
+  fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Pattern { ops, .. } => SvgOp::estimated_bytes(ops),
+      _ => 0,
+    }
+  }
 }
 
 /// The pixels of a bitmap inside an SVG.

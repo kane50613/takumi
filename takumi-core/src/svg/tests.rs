@@ -27,14 +27,16 @@ fn ops(body: &str) -> Vec<SvgOp> {
   document
     .ok()
     .and_then(|document| {
-      document.ops(
-        SvgHost::Image {
-          current_color: BLACK,
-          fonts: None,
-          cache: None,
-        },
-        document.declared_size(),
-      )
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: BLACK,
+            fonts: None,
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(ops, _)| ops)
     })
     .unwrap_or_default()
 }
@@ -102,14 +104,16 @@ fn the_host_color_is_what_current_color_is() {
   let ops = document
     .ok()
     .and_then(|document| {
-      document.ops(
-        SvgHost::Image {
-          current_color: color,
-          fonts: None,
-          cache: None,
-        },
-        document.declared_size(),
-      )
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: color,
+            fonts: None,
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(ops, _)| ops)
     })
     .unwrap_or_default();
 
@@ -349,7 +353,7 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
       current_color: BLACK,
       fonts: None,
       cache: None,
-    }, document.declared_size()))
+    }, document.declared_size()).map(|(ops, _)| ops))
   .unwrap_or_default();
 
   assert_eq!(fills(&ops), [Some(BLACK)]);
@@ -501,14 +505,16 @@ fn text_ops(body: &str) -> Vec<SvgOp> {
   SvgDocument::parse(&markup)
     .ok()
     .and_then(|document| {
-      document.ops(
-        SvgHost::Image {
-          current_color: BLACK,
-          fonts: Some(&geist()),
-          cache: None,
-        },
-        document.declared_size(),
-      )
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: BLACK,
+            fonts: Some(&geist()),
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(ops, _)| ops)
     })
     .unwrap_or_default()
 }
@@ -547,14 +553,16 @@ fn text_draws_nothing_without_a_font() {
   let ops = SvgDocument::parse(&markup)
     .ok()
     .and_then(|document| {
-      document.ops(
-        SvgHost::Image {
-          current_color: BLACK,
-          fonts: None,
-          cache: None,
-        },
-        document.declared_size(),
-      )
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: BLACK,
+            fonts: None,
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(ops, _)| ops)
     })
     .unwrap_or_default();
 
@@ -780,14 +788,16 @@ fn bitmap_glyphs_stop_at_the_image_byte_budget() {
   let ops = SvgDocument::parse(&markup)
     .ok()
     .and_then(|document| {
-      document.ops(
-        SvgHost::Image {
-          current_color: BLACK,
-          fonts: Some(&fonts.snapshot()),
-          cache: None,
-        },
-        document.declared_size(),
-      )
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: BLACK,
+            fonts: Some(&fonts.snapshot()),
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(ops, _)| ops)
     })
     .unwrap_or_default();
   let images = ops
@@ -1034,6 +1044,7 @@ fn a_root_and_attributes_with_declared_prefixes_resolve() {
       },
       document.declared_size(),
     )
+    .map(|(ops, _)| ops)
     .unwrap_or_default();
 
   assert_eq!(fills(&ops), [red(), red()]);

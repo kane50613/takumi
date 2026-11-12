@@ -996,7 +996,7 @@ impl Emitter<'_> {
     if viewport.width <= 0.0 || viewport.height <= 0.0 {
       return;
     }
-    let ops = svg.vector_ops(context, viewport);
+    let picture = svg.picture(context, viewport);
     let canvas =
       KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
 
@@ -1011,7 +1011,7 @@ impl Emitter<'_> {
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
     }
-    SvgPainter::new(self.color_filter.as_deref()).draw(surface, ops);
+    SvgPainter::new(self.color_filter.as_deref()).draw(surface, picture.ops());
     if canvas.is_some() {
       surface.pop();
     }

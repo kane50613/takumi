@@ -14,6 +14,7 @@ mod tests;
 
 use std::{
   collections::{BTreeMap, HashMap},
+  ops::BitOrAssign,
   sync::Arc,
 };
 
@@ -37,6 +38,23 @@ use crate::{
 const XLINK_NAMESPACE: &str = "http://www.w3.org/1999/xlink";
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 const XMLNS_NAMESPACE: &str = "http://www.w3.org/2000/xmlns/";
+
+/// What a layout read from the box an SVG image draws in, which a drawing reused in another box
+/// must match.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HostReads {
+  /// The box's `color`, which `currentColor` resolves to.
+  pub(crate) color: bool,
+  /// The registered fonts, which text draws with.
+  pub(crate) fonts: bool,
+}
+
+impl BitOrAssign for HostReads {
+  fn bitor_assign(&mut self, other: Self) {
+    self.color |= other.color;
+    self.fonts |= other.fonts;
+  }
+}
 
 /// The box an SVG document draws in, which its root element inherits from.
 #[derive(Clone, Copy)]
@@ -159,15 +177,6 @@ impl SvgDocument {
     self.size.intrinsic
   }
 
-  /// Whether the document holds a `text` element, which draws with the registered fonts.
-  #[cfg(feature = "svg-raster")]
-  pub(crate) fn has_text(&self) -> bool {
-    self
-      .elements
-      .iter()
-      .any(|element| element.kind == SvgElementKind::Text)
-  }
-
   /// The displayed text of the `text` elements, each with its styled context; approximate, ignoring `use`.
   pub(crate) fn text_runs(&self, host: SvgHost<'_>) -> Vec<(RenderContext, &str)> {
     let styles = style::StyleResolver::new(self, host, self.canvas);
@@ -257,8 +266,13 @@ impl SvgDocument {
       .filter_by_id(id, width, height)
   }
 
-  /// The drawing ops of the document drawn in `host` at `viewport`, in its coordinates.
-  pub(crate) fn ops(&self, host: SvgHost<'_>, viewport: Size<f32>) -> Option<Vec<SvgOp>> {
+  /// The drawing ops of the document drawn in `host` at `viewport`, in its coordinates, and what
+  /// they read from `host`.
+  pub(crate) fn ops(
+    &self,
+    host: SvgHost<'_>,
+    viewport: Size<f32>,
+  ) -> Option<(Vec<SvgOp>, HostReads)> {
     layout::SvgLayout::new(self, host, viewport).layout()
   }
 
