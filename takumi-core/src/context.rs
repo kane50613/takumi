@@ -22,7 +22,7 @@ use crate::{
     font_fallback_map::FontFallbackMap,
   },
   geometry::{ComputedLayout, Point},
-  layout::inline::InlineLayoutCache,
+  layout::{inline::InlineLayoutCache, node::RecentImages},
   resources::{
     font::FontsSnapshot,
     image::{ImageSource, ResourceCache},
@@ -42,6 +42,7 @@ struct RenderShared {
   font_families: ExpandedFamilies,
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
+  recent_images: RecentImages,
   matched_styles: MatchedStyleCache,
   time_ms: u64,
   draw_debug_border: bool,
@@ -96,6 +97,7 @@ impl From<RenderContextInit> for RenderContext {
         font_families: ExpandedFamilies::default(),
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
+        recent_images: RecentImages::default(),
         matched_styles: MatchedStyleCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
@@ -221,6 +223,11 @@ impl RenderContext {
   /// The resources fetched externally.
   pub(crate) fn images(&self) -> &HashMap<Arc<str>, ImageSource> {
     &self.shared.images
+  }
+
+  /// The images the render's latest inline sources decoded to.
+  pub(crate) fn recent_images(&self) -> &RecentImages {
+    &self.shared.recent_images
   }
 
   /// The cache `data:` URI images decode through, when the render has one.

@@ -1,4 +1,10 @@
-use std::sync::{Arc, Weak};
+use std::{
+  cell::RefCell,
+  collections::VecDeque,
+  sync::{Arc, Weak},
+};
+
+use xxhash_rust::xxh3::xxh3_128;
 
 use crate::{
   context::RenderContext,
@@ -98,16 +104,20 @@ fn decode_cached(
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.
 pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
-    return parse_data_uri_image(src, context.resource_cache());
+    return context
+      .recent_images()
+      .get_or_decode(src, || parse_data_uri_image(src, context.resource_cache()));
   }
 
   if is_svg_like(src) {
     #[cfg(feature = "svg-sizing")]
-    return decode_cached(
-      src.as_bytes(),
-      context.resource_cache(),
-      ImageSource::from_bytes,
-    );
+    return context.recent_images().get_or_decode(src, || {
+      decode_cached(
+        src.as_bytes(),
+        context.resource_cache(),
+        ImageSource::from_bytes,
+      )
+    });
     #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
@@ -119,6 +129,42 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   log::debug!(target: "takumi::image", "no image is loaded for {src:?}");
 
   Err(ImageError::Unknown)
+}
+
+/// The images the latest inline sources of a render decoded to, keyed by a hash of the source,
+/// which a repeat of one reads instead of decoding it again.
+#[derive(Default)]
+pub(crate) struct RecentImages(RefCell<VecDeque<(u128, ImageSource)>>);
+
+impl RecentImages {
+  const LEN: usize = 16;
+
+  /// The image `src` decoded to lately, or what `decode` returns for it.
+  fn get_or_decode(&self, src: &str, decode: impl FnOnce() -> ImageResult) -> ImageResult {
+    let key = xxh3_128(src.as_bytes());
+    let mut recent = self.0.borrow_mut();
+
+    // A hit moves to the back, so a source every row repeats stays while rarer ones age out.
+    if let Some((_, source)) = recent
+      .iter()
+      .position(|(recent_key, _)| *recent_key == key)
+      .and_then(|index| recent.remove(index))
+    {
+      recent.push_back((key, source.clone()));
+      return Ok(source);
+    }
+
+    drop(recent);
+
+    let source = decode()?;
+    let mut recent = self.0.borrow_mut();
+
+    if recent.len() == Self::LEN {
+      recent.pop_front();
+    }
+    recent.push_back((key, source.clone()));
+    Ok(source)
+  }
 }
 
 #[cfg(test)]
@@ -197,6 +243,42 @@ mod tests {
       (first, second),
       (ImageSource::Svg(first), ImageSource::Svg(second)) if Arc::ptr_eq(&first, &second)
     );
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_data_uri_decodes_once_while_recent_without_a_cache() {
+    use std::sync::Arc;
+
+    use super::{RecentImages, resolve_image};
+
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let uri = |width: usize| {
+      format!(
+        "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='10'/>"
+      )
+    };
+    let resolve = |src: &str| match resolve_image(src, &context) {
+      Ok(ImageSource::Svg(source)) => source,
+      _ => unreachable!("an SVG data URI resolves to an SVG"),
+    };
+    let first = resolve(&uri(1));
+
+    assert!(Arc::ptr_eq(&first, &resolve(&uri(1))));
+
+    for width in 2..=RecentImages::LEN + 1 {
+      resolve(&uri(width));
+    }
+
+    assert!(!Arc::ptr_eq(&first, &resolve(&uri(1))));
   }
 
   #[test]
