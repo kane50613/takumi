@@ -391,7 +391,7 @@ pub(crate) struct LayoutNodeState {
   pub(crate) layout_style: Rc<LayoutStyle>,
   /// Whether the styles are the same whatever query container they resolve against, so repeated
   /// layouts can reuse them.
-  container_independent: bool,
+  pub(crate) container_independent: bool,
   pub(crate) cache: LayoutCache,
   /// Blink's `LayoutBox::layout_results_`: where each of its fragments went, by fragment index.
   pub(crate) fragments: Fragments,

@@ -400,12 +400,15 @@ impl<'r> LayoutTree<'r> {
   /// A measure of `node` that gives the box the border box `space` lays it out at, which serves a
   /// layout whose fragments nothing places, as Blink's `CachedLayoutResult` serves a first layout
   /// from the measures.
+  ///
+  /// Approximate: a measure keeps no record of the style it resolved, so a box whose style reads
+  /// its query container never reuses one, where Blink reuses it while the style is unchanged.
   pub(crate) fn measure_for_layout(
     &mut self,
     node: NodeId,
     space: &ConstraintSpace,
   ) -> Option<Rc<LayoutResult>> {
-    if space.table_part.is_some() {
+    if space.table_part.is_some() || !self.node_state(node).container_independent {
       return None;
     }
 
@@ -428,6 +431,10 @@ impl<'r> LayoutTree<'r> {
 
   /// Blink's `CalculateSizeBasedLayoutCacheStatus` returning `kHit`: whether `space` gives `node`
   /// the border box and padding `result` has from `cached`.
+  ///
+  /// Approximate: the %-block-size dependence comes from the styles of the box and its children,
+  /// where Blink records it on the fragments they laid out, so a child that lays out no fragment
+  /// can make a box miss where Blink hits.
   fn size_matches(
     &mut self,
     node: NodeId,
