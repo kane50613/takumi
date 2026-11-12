@@ -36,7 +36,7 @@ use std::{
 use crate::resources::image::SvgSource;
 use crate::{
   form_control::InputType,
-  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
+  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind},
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::{
     Direction, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
@@ -386,6 +386,7 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
     max_depth: options.max_depth,
     styles: RefCell::default(),
+    names: Names::default(),
     disabling_fieldsets: Cell::new(0),
   };
   let dom = markup::parse(source, options.document || is_document(source));
@@ -634,6 +635,8 @@ struct NodeBuilder<'a> {
   max_depth: usize,
   /// Parsed `style` attributes, by source text.
   styles: RefCell<HashMap<Box<str>, Style>>,
+  /// The element and attribute names built so far.
+  names: Names,
   /// How many `<fieldset disabled>` hold the element being built outside their first `<legend>`.
   disabling_fieldsets: Cell<usize>,
 }
@@ -797,7 +800,7 @@ impl NodeBuilder<'_> {
   }
 
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
-    node = node.with_tag_name(tag);
+    node = node.with_tag_name(self.names.get(tag));
 
     let mut preset = if matches!(tag, "input" | "textarea") {
       self.form_control_preset(handle, tag)
@@ -864,13 +867,13 @@ impl NodeBuilder<'_> {
         // Consumed above; keep out of the passthrough attributes.
         _ if name == self.tw_property => {}
         _ => {
-          attributes.insert(name.into(), value.into());
+          attributes.insert(self.names.get(name), value.into());
         }
       }
     }
 
     if !attributes.is_empty() {
-      node = node.with_attributes(attributes);
+      node = node.with_named_attributes(attributes);
     }
 
     node
@@ -908,9 +911,9 @@ impl NodeBuilder<'_> {
     Ok(match handle.data() {
       NodeData::Text(contents) => Some(Node::text(contents.clone())),
       NodeData::Element { name, attrs, .. } => {
-        let attributes: BTreeMap<Box<str>, Box<str>> = attrs
+        let attributes = attrs
           .iter()
-          .map(|attr| (qualified_name(attr), attr.value.clone()))
+          .map(|attr| (self.names.get(&qualified_name(attr)), attr.value.clone()))
           .collect();
         let mut children = Vec::new();
 
@@ -920,8 +923,8 @@ impl NodeBuilder<'_> {
 
         Some(
           Node::container(children)
-            .with_tag_name(&*name.local)
-            .with_attributes(attributes),
+            .with_tag_name(self.names.get(&name.local))
+            .with_named_attributes(attributes),
         )
       }
       _ => None,
@@ -1015,7 +1018,7 @@ fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
 /// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
 /// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
 #[cfg(feature = "html-svg-nodes")]
-fn qualified_name(attr: &Attribute) -> Box<str> {
+fn qualified_name(attr: &Attribute) -> Cow<'_, str> {
   let local = &*attr.local;
 
   match attr.ns {

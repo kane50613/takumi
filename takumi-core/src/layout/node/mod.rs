@@ -3,6 +3,7 @@ mod image;
 mod input;
 
 use std::{
+  cell::RefCell,
   collections::BTreeMap,
   mem::take,
   sync::{Arc, Weak},
@@ -28,15 +29,36 @@ use crate::{
 /// recurse once per level. Blink's `HTMLConstructionSite::kMaximumHTMLParserDOMTreeDepth`.
 pub const MAXIMUM_DOM_TREE_DEPTH: usize = 512;
 
+/// An element or attribute name, which the elements of a parsed document carrying it share.
+pub(crate) type Name = Arc<str>;
+
 /// An element's attributes as name and value pairs, in name order: a slice, since a `BTreeMap`
 /// leaf takes 368 bytes for even one attribute.
-pub(crate) type Attributes = Box<[(Box<str>, Box<str>)]>;
+pub(crate) type Attributes = Box<[(Name, Box<str>)]>;
+
+/// The names a document's elements carry so far, each stored once.
+#[derive(Default)]
+pub(crate) struct Names(RefCell<Xxh3HashSet<Name>>);
+
+impl Names {
+  /// `name`, shared with each element before it that carried the same name.
+  pub(crate) fn get(&self, name: &str) -> Name {
+    if let Some(shared) = self.0.borrow().get(name) {
+      return shared.clone();
+    }
+
+    let shared = Name::from(name);
+
+    self.0.borrow_mut().insert(shared.clone());
+    shared
+  }
+}
 
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {
   /// The element's tag name.
-  pub tag_name: Option<Box<str>>,
+  pub tag_name: Option<Name>,
   /// The element's class name.
   pub class_name: Option<Box<str>>,
   /// The element's id.
@@ -434,7 +456,7 @@ impl Node {
   }
 
   /// Sets the tag name and returns the updated node.
-  pub fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self {
+  pub fn with_tag_name(mut self, tag_name: impl Into<Arc<str>>) -> Self {
     self.metadata.tag_name = Some(tag_name.into());
     self
   }
@@ -453,6 +475,18 @@ impl Node {
 
   /// Sets the element attributes and returns the updated node.
   pub fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self {
+    self.metadata.attributes = Some(
+      attributes
+        .into_iter()
+        .map(|(name, value)| (Name::from(name), value))
+        .collect(),
+    );
+    self
+  }
+
+  /// Sets the element attributes under names the document's elements share.
+  #[cfg(any(feature = "html", feature = "svg"))]
+  pub(crate) fn with_named_attributes(mut self, attributes: BTreeMap<Name, Box<str>>) -> Self {
     self.metadata.attributes = Some(attributes.into_iter().collect());
     self
   }
