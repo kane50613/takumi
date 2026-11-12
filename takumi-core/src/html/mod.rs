@@ -288,9 +288,7 @@ pub struct FromHtmlOptions {
   /// Defaults to [`MAXIMUM_DOM_TREE_DEPTH`].
   #[builder(default = MAXIMUM_DOM_TREE_DEPTH)]
   pub(crate) max_depth: usize,
-  /// Parses the source as a whole document with `html` and `body`, as a browser opens an HTML
-  /// file, even when it starts with neither a doctype nor `<html>`. Off by default, which parses
-  /// such a source as a fragment.
+  /// Parses any source as a whole document, as a browser opens an HTML file. Off by default.
   #[builder(default)]
   pub(crate) document: bool,
 }
@@ -325,22 +323,18 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 pub struct ParsedHtml {
   /// The node tree, as [`from_html`] returns it.
   pub node: Node,
-  /// The text of each non-empty CSS `<style>` element outside `<svg>` and `<math>` that the
-  /// preferred style sheet set keeps, in document order, inside an `@media` rule when the element
-  /// has a `media` attribute.
+  /// The [CSS](StyleElement::css) of each entry in [`styles`](Self::styles).
   pub css: Vec<String>,
-  /// Each `<link rel="stylesheet">` the preferred style sheet set keeps, for the host to fetch,
-  /// in document order.
+  /// Each non-empty `<style>` element the preferred style sheet set keeps, in document order.
+  pub styles: Vec<StyleElement>,
+  /// Each `<link rel="stylesheet">` the preferred style sheet set keeps, in document order.
   pub links: Vec<StyleSheetLink>,
   /// The `href` of the first `<base>` element that has one, which relative URLs resolve against.
   pub base_href: Option<String>,
 }
 
 impl ParsedHtml {
-  /// The CSS of every [`css`](Self::css) entry and of every [link](Self::links) `fetch` returns
-  /// text for, in document order. A link `fetch` returns none for is skipped, as a browser skips
-  /// one that fails to load. [`parse_html`] has already left out the sheets outside the preferred
-  /// style sheet set.
+  /// Each [`css`](Self::css) entry and the text `fetch` loads for each link, in document order.
   pub fn css_with_links(
     &self,
     mut fetch: impl FnMut(&StyleSheetLink) -> Option<String>,
@@ -364,6 +358,23 @@ impl ParsedHtml {
   }
 }
 
+/// A CSS `<style>` element outside `<svg>` and `<math>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StyleElement {
+  /// The element's text.
+  pub text: String,
+  /// The `media` attribute, none when it is absent or empty.
+  pub media: Option<String>,
+}
+
+impl StyleElement {
+  /// The text, inside an `@media` rule when the element has a `media` attribute.
+  pub fn css(&self) -> String {
+    in_media(self.media.as_deref(), self.text.clone())
+  }
+}
+
 /// A `<link rel="stylesheet">`, which the document loads from `href`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -376,8 +387,7 @@ pub struct StyleSheetLink {
   pub css_index: usize,
 }
 
-/// Parse HTML markup into a node tree, the CSS its `<style>` elements hold as the JS `fromHtml`
-/// returns it, and the style sheets it links. See [`from_html`].
+/// Parse HTML markup into a node tree, its `<style>` elements, and the style sheets it links.
 pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);
@@ -397,6 +407,7 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
   let mut parsed = ParsedHtml {
     node: collapse(nodes),
     css: Vec::new(),
+    styles: Vec::new(),
     links: Vec::new(),
     base_href: None,
   };
@@ -425,7 +436,7 @@ impl ParsedHtml {
       }
 
       let sheet = match &*name.local {
-        "style" => style_css(node).map(DocumentStyleSheet::Inline),
+        "style" => style_element(node).map(DocumentStyleSheet::Inline),
         "link" => stylesheet_href(node).map(|href| {
           DocumentStyleSheet::Link(StyleSheetLink {
             href: href.to_owned(),
@@ -477,8 +488,11 @@ impl ParsedHtml {
       }
 
       match sheet {
-        DocumentStyleSheet::Inline(css) if css.is_empty() => {}
-        DocumentStyleSheet::Inline(css) => self.css.push(css),
+        DocumentStyleSheet::Inline(style) if style.text.is_empty() => {}
+        DocumentStyleSheet::Inline(style) => {
+          self.css.push(style.css());
+          self.styles.push(style);
+        }
         DocumentStyleSheet::Link(link) => self.links.push(StyleSheetLink {
           css_index: self.css.len(),
           ..link
@@ -490,14 +504,13 @@ impl ParsedHtml {
 
 /// A style sheet an element holds or links, before the document picks the ones it applies.
 enum DocumentStyleSheet {
-  Inline(String),
+  Inline(StyleElement),
   Link(StyleSheetLink),
 }
 
-/// The text of a `<style>` element with no type or `text/css`, inside an `@media` rule when the
-/// element has a `media` attribute. An empty one still takes part in picking the preferred
-/// style sheet set, as in Blink.
-fn style_css(style: NodeRef<'_>) -> Option<String> {
+/// A `<style>` element with no type or `text/css`. An empty one still takes part in picking the
+/// preferred style sheet set, as in Blink.
+fn style_element(style: NodeRef<'_>) -> Option<StyleElement> {
   if !is_css_type(style.attribute("type")) {
     return None;
   }
@@ -510,11 +523,10 @@ fn style_css(style: NodeRef<'_>) -> Option<String> {
     })
     .collect();
 
-  if text.is_empty() {
-    return Some(text);
-  }
-
-  Some(in_media(media_attribute(style), text))
+  Some(StyleElement {
+    text,
+    media: media_attribute(style).map(str::to_owned),
+  })
 }
 
 /// The `href` a `<link>` loads a style sheet from, as Blink's
@@ -1402,6 +1414,14 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
+    assert_eq!(
+      parsed
+        .styles
+        .iter()
+        .map(|style| (&*style.text, style.media.as_deref()))
+        .collect::<Vec<_>>(),
+      [("a{}", Some("print")), ("b{}", None)]
+    );
   }
 
   #[test]

@@ -11,7 +11,10 @@ use takumi::prelude::{
   Color, ColorInput, Fonts, FromCssStr, PageName, RenderNeeds, StyleSheet, Viewport,
   page_rule::{PageContext, PageKind},
 };
-use takumi_pdf::{MeasureOptions, PageOptions, PageRange, PdfError, PdfMetadata, PdfOptions};
+use takumi_pdf::{
+  MeasureOptions, PageOptions, PageRange, PdfError, PdfMetadata, PdfOptions, needs as pdf_needs,
+  render as render_pdf,
+};
 
 use crate::{
   document::Document,
@@ -37,14 +40,20 @@ pub(crate) struct PdfArgs {
   #[command(flatten)]
   pub(crate) output: OutputArgs,
 
-  /// The page size as the CSS `size` property takes it, such as `A4`, `letter landscape`, or
-  /// `210mm 297mm`. Defaults to A4. The document's `@page` rule wins.
-  #[arg(long, value_name = "SIZE")]
+  /// The CSS `size` of each page, such as `A4` or `letter landscape`. Defaults to A4.
+  #[arg(
+    long,
+    value_name = "SIZE",
+    long_help = "The page size as the CSS `size` property takes it, such as `A4`, `letter landscape`, or `210mm 297mm`. Defaults to A4. The document's `@page` rule wins."
+  )]
   page: Option<String>,
 
-  /// The page margins as the CSS `margin` property takes them, such as `20mm` or `1in 0.75in`.
-  /// Defaults to 1cm, grown to fit a header or footer. The document's `@page` rule wins.
-  #[arg(long, value_name = "MARGIN")]
+  /// The CSS `margin` of each page, such as `20mm` or `1in 0.75in`. Defaults to 1cm.
+  #[arg(
+    long,
+    value_name = "MARGIN",
+    long_help = "The page margins as the CSS `margin` property takes them, such as `20mm` or `1in 0.75in`. Defaults to 1cm, grown to fit a header or footer. The document's `@page` rule wins."
+  )]
   margin: Option<String>,
 
   /// The pages to keep, such as `1-3,8` or `5-`. Page numbers still count every page.
@@ -67,9 +76,12 @@ pub(crate) struct PdfArgs {
   #[arg(long)]
   outline: bool,
 
-  /// An HTML file drawn in the top margin of every page. Its references resolve against the
-  /// file and read through the same directories as the input's.
-  #[arg(long, value_name = "FILE")]
+  /// An HTML file drawn in the top margin of every page.
+  #[arg(
+    long,
+    value_name = "FILE",
+    long_help = "An HTML file drawn in the top margin of every page. Its references resolve against the file and read through the same directories as the input's."
+  )]
   header: Option<PathBuf>,
 
   /// An HTML file drawn in the bottom margin of every page, as `--header` is in the top one.
@@ -121,6 +133,7 @@ impl PdfArgs {
     Ok(Pdf {
       header: self.header.clone(),
       footer: self.footer.clone(),
+      // Ahead of the document's CSS, so its `@page` rule wins, as over Chromium's print dialog: https://www.w3.org/TR/css-page-3/
       page_css: (!declarations.is_empty())
         .then(|| format!("@page {{ {} }}", declarations.join("; "))),
       page_ranges: self.pages.clone().map(|ranges| ranges.0),
@@ -131,10 +144,9 @@ impl PdfArgs {
   }
 }
 
-/// `property: value` for an `@page` rule, if takumi reads the value. A value holding anything
-/// that could end the declaration or the rule, or raise it to `!important`, is refused, so a flag
-/// stays one default the document's own `@page` rule overrides.
+/// `property: value` for an `@page` rule, refusing a value takumi does not read or that could escape it.
 fn check_page_declaration(property: &str, value: &str) -> Result<String, String> {
+  // Nothing may end the declaration or rule or make it `!important`, so the document's `@page` rule still overrides it.
   if value.contains(['{', '}', ';', '!', '@', '\\']) || value.contains("/*") {
     return Err(format!(
       "`{value}` is not a CSS `{property}` value takumi reads."
@@ -236,7 +248,7 @@ impl Product for Pdf {
     fonts: &Fonts,
     images: &Images,
   ) -> Result<RenderNeeds, Box<dyn Error>> {
-    Ok(takumi_pdf::needs(
+    Ok(pdf_needs(
       MeasureOptions::builder()
         .fonts(fonts)
         .node(document.node.clone())
@@ -272,7 +284,7 @@ impl Product for Pdf {
     options.header = header;
     options.footer = footer;
 
-    takumi_pdf::render(options).map_err(|error| match error {
+    render_pdf(options).map_err(|error| match error {
       PdfError::UncoveredCharacters(characters) => format!(
         "no font draws {characters}. Pass a font that does with `--font`, or check the `font-family` of that text."
       )
