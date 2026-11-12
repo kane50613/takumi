@@ -284,11 +284,14 @@ impl Sandbox {
       .ok()
       .and_then(|path| lexical(&path))
       .ok_or_else(|| ResourceError::UnsupportedScheme(url.clone()))?;
+    // The deepest grant holding the file reads it, so a symlink granted inside another grant
+    // still opens through its own handle.
     let Some((root, relative)) = self
       .roots
       .iter()
-      .find_map(|root| Some((root, root.relative(&path)?)))
+      .filter_map(|root| Some((root, root.relative(&path)?)))
       .filter(|(_, relative)| !relative.as_os_str().is_empty())
+      .min_by_key(|(_, relative)| relative.components().count())
     else {
       return Err(ResourceError::Denied {
         url: url.clone(),
@@ -490,6 +493,23 @@ mod tests {
 
       assert_eq!(sandbox.read(&url).unwrap(), b"a{}", "{url}");
     }
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_symlink_granted_inside_another_grant_reads_through_its_own_grant() {
+    let outer = temp_dir("nested-grant-outer");
+    let shared = temp_dir("nested-grant-shared");
+    let link = outer.join("assets");
+
+    fs::write(shared.join("logo.css"), "a{}").unwrap();
+    let _ = fs::remove_file(&link);
+    std::os::unix::fs::symlink(&shared, &link).unwrap();
+
+    let sandbox = Sandbox::new([outer.clone(), link.clone()]).unwrap();
+    let url = directory_url(&link).unwrap().join("logo.css").unwrap();
+
+    assert_eq!(sandbox.read(&url).unwrap(), b"a{}");
   }
 
   #[cfg(unix)]
