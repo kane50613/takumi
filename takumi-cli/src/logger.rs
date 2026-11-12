@@ -20,6 +20,8 @@ pub(crate) enum LogLevel {
 /// Writes takumi's own log records to standard error.
 pub(crate) struct Logger {
   started: Instant,
+  /// Whether `-q` hides warnings, which `--log` leaves on.
+  quiet: bool,
   /// The lines below a warning already printed, since a render reaches the same one many times.
   printed: Mutex<HashSet<String>>,
 }
@@ -36,6 +38,7 @@ impl Logger {
 
     log::set_logger(Box::leak(Box::new(Self {
       started: Instant::now(),
+      quiet,
       printed: Mutex::default(),
     })))?;
     log::set_max_level(filter);
@@ -55,7 +58,10 @@ impl Log for Logger {
     };
 
     if record.level() <= Level::Warn {
-      eprintln!("warning: {}", record.args());
+      if !self.quiet {
+        eprintln!("warning: {}", record.args());
+      }
+
       return;
     }
 
