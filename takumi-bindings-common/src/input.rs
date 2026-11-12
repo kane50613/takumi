@@ -12,11 +12,11 @@ use serde_bytes::ByteBuf;
 #[cfg(feature = "wasm")]
 use serde_wasm_bindgen::{Error as JsError, from_value};
 use takumi_core::{
-  Fonts,
+  Cache, Fonts,
   layout::node::Node,
   resources::{
     font::{FontError, FontOverride, FontResource, FontSource, PendingFontFace, RegisteredFamily},
-    image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache, is_svg_bytes},
+    image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, is_svg_bytes},
     unicode_range::UnicodeRange,
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
@@ -308,13 +308,13 @@ pub fn register_resource(
 
 /// Decodes the per-render image inputs into a `src`-keyed map through `cache`.
 pub fn decode_images(
-  cache: &ResourceCache,
+  cache: &Cache,
   sources: &[ImageSource],
 ) -> Result<HashMap<Arc<str>, DecodedImage>, ImageError> {
   sources
     .iter()
     .map(|source| {
-      let image = cache.get_or_decode(&source.data, source.cache.unwrap_or_default())?;
+      let image = cache.decode_image(&source.data, source.cache.unwrap_or_default())?;
       Ok((source.src.clone(), image))
     })
     .collect()

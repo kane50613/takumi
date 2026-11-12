@@ -15,7 +15,7 @@ use takumi_bindings_common::{
 use takumi_core::{
   Fonts,
   layout::{needs::RenderNeeds, node::Node},
-  resources::image::{ImageSource as LoadedImageSource, ResourceCache},
+  resources::{cache::Cache, image::ImageSource as LoadedImageSource},
 };
 use takumi_raster::{SequentialScene, measure, needs, render, write_animation, write_image};
 use wasm_bindgen::prelude::*;
@@ -30,19 +30,19 @@ use crate::{helper::map_error, model::*};
 #[wasm_bindgen]
 pub struct Renderer {
   fonts: FontStore,
-  resource_cache: ResourceCache,
+  cache: Cache,
   sources: SourceCache,
 }
 
 fn raster_options<'fonts>(
-  resource_cache: &'fonts ResourceCache,
+  cache: &'fonts Cache,
   fonts: &'fonts Fonts,
   node: Node,
   mut options: RenderOptions,
   images: HashMap<Arc<str>, LoadedImageSource>,
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
   let stylesheet = stylesheet(
-    resource_cache,
+    cache,
     css_or_stylesheets(options.css.take(), options.stylesheets.take()),
     options.keyframes.take().unwrap_or_default(),
   )
@@ -53,7 +53,7 @@ fn raster_options<'fonts>(
       node,
       Draw {
         fonts,
-        cache: resource_cache,
+        cache,
         stylesheet,
         images,
       },
@@ -67,7 +67,7 @@ impl Renderer {
     &self,
     images: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
-    decode_images(&self.resource_cache, images.unwrap_or_default()).map_err(map_error)
+    decode_images(&self.cache, images.unwrap_or_default()).map_err(map_error)
   }
 
   /// Creates a new Renderer instance.
@@ -80,9 +80,9 @@ impl Renderer {
 
     Ok(Renderer {
       fonts: FontStore::new(options.font_cache_bytes()).map_err(map_error)?,
-      resource_cache: match options.cache_bytes() {
-        Some(bytes) => ResourceCache::new(bytes),
-        None => ResourceCache::default(),
+      cache: match options.cache_bytes() {
+        Some(bytes) => Cache::builder().images(bytes).build(),
+        None => Cache::default(),
       },
       sources: SourceCache::default(),
     })
@@ -177,7 +177,7 @@ impl Renderer {
       .format
       .unwrap_or_default()
       .raster(options.quality, options.lossless);
-    let render_options = raster_options(&self.resource_cache, fonts, node, options, images)?;
+    let render_options = raster_options(&self.cache, fonts, node, options, images)?;
     let image = render(render_options).map_err(map_error)?;
     let Some(format) = format else {
       return Ok(image.into_raw());
@@ -209,7 +209,7 @@ impl Renderer {
 
     let images = self.images_map(options.images.take().as_deref())?;
     let stylesheet = stylesheet(
-      &self.resource_cache,
+      &self.cache,
       options.css.take(),
       options.keyframes.take().unwrap_or_default(),
     )
@@ -220,7 +220,7 @@ impl Renderer {
     );
     let draw = Draw {
       fonts: &fonts,
-      cache: &self.resource_cache,
+      cache: &self.cache,
       stylesheet,
       images,
     };
@@ -253,7 +253,7 @@ impl Renderer {
       options.font_families.as_deref(),
       options.failed_font_files.as_deref(),
     );
-    let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
+    let render_options = raster_options(&self.cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
 
@@ -288,7 +288,7 @@ impl Renderer {
       listed.as_ref(),
       options.failed_font_files.as_deref(),
     );
-    let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
+    let render_options = raster_options(&self.cache, &fonts, node, options, images)?;
 
     Ok(
       to_value(&NeedsOutput::new(needs(render_options), listed.as_ref()))
@@ -419,14 +419,14 @@ impl Renderer {
       read_source,
     )?;
     let stylesheet = stylesheet(
-      &self.resource_cache,
+      &self.cache,
       css,
       options.keyframes.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
     let draw = Draw {
       fonts,
-      cache: &self.resource_cache,
+      cache: &self.cache,
       stylesheet,
       images,
     };

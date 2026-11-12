@@ -22,7 +22,7 @@ use crate::{
   error::Result,
   geometry::Size,
   layout::{needs::RenderNeeds, node::Node, tree::RenderNode},
-  resources::image::ImageSource as DecodedImage,
+  resources::{cache::Cache, image::ImageSource as DecodedImage},
   scene::Scene,
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
@@ -40,6 +40,9 @@ pub struct PaintTreeOptions<'g> {
   /// Pre-decoded images keyed by `src`.
   #[builder(default)]
   pub(crate) images: HashMap<Arc<str>, DecodedImage>,
+  /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
+  #[builder(default = Cache::shared())]
+  pub(crate) cache: Cache,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
@@ -85,6 +88,7 @@ impl PaintTreeOptions<'_> {
       )
       .sizing(SizingContext::builder().viewport(self.viewport).build())
       .images(Rc::new(self.images))
+      .cache(self.cache)
       .stylesheet(self.stylesheet)
       .time_ms(self.time_ms)
       .style(Box::new(ComputedStyle::root(self.lang, self.font_families)))

@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use crate::{
   context::RenderContext,
@@ -7,9 +7,9 @@ use crate::{
     node::{ImageData, ImageSourceInput},
   },
   layout_unit::LayoutUnit,
-  resources::image::{
-    ImageCacheMode, ImageError, ImageResult, ImageSource, ResourceCache, decode_data_uri,
-    is_svg_like,
+  resources::{
+    cache::Cache,
+    image::{ImageCacheMode, ImageError, ImageResult, decode_data_uri, is_svg_like},
   },
   style::{Length, Style, StyleDeclaration},
 };
@@ -74,40 +74,24 @@ impl ImageData {
 
 const DATA_URI_PREFIX: &str = "data:";
 
-/// The image a `data:` URI holds, decoded through `cache` when the render has one.
-fn parse_data_uri_image(src: &str, cache: Option<&ResourceCache>) -> ImageResult {
+/// The image a `data:` URI holds, decoded through `cache`.
+fn parse_data_uri_image(src: &str, cache: &Cache) -> ImageResult {
   let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
 
-  decode_cached(&decoded.bytes, cache, |bytes| {
-    ImageSource::from_bytes_lazy(bytes, 0, Weak::new())
-  })
-}
-
-/// `bytes` decoded through `cache` when the render has one, and by `uncached` otherwise.
-fn decode_cached(
-  bytes: &[u8],
-  cache: Option<&ResourceCache>,
-  uncached: fn(&[u8]) -> ImageResult,
-) -> ImageResult {
-  match cache {
-    Some(cache) => cache.get_or_decode(bytes, ImageCacheMode::Auto),
-    None => uncached(bytes),
-  }
+  cache.decode_image(&decoded.bytes, ImageCacheMode::Auto)
 }
 
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.
 pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
-    return parse_data_uri_image(src, context.resource_cache());
+    return parse_data_uri_image(src, context.cache());
   }
 
   if is_svg_like(src) {
     #[cfg(feature = "svg-sizing")]
-    return decode_cached(
-      src.as_bytes(),
-      context.resource_cache(),
-      ImageSource::from_bytes,
-    );
+    return context
+      .cache()
+      .decode_image(src.as_bytes(), ImageCacheMode::Auto);
     #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
@@ -129,6 +113,8 @@ mod tests {
 
   #[cfg(any(feature = "svg", feature = "png"))]
   use super::parse_data_uri_image;
+  #[cfg(any(feature = "svg", feature = "png"))]
+  use crate::resources::cache::Cache;
   #[cfg(feature = "svg")]
   use crate::{Fonts, context::RenderContext, style::SizingContext, viewport::Viewport};
   use crate::{
@@ -141,7 +127,7 @@ mod tests {
   fn parse_data_uri_svg_with_unescaped_hash() {
     let source = parse_data_uri_image(
       "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10' fill='#f00'/></svg>",
-      None,
+      &Cache::default(),
     )
     .unwrap();
 
@@ -153,7 +139,7 @@ mod tests {
   fn a_data_uri_decodes_once_per_cache() {
     use std::sync::Arc;
 
-    use crate::resources::image::{ResourceCache, to_data_url};
+    use crate::resources::image::to_data_url;
 
     let png = ImageBuffer::from_rgba_bytes(vec![255; 4 * 4 * 4], 4, 4)
       .unwrap()
@@ -161,9 +147,9 @@ mod tests {
       .unwrap();
 
     let uri = to_data_url("image/png", &png);
-    let cache = ResourceCache::default();
-    let first = parse_data_uri_image(&uri, Some(&cache)).unwrap();
-    let second = parse_data_uri_image(&uri, Some(&cache)).unwrap();
+    let cache = Cache::default();
+    let first = parse_data_uri_image(&uri, &cache).unwrap();
+    let second = parse_data_uri_image(&uri, &cache).unwrap();
 
     assert_matches!(
       (first, second),
@@ -177,7 +163,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::resolve_image;
-    use crate::resources::image::ResourceCache;
 
     let fonts = Fonts::default();
     let context = RenderContext::builder()
@@ -187,7 +172,7 @@ mod tests {
           .viewport(Viewport::new((1200, 630)))
           .build(),
       )
-      .resource_cache(Some(ResourceCache::default()))
+      .cache(Cache::default())
       .build();
     let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10'/></svg>";
     let first = resolve_image(svg, &context).unwrap();

@@ -39,8 +39,8 @@ use takumi_core::{
   Error as CoreError, Fonts,
   layout::{needs::RenderNeeds, node::Node},
   resources::{
+    cache::Cache,
     font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
-    image::ResourceCache,
   },
   style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
   viewport::DEFAULT_DEVICE_PIXEL_RATIO,
@@ -328,7 +328,7 @@ impl Scenes {
 /// Parsed sheets are cached by source text in `cache`; per-render keyframes are
 /// grafted onto a copy so the cached parse stays pristine.
 pub fn stylesheet(
-  cache: &ResourceCache,
+  cache: &Cache,
   css: Option<Vec<CssSource>>,
   keyframes: Vec<KeyframesRule>,
 ) -> Result<Arc<StyleSheet>, CssSourceError> {
@@ -338,7 +338,7 @@ pub fn stylesheet(
     .map(CssSource::into_css)
     .collect::<Result<Vec<_>, _>>()?;
 
-  let sheet = cache.get_or_parse_stylesheet(sheets);
+  let sheet = cache.parse_stylesheet(sheets);
 
   if keyframes.is_empty() {
     return Ok(sheet);

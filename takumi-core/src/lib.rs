@@ -88,7 +88,7 @@ use std::collections::HashSet;
 pub use error::{Error, Result};
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
-pub use crate::resources::font::Fonts;
+pub use crate::resources::{cache::Cache, font::Fonts};
 
 /// Type alias for HashSet using XXH3 hasher
 pub(crate) type Xxh3HashSet<T> = HashSet<T, Xxh3DefaultBuilder>;

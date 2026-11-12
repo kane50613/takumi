@@ -13,10 +13,7 @@ use takumi_core::{
   error::Error as TakumiError,
   geometry::{Rect, Size},
   layout::node::Node,
-  resources::{
-    font::FontError,
-    image::{ImageSource, ResourceCache},
-  },
+  resources::{cache::Cache, font::FontError, image::ImageSource},
   style::{
     Color, FontFamily, Lang, Length, SizingContext, StyleSheet,
     page_rule::{PageContext, PageSize},
@@ -389,9 +386,9 @@ pub struct PdfOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
-  /// The cache `data:` URI images decode through, shared by renders that embed the same image; `None` gives the render its own.
-  #[builder(default, setter(strip_option))]
-  pub resource_cache: Option<ResourceCache>,
+  /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
+  #[builder(default = Cache::shared())]
+  pub cache: Cache,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
@@ -1086,9 +1083,9 @@ pub struct MeasureOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
-  /// The cache `data:` URI images decode through; see [`PdfOptions::resource_cache`].
-  #[builder(default, setter(strip_option))]
-  pub resource_cache: Option<ResourceCache>,
+  /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
+  #[builder(default = Cache::shared())]
+  pub cache: Cache,
   /// Lays out at the full page width with unbounded height, exactly how
   /// [`crate::render`] measures a header/footer band. Margins do not affect the
   /// result.

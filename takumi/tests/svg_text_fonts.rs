@@ -6,7 +6,7 @@ use std::fs;
 use takumi::prelude::*;
 use takumi_core::{
   context::RenderContext,
-  resources::image::{RenderedImage, ResourceCache},
+  resources::{cache::Cache, image::RenderedImage},
 };
 
 use crate::test_utils::{repo_base_path, write_goldens};
@@ -28,9 +28,9 @@ fn fonts_with(path: &str) -> Fonts {
   fonts
 }
 
-fn decode(cache: &ResourceCache, svg: &str) -> ImageSource {
+fn decode(cache: &Cache, svg: &str) -> ImageSource {
   cache
-    .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
+    .decode_image(svg.as_bytes(), ImageCacheMode::Auto)
     .unwrap()
 }
 
@@ -55,7 +55,7 @@ fn raster(source: &ImageSource, fonts: &Fonts) -> Vec<u8> {
 
 #[test]
 fn shared_text_svg_follows_the_font_snapshot() {
-  let cache = ResourceCache::default();
+  let cache = Cache::default();
   let source = decode(&cache, SVG);
 
   let geist = fonts_with(GEIST);
@@ -74,7 +74,7 @@ fn has_ink(rgba: &[u8]) -> bool {
 
 #[test]
 fn text_without_font_family_falls_back_to_a_registered_face() {
-  let cache = ResourceCache::default();
+  let cache = Cache::default();
   let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><text x="10" y="55" font-size="48" fill="black">Hgo</text></svg>"#;
   let source = decode(&cache, svg);
   let fonts = fonts_with(GEIST);
@@ -84,7 +84,7 @@ fn text_without_font_family_falls_back_to_a_registered_face() {
 
 #[test]
 fn namespace_prefixed_text_is_rendered() {
-  let cache = ResourceCache::default();
+  let cache = Cache::default();
   let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:s="http://www.w3.org/2000/svg" width="200" height="80"><s:text x="10" y="55" font-family="Swap" font-size="48" fill="black">Hgo</s:text></svg>"#;
   let source = decode(&cache, svg);
   let fonts = fonts_with(GEIST);
@@ -94,7 +94,7 @@ fn namespace_prefixed_text_is_rendered() {
 
 #[test]
 fn empty_and_paragraph_separator_text_do_not_panic() {
-  let cache = ResourceCache::default();
+  let cache = Cache::default();
   let fonts = fonts_with(GEIST);
 
   for svg in [

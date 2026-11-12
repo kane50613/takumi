@@ -21,7 +21,7 @@ use takumi_bindings_common::{
 use takumi_core::{
   Fonts,
   layout::{needs::RenderNeeds, node::Node},
-  resources::image::{ImageSource, ResourceCache},
+  resources::{cache::Cache, image::ImageSource},
   style::{FontFamily, Lang, StyleSheet},
   viewport::Viewport,
 };
@@ -103,7 +103,7 @@ struct MeasureInputs {
   layout: Layout,
   fonts: Rc<Fonts>,
   stylesheet: Arc<StyleSheet>,
-  resource_cache: ResourceCache,
+  cache: Cache,
   font_families: Option<FontFamily>,
 }
 
@@ -116,7 +116,7 @@ impl MeasureInputs {
       node,
       stylesheet: self.stylesheet.clone(),
       images: self.layout.images.clone(),
-      resource_cache: Some(self.resource_cache.clone()),
+      cache: self.cache.clone(),
       page: self.layout.page,
       font_families: self.font_families.clone(),
       lang: self.layout.lang,
@@ -132,7 +132,7 @@ impl MeasureInputs {
 #[wasm_bindgen]
 pub struct PdfRenderer {
   fonts: FontStore,
-  resource_cache: ResourceCache,
+  cache: Cache,
   sources: SourceCache,
   bands: SourceCache,
 }
@@ -165,11 +165,8 @@ impl PdfRenderer {
   }
 
   fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
+    let images = decode_images(&self.cache, options.images.as_deref().unwrap_or_default())
+      .map_err(map_error)?;
     let (viewport, page) = resolve_geometry(options)?;
     let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
@@ -194,9 +191,8 @@ impl PdfRenderer {
         listed,
         options.failed_font_files.as_deref(),
       ),
-      stylesheet: stylesheet(&self.resource_cache, options.css.take(), Vec::new())
-        .map_err(map_error)?,
-      resource_cache: self.resource_cache.clone(),
+      stylesheet: stylesheet(&self.cache, options.css.take(), Vec::new()).map_err(map_error)?,
+      cache: self.cache.clone(),
       font_families: options.font_families.take().map(FontFamily::from_names),
     })
   }
@@ -214,7 +210,7 @@ impl PdfRenderer {
 
     Ok(PdfRenderer {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
-      resource_cache: ResourceCache::default(),
+      cache: Cache::default(),
       sources: SourceCache::default(),
       bands: SourceCache::default(),
     })
@@ -297,9 +293,9 @@ impl PdfRenderer {
       viewport,
       fonts: &fonts,
       node,
-      stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
+      stylesheet: stylesheet(&self.cache, options.css, Vec::new()).map_err(map_error)?,
       images,
-      resource_cache: Some(self.resource_cache.clone()),
+      cache: self.cache.clone(),
       page,
       page_ranges: options
         .page_ranges

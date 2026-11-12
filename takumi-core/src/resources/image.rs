@@ -8,21 +8,14 @@ pub use super::animated::AnimatedSource;
 use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::FromStr;
-use std::{
-  str::from_utf8,
-  sync::{Arc, Weak},
-};
+use std::{str::from_utf8, sync::Arc};
 
-use quick_cache::{
-  DefaultHashBuilder, OptionsBuilder, Weighter,
-  sync::{Cache, DefaultLifecycle, GuardResult},
-};
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Pixmap;
-use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+use xxhash_rust::xxh3::xxh3_64;
 
 #[cfg(feature = "svg-raster")]
 use crate::geometry::Point;
@@ -48,10 +41,11 @@ pub use crate::svg_vector::{
 use crate::{
   context::RenderContext,
   resources::{
+    cache::{Cache, SizedKey},
     image_buffer::ImageBuffer,
     image_decoder::{DecodeTarget, bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
-  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
+  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Transform;
@@ -106,12 +100,10 @@ pub struct SvgSource {
   /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
   #[cfg(feature = "svg-raster")]
   has_text: bool,
+  /// The key the cache keeps its rasters under, none for a source no cache holds.
   #[cfg(feature = "svg")]
   #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
-  hash: u64,
-  #[cfg(feature = "svg")]
-  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
-  cache: Weak<SharedResourceCache>,
+  key: Option<u64>,
 }
 
 #[cfg(feature = "svg-sizing")]
@@ -154,7 +146,7 @@ impl SvgSource {
 
 #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
 impl SvgSource {
-  fn parse(src: &str, _hash: u64, _cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
+  fn parse(src: &str, _key: Option<u64>) -> Result<Self, ImageError> {
     Ok(SvgSource {
       source: Box::from(src),
       sizing: SvgSize::parse(src).map_err(ImageError::svg_parse)?,
@@ -233,18 +225,14 @@ impl SvgSource {
 
     Ok(Self {
       inline: true,
-      cache: Weak::new(),
-      hash: xxh3_64(markup.as_bytes()),
       ..Self::from_document(document, markup)
     })
   }
 
-  /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
-  /// keyed by content hash and target size. A dead handle rasterizes per call.
-  fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
+  /// Parses SVG markup, whose rasters a cache keeps under `key`.
+  fn parse(src: &str, key: Option<u64>) -> Result<Self, ImageError> {
     Ok(Self {
-      hash,
-      cache,
+      key,
       ..Self::from_document(SvgDocument::parse(src)?, src)
     })
   }
@@ -258,8 +246,7 @@ impl SvgSource {
       document: Arc::new(document),
       inline: false,
       source: Box::from(src),
-      hash: 0,
-      cache: Weak::new(),
+      key: None,
     }
   }
 
@@ -309,22 +296,22 @@ impl SvgSource {
       return self.rasterize(raster, host);
     }
 
-    let mut hash = if self.uses_current_color {
-      self.hash ^ xxh3_64(&host.current_color.0)
-    } else {
-      self.hash
-    };
+    let mut variant = raster.hash();
+
+    if self.uses_current_color {
+      variant ^= xxh3_64(&host.current_color.0);
+    }
 
     // Text rasterization depends on which fonts are registered.
     if self.has_text {
-      hash ^= xxh3_64(&host.fonts().revision().to_le_bytes());
+      variant ^= xxh3_64(&host.fonts().revision().to_le_bytes());
     }
 
-    hash ^= raster.hash();
+    let sized = SizedKey::new(variant, raster.width, raster.height, image_rendering);
 
-    let key = ResourceCacheKey::sized(hash, raster.width, raster.height, image_rendering);
-
-    cached_sized(&self.cache, key, || self.rasterize(raster, host))
+    host
+      .cache()
+      .sized(self.key, sized, || self.rasterize(raster, host))
   }
 }
 
@@ -402,8 +389,8 @@ pub struct EncodedBitmap {
   bytes: Box<[u8]>,
   width: u32,
   height: u32,
-  hash: u64,
-  cache: Weak<SharedResourceCache>,
+  /// The key the cache keeps its downscaled buffers under, none for a source no cache holds.
+  key: Option<u64>,
 }
 
 impl EncodedBitmap {
@@ -423,10 +410,11 @@ impl EncodedBitmap {
     width: u32,
     height: u32,
     algorithm: ImageScalingAlgorithm,
+    cache: &Cache,
   ) -> Result<(Arc<ImageBuffer>, (f32, f32)), ImageError> {
     let target = DecodeTarget::covering((self.width, self.height), (width, height), algorithm);
-    let key = ResourceCacheKey::sized(self.hash, target.width, target.height, algorithm);
-    let buffer = cached_sized(&self.cache, key, || {
+    let sized = SizedKey::new(0, target.width, target.height, algorithm);
+    let buffer = cache.sized(self.key, sized, || {
       decode_bitmap_scaled(&self.bytes, target)
         .map(Arc::new)
         .map_err(ImageError::decode)
@@ -437,30 +425,6 @@ impl EncodedBitmap {
     );
 
     Ok((buffer, scale))
-  }
-}
-
-/// The sized buffer `cache` holds for `key`, computing it once across concurrent misses. A dead
-/// cache computes on every call.
-fn cached_sized(
-  cache: &Weak<SharedResourceCache>,
-  key: ResourceCacheKey,
-  compute: impl Fn() -> Result<Arc<ImageBuffer>, ImageError>,
-) -> Result<Arc<ImageBuffer>, ImageError> {
-  let Some(cache) = cache.upgrade() else {
-    return compute();
-  };
-
-  match cache.get_value_or_guard(&key, None) {
-    GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
-    GuardResult::Value(_) => compute(),
-    GuardResult::Guard(guard) => {
-      let buffer = compute()?;
-      let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
-      Ok(buffer)
-    }
-    // `None` timeout never times out.
-    GuardResult::Timeout => compute(),
   }
 }
 
@@ -496,7 +460,7 @@ impl FromStr for SvgSource {
   type Err = ImageError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
-    Self::parse(src, xxh3_64(src.as_bytes()), Weak::new())
+    Self::parse(src, Some(xxh3_64(src.as_bytes())))
   }
 }
 
@@ -517,40 +481,42 @@ impl ImageSource {
 
   /// Loads an image from bytes, as an SVG document when they look like one.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
-    Self::from_svg_or_animated_bytes(bytes, || xxh3_64(bytes), &Weak::new())
+    Self::from_svg_or_animated_bytes(bytes, || Some(xxh3_64(bytes)))
       .unwrap_or_else(|| Self::from_still_bytes(bytes))
   }
 
-  /// [`from_bytes`](Self::from_bytes), with bitmaps decoding at draw size into `cache`.
-  pub(crate) fn from_bytes_lazy(
-    bytes: &[u8],
-    hash: u64,
-    cache: Weak<SharedResourceCache>,
-  ) -> ImageResult {
-    if let Some(source) = Self::from_svg_or_animated_bytes(bytes, || hash, &cache) {
+  /// [`from_bytes`](Self::from_bytes), with nothing kept in a cache.
+  pub(crate) fn from_bytes_uncached(bytes: &[u8]) -> ImageResult {
+    Self::from_svg_or_animated_bytes(bytes, || None)
+      .unwrap_or_else(|| Self::from_still_bytes(bytes))
+  }
+
+  /// [`from_bytes`](Self::from_bytes), with bitmaps decoding at draw size into the cache under
+  /// `hash`.
+  pub(crate) fn from_bytes_keyed(bytes: &[u8], hash: u64) -> ImageResult {
+    if let Some(source) = Self::from_svg_or_animated_bytes(bytes, || Some(hash)) {
       return source;
     }
 
     match bitmap_dimensions(bytes) {
-      Some(Ok((width, height))) => Ok(Self::encoded(bytes, (width, height), hash, cache)),
+      Some(Ok((width, height))) => Ok(Self::encoded(bytes, (width, height), Some(hash))),
       Some(Err(error)) => Err(ImageError::decode(error)),
       None => Self::from_still_bytes(bytes),
     }
   }
 
-  /// The SVG or animated source `bytes` hold, or `None` for a still bitmap. `hash` keys the SVG's
-  /// rasters in `cache`.
+  /// The SVG or animated source `bytes` hold, or `None` for a still bitmap. `key` keys the SVG's
+  /// rasters in a cache.
   #[cfg_attr(not(feature = "svg-sizing"), allow(unused_variables))]
   fn from_svg_or_animated_bytes(
     bytes: &[u8],
-    hash: impl FnOnce() -> u64,
-    cache: &Weak<SharedResourceCache>,
+    key: impl FnOnce() -> Option<u64>,
   ) -> Option<ImageResult> {
     #[cfg(feature = "svg-sizing")]
     if let Ok(text) = from_utf8(bytes)
       && is_svg_like(text)
     {
-      return Some(SvgSource::parse(text, hash(), cache.clone()).map(Self::from));
+      return Some(SvgSource::parse(text, key()).map(Self::from));
     }
 
     #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
@@ -569,25 +535,19 @@ impl ImageSource {
       Err(error) => Err(ImageError::decode(error)),
       #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
       Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
-        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
+        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, None)),
         _ => Err(ImageError::decode(error)),
       },
     }
   }
 
   /// A bitmap kept in the bytes it arrived in.
-  fn encoded(
-    bytes: &[u8],
-    (width, height): (u32, u32),
-    hash: u64,
-    cache: Weak<SharedResourceCache>,
-  ) -> Self {
+  fn encoded(bytes: &[u8], (width, height): (u32, u32), key: Option<u64>) -> Self {
     ImageSource::Encoded(Arc::new(EncodedBitmap {
       bytes: bytes.into(),
       width,
       height,
-      hash,
-      cache,
+      key,
     }))
   }
 
@@ -615,7 +575,7 @@ impl ImageSource {
       allow(unused_variables)
     )]
     time_ms: u64,
-    #[cfg_attr(not(feature = "svg-raster"), allow(unused_variables))] host: &RenderContext,
+    host: &RenderContext,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
@@ -641,7 +601,8 @@ impl ImageSource {
         })
       }
       ImageSource::Encoded(encoded) => {
-        let (source, source_scale) = encoded.decode_at(width, height, image_rendering)?;
+        let (source, source_scale) =
+          encoded.decode_at(width, height, image_rendering, host.cache())?;
         Ok(RenderedImage::Sampled {
           source,
           width,
@@ -891,14 +852,7 @@ impl ImageError {
   }
 }
 
-/// The default byte budget, which [`ResourceCache::new`] raises for heavier workloads.
-const DEFAULT_MAX_BYTES: u64 = 64 << 20;
-
-/// Bytes each shard holds, enough for one decoded photo, since `quick_cache` rejects an entry over
-/// 97% of its shard.
-const SHARD_BYTES: u64 = 64 << 20;
-
-/// Cache policy for a decoded image, applied per [`ResourceCache::get_or_decode`] call.
+/// Cache policy for a decoded image, applied per [`Cache::decode_image`] call.
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
@@ -910,197 +864,14 @@ pub enum ImageCacheMode {
   None,
 }
 
-/// A cache key: a source, a decode at a size and filter, or a parsed sheet, told apart by `kind`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ResourceCacheKey {
-  hash: u64,
-  width: u32,
-  height: u32,
-  algorithm: u8,
-  kind: u8,
-}
-
-const KIND_SOURCE: u8 = 0;
-const KIND_SIZED: u8 = 1;
-const KIND_STYLESHEET: u8 = 2;
-
-impl ResourceCacheKey {
-  fn source(hash: u64) -> Self {
-    Self {
-      hash,
-      width: 0,
-      height: 0,
-      algorithm: 0,
-      kind: KIND_SOURCE,
-    }
-  }
-
-  fn sized(hash: u64, width: u32, height: u32, algorithm: ImageScalingAlgorithm) -> Self {
-    Self {
-      hash,
-      width,
-      height,
-      algorithm: match algorithm {
-        ImageScalingAlgorithm::Smooth => 1,
-        ImageScalingAlgorithm::Pixelated => 2,
-        _ => 0,
-      },
-      kind: KIND_SIZED,
-    }
-  }
-
-  fn stylesheet(hash: u64) -> Self {
-    Self {
-      hash,
-      width: 0,
-      height: 0,
-      algorithm: 0,
-      kind: KIND_STYLESHEET,
-    }
-  }
-}
-
-#[derive(Clone)]
-pub(crate) enum CacheEntry {
-  Source(ImageSource),
-  Sized(Arc<ImageBuffer>),
-  Stylesheet { sheet: Arc<StyleSheet>, weight: u32 },
-}
-
-#[derive(Clone)]
-pub(crate) struct ResourceWeighter;
-
-impl Weighter<ResourceCacheKey, CacheEntry> for ResourceWeighter {
-  fn weight(&self, _key: &ResourceCacheKey, entry: &CacheEntry) -> u64 {
-    let bytes = match entry {
-      CacheEntry::Source(source) => source.estimated_bytes(),
-      CacheEntry::Sized(buffer) => buffer.data().len(),
-      CacheEntry::Stylesheet { weight, .. } => *weight as usize,
-    };
-    (bytes as u64).max(1)
-  }
-}
-
-pub(crate) type SharedResourceCache = Cache<ResourceCacheKey, CacheEntry, ResourceWeighter>;
-
-/// Decoded images, SVG rasters, and parsed stylesheets under one byte budget, shared by clones.
-#[derive(Clone)]
-pub struct ResourceCache {
-  cache: Arc<SharedResourceCache>,
-}
-
-impl Default for ResourceCache {
-  fn default() -> Self {
-    Self::new(DEFAULT_MAX_BYTES)
-  }
-}
-
-impl ResourceCache {
-  /// Creates a cache holding at most `max_bytes` across every entry kind.
-  /// `0` disables retention: lookups miss and nothing is kept.
-  pub fn new(max_bytes: u64) -> Self {
-    // ~64 KiB average decoded image ⇒ a reasonable item-count hint for the budget.
-    let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
-    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get() as u64);
-    let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
-    let shards = if shards.is_power_of_two() {
-      shards
-    } else {
-      shards.next_power_of_two() / 2
-    } as usize;
-    let options = OptionsBuilder::new()
-      .estimated_items_capacity(estimated_items)
-      .weight_capacity(max_bytes)
-      .shards(shards)
-      .build();
-    let cache = match options {
-      Ok(options) => Cache::with_options(
-        options,
-        ResourceWeighter,
-        DefaultHashBuilder::default(),
-        DefaultLifecycle::default(),
-      ),
-      Err(_) => Cache::with_weighter(estimated_items, max_bytes, ResourceWeighter),
-    };
-
-    Self {
-      cache: Arc::new(cache),
-    }
-  }
-
-  /// The decoded image for `bytes`, decoded once across concurrent misses and cached unless `mode`
-  /// is [`ImageCacheMode::None`].
-  pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
-    let hash = xxh3_64(bytes);
-    let key = ResourceCacheKey::source(hash);
-
-    if matches!(mode, ImageCacheMode::None) {
-      return match self.cache.get(&key) {
-        Some(CacheEntry::Source(source)) => Ok(source),
-        _ => ImageSource::from_bytes(bytes),
-      };
-    }
-
-    match self.cache.get_value_or_guard(&key, None) {
-      GuardResult::Value(CacheEntry::Source(source)) => Ok(source),
-      GuardResult::Value(_) => ImageSource::from_bytes(bytes),
-      GuardResult::Guard(guard) => {
-        let source = ImageSource::from_bytes_lazy(bytes, hash, Arc::downgrade(&self.cache))?;
-        let _ = guard.insert(CacheEntry::Source(source.clone()));
-        Ok(source)
-      }
-      // `None` timeout never times out.
-      GuardResult::Timeout => ImageSource::from_bytes(bytes),
-    }
-  }
-
-  /// Returns the parsed sheet for `sources`, parsing on a miss. Keyed by the
-  /// source text, so a server re-sending the same CSS parses it once.
-  pub fn get_or_parse_stylesheet(&self, sources: Vec<String>) -> Arc<StyleSheet> {
-    let mut hasher = Xxh3::new();
-    for source in &sources {
-      hasher.update(source.as_bytes());
-      hasher.update(&(source.len() as u64).to_le_bytes());
-    }
-    let key = ResourceCacheKey::stylesheet(hasher.digest());
-
-    // Parsed rules retain roughly this much beyond the source text.
-    let weight = sources
-      .iter()
-      .map(String::len)
-      .sum::<usize>()
-      .saturating_mul(3)
-      .min(u32::MAX as usize) as u32;
-
-    match self.cache.get_value_or_guard(&key, None) {
-      GuardResult::Value(CacheEntry::Stylesheet { sheet, .. }) => sheet,
-      GuardResult::Value(_) => Arc::new(StyleSheet::parse_owned_list_loosy(sources)),
-      GuardResult::Guard(guard) => {
-        let sheet = Arc::new(StyleSheet::parse_owned_list_loosy(sources));
-        let _ = guard.insert(CacheEntry::Stylesheet {
-          sheet: sheet.clone(),
-          weight,
-        });
-        sheet
-      }
-      // `None` timeout never times out.
-      GuardResult::Timeout => Arc::new(StyleSheet::parse_owned_list_loosy(sources)),
-    }
-  }
-}
-
 #[cfg(all(test, feature = "png"))]
-mod resource_cache_tests {
+mod encoded_tests {
   use std::sync::Arc;
 
-  use quick_cache::sync::Cache;
-
-  use super::{
-    CacheEntry, ImageCacheMode, RenderedImage, ResourceCache, ResourceCacheKey, ResourceWeighter,
-  };
+  use super::{ImageCacheMode, RenderedImage};
   use crate::{
     context::RenderContext,
-    resources::{image::ImageSource, image_buffer::ImageBuffer},
+    resources::{cache::Cache, image::ImageSource, image_buffer::ImageBuffer},
     style::{Color, ImageScalingAlgorithm},
   };
 
@@ -1119,22 +890,6 @@ mod resource_cache_tests {
     bytes[tail..].fill(0);
 
     assert!(ImageSource::from_bytes(&bytes).is_err());
-  }
-
-  #[test]
-  fn decodes_and_reuses_on_hit() {
-    let cache = ResourceCache::default();
-    let bytes = png_bytes();
-
-    let first = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
-    let second = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
-
-    match (&first, &second) {
-      (ImageSource::Encoded(a), ImageSource::Encoded(b)) => {
-        assert!(Arc::ptr_eq(a, b))
-      }
-      _ => panic!("expected encoded bitmaps"),
-    }
   }
 
   fn sized_png_bytes(width: u32, height: u32) -> Vec<u8> {
@@ -1170,9 +925,9 @@ mod resource_cache_tests {
 
   #[test]
   fn encoded_decodes_at_draw_size_and_reuses() {
-    let cache = ResourceCache::default();
+    let cache = Cache::default();
     let bytes = sized_png_bytes(64, 64);
-    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+    let source = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
 
     let (first, scale) = rendered_buffer(&source, 16, 16);
     let (second, _) = rendered_buffer(&source, 16, 16);
@@ -1184,9 +939,9 @@ mod resource_cache_tests {
 
   #[test]
   fn encoded_covers_the_larger_axis() {
-    let cache = ResourceCache::default();
+    let cache = Cache::default();
     let bytes = sized_png_bytes(64, 64);
-    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+    let source = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
 
     let (buffer, scale) = rendered_buffer(&source, 32, 16);
 
@@ -1196,135 +951,14 @@ mod resource_cache_tests {
 
   #[test]
   fn encoded_never_upscales() {
-    let cache = ResourceCache::default();
+    let cache = Cache::default();
     let bytes = sized_png_bytes(8, 8);
-    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+    let source = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
 
     let (buffer, scale) = rendered_buffer(&source, 32, 32);
 
     assert_eq!((buffer.width(), buffer.height()), (8, 8));
     assert_eq!(scale, (1.0, 1.0));
-  }
-
-  #[test]
-  fn store_false_does_not_populate_cache() {
-    let cache = ResourceCache::default();
-    let bytes = png_bytes();
-
-    let a = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
-    let b = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
-
-    match (&a, &b) {
-      (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!Arc::ptr_eq(x, y)),
-      _ => panic!("expected bitmaps"),
-    }
-  }
-
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_source_and_raster_are_cached() {
-    let cache = ResourceCache::default();
-    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>"#;
-
-    let a = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
-    let b = cache.get_or_decode(svg, ImageCacheMode::Auto).unwrap();
-
-    match (&a, &b) {
-      (ImageSource::Svg(x), ImageSource::Svg(y)) => {
-        assert!(Arc::ptr_eq(x, y))
-      }
-      _ => panic!("expected svgs"),
-    }
-
-    let (first, second) = (rendered_raster(&a, 4, 4), rendered_raster(&b, 4, 4));
-    assert!(Arc::ptr_eq(&first, &second));
-  }
-
-  #[cfg(feature = "svg")]
-  fn rendered_raster(source: &ImageSource, width: u32, height: u32) -> Arc<ImageBuffer> {
-    match source
-      .render_for_layout(
-        width,
-        height,
-        ImageScalingAlgorithm::Auto,
-        0,
-        &RenderContext::with_current_color(Color::black()),
-      )
-      .unwrap()
-    {
-      RenderedImage::Rasterized(buffer) => buffer,
-      _ => panic!("expected rasterized"),
-    }
-  }
-
-  #[test]
-  fn stylesheet_is_parsed_once() {
-    let cache = ResourceCache::default();
-    let sources = vec![".a { color: red; }".to_string()];
-
-    let first = cache.get_or_parse_stylesheet(sources.clone());
-    let second = cache.get_or_parse_stylesheet(sources);
-
-    assert!(Arc::ptr_eq(&first, &second));
-  }
-
-  #[test]
-  fn a_sized_entry_near_the_budget_is_retained() {
-    let cache = ResourceCache::new(16 << 20);
-    let key = ResourceCacheKey::sized(1, 2400, 1601, ImageScalingAlgorithm::Auto);
-    let buffer = Arc::new(ImageBuffer::new(2400, 1601).unwrap());
-
-    cache.cache.insert(key, CacheEntry::Sized(buffer));
-
-    assert!(cache.cache.get(&key).is_some());
-  }
-
-  #[test]
-  fn an_uneven_budget_keeps_a_whole_shard_per_entry() {
-    let cache = ResourceCache::new(192 << 20);
-    let key = ResourceCacheKey::sized(1, 4000, 3900, ImageScalingAlgorithm::Auto);
-    let buffer = Arc::new(ImageBuffer::new(4000, 3900).unwrap());
-
-    cache.cache.insert(key, CacheEntry::Sized(buffer));
-
-    assert!(cache.cache.get(&key).is_some());
-  }
-
-  #[test]
-  fn zero_budget_disables_retention() {
-    let cache = ResourceCache::new(0);
-    let bytes = png_bytes();
-
-    let a = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
-    let b = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
-
-    match (&a, &b) {
-      (ImageSource::Encoded(x), ImageSource::Encoded(y)) => {
-        assert!(!Arc::ptr_eq(x, y))
-      }
-      _ => panic!("expected encoded bitmaps"),
-    }
-  }
-
-  /// Builds a bitmap source of approximately `bytes` decoded size (premultiplied RGBA, 1px tall).
-  fn image(bytes: u32) -> ImageSource {
-    let width = (bytes / 4).max(1);
-    ImageSource::from(ImageBuffer::new(width, 1).unwrap())
-  }
-
-  #[test]
-  fn eviction_stays_within_byte_budget() {
-    let max_bytes = 4096u64;
-    let cache = Cache::with_weighter(8, max_bytes, ResourceWeighter);
-
-    for key in 0..64u64 {
-      cache.insert(
-        ResourceCacheKey::source(key),
-        CacheEntry::Source(image(1024)),
-      );
-    }
-
-    assert!(cache.weight() <= max_bytes);
   }
 }
 

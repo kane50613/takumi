@@ -51,13 +51,13 @@ impl RenderJob {
     };
     let (node, stylesheet) = input.resolve(&self.state)?;
     let images = decode_images(
-      &self.state.resource_cache,
+      &self.state.cache,
       &self.options.images.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
     let draw = Draw {
       fonts: &self.fonts,
-      cache: &self.state.resource_cache,
+      cache: &self.state.cache,
       stylesheet,
       images,
     };

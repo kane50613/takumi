@@ -7,7 +7,7 @@ use takumi_core::{
   Error, Fonts,
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::image::{ImageSource as DecodedImage, ResourceCache},
+  resources::{cache::Cache, image::ImageSource as DecodedImage},
   style::{CssSource, FontFamily, KeyframesRule, StyleSheet},
   viewport::Viewport,
 };
@@ -103,7 +103,7 @@ impl RenderOptions {
         .font_families(self.font_families.clone().map(FontFamily::from_names))
         .lang(parse_lang(self.lang.as_deref())?)
         .images(draw.images)
-        .resource_cache(draw.cache.clone())
+        .cache(draw.cache.clone())
         .stylesheet(draw.stylesheet)
         .fonts(draw.fonts)
         .node(node)
@@ -121,6 +121,7 @@ impl RenderOptions {
         .font_families(self.font_families.clone().map(FontFamily::from_names))
         .lang(parse_lang(self.lang.as_deref())?)
         .images(draw.images)
+        .cache(draw.cache.clone())
         .stylesheet(draw.stylesheet)
         .fonts(draw.fonts)
         .node(node)
@@ -132,7 +133,7 @@ impl RenderOptions {
 /// What a render draws with besides its options: the fonts, the stylesheet, and the images.
 pub struct Draw<'f> {
   pub fonts: &'f Fonts,
-  pub cache: &'f ResourceCache,
+  pub cache: &'f Cache,
   pub stylesheet: Arc<StyleSheet>,
   pub images: HashMap<Arc<str>, DecodedImage>,
 }
@@ -199,7 +200,7 @@ impl<S> RenderAnimationOptions<S> {
             .font_families(font_families.clone())
             .lang(lang)
             .images(draw.images.clone())
-            .resource_cache(draw.cache.clone())
+            .cache(draw.cache.clone())
             .stylesheet(Arc::clone(&draw.stylesheet))
             .fonts(draw.fonts)
             .node(node)

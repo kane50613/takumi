@@ -1,5 +1,6 @@
 #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 mod animated;
+pub mod cache;
 /// Font loading and processing functionality
 pub mod font;
 /// Glyph rasterization: shaped glyph ids to bitmaps or vector outlines.
