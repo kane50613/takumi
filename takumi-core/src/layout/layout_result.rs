@@ -322,6 +322,9 @@ pub(crate) struct LayoutResult {
   /// The run of the box's algorithm that made the layout, which the fragments it placed name.
   #[cfg(feature = "fragmentation")]
   pub(crate) run: u32,
+  /// Whether the layout ran inside a measure or a provisional layout, so its boxes ended nowhere.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) is_provisional: bool,
 }
 
 /// What Blink's `LayoutResult` and its fragment tell the container about breaking.
@@ -441,6 +444,8 @@ impl LayoutResult {
       break_info: BreakInfo::default(),
       #[cfg(feature = "fragmentation")]
       run: 0,
+      #[cfg(feature = "fragmentation")]
+      is_provisional: false,
     }
   }
 

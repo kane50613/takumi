@@ -246,6 +246,23 @@ impl ConstraintSpace {
       }
   }
 
+  /// Blink's `MaySkipLayout`, with the BFC position and the floats equal too: whether this space
+  /// and `other` differ at most in the sizes `CalculateSizeBasedLayoutCacheStatus` compares.
+  pub(crate) fn differs_only_in_size(&self, other: &Self) -> bool {
+    *self
+      == Self {
+        available_inline_size: self.available_inline_size,
+        available_block_size: self.available_block_size,
+        percentage_resolution_inline_size: self.percentage_resolution_inline_size,
+        percentage_resolution_block_size: self.percentage_resolution_block_size,
+        is_fixed_inline_size: self.is_fixed_inline_size,
+        is_fixed_block_size: self.is_fixed_block_size,
+        inline_auto_behavior: self.inline_auto_behavior,
+        block_auto_behavior: self.block_auto_behavior,
+        ..other.clone()
+      }
+  }
+
   /// Blink's `AvailableSize` and `PercentageResolutionSize`.
   pub(crate) fn available_and_percentage_sizes(
     &self,
