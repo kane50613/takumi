@@ -289,6 +289,9 @@ pub struct LayoutTree<'r> {
   runs: u32,
   #[cfg(feature = "fragmentation")]
   running: Vec<PlacedBy>,
+  /// How many measures or provisional layouts run now, whose placements no page shows.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) provisional: usize,
   /// The layout styles the latest table parts took, which an equal part's shares.
   table_part_styles: RecentStyles<LayoutStyle>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
@@ -902,7 +905,9 @@ impl LayoutTree<'_> {
     let holder = (0..self.running.len())
       .filter_map(|index| Some((running(index)?, running(index + 1).unwrap_or(node))))
       .find(|&(container, child)| {
-        container != node && self.relays_out_ended_child(container, child)
+        container != node
+          && self.relays_out_ended_child(container, child)
+          && (child == node || self.relays_out_ended_descendants(container))
       })
       .map(|(container, _)| container);
 
@@ -942,6 +947,9 @@ impl LayoutTree<'_> {
     let Some(releases) = &self.releases else {
       return;
     };
+    if self.provisional > 0 {
+      return;
+    }
 
     self.nodes[usize::from(node)].ended_by = NonZeroUsize::new(releases.laid()).filter(|_| ends);
     if ends {
@@ -1065,6 +1073,8 @@ impl<'r> LayoutTree<'r> {
       runs: 0,
       #[cfg(feature = "fragmentation")]
       running: Vec::new(),
+      #[cfg(feature = "fragmentation")]
+      provisional: 0,
       table_part_styles: RecentStyles::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),

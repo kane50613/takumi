@@ -10,7 +10,8 @@ use crate::layout::{
   fragmentation_utils::{
     FlexItemBreak, IndexedBlockChildIterator, break_before_child_if_needed, finish_fragmentation,
     fragment_index, fragmentation_layout_input_for_child, is_early_break_target,
-    setup_fragment_builder_for_fragmentation, setup_space_builder_for_fragmentation,
+    join_fragmentainer_break_values, setup_fragment_builder_for_fragmentation,
+    setup_space_builder_for_fragmentation,
   },
   logical_rect::LogicalBoxStrut,
 };
@@ -25,6 +26,11 @@ use crate::{
     tree::LayoutTree,
   },
   layout_unit::LayoutUnit,
+};
+#[cfg(feature = "fragmentation")]
+use crate::{
+  layout::{layout_style::BreakStyle, table::layout::RowPart},
+  style::BreakBetween,
 };
 
 /// Stacks a section's rows at the block sizes its table gave them.
@@ -199,12 +205,45 @@ impl<'t, 'r> TableSectionLayoutAlgorithm<'t, 'r> {
           .baseline
           .unwrap_or(LayoutUnit::ZERO)
     });
+    self.measure_break_values(&mut result);
     result
   }
 }
 
 #[cfg(feature = "fragmentation")]
 impl TableSectionLayoutAlgorithm<'_, '_> {
+  /// The break values a layout of the rows propagates outside block fragmentation, where a cell
+  /// propagates none from its content: the first row's break-before and the last row's
+  /// break-after, each joined with its cells'.
+  fn measure_break_values(&self, result: &mut LayoutResult) {
+    if !self.space.should_propagate_child_break_values()
+      || self.space.has_block_fragmentation()
+      || self
+        .tree
+        .layout_style(self.node)
+        .applies_layout_containment()
+    {
+      return;
+    }
+
+    let rows = &self.data.structure.sections[self.section].rows;
+    let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
+      return;
+    };
+    // The break value `side` of `row` joined with its cells'.
+    let joined = |row: &RowPart, side: fn(&BreakStyle) -> BreakBetween| {
+      let side_of = |node: NodeId| side(&self.tree.layout_style(node).breaks);
+      let cells = row.cells.iter().fold(BreakBetween::Auto, |joined, cell| {
+        join_fragmentainer_break_values(joined, side_of(cell.node))
+      });
+
+      join_fragmentainer_break_values(cells, side_of(row.node))
+    };
+
+    result.break_info.initial_break_before = Some(joined(first, |breaks| breaks.break_before));
+    result.break_info.final_break_after = Some(joined(last, |breaks| breaks.break_after));
+  }
+
   /// Blink's `BlockChildIterator` over the section's rows, by index in the section.
   fn row_entries(&self) -> IndexedBlockChildIterator {
     IndexedBlockChildIterator::new(
@@ -391,6 +430,8 @@ impl TableSectionLayoutAlgorithm<'_, '_> {
   ) -> Rc<LayoutResult> {
     self.tree.layout(row, space)
   }
+
+  fn measure_break_values(&self, _result: &mut LayoutResult) {}
 
   fn break_before_row_if_needed(
     &mut self,

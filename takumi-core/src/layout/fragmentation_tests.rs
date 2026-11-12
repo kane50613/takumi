@@ -794,12 +794,48 @@ fn a_table_row_breaks_inside_unless_it_avoids_it() {
   );
 }
 
-/// A table of ten rows 60 tall, `r0` to `r9`, each cell holding a block `r0-cell` to `r9-cell`.
-fn ten_row_table() -> RenderNode {
-  let rows = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]
-    .map(|id| (id, block(&format!("{id}-cell"), "h60")));
+/// Ten rows 60 tall, `r0` to `r9`, each cell holding a block `r0-cell` to `r9-cell`.
+fn ten_rows() -> [(&'static str, Node); 10] {
+  ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]
+    .map(|id| (id, block(&format!("{id}-cell"), "h60")))
+}
 
-  render(root([table(rows)]), TABLE_CSS)
+/// A table of [`ten_rows`].
+fn ten_row_table() -> RenderNode {
+  render(root([table(ten_rows())]), TABLE_CSS)
+}
+
+/// A table of [`ten_rows`], the only item of the flexbox `flexbox` in `direction`.
+fn ten_row_table_in_flexbox(direction: &str) -> RenderNode {
+  let flexbox = Node::container([table(ten_rows())])
+    .with_class_name("flex")
+    .with_id("flexbox");
+
+  render(
+    root([flexbox]),
+    &format!("{TABLE_CSS} .flex {{ display: flex; flex-direction: {direction} }}"),
+  )
+}
+
+/// `tree` laid out on pages 200 tall up to its second, freeing what the first kept on the way.
+fn second_page_after_release(tree: &RenderNode) -> PagedLayout<'_> {
+  let page_size = Size {
+    width: 300.0,
+    height: 200.0,
+  };
+  let mut layout = PagedLayout::new(tree, PageSizer::uniform(page_size), usize::MAX).with_release();
+
+  assert!(layout.next_page().expect("page lays out"));
+  layout.release(1);
+  assert!(layout.next_page().expect("page lays out"));
+  layout
+}
+
+/// Whether the box `id` freed every layout it kept.
+fn is_released(layout: &PagedLayout<'_>, id: &str) -> bool {
+  let tree = layout.tree();
+
+  tree.node_state(node_with_id(tree, id)).cache.is_released()
 }
 
 fn node_with_id(tree: &LayoutTree<'_>, id: &str) -> NodeId {
@@ -813,24 +849,36 @@ fn node_with_id(tree: &LayoutTree<'_>, id: &str) -> NodeId {
 #[test]
 fn a_tables_finished_rows_free_their_layouts_before_the_table_ends() {
   let tree = ten_row_table();
-  let page_size = Size {
-    width: 300.0,
-    height: 200.0,
-  };
-  let mut layout =
-    PagedLayout::new(&tree, PageSizer::uniform(page_size), usize::MAX).with_release();
+  let layout = second_page_after_release(&tree);
 
-  assert!(layout.next_page().expect("page lays out"));
-  layout.release(1);
-  assert!(layout.next_page().expect("page lays out"));
+  assert!(!is_released(&layout, "table"));
+  assert!(is_released(&layout, "r0"));
+  assert!(is_released(&layout, "r0-cell"));
+  assert!(!is_released(&layout, "r9"));
+}
 
-  let tree = layout.tree();
-  let is_released = |id: &str| tree.node_state(node_with_id(tree, id)).cache.is_released();
+/// A column flexbox resumes its item where it broke, so the finished rows of the item free their
+/// layouts while the flexbox goes on.
+#[test]
+fn a_column_flex_items_finished_rows_free_their_layouts_before_the_flexbox_ends() {
+  let tree = ten_row_table_in_flexbox("column");
+  let layout = second_page_after_release(&tree);
 
-  assert!(!is_released("table"));
-  assert!(is_released("r0"));
-  assert!(is_released("r0-cell"));
-  assert!(!is_released("r9"));
+  assert!(!is_released(&layout, "flexbox"));
+  assert!(is_released(&layout, "r0"));
+  assert!(is_released(&layout, "r0-cell"));
+  assert!(!is_released(&layout, "r9"));
+}
+
+/// A row flexbox lays the items of a line out again on each page, so its item keeps the layouts of
+/// its finished rows until the flexbox ends.
+#[test]
+fn a_row_flex_items_finished_rows_keep_their_layouts_until_the_flexbox_ends() {
+  let tree = ten_row_table_in_flexbox("row");
+  let layout = second_page_after_release(&tree);
+
+  assert!(!is_released(&layout, "flexbox"));
+  assert!(!is_released(&layout, "r0"));
 }
 
 /// The rows a table measured for its first page, but placed on none yet, drop their measures.
@@ -2223,4 +2271,81 @@ fn a_named_table_row_starts_its_page_once() {
     .collect();
 
   assert_eq!(names, [None, Some("wide")]);
+}
+
+/// A flexbox that breaks lays an item out provisionally, and a monolithic box under the item lays
+/// out again for its page, so what it holds ends there and frees its layouts.
+#[test]
+fn monolithic_content_under_a_flex_item_frees_its_layouts() {
+  for (direction, wraps_table) in [
+    ("column", false),
+    ("column", true),
+    ("row", false),
+    ("row", true),
+  ] {
+    let rows = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"].map(|id| {
+      let inner = block(&format!("{id}-inner"), "h60");
+      let monolithic = Node::container([inner]).with_class_name("inline-block");
+
+      (id, Node::container([monolithic]).with_class_name("block"))
+    });
+    let item = if wraps_table {
+      Node::container([table(rows)]).with_class_name("block")
+    } else {
+      table(rows)
+    };
+    let flexbox = Node::container([item]).with_class_name("flex");
+    let tree = render(
+      root([flexbox, block("tail", "h300")]),
+      &format!(
+        "{TABLE_CSS} .flex {{ display: flex; flex-direction: {direction} }} \
+          .inline-block {{ display: inline-block; width: 100px }}"
+      ),
+    );
+    let page_size = Size {
+      width: 300.0,
+      height: 200.0,
+    };
+    let mut layout =
+      PagedLayout::new(&tree, PageSizer::uniform(page_size), usize::MAX).with_release();
+    let mut pages = 0;
+
+    while layout.next_page().expect("page lays out") {
+      pages += 1;
+      layout.release(pages);
+    }
+
+    assert!(
+      is_released(&layout, "r0-inner"),
+      "{direction} {wraps_table}"
+    );
+    assert!(
+      is_released(&layout, "r9-inner"),
+      "{direction} {wraps_table}"
+    );
+  }
+}
+
+/// A flexbox that breaks reads its item's break values from a measure, which carries the forced
+/// break of a first row as a layout of the rows does.
+#[test]
+fn a_forced_break_before_a_first_row_reaches_the_flexbox_that_holds_its_table() {
+  for direction in ["column", "row"] {
+    let rows = ["r0", "r1"].map(|id| (id, block(&format!("{id}-cell"), "h60")));
+    let item = Node::container([table(rows)]).with_class_name("block");
+    let flexbox = Node::container([item]).with_class_name("flex");
+    let (boxes, page_count) = pages(
+      &render(
+        root([block("intro", "h60"), flexbox]),
+        &format!(
+          "{TABLE_CSS} .flex {{ display: flex; flex-direction: {direction} }} \
+            #r0 {{ break-before: page }}"
+        ),
+      ),
+      200.0,
+    );
+
+    assert_eq!(page_count, 2, "{direction}");
+    assert_eq!(boxes["r0"], [placed(1, 0.0, 60.0)], "{direction}");
+  }
 }
