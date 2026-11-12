@@ -7,12 +7,13 @@ description: Every takumi command and flag, with its default, plus the exit code
 
 ## Commands
 
-| Command                | What it does                                               |
-| ---------------------- | ---------------------------------------------------------- |
-| `takumi image <input>` | Renders an HTML file to a PNG, JPEG, WebP, or SVG image.   |
-| `takumi pdf <input>`   | Renders an HTML file to a paged PDF.                       |
-| `takumi paint <input>` | Writes what painting an HTML file draws, as text or JSON.  |
-| `takumi upgrade`       | Reinstalls takumi from the source Cargo installed it from. |
+| Command                      | What it does                                                   |
+| ---------------------------- | -------------------------------------------------------------- |
+| `takumi image <input>`       | Renders an HTML file to a PNG, JPEG, WebP, or SVG image.       |
+| `takumi pdf <input>`         | Renders an HTML file to a paged PDF.                           |
+| `takumi paint <input>`       | Writes what painting an HTML file draws, as text or JSON.      |
+| `takumi upgrade`             | Reinstalls takumi from the source Cargo installed it from.     |
+| `takumi completions <shell>` | Writes the script that completes takumi's commands in a shell. |
 
 Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
@@ -101,6 +102,10 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 | Flag              | Effect                                                 |
 | ----------------- | ------------------------------------------------------ |
 | `-n`, `--dry-run` | Prints the `cargo install` command without running it. |
+
+## `takumi completions`
+
+`takumi completions <shell>` writes a completion script to standard output. `<shell>` is `bash`, `zsh`, `fish`, `powershell`, or `elvish`. [Install takumi](/docs/cli/install#shell-completion) shows where each shell reads the script from.
 
 ## Exit codes
 

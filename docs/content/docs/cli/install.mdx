@@ -65,6 +65,26 @@ takumi upgrade --dry-run
 - An install from a local clone upgrades after you pull the clone. The printed command rebuilds from it.
 - A binary that `cargo install` did not install, such as one copied from another machine, upgrades the way you installed it.
 
+## Shell completion
+
+`takumi completions` writes a script that completes takumi's commands, flags, and their values when you press Tab. Save it where your shell reads completions, then open a new shell:
+
+```sh
+# bash
+takumi completions bash > ~/.local/share/bash-completion/completions/takumi
+
+# zsh, into a directory on $fpath
+takumi completions zsh > "${fpath[1]}/_takumi"
+
+# fish
+takumi completions fish > ~/.config/fish/completions/takumi.fish
+
+# PowerShell
+takumi completions powershell >> $PROFILE
+```
+
+Run the command again after `takumi upgrade`, so the script knows the new commands and flags.
+
 ## Uninstall
 
 ```sh
