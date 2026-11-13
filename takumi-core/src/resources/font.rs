@@ -428,10 +428,20 @@ impl Fonts {
       .collect()
   }
 
-  /// Registration revision of the font registry.
+  /// Feeds `hasher` what selecting a face reads: the registry's revision and the fallback families.
   #[cfg(feature = "svg")]
-  pub(crate) fn revision(&self) -> u64 {
-    self.registry.revision
+  pub(crate) fn hash_selection(&self, hasher: &mut Xxh3) {
+    hasher.update(&self.registry.revision.to_le_bytes());
+
+    let Some(families) = &self.fallback_families else {
+      return;
+    };
+
+    hasher.update(&(families.len() as u64).to_le_bytes());
+    for family in families {
+      hasher.update(&(family.len() as u64).to_le_bytes());
+      hasher.update(family.as_bytes());
+    }
   }
 
   /// Render-local snapshot with no extra fallbacks.

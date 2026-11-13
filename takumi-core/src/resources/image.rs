@@ -153,7 +153,7 @@ impl SvgPicture {
     }
 
     if reads.fonts {
-      hasher.update(&host.fonts().revision().to_le_bytes());
+      host.fonts().hash_selection(&mut hasher);
     }
 
     hasher.digest()
@@ -1053,7 +1053,11 @@ mod tests {
   use crate::resources::image_decoder::DecodeTarget;
   use crate::style::Color;
   #[cfg(feature = "svg")]
-  use crate::{Fonts, viewport::Viewport};
+  use crate::{
+    Fonts,
+    style::{FontFamily, FromCssStr},
+    viewport::Viewport,
+  };
 
   use super::*;
 
@@ -1960,6 +1964,42 @@ mod tests {
     for svg in reads_none {
       assert_eq!(picture_key(svg, red), picture_key(svg, blue), "{svg}");
     }
+  }
+
+  // Text falls back through the families a render names, so a picture of text is not shared by
+  // renders that name other ones.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_picture_key_follows_the_fallback_families_of_its_text() -> Result<(), ImageError> {
+    let fonts = Fonts::default();
+    let source: SvgSource =
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#
+        .parse()?;
+    let key = |fallbacks: &str| {
+      let fallbacks = FontFamily::from_css_str(fallbacks).ok();
+      let host = RenderContext::builder()
+        .fonts(fonts.snapshot_with_fallbacks(fallbacks.as_ref()))
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((4, 4)))
+            .build(),
+        )
+        .build();
+
+      source
+        .picture(
+          &host,
+          Size {
+            width: 4.0,
+            height: 4.0,
+          },
+        )
+        .key()
+    };
+
+    assert_eq!(key("A"), key("A"));
+    assert_ne!(key("A"), key("B"));
+    Ok(())
   }
 
   // Two hosts of different colors drawing one source through one cache each get their own color.
