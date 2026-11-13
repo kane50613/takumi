@@ -1994,6 +1994,7 @@ fn image_object_fit() {
 
 /// An SVG logo (gradient circle + stroked check) embeds as vector paths and
 /// shading patterns, never as a rasterized image XObject.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_vector_image() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
@@ -2061,6 +2062,7 @@ fn svg_singular_gradient_transform() {
 }
 
 /// SVG filters drop out, luminance masks become soft masks, and patterns become tiling patterns.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_filters_masks_and_patterns() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
@@ -2131,6 +2133,7 @@ fn read_asset(name: &str) -> Vec<u8> {
 }
 
 /// A PNG inside an SVG embeds as an image XObject, not a rasterized group.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_embedded_png() {
   let svg = format!(
@@ -2162,6 +2165,7 @@ fn svg_embedded_png() {
 }
 
 /// A JPEG inside an SVG passes through to the PDF undecoded.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_embedded_jpeg_passes_through() {
   let svg = format!(
@@ -2186,6 +2190,7 @@ fn svg_embedded_jpeg_passes_through() {
 }
 
 /// A color-matrix `filter` on an SVG image recolors its paints and bitmaps without rasterizing.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_with_color_filter() {
   let svg = format!(
@@ -2220,6 +2225,7 @@ fn svg_with_color_filter() {
 }
 
 /// A CSS `filter` on an SVG image leaves the SVG's mask content as drawn.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_color_filter_leaves_masks_alone() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
@@ -7460,6 +7466,7 @@ fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
 
 /// An SVG image drawn many times at one size is one form XObject from its second draw on, a size
 /// of its own for each width and height, and an SVG drawn once draws in place.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn a_repeated_svg_image_draws_once_more() {
   let repeated = data_url(
@@ -7490,6 +7497,7 @@ fn a_repeated_svg_image_draws_once_more() {
 
 /// An SVG image whose root `color` takes the host's draws in each host's color, however its
 /// draws repeat.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn a_repeated_svg_image_keeps_each_host_color() {
   let svg = data_url(
