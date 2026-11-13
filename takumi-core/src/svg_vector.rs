@@ -105,6 +105,7 @@ impl SvgOp {
               SvgImageData::Encoded(bytes) => bytes.len(),
               SvgImageData::Bitmap(buffer) => buffer.data().len(),
             },
+            Self::PushFilter(filters) => filters.estimated_bytes(),
             _ => 0,
           }
       })
@@ -144,6 +145,20 @@ impl SvgImageData {
 /// The SVG filters of one group, applied to its layer.
 #[derive(Debug, Clone)]
 pub struct SvgFilters(#[cfg(feature = "svg-raster")] Vec<Arc<SvgFilter>>);
+
+impl SvgFilters {
+  /// The bytes the filters retain, for cache budgeting.
+  fn estimated_bytes(&self) -> usize {
+    #[cfg(feature = "svg-raster")]
+    return self
+      .0
+      .iter()
+      .map(|filter| size_of::<Arc<SvgFilter>>() + filter.estimated_bytes())
+      .sum();
+    #[cfg(not(feature = "svg-raster"))]
+    0
+  }
+}
 
 #[cfg(feature = "svg-raster")]
 impl SvgFilters {
