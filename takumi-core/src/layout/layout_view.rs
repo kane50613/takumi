@@ -370,6 +370,30 @@ impl LiveLayout<'_> {
           .and_then(|container| container.fragments.get(fragment.container_fragment_index))
           .is_some_and(|holder| holder.is_laid_out && holder.run == fragment.placed_by.run))
   }
+
+  /// The page holding `node`'s fragment `fragment_index`, through placements layout kept up to the
+  /// root. None while a layout that broke before a box above it leaves it on no page, until a later
+  /// page places that box with the same layout.
+  pub(in crate::layout) fn page_holding(
+    &self,
+    mut node: NodeId,
+    mut fragment_index: usize,
+  ) -> Option<usize> {
+    loop {
+      let fragment = self
+        .nodes
+        .get(usize::from(node))?
+        .fragments
+        .get(fragment_index)
+        .filter(|fragment| self.holds(fragment))?;
+
+      if node == NodeId::ROOT {
+        return Some(fragment.container_fragment_index);
+      }
+      node = NodeId::new(fragment.placed_by.node as usize);
+      fragment_index = fragment.container_fragment_index;
+    }
+  }
 }
 
 #[cfg(all(test, feature = "fragmentation"))]
