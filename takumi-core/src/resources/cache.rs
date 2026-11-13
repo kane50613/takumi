@@ -65,8 +65,8 @@ pub struct CacheOptions {
   #[builder(default = CacheOptions::DEFAULT_INTERCEPTS)]
   intercepts: u64,
   /// The faces `@font-face` rules add, weighed by the font files they hold.
+  #[cfg(feature = "font-face")]
   #[builder(default = CacheOptions::DEFAULT_FONT_FACES)]
-  #[cfg_attr(not(feature = "font-face"), allow(dead_code))]
   font_faces: u64,
 }
 
@@ -82,6 +82,7 @@ impl CacheOptions {
   /// The default budget for intercepts.
   pub const DEFAULT_INTERCEPTS: u64 = 1 << 20;
   /// The default budget for font faces.
+  #[cfg(feature = "font-face")]
   pub const DEFAULT_FONT_FACES: u64 = 16 << 20;
 }
 
