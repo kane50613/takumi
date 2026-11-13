@@ -127,7 +127,10 @@ pub(crate) struct DocumentState<'a> {
   pictures: RefCell<FxHashMap<u64, PictureDraws>>,
 }
 
-/// How a document has drawn one SVG picture.
+/// How a document has drawn one SVG picture. Approximate: Chromium's PDF output, through Skia's
+/// [`SkPDFDevice`](https://github.com/google/skia/blob/main/src/pdf/SkPDFDevice.cpp), shares only
+/// raster images and writes a vector drawing again at each draw, where takumi writes a repeated
+/// SVG once.
 #[cfg(all(feature = "svg", feature = "images"))]
 enum PictureDraws {
   /// Drawn once, in place, so a picture the document shows once costs no form XObject.
