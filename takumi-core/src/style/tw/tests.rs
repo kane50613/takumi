@@ -1,4 +1,4 @@
-use std::{assert_matches, collections::HashMap, sync::Arc};
+use std::{assert_matches, collections::HashMap, ptr, sync::Arc};
 
 use super::{builder::TailwindDeclarationBuilder, parser::*, *};
 use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage};
@@ -620,7 +620,7 @@ fn test_value_parsing() {
 fn test_values_sorting() {
   let values = TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16")
     .expect("tailwind values should parse");
-  let order = cascade_order(values.inner.iter().map(Arc::as_ref))
+  let order = cascade_order(values.rules(None).iter().map(Arc::as_ref))
     .into_iter()
     .map(|rule| {
       let declarations = rule
@@ -1886,13 +1886,21 @@ fn test_translate_composes_through_variables() {
 }
 
 #[test]
-fn test_class_list_parsing_shares_storage() {
+fn a_cache_compiles_a_class_list_once() {
   let first: TailwindValues = "flex items-center gap-2".parse().unwrap();
   let second: TailwindValues = "flex items-center gap-2".parse().unwrap();
   let deserialized: TailwindValues = serde_json::from_str("\"flex items-center gap-2\"").unwrap();
 
-  assert!(Arc::ptr_eq(&first.inner, &second.inner));
-  assert!(Arc::ptr_eq(&first.inner, &deserialized.inner));
+  let cache = TailwindCache::new(1 << 20);
+
+  assert!(ptr::eq(
+    first.rules(Some(&cache)),
+    second.rules(Some(&cache))
+  ));
+  assert!(ptr::eq(
+    first.rules(Some(&cache)),
+    deserialized.rules(Some(&cache))
+  ));
   assert_eq!(first, second);
   assert_eq!(first, " flex  items-center gap-2 ".parse().unwrap());
 }
@@ -1995,7 +2003,7 @@ fn structural_variants_cascade_as_tailwind_registers_them() {
   let order = |classes: &str| {
     let values = TailwindValues::from_str(classes).unwrap();
 
-    cascade_order(values.inner.iter().map(Arc::as_ref))
+    cascade_order(values.rules(None).iter().map(Arc::as_ref))
       .into_iter()
       .map(|rule| rule.order.clone())
       .collect::<Vec<_>>()
@@ -2004,7 +2012,7 @@ fn structural_variants_cascade_as_tailwind_registers_them() {
   assert_eq!(order("odd:mt-2 first:mt-4"), order("first:mt-4 odd:mt-2"));
 
   let values = TailwindValues::from_str("odd:mt-2 first:mt-4").unwrap();
-  let last = cascade_order(values.inner.iter().map(Arc::as_ref))
+  let last = cascade_order(values.rules(None).iter().map(Arc::as_ref))
     .pop()
     .unwrap()
     .id;

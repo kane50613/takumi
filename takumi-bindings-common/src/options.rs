@@ -7,7 +7,11 @@ use takumi_core::{
   Error, Fonts,
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::{cache::Cache, image::ImageSource as DecodedImage},
+  resources::{
+    cache::{Cache, CacheOptions},
+    glyph_cache,
+    image::ImageSource as DecodedImage,
+  },
   style::{CssSource, FontFamily, KeyframesRule, StyleSheet},
   viewport::Viewport,
 };
@@ -39,6 +43,25 @@ impl RendererOptions {
   pub fn font_cache_bytes(&self) -> Option<u64> {
     self.font_cache_max_bytes.map(bytes)
   }
+
+  /// The cache a renderer built with these options keeps, with the glyph budget the last
+  /// [`set_glyph_cache_max_bytes`] set.
+  pub fn cache(&self) -> Cache {
+    Cache::builder()
+      .images(self.cache_bytes().unwrap_or(CacheOptions::DEFAULT_IMAGES))
+      .stylesheets(
+        self
+          .cache_bytes()
+          .unwrap_or(CacheOptions::DEFAULT_STYLESHEETS),
+      )
+      .build()
+  }
+}
+
+/// Sets the glyph budget of the renderers created after this call, from a JavaScript byte count.
+pub fn set_glyph_cache_max_bytes(value: f64) {
+  #[allow(deprecated)]
+  glyph_cache::set_glyph_cache_max_bytes(bytes(value) as usize);
 }
 
 /// A JavaScript byte count, negative ones read as zero.

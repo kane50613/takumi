@@ -233,6 +233,7 @@ pub(crate) fn rasterize_layers(
           &mut DrawTarget {
             pixmap: &mut pixmap,
             combined_mask: mask_view(),
+            glyphs: context.cache().glyphs(),
           },
           &layer.tile,
           OverlayOptions {

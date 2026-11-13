@@ -26,6 +26,7 @@ use crate::{
   html::markup::parse_svg_image,
   layout::node::{MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind},
   resources::{
+    cache::Cache,
     font::FontsSnapshot,
     image::{ImageError, SvgOp},
     svg_size::{SvgSize, SvgSizeError},
@@ -44,6 +45,8 @@ pub(crate) enum SvgHost<'a> {
   Image {
     current_color: Color,
     fonts: Option<&'a FontsSnapshot>,
+    /// What the layout keeps, [`Cache::shared`] when none is given.
+    cache: Option<&'a Cache>,
   },
   /// An inline `svg` element. Approximate: selectors do not match across its HTML ancestors.
   Inline(&'a RenderContext),
@@ -54,6 +57,7 @@ impl SvgHost<'_> {
   const BLACK: Self = Self::Image {
     current_color: Color([0, 0, 0, 255]),
     fonts: None,
+    cache: None,
   };
 }
 

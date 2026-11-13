@@ -31,6 +31,7 @@ fn ops(body: &str) -> Vec<SvgOp> {
         SvgHost::Image {
           current_color: BLACK,
           fonts: None,
+          cache: None,
         },
         document.declared_size(),
       )
@@ -105,6 +106,7 @@ fn the_host_color_is_what_current_color_is() {
         SvgHost::Image {
           current_color: color,
           fonts: None,
+          cache: None,
         },
         document.declared_size(),
       )
@@ -346,6 +348,7 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
   .and_then(|document| document.ops(SvgHost::Image {
       current_color: BLACK,
       fonts: None,
+      cache: None,
     }, document.declared_size()))
   .unwrap_or_default();
 
@@ -502,6 +505,7 @@ fn text_ops(body: &str) -> Vec<SvgOp> {
         SvgHost::Image {
           current_color: BLACK,
           fonts: Some(&geist()),
+          cache: None,
         },
         document.declared_size(),
       )
@@ -547,6 +551,7 @@ fn text_draws_nothing_without_a_font() {
         SvgHost::Image {
           current_color: BLACK,
           fonts: None,
+          cache: None,
         },
         document.declared_size(),
       )
@@ -779,6 +784,7 @@ fn bitmap_glyphs_stop_at_the_image_byte_budget() {
         SvgHost::Image {
           current_color: BLACK,
           fonts: Some(&fonts.snapshot()),
+          cache: None,
         },
         document.declared_size(),
       )
@@ -1024,6 +1030,7 @@ fn a_root_and_attributes_with_declared_prefixes_resolve() {
       SvgHost::Image {
         current_color: BLACK,
         fonts: None,
+        cache: None,
       },
       document.declared_size(),
     )

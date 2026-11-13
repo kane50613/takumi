@@ -4,9 +4,9 @@
 //! first usable source gives.
 
 use crate::sort_key::sort_by_key;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
-use quick_cache::sync::Cache;
+use quick_cache::sync::Cache as Store;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -16,6 +16,7 @@ use crate::{
     font_custom_platform_data::FontCustomPlatformData,
     font_face::{FontFace, PendingSource},
   },
+  resources::cache::{ByBytes, Weighed, store},
   style::{
     StyleSheet,
     font_face_rule::{FontFaceRule, FontFaceSrc},
@@ -30,10 +31,35 @@ pub(super) enum FontFile {
   Failed,
 }
 
-/// The registries the rules of recent renders made, so the same rules over the same fonts reuse
-/// their decoded faces.
-static DOCUMENT_REGISTRIES: LazyLock<Cache<DocumentKey, Arc<FontRegistry>>> =
-  LazyLock::new(|| Cache::new(16));
+/// The registries the `@font-face` rules of recent renders made, which a [`Cache`](crate::Cache)
+/// keeps so the same rules over the same fonts reuse their decoded faces. A file
+/// [`Fonts::forget_font_file`] releases stays held until the registries holding it are evicted.
+pub(crate) struct DocumentRegistries {
+  store: Store<DocumentKey, CachedRegistry, ByBytes>,
+}
+
+#[derive(Clone)]
+struct CachedRegistry {
+  registry: Arc<FontRegistry>,
+  /// The bytes of the font files the rules' faces hold.
+  bytes: usize,
+}
+
+impl Weighed for CachedRegistry {
+  fn bytes(&self) -> usize {
+    self.bytes
+  }
+}
+
+impl DocumentRegistries {
+  /// A cache holding registries whose font files total at most `max_bytes`.
+  pub(crate) fn new(max_bytes: u64) -> Self {
+    Self {
+      // ~256 KiB of font files per document ⇒ an item-count hint for the budget.
+      store: store(max_bytes, 256 << 10),
+    }
+  }
+}
 
 /// What a document's faces are made of: the registry they extend, and each face's descriptors
 /// and the source it reaches, as written.
@@ -80,8 +106,6 @@ impl Fonts {
 
     registry.revise();
     registry.font_files.remove(url);
-    // A cached document registry still holds the file, outside the budget that released it.
-    DOCUMENT_REGISTRIES.clear();
 
     true
   }
@@ -106,7 +130,12 @@ impl Fonts {
 impl FontsSnapshot {
   /// This snapshot with the faces of the `@font-face` rules in force at `viewport` added, in
   /// Blink's cascade order: by layer, unlayered rules last, then in source order.
-  pub(crate) fn with_font_faces(self, stylesheet: &StyleSheet, viewport: Viewport) -> Self {
+  pub(crate) fn with_font_faces(
+    self,
+    stylesheet: &StyleSheet,
+    viewport: Viewport,
+    registries: &DocumentRegistries,
+  ) -> Self {
     let mut rules: Vec<&FontFaceRule> = stylesheet
       .font_faces()
       .iter()
@@ -141,7 +170,9 @@ impl FontsSnapshot {
         })
         .collect(),
     };
-    let registry = DOCUMENT_REGISTRIES
+    let bytes = sources.iter().map(RuleSource::file_bytes).sum();
+    let registry = registries
+      .store
       .get_or_insert_with(&key, || {
         let mut registry = (**base).clone();
 
@@ -153,9 +184,12 @@ impl FontsSnapshot {
 
         registry.revise();
 
-        Ok::<_, ()>(Arc::new(registry))
+        Ok::<_, ()>(CachedRegistry {
+          registry: Arc::new(registry),
+          bytes,
+        })
       })
-      .unwrap_or_else(|()| Arc::clone(base));
+      .map_or_else(|()| Arc::clone(base), |cached| cached.registry);
 
     Self(Fonts {
       registry,
@@ -200,6 +234,14 @@ impl FontRegistry {
 }
 
 impl RuleSource<'_> {
+  /// The bytes of the loaded file the source draws with, none for a face it shares or awaits.
+  fn file_bytes(&self) -> usize {
+    match self.data {
+      SourceData::File(data, _) => (**data).as_ref().len(),
+      SourceData::Local(_) | SourceData::Pending(_) => 0,
+    }
+  }
+
   /// Blink's `FontFace::Create` for the rule, drawing with the source's data or waiting on its
   /// URL. Data that does not parse as a font makes no face.
   fn font_face(&self, selector: &CssFontSelector) -> Option<FontFace> {

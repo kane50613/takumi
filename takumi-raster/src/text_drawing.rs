@@ -10,7 +10,7 @@ use crate::{
   alpha_mask, checked_area, cull_bounds, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
-    glyph_cache::glyph_mask,
+    glyph_cache::GlyphCache,
   },
   style::{Affine, BlendMode, Color, PaintPhase},
 };
@@ -116,20 +116,22 @@ fn draw_mask_with_cache(
     return;
   }
 
-  let (mask, placement) = cached_glyph_mask(glyph_signature, paths, transform, stroke);
+  let (mask, placement) =
+    cached_glyph_mask(canvas.glyphs(), glyph_signature, paths, transform, stroke);
 
   canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
 }
 
 /// The glyph cache's mask of `paths` drawn under `transform`, placed where the canvas draws it.
 pub(crate) fn cached_glyph_mask(
+  glyphs: &GlyphCache,
   glyph_signature: u64,
   paths: &[Command],
   transform: Affine,
   stroke: Option<Stroke>,
 ) -> (Arc<Vec<u8>>, Placement) {
   let bucket = GlyphBucket::of(transform);
-  let (mask, placement) = glyph_mask(bucket.mask_key(glyph_signature, stroke), || {
+  let (mask, placement) = glyphs.glyph_mask(bucket.mask_key(glyph_signature, stroke), || {
     bucket.render_mask(paths, stroke)
   });
 

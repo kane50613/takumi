@@ -27,8 +27,9 @@ pub(crate) use paint_source::{
   interpolate_with_footprint,
 };
 use takumi_core::{
+  Cache,
   geometry::{Point, Size},
-  resources::image_buffer::demultiply_pixel,
+  resources::{glyph_cache::GlyphCache, image_buffer::demultiply_pixel},
 };
 use tiny_skia::{
   BlendMode as TinyBlendMode, FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap,
@@ -108,6 +109,8 @@ fn whole_pixel_translation(transform: Affine) -> Option<Point<f32>> {
 pub(crate) struct DrawTarget<'a, 'p> {
   pub pixmap: &'a mut PixmapMut<'p>,
   pub combined_mask: Option<MaskView<'a>>,
+  /// The cache masks drawn here are kept in.
+  pub glyphs: &'a GlyphCache,
 }
 
 impl<'a> DrawTarget<'a, '_> {
@@ -135,6 +138,8 @@ pub(crate) struct Canvas {
   image: Pixmap,
   origin: Point<i32>,
   constraint_mask_stack: Vec<MaskStackEntry>,
+  /// The cache of the render painting it, which keeps its glyph and shape masks.
+  cache: Cache,
 }
 
 pub(crate) struct CanvasSubcanvas {
@@ -150,8 +155,9 @@ enum SubcanvasClips {
 }
 
 impl Canvas {
-  /// A canvas of `size`, or `None` when the pixmap cannot be allocated.
-  pub(crate) fn try_new(size: Size<u32>) -> Option<Self> {
+  /// A canvas of `size` keeping its masks in `cache`, or `None` when the pixmap cannot be
+  /// allocated.
+  pub(crate) fn try_new(size: Size<u32>, cache: Cache) -> Option<Self> {
     if !within_pixmap_pixel_budget(size) {
       return None;
     }
@@ -161,7 +167,13 @@ impl Canvas {
       image,
       origin: Point { x: 0, y: 0 },
       constraint_mask_stack: Vec::new(),
+      cache,
     })
+  }
+
+  /// The glyphs and masks the canvas draws through.
+  pub(crate) fn glyphs(&self) -> &GlyphCache {
+    self.cache.glyphs()
   }
 
   /// The canvas painting the area of a scene that starts at `origin`.
@@ -174,11 +186,14 @@ impl Canvas {
   /// allocated. Production code uses [`Canvas::try_new`] and surfaces the error.
   #[cfg(test)]
   pub(crate) fn new(size: Size<u32>) -> Self {
-    Self::try_new(size).unwrap_or_else(|| {
-      Self::try_new(Size {
-        width: 1,
-        height: 1,
-      })
+    Self::try_new(size, Cache::default()).unwrap_or_else(|| {
+      Self::try_new(
+        Size {
+          width: 1,
+          height: 1,
+        },
+        Cache::default(),
+      )
       .expect("1x1 pixmap always allocates")
     })
   }
@@ -580,6 +595,7 @@ impl Canvas {
     let mut target = DrawTarget {
       pixmap: &mut pixmap,
       combined_mask,
+      glyphs: self.cache.glyphs(),
     };
     f(&mut target)
   }

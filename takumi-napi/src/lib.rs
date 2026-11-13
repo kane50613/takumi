@@ -31,26 +31,19 @@ use takumi_bindings_common::{
 use takumi_core::html::{FromHtmlOptions, parse_html};
 use takumi_core::{
   layout::node::Node,
-  resources::{
-    font::{FontResource, Fonts},
-    glyph_cache,
-  },
+  resources::font::{FontResource, Fonts},
   style::{CssSource, KeyframesRule, StyleSheet},
 };
 
-/// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
-/// `0` stops caching. Defaults to 8 MiB.
-///
-/// These caches live in the module, not in a `Renderer`, so this budget covers
-/// every renderer in the process. The value is read when a cache is first used,
-/// so call this before the first render.
+/// Sets the byte budget of the resolved-glyph and glyph-mask cache of each
+/// `Renderer` created after this call; `0` stops caching. Defaults to 8 MiB.
 ///
 /// Raise it for scripts with large glyph sets: a CJK outline runs a few
 /// kilobytes, so the default holds around a thousand of them and a page of
 /// Chinese re-rasterizes glyphs it just evicted.
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
+  takumi_bindings_common::options::set_glyph_cache_max_bytes(bytes);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.
