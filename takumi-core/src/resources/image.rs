@@ -2011,14 +2011,21 @@ mod tests {
           .key(),
       )
     };
+    let nested = to_data_url(
+      "image/svg+xml",
+      br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#,
+    );
     let reads_fonts = [
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#,
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#,
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" style="stroke-width: 1ex" stroke="red"/></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" style="stroke-width: 1ex" stroke="red"/></svg>"#.to_owned(),
+      format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image width="4" height="4" href="{nested}"/></svg>"#
+      ),
     ];
     let reads_none = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1em" height="4"/></svg>"#;
 
-    for svg in reads_fonts {
+    for svg in &reads_fonts {
       assert_eq!(key(svg, "A")?, key(svg, "A")?, "{svg}");
       assert_ne!(key(svg, "A")?, key(svg, "B")?, "{svg}");
     }
