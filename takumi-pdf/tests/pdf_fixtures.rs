@@ -1994,6 +1994,7 @@ fn image_object_fit() {
 
 /// An SVG logo (gradient circle + stroked check) embeds as vector paths and
 /// shading patterns, never as a rasterized image XObject.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_vector_image() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
@@ -2061,6 +2062,7 @@ fn svg_singular_gradient_transform() {
 }
 
 /// SVG filters drop out, luminance masks become soft masks, and patterns become tiling patterns.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_filters_masks_and_patterns() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
@@ -2109,6 +2111,7 @@ fn svg_filters_masks_and_patterns() {
   );
 }
 
+#[cfg(all(feature = "svg", feature = "images"))]
 fn svg_image_node(svg: &str, width: f32, height: f32) -> Node {
   Node::image(ImageData {
     src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
@@ -2121,6 +2124,7 @@ fn data_url(mime: &str, bytes: &[u8]) -> String {
   format!("data:{mime};base64,{}", BASE64_STANDARD.encode(bytes))
 }
 
+#[cfg(all(feature = "svg", feature = "images"))]
 fn read_asset(name: &str) -> Vec<u8> {
   fs::read(
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -2131,6 +2135,7 @@ fn read_asset(name: &str) -> Vec<u8> {
 }
 
 /// A PNG inside an SVG embeds as an image XObject, not a rasterized group.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_embedded_png() {
   let svg = format!(
@@ -2162,6 +2167,7 @@ fn svg_embedded_png() {
 }
 
 /// A JPEG inside an SVG passes through to the PDF undecoded.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_embedded_jpeg_passes_through() {
   let svg = format!(
@@ -2186,6 +2192,7 @@ fn svg_embedded_jpeg_passes_through() {
 }
 
 /// A color-matrix `filter` on an SVG image recolors its paints and bitmaps without rasterizing.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_with_color_filter() {
   let svg = format!(
@@ -2220,6 +2227,7 @@ fn svg_with_color_filter() {
 }
 
 /// A CSS `filter` on an SVG image leaves the SVG's mask content as drawn.
+#[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn svg_color_filter_leaves_masks_alone() {
   let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
@@ -7456,4 +7464,80 @@ fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
         .collect()
     })
     .collect()
+}
+
+/// An SVG image drawn many times at one size is one form XObject from its second draw on, a size
+/// of its own for each width and height, and an SVG drawn once draws in place.
+#[cfg(all(feature = "svg", feature = "images"))]
+#[test]
+fn a_repeated_svg_image_draws_once_more() {
+  let repeated = data_url(
+    "image/svg+xml",
+    br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#0044ff"/></svg>"##,
+  );
+  let once = data_url(
+    "image/svg+xml",
+    br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="20" height="20" fill="#ff4400"/></svg>"##,
+  );
+  let html = format!(
+    r#"<img src="{repeated}"><img src="{repeated}"><img src="{repeated}">
+    <img src="{repeated}" style="width: 48px; height: 24px"><img src="{repeated}" style="width: 48px; height: 24px">
+    <img src="{repeated}" style="width: 24px; height: 48px"><img src="{repeated}" style="width: 24px; height: 48px">
+    <img src="{once}">"#
+  );
+  let pdf = run_pdf_fixture("svg-image-repeated", |fonts| a4_options(&html, fonts));
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert_eq!(text.matches("/Subtype/Form").count(), 3, "{text}");
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b" Do"))
+      .count(),
+    4
+  );
+}
+
+/// An SVG image whose drawing uses a soft mask draws in place at every repeat, as a form would
+/// wrap it in a transparency group that changes how it blends under a blend mode.
+#[cfg(all(feature = "svg", feature = "images"))]
+#[test]
+fn a_repeated_svg_image_with_a_soft_mask_draws_in_place() {
+  let svg = data_url(
+    "image/svg+xml",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><linearGradient id="g"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue" stop-opacity="0"/></linearGradient><rect width="24" height="24" fill="url(#g)"/></svg>"#,
+  );
+  let html = format!(r#"<img src="{svg}"><img src="{svg}"><img src="{svg}">"#);
+  let fonts = fonts();
+  let pdf = render_pinned(a4_options(&html, &fonts));
+
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b" Do"))
+      .count(),
+    0
+  );
+}
+
+/// An SVG image whose root `color` takes the host's draws in each host's color, however its
+/// draws repeat.
+#[cfg(all(feature = "svg", feature = "images"))]
+#[test]
+fn a_repeated_svg_image_keeps_each_host_color() {
+  let svg = data_url(
+    "image/svg+xml",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" color="currentColor"><rect width="24" height="24" fill="currentColor"/></svg>"#,
+  );
+  let html = format!(
+    r#"<img src="{svg}" style="color: #ff0000"><img src="{svg}" style="color: #0000ff"><img src="{svg}" style="color: #ff0000">"#
+  );
+  let fonts = fonts();
+  let pdf = render_pinned(a4_options(&html, &fonts));
+  let fills = |color: &str| {
+    content_lines(&pdf)
+      .filter(|line| String::from_utf8_lossy(line).contains(color))
+      .count()
+  };
+
+  assert_eq!(fills("1 0 0 rg"), 2);
+  assert_eq!(fills("0 0 1 rg"), 1);
 }
