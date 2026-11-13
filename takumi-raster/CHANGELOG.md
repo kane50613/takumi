@@ -1,3 +1,13 @@
+## takumi-raster@0.8.0
+
+### An inline element that is positioned or a stacking context paints as a layer of its own
+
+A `display: inline` element with `position`, `opacity`, `filter`, `mix-blend-mode`, `clip-path`, or `mask` now paints as a layer of its own, as Chrome paints it. Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. The layer's box is the union of the element's line boxes, which approximates Chrome, where each line's box stays apart. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing. A text node with a style of its own now opens an inline box as a span does. In the paint tree, such an element is a box with `effects`, and its line boxes and its own text node are its children. `NodePaint::inline_layer`, `InlineLayer`, and `OwnContent::InlineLayer` are new, and `InlineBrush` no longer has an `opacity` field.
+
+### `paint-order: stroke` draws `-webkit-text-stroke` under the text
+
+On HTML text, `paint-order: stroke` or `stroke fill` now draws the stroke first and the fill on top, as Chrome does, so a thick outline no longer eats into the letters. The fill and the stroke each paint over a whole run, as in Chrome, so with `normal` a letter's fill no longer covers the previous letter's stroke where they overlap. Images, SVG output, PDFs, and the paint tree all follow it. `PaintOrder::text_phases` returns the order, and `InlineBrush` carries the run's `paint_order`.
+
 ## takumi-raster@0.7.0
 
 ### Raster pages can take their sizes from `@page` rules

@@ -1,3 +1,17 @@
+## takumi@2.21.0
+
+### A `<style media>` element's `@import` rules load
+
+`ParsedHtml::styles` lists each `<style>` element with its text and `media` apart, and `StyleElement::css` wraps the text in the `@media` rule that `ParsedHtml::css` holds. The `takumi` command now loads the `@import` rules of a `<style>` element with a `media` attribute and applies them under that media, as Chrome does. Before, it dropped them.
+
+### `parse_html` reports the style sheets a document links
+
+`ParsedHtml` now lists each `<link rel="stylesheet">` in `links` and the first `<base href>` in `base_href`, so a host can fetch linked CSS and resolve it as a browser does. `ParsedHtml::css_with_links` takes a fetch function and returns the CSS of every `<style>` element and fetched link in document order, wrapping a link's `media` in an `@media` rule. Titled and alternate style sheets follow the preferred style sheet set, as in Chrome, so only the first set's `<style>` elements stay in `css`.
+
+### `takumi image` warns of the characters no font draws
+
+`takumi image` now prints a warning that names each character no loaded font draws, where it drew an empty box without a word. `uncovered_characters` in `takumi` returns the same list for a node. The command line also lists a file that is not there as `missing` in `--list-resources`, refuses a `--margin` or `--page` number without a unit, and points to `--font`, `--root`, or `takumi pdf` in the errors those fix.
+
 ## takumi@2.20.0
 
 ### Load fonts from `@font-face` rules

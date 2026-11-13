@@ -1,6 +1,6 @@
 [package]
 name = "takumi-cli"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Renders HTML and CSS to images, SVG, and PDF from the command line."
@@ -29,18 +29,18 @@ libc = "0.2"
 
 [dependencies.takumi]
 path = "../takumi"
-version = "2.20.0"
+version = "2.21.0"
 features = ["from-html", "svg-backend"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.36.0"
+version = "0.37.0"
 default-features = false
 features = ["paint-tree"]
 
 [dependencies.takumi-pdf]
 path = "../takumi-pdf"
-version = "0.20.0"
+version = "0.21.0"
 
 [lints]
 workspace = true
