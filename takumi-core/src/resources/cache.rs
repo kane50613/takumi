@@ -310,6 +310,7 @@ mod tests {
   use std::sync::Arc;
 
   use super::*;
+  #[cfg(feature = "svg-raster")]
   use crate::{
     Fonts, context::RenderContext, resources::image::RenderedImage, style::SizingContext,
     viewport::Viewport,
@@ -354,7 +355,7 @@ mod tests {
 
   /// The raster an SVG draws is kept in the cache of the render that draws it, not the one that
   /// decoded it.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-raster")]
   #[test]
   fn an_svg_raster_is_kept_by_the_render_that_draws_it() {
     let decoding = Cache::default();
