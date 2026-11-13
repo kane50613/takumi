@@ -37,28 +37,28 @@ impl<'a> SvgPainter<'a> {
   }
 
   /// Draws `ops` onto `surface`, then resets its fill and stroke.
-  pub(crate) fn draw(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
+  pub(crate) fn draw(&self, surface: &mut Surface, ops: &[SvgOp]) {
     self.draw_ops(surface, ops);
     surface.set_fill(None);
     surface.set_stroke(None);
   }
 
-  fn draw_ops(&self, surface: &mut Surface, ops: Vec<SvgOp>) {
+  fn draw_ops(&self, surface: &mut Surface, ops: &[SvgOp]) {
     for op in ops {
       match op {
-        SvgOp::PushTransform(transform) => surface.push_transform(&transform.into()),
-        SvgOp::PushClip { path, evenodd, .. } => match krilla_path(&path, Point::ZERO) {
-          Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
+        SvgOp::PushTransform(transform) => surface.push_transform(&(*transform).into()),
+        SvgOp::PushClip { path, evenodd, .. } => match krilla_path(path, Point::ZERO) {
+          Some(path) => surface.push_clip_path(&path, &fill_rule(*evenodd)),
           // The matching `Pop` still comes; keep the layer stack balanced.
           None => surface.push_transform(&Transform::identity()),
         },
-        SvgOp::PushBlend { blend, .. } => surface.push_blend_mode(blend.into()),
+        SvgOp::PushBlend { blend, .. } => surface.push_blend_mode((*blend).into()),
         SvgOp::PushIsolation { .. } => surface.push_isolated(),
-        SvgOp::PushOpacity { opacity, .. } => surface.push_opacity(normalized(opacity)),
+        SvgOp::PushOpacity { opacity, .. } => surface.push_opacity(normalized(*opacity)),
         SvgOp::PushMask { ops, luminance } => {
           // CSS filters the element after masking, so the mask's own colors stay as drawn.
           let stream = draw_stream(surface, |mask| SvgPainter::new(None).draw_ops(mask, ops));
-          let kind = if luminance {
+          let kind = if *luminance {
             MaskType::Luminosity
           } else {
             MaskType::Alpha
@@ -71,11 +71,11 @@ impl<'a> SvgPainter<'a> {
         SvgOp::Draw {
           path, fill, stroke, ..
         } => {
-          let Some(path) = krilla_path(&path, Point::ZERO) else {
+          let Some(path) = krilla_path(path, Point::ZERO) else {
             continue;
           };
-          let fill = fill.map(|fill| self.fill(fill, surface));
-          let stroke = stroke.map(|stroke| self.stroke(stroke, surface));
+          let fill = fill.as_ref().map(|fill| self.fill(fill, surface));
+          let stroke = stroke.as_ref().map(|stroke| self.stroke(stroke, surface));
 
           surface.set_fill(fill);
           surface.set_stroke(stroke);
@@ -87,10 +87,10 @@ impl<'a> SvgPainter<'a> {
           height,
           ..
         } => {
-          let Some(size) = KrillaSize::from_wh(width, height) else {
+          let Some(size) = KrillaSize::from_wh(*width, *height) else {
             continue;
           };
-          let Some(image) = self.image(&data) else {
+          let Some(image) = self.image(data) else {
             continue;
           };
 
@@ -111,8 +111,8 @@ impl<'a> SvgPainter<'a> {
     Some(bitmap_image(&data.decode()?, self.filter))
   }
 
-  fn fill(&self, fill: SvgFill, surface: &mut Surface) -> Fill {
-    let (paint, opacity) = self.paint(fill.paint, fill.opacity, surface);
+  fn fill(&self, fill: &SvgFill, surface: &mut Surface) -> Fill {
+    let (paint, opacity) = self.paint(&fill.paint, fill.opacity, surface);
 
     Fill {
       paint,
@@ -121,8 +121,8 @@ impl<'a> SvgPainter<'a> {
     }
   }
 
-  fn stroke(&self, stroke: SvgStrokeStyle, surface: &mut Surface) -> Stroke {
-    let (paint, opacity) = self.paint(stroke.paint, stroke.opacity, surface);
+  fn stroke(&self, stroke: &SvgStrokeStyle, surface: &mut Surface) -> Stroke {
+    let (paint, opacity) = self.paint(&stroke.paint, stroke.opacity, surface);
 
     Stroke {
       paint,
@@ -139,9 +139,10 @@ impl<'a> SvgPainter<'a> {
         SvgLineJoin::Bevel => LineJoin::Bevel,
       },
       opacity: normalized(opacity),
-      dash: stroke
-        .dash
-        .map(|(array, offset)| StrokeDash { array, offset }),
+      dash: stroke.dash.as_ref().map(|(array, offset)| StrokeDash {
+        array: array.clone(),
+        offset: *offset,
+      }),
     }
   }
 
@@ -156,10 +157,10 @@ impl<'a> SvgPainter<'a> {
   }
 
   /// `paint` for a fill or stroke of `opacity`, with the opacity the filter leaves it.
-  fn paint(&self, paint: SvgOpPaint, opacity: f32, surface: &mut Surface) -> (Paint, f32) {
+  fn paint(&self, paint: &SvgOpPaint, opacity: f32, surface: &mut Surface) -> (Paint, f32) {
     match paint {
       SvgOpPaint::Color(color) => {
-        let (color, opacity) = self.filtered_color(color, opacity);
+        let (color, opacity) = self.filtered_color(*color, opacity);
 
         (color.into(), opacity)
       }
@@ -175,7 +176,7 @@ impl<'a> SvgPainter<'a> {
           y2: end.y,
           transform: gradient.transform.into(),
           spread_method: gradient.spread.into(),
-          stops: self.gradient_stops(&gradient),
+          stops: self.gradient_stops(gradient),
           anti_alias: false,
         }
         .into(),
@@ -191,13 +192,13 @@ impl<'a> SvgPainter<'a> {
         RadialGradient {
           cx: center.x,
           cy: center.y,
-          cr: radius,
+          cr: *radius,
           fx: focal.x,
           fy: focal.y,
-          fr: focal_radius,
+          fr: *focal_radius,
           transform: gradient.transform.into(),
           spread_method: gradient.spread.into(),
-          stops: self.gradient_stops(&gradient),
+          stops: self.gradient_stops(gradient),
           anti_alias: false,
         }
         .into(),
@@ -211,9 +212,9 @@ impl<'a> SvgPainter<'a> {
       } => (
         Pattern {
           stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
-          transform: transform.into(),
-          width,
-          height,
+          transform: (*transform).into(),
+          width: *width,
+          height: *height,
         }
         .into(),
         opacity,

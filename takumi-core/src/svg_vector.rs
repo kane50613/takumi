@@ -1,6 +1,9 @@
 //! The drawing ops every backend draws an SVG image from.
 
-use std::sync::Arc;
+use std::{
+  mem::{size_of, size_of_val},
+  sync::Arc,
+};
 
 #[cfg(feature = "svg-raster")]
 use crate::svg::filter::SvgFilter;
@@ -78,6 +81,54 @@ pub enum SvgOp {
   },
 }
 
+impl SvgOp {
+  /// The bytes `ops` retain, for cache budgeting.
+  pub(crate) fn estimated_bytes(ops: &[SvgOp]) -> usize {
+    ops
+      .iter()
+      .map(|op| {
+        size_of::<SvgOp>()
+          + match op {
+            Self::PushClip { path, .. } => size_of_val(path.as_slice()),
+            Self::PushMask { ops, .. } => Self::estimated_bytes(ops),
+            Self::Draw {
+              path, fill, stroke, ..
+            } => {
+              size_of_val(path.as_slice())
+                + fill.as_ref().map_or(0, |fill| fill.paint.estimated_bytes())
+                + stroke.as_ref().map_or(0, |stroke| {
+                  stroke.paint.estimated_bytes()
+                    + stroke
+                      .dash
+                      .as_ref()
+                      .map_or(0, |(dashes, _)| size_of_val(dashes.as_slice()))
+                })
+            }
+            Self::Image { data, .. } => match data {
+              SvgImageData::Encoded(bytes) => bytes.len(),
+              SvgImageData::Bitmap(buffer) => buffer.data().len(),
+            },
+            Self::PushFilter(filters) => filters.estimated_bytes(),
+            _ => 0,
+          }
+      })
+      .sum()
+  }
+}
+
+impl SvgOpPaint {
+  /// The bytes the stops of a gradient or the ops of a pattern retain.
+  fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Linear { gradient, .. } | Self::Radial { gradient, .. } => {
+        size_of_val(gradient.stops.as_slice())
+      }
+      Self::Pattern { ops, .. } => SvgOp::estimated_bytes(ops),
+      Self::Color(_) => 0,
+    }
+  }
+}
+
 /// The pixels of a bitmap inside an SVG.
 #[derive(Debug, Clone)]
 pub enum SvgImageData {
@@ -100,6 +151,20 @@ impl SvgImageData {
 /// The SVG filters of one group, applied to its layer.
 #[derive(Debug, Clone)]
 pub struct SvgFilters(#[cfg(feature = "svg-raster")] Vec<Arc<SvgFilter>>);
+
+impl SvgFilters {
+  /// The bytes the filters retain, for cache budgeting.
+  fn estimated_bytes(&self) -> usize {
+    #[cfg(feature = "svg-raster")]
+    return self
+      .0
+      .iter()
+      .map(|filter| size_of::<Arc<SvgFilter>>() + filter.estimated_bytes())
+      .sum();
+    #[cfg(not(feature = "svg-raster"))]
+    0
+  }
+}
 
 #[cfg(feature = "svg-raster")]
 impl SvgFilters {

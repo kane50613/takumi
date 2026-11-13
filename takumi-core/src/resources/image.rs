@@ -8,13 +8,20 @@ pub use super::animated::AnimatedSource;
 use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::FromStr;
+#[cfg(feature = "svg")]
+use std::sync::Mutex;
 use std::{str::from_utf8, sync::Arc};
+
+#[cfg(feature = "svg")]
+use rustc_hash::FxHashMap;
 
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
 #[cfg(feature = "svg-raster")]
 use tiny_skia::Pixmap;
+#[cfg(feature = "svg")]
+use xxhash_rust::xxh3::Xxh3;
 use xxhash_rust::xxh3::xxh3_64;
 
 #[cfg(feature = "svg-raster")]
@@ -30,7 +37,7 @@ use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::style::Color;
 #[cfg(feature = "svg")]
-use crate::svg::{SvgDocument, SvgHost};
+use crate::svg::{HostReads, SvgDocument, SvgHost};
 #[cfg(feature = "svg-raster")]
 use crate::svg_drawing;
 #[cfg(feature = "svg")]
@@ -87,7 +94,7 @@ pub struct SvgSource {
   /// Canvas size and CSS intrinsic sizing read from the root element.
   #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
-  /// Whether rendering depends on the host `color`: the markup references
+  /// Whether a vector backend embedding the markup adds the host `color` to it: the markup names
   /// `currentColor` and the root element sets no `color` of its own.
   #[cfg(feature = "svg")]
   uses_current_color: bool,
@@ -97,13 +104,96 @@ pub struct SvgSource {
   /// Whether the document is an inline `svg` element, which draws in the style of its box.
   #[cfg(feature = "svg")]
   inline: bool,
-  /// Whether the markup contains `<text`, so rendering depends on the registered fonts.
-  #[cfg(feature = "svg-raster")]
-  has_text: bool,
-  /// The key the cache keeps its rasters under, none for a source no cache holds.
+  /// The key the cache keeps its pictures under, none for a source no cache holds.
   #[cfg(feature = "svg")]
-  #[cfg_attr(not(feature = "svg-raster"), allow(dead_code))]
   key: Option<u64>,
+  /// What a layout at each viewport, by the bits of its width and height, read from its host.
+  #[cfg(feature = "svg")]
+  reads: Mutex<FxHashMap<(u32, u32), HostReads>>,
+}
+
+/// An SVG laid out at one viewport in one host: its drawing ops, and the key every host that draws
+/// it the same shares.
+#[cfg(feature = "svg")]
+#[derive(Debug)]
+pub struct SvgPicture {
+  ops: Vec<SvgOp>,
+  key: Option<u64>,
+}
+
+#[cfg(feature = "svg")]
+impl SvgPicture {
+  /// The drawing ops, in the SVG's canvas coordinates.
+  pub fn ops(&self) -> &[SvgOp] {
+    &self.ops
+  }
+
+  /// The key every picture that draws the same ops shares, none for one laid out in the style of
+  /// an inline `svg`'s box or from a source no cache holds.
+  pub fn key(&self) -> Option<u64> {
+    self.key
+  }
+
+  /// The pixels of `raster`.
+  #[cfg(feature = "svg-raster")]
+  fn rasterize(&self, raster: SvgRaster) -> Result<Arc<ImageBuffer>, ImageError> {
+    let SvgRaster {
+      origin,
+      size,
+      width,
+      height,
+      ..
+    } = raster;
+
+    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
+      return Err(ImageError::InvalidPixmapSize);
+    }
+
+    let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
+    let sx = width as f32 / size.width;
+    let sy = height as f32 / size.height;
+
+    svg_drawing::draw(
+      &self.ops,
+      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
+      &mut pixmap.as_mut(),
+    );
+
+    ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
+      .map(Arc::new)
+      .ok_or(ImageError::InvalidPixmapSize)
+  }
+
+  /// The bytes the picture retains, for cache budgeting.
+  pub(crate) fn estimated_bytes(&self) -> usize {
+    SvgOp::estimated_bytes(&self.ops)
+  }
+
+  /// The key of the source `source` laid out at `viewport` in `host`, from the host state `reads`
+  /// names.
+  fn key_of(source: u64, viewport: Size<f32>, reads: HostReads, host: &RenderContext) -> u64 {
+    let mut hasher = Xxh3::new();
+
+    hasher.update(&source.to_le_bytes());
+    hasher.update(&viewport.width.to_bits().to_le_bytes());
+    hasher.update(&viewport.height.to_bits().to_le_bytes());
+
+    if reads.color {
+      hasher.update(&host.current_color.0);
+    }
+
+    if reads.fonts {
+      host.fonts().hash_selection(&mut hasher);
+    }
+
+    hasher.digest()
+  }
+}
+
+/// The bits of `viewport`'s width and height, which key what a layout at it read.
+#[cfg(feature = "svg")]
+fn viewport_bits(viewport: Size<f32>) -> (u32, u32) {
+  (viewport.width.to_bits(), viewport.height.to_bits())
 }
 
 #[cfg(feature = "svg-sizing")]
@@ -192,13 +282,54 @@ impl SvgSource {
     self.document.node_count() * size_of::<Node>()
   }
 
-  /// The SVG's drawing ops laid out at `viewport`, the size it is drawn at in device pixels, in the
-  /// box `host` styles.
+  /// The ops of [`Self::picture`], copied out of the cache.
+  #[deprecated(note = "use `picture`, whose ops the cache shares")]
   pub fn vector_ops(&self, host: &RenderContext, viewport: Size<f32>) -> Vec<SvgOp> {
-    self
-      .document
-      .ops(self.host(host), viewport)
-      .unwrap_or_default()
+    self.picture(host, viewport).ops().to_vec()
+  }
+
+  /// The SVG laid out at `viewport`, the size it is drawn at in device pixels, in the box `host`
+  /// styles, from `host`'s cache when a box that draws it the same laid it out before.
+  pub fn picture(&self, host: &RenderContext, viewport: Size<f32>) -> Arc<SvgPicture> {
+    let lay_out = || {
+      self
+        .document
+        .ops(self.host(host), viewport)
+        .unwrap_or_default()
+    };
+
+    // An inline `svg` draws in the style of its box, which no key holds.
+    let Some(source) = self.key.filter(|_| !self.inline) else {
+      return Arc::new(SvgPicture {
+        ops: lay_out().0,
+        key: None,
+      });
+    };
+    if let Some(picture) = self
+      .known_key(host, viewport)
+      .and_then(|key| host.cache().picture(key))
+    {
+      return picture;
+    }
+
+    let (ops, reads) = lay_out();
+
+    if let Ok(mut known) = self.reads.lock() {
+      known.insert(viewport_bits(viewport), reads);
+    }
+
+    host.cache().keep_picture(SvgPicture {
+      ops,
+      key: Some(SvgPicture::key_of(source, viewport, reads, host)),
+    })
+  }
+
+  /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
+  fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
+    let source = self.key.filter(|_| !self.inline)?;
+    let reads = *self.reads.lock().ok()?.get(&viewport_bits(viewport))?;
+
+    Some(SvgPicture::key_of(source, viewport, reads, host))
   }
 
   /// The box the document draws in when the box `host` styles shows it.
@@ -241,47 +372,13 @@ impl SvgSource {
   /// The source of `document`, parsed from `src`, as an image that no cache holds.
   fn from_document(document: SvgDocument, src: &str) -> Self {
     Self {
-      #[cfg(feature = "svg-raster")]
-      has_text: document.has_text(),
       uses_current_color: document.uses_current_color(),
       document: Arc::new(document),
       inline: false,
       source: Box::from(src),
       key: None,
+      reads: Mutex::default(),
     }
-  }
-
-  #[cfg(feature = "svg-raster")]
-  fn rasterize(
-    &self,
-    raster: SvgRaster,
-    host: &RenderContext,
-  ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let SvgRaster {
-      viewport,
-      origin,
-      size,
-      width,
-      height,
-    } = raster;
-
-    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
-      return Err(ImageError::InvalidPixmapSize);
-    }
-
-    let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
-    let sx = width as f32 / size.width;
-    let sy = height as f32 / size.height;
-
-    svg_drawing::draw(
-      &self.vector_ops(host, viewport),
-      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
-      &mut pixmap.as_mut(),
-    );
-
-    ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
-      .map(Arc::new)
-      .ok_or(ImageError::InvalidPixmapSize)
   }
 
   /// The pixels of `raster`, from the cache when an image drew them before.
@@ -292,27 +389,21 @@ impl SvgSource {
     image_rendering: ImageScalingAlgorithm,
     host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    // An inline `svg` draws in the style of its box, which the key cannot hold.
-    if self.inline {
-      return self.rasterize(raster, host);
+    let sized = SizedKey::new(raster.hash(), raster.width, raster.height, image_rendering);
+    let picture = || self.picture(host, raster.viewport);
+
+    // A known key finds a kept raster without laying the document out again.
+    if let Some(key) = self.known_key(host, raster.viewport) {
+      return host
+        .cache()
+        .sized(Some(key), sized, || picture().rasterize(raster));
     }
 
-    let mut variant = raster.hash();
-
-    if self.uses_current_color {
-      variant ^= xxh3_64(&host.current_color.0);
-    }
-
-    // Text rasterization depends on which fonts are registered.
-    if self.has_text {
-      variant ^= xxh3_64(&host.fonts().revision().to_le_bytes());
-    }
-
-    let sized = SizedKey::new(variant, raster.width, raster.height, image_rendering);
+    let picture = picture();
 
     host
       .cache()
-      .sized(self.key, sized, || self.rasterize(raster, host))
+      .sized(picture.key(), sized, || picture.rasterize(raster))
   }
 }
 
@@ -976,6 +1067,12 @@ mod tests {
   #[cfg(any(feature = "png", feature = "webp"))]
   use crate::resources::image_decoder::DecodeTarget;
   use crate::style::Color;
+  #[cfg(feature = "svg")]
+  use crate::{
+    Fonts,
+    style::{FontFamily, FromCssStr},
+    viewport::Viewport,
+  };
 
   use super::*;
 
@@ -1836,6 +1933,213 @@ mod tests {
     Ok(())
   }
 
+  /// The key of `svg`'s picture at 4 by 4 under a host of `color`.
+  #[cfg(feature = "svg")]
+  fn picture_key(svg: &str, color: Color) -> Option<u64> {
+    let source: SvgSource = svg.parse().ok()?;
+
+    source
+      .picture(
+        &RenderContext::with_current_color(color),
+        Size {
+          width: 4.0,
+          height: 4.0,
+        },
+      )
+      .key()
+  }
+
+  // A picture is shared by hosts of other colors exactly when its layout reads no host color.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_picture_key_follows_the_host_color_its_layout_reads() {
+    let nested = to_data_url(
+      "image/svg+xml",
+      br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#,
+    );
+    let reads_the_host = [
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg { color: inherit }</style><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
+      format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image width="4" height="4" href="{nested}"/></svg>"#
+      ),
+    ];
+    let reads_none = [
+      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##,
+      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#00ff00"/></svg>"##,
+    ];
+    let red = Color([255, 0, 0, 255]);
+    let blue = Color([0, 0, 255, 255]);
+
+    for svg in &reads_the_host {
+      assert_ne!(picture_key(svg, red), picture_key(svg, blue), "{svg}");
+    }
+
+    for svg in reads_none {
+      assert_eq!(picture_key(svg, red), picture_key(svg, blue), "{svg}");
+    }
+  }
+
+  // Text falls back through the families a render names, and `ch` and `ex` read the face it
+  // picks, so a picture that reads either is not shared by renders that name other families.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_picture_key_follows_the_fonts_its_layout_reads() -> Result<(), ImageError> {
+    let fonts = Fonts::default();
+    let key = |svg: &str, fallbacks: &str| -> Result<Option<u64>, ImageError> {
+      let source: SvgSource = svg.parse()?;
+      let fallbacks = FontFamily::from_css_str(fallbacks).ok();
+      let host = RenderContext::builder()
+        .fonts(fonts.snapshot_with_fallbacks(fallbacks.as_ref()))
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((4, 4)))
+            .build(),
+        )
+        .build();
+
+      Ok(
+        source
+          .picture(
+            &host,
+            Size {
+              width: 4.0,
+              height: 4.0,
+            },
+          )
+          .key(),
+      )
+    };
+    let nested = to_data_url(
+      "image/svg+xml",
+      br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#,
+    );
+    let reads_fonts = [
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" style="stroke-width: 1ex" stroke="red"/></svg>"#.to_owned(),
+      format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image width="4" height="4" href="{nested}"/></svg>"#
+      ),
+    ];
+    let reads_none = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1em" height="4"/></svg>"#;
+
+    for svg in &reads_fonts {
+      assert_eq!(key(svg, "A")?, key(svg, "A")?, "{svg}");
+      assert_ne!(key(svg, "A")?, key(svg, "B")?, "{svg}");
+    }
+
+    assert_eq!(key(reads_none, "A")?, key(reads_none, "B")?);
+    Ok(())
+  }
+
+  /// The bytes the picture of `svg`, a 4 by 4 document around `body`, retains.
+  #[cfg(feature = "svg")]
+  fn picture_bytes(body: &str) -> Result<usize, ImageError> {
+    let source: SvgSource =
+      format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">{body}</svg>"#)
+        .parse()?;
+
+    Ok(
+      source
+        .picture(
+          &RenderContext::with_current_color(Color([0, 0, 0, 255])),
+          Size {
+            width: 4.0,
+            height: 4.0,
+          },
+        )
+        .estimated_bytes(),
+    )
+  }
+
+  // A filter's kernel counts against the picture budget, as its picture keeps it.
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_picture_weighs_the_filters_it_keeps() -> Result<(), ImageError> {
+    let bytes = |filter: &str| {
+      picture_bytes(&format!(
+        r#"{filter}<rect width="4" height="4" filter="url(#f)"/>"#
+      ))
+    };
+    let small = bytes(r#"<filter id="f"><feConvolveMatrix order="1" kernelMatrix="1"/></filter>"#)?;
+    let large = bytes(
+      r#"<filter id="f"><feConvolveMatrix order="9" kernelMatrix="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"/></filter>"#,
+    )?;
+
+    assert!(
+      large >= small + 80 * size_of::<f32>(),
+      "{small} then {large}"
+    );
+    Ok(())
+  }
+
+  // A gradient's stops and a stroke's dashes count against the picture budget, as its picture keeps
+  // them.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_picture_weighs_the_stops_and_dashes_it_keeps() -> Result<(), ImageError> {
+    let gradient = |stops: usize| {
+      let stops: String = (0..stops)
+        .map(|stop| {
+          let color = ["red", "blue"][stop % 2];
+
+          format!(
+            r#"<stop offset="{}" stop-color="{color}"/>"#,
+            stop as f32 / stops as f32
+          )
+        })
+        .collect();
+
+      picture_bytes(&format!(
+        r#"<linearGradient id="g">{stops}</linearGradient><rect width="4" height="4" fill="url(#g)"/>"#
+      ))
+    };
+    let dashed = |dashes: usize| {
+      let dashes = vec!["1"; dashes].join(" ");
+
+      picture_bytes(&format!(
+        r#"<line x2="4" stroke="red" stroke-dasharray="{dashes}"/>"#
+      ))
+    };
+
+    assert!(gradient(64)? >= gradient(2)? + 60 * size_of::<SvgGradientStop>());
+    assert!(dashed(64)? >= dashed(2)? + 60 * size_of::<f32>());
+    Ok(())
+  }
+
+  // Two hosts of different colors drawing one source through one cache each get their own color.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_cached_raster_keeps_each_host_color() -> Result<(), ImageError> {
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#;
+    let cache = Cache::default();
+    let image = cache.decode_image(svg, ImageCacheMode::Auto)?;
+    let draw = |color| {
+      let host = RenderContext::builder()
+        .fonts(Fonts::default().snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((4, 4)))
+            .build(),
+        )
+        .current_color(color)
+        .cache(cache.clone())
+        .build();
+
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, &host)
+    };
+
+    draw(Color([255, 0, 0, 255]))?;
+
+    assert_eq!(
+      premul_at(&draw(Color([0, 0, 255, 255]))?, 2, 2),
+      [0, 0, 255, 255]
+    );
+    Ok(())
+  }
+
   // A `color` attribute on the root wins over the host color, so the host
   // never overrides what the SVG defines itself.
   #[cfg(feature = "svg")]
@@ -2082,18 +2386,14 @@ mod tests {
       path.display()
     );
     let source = svg.parse::<SvgSource>().unwrap();
+    let host = RenderContext::with_current_color(Color::black());
+    let viewport = Size {
+      width: 8.0,
+      height: 8.0,
+    };
     let rasterized = source
-      .rasterize(
-        SvgRaster::whole(
-          Size {
-            width: 8.0,
-            height: 8.0,
-          },
-          8,
-          8,
-        ),
-        &RenderContext::with_current_color(Color::black()),
-      )
+      .picture(&host, viewport)
+      .rasterize(SvgRaster::whole(viewport, 8, 8))
       .unwrap();
 
     std::fs::remove_file(&path).ok();

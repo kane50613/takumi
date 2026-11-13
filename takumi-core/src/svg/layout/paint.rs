@@ -118,8 +118,6 @@ impl SvgLayout<'_> {
         None,
       ))
     };
-    let current_color = styled.context.current_color;
-
     match paint {
       SvgPaint::None => None,
       SvgPaint::ContextFill => scope
@@ -132,17 +130,17 @@ impl SvgLayout<'_> {
         .clone()
         .and_then(|(_, stroke)| stroke)
         .map(|stroke| (stroke.paint, stroke.context)),
-      SvgPaint::Color(color) => color_paint(color.resolve(current_color), opacity),
+      SvgPaint::Color(color) => color_paint(self.resolve_color(styled, *color), opacity),
       SvgPaint::Url(resource, fallback) => {
-        let from_fallback = |opacity: &mut f32| {
-          fallback.and_then(|color| color_paint(color.resolve(current_color), opacity))
+        let from_fallback = |layout: &Self, opacity: &mut f32| {
+          fallback.and_then(|color| color_paint(layout.resolve_color(styled, color), opacity))
         };
         let Some(link) = self.reference(resource) else {
-          return from_fallback(opacity);
+          return from_fallback(self, opacity);
         };
 
         if !self.document.elements[link].kind.is_paint_server() {
-          return from_fallback(opacity);
+          return from_fallback(self, opacity);
         }
 
         match self.paint_server(link, scope) {
@@ -150,7 +148,7 @@ impl SvgLayout<'_> {
             // A server in bounding box units paints only a shape that has a bounding box.
             // https://www.w3.org/TR/SVG11/painting.html#SpecifyingPaint
             if !has_bbox && paint.units() == Units::ObjectBoundingBox {
-              from_fallback(opacity)
+              from_fallback(self, opacity)
             } else {
               Some((paint, None))
             }
@@ -162,7 +160,7 @@ impl SvgLayout<'_> {
             *opacity = server_opacity;
             Some((Paint::Color(color), None))
           }
-          None => from_fallback(opacity),
+          None => from_fallback(self, opacity),
         }
       }
     }

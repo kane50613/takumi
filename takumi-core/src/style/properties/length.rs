@@ -393,10 +393,10 @@ impl Length {
       Length::Percentage(value) => (value / 100.0) * percentage_full_px,
       Length::Rem(value) => value * sizing.rem_basis(),
       Length::Em(value) => value * sizing.font_size,
-      Length::Lh(value) => value * sizing.line_height,
+      Length::Lh(value) => value * sizing.lh_basis(),
       Length::Rlh(value) => value * sizing.root_line_height_basis(),
-      Length::Ch(value) => value * sizing.ch,
-      Length::Ex(value) => value * sizing.ex,
+      Length::Ch(value) => value * sizing.ch_basis(),
+      Length::Ex(value) => value * sizing.ex_basis(),
       Length::Vh(value) => value * sizing.viewport.unit_height() / 100.0,
       Length::Vw(value) => value * sizing.viewport.unit_width() / 100.0,
       Length::CqH(value) => value * sizing.query_container_height() / 100.0,
@@ -537,7 +537,7 @@ impl MakeComputed for Length {
     }
 
     if let Self::Lh(lh) = *self {
-      *self = Self::Px(lh * sizing.to_css(sizing.line_height));
+      *self = Self::Px(lh * sizing.to_css(sizing.lh_basis()));
       return;
     }
 
@@ -547,12 +547,12 @@ impl MakeComputed for Length {
     }
 
     if let Self::Ch(ch) = *self {
-      *self = Self::Px(ch * sizing.to_css(sizing.ch));
+      *self = Self::Px(ch * sizing.to_css(sizing.ch_basis()));
       return;
     }
 
     if let Self::Ex(ex) = *self {
-      *self = Self::Px(ex * sizing.to_css(sizing.ex));
+      *self = Self::Px(ex * sizing.to_css(sizing.ex_basis()));
       return;
     }
 
@@ -641,6 +641,7 @@ mod tests {
       },
       container_size: Size::NONE,
       container_read: Default::default(),
+      font_read: None,
       font_size: 10.0,
       root_font_size: None,
       line_height: 30.0,
