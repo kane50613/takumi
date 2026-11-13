@@ -168,10 +168,16 @@ impl<'a> SvgLayout<'a> {
 
     // A document that outgrows the budget draws nothing.
     let ops = SvgPainter::paint(&document.root, &mut self.budget).unwrap_or_default();
+
+    Some((ops, self.host_reads()))
+  }
+
+  /// What the layout has read from the host so far, its styles' font metrics included.
+  fn host_reads(&self) -> HostReads {
     let mut reads = self.reads.get();
 
     reads.fonts |= self.styles.read_fonts();
-    Some((ops, reads))
+    reads
   }
 
   /// `color` in the context of `styled`. Approximate: a `color: currentColor` under an ancestor's

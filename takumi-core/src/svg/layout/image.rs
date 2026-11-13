@@ -298,7 +298,7 @@ impl SvgLayout<'_> {
     let nested = layout.layout_root();
 
     self.budget = mem::take(&mut layout.budget);
-    self.read(layout.reads.get());
+    self.read(layout.host_reads());
     nested
   }
 }
