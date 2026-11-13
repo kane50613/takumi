@@ -18,8 +18,8 @@ use crate::{
   resources::font::PrimaryFontMetrics,
   shadow::SizedShadow,
   style::{
-    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFamilyToken,
-    FontVariantCaps, LineHeight as CssLineHeight, SizingContext,
+    AppliedTextDecorations, Color, ComputedStyle, FontFamily, FontFamilyToken, FontVariantCaps,
+    LineHeight as CssLineHeight, SizingContext,
   },
 };
 
@@ -124,12 +124,6 @@ impl SizedFontStyle<'_> {
   pub(crate) fn brush(&self) -> InlineBrush {
     InlineBrush {
       source_span_id: None,
-      // Inline elements don't establish a stacking context, so we handle opacity here.
-      opacity: if self.parent.base_data.display == Display::Inline {
-        self.parent.svg_data.opacity.0
-      } else {
-        1.0
-      },
       color: self.color,
       decorations: self.text_decorations.clone(),
       decoration_skip_ink: self.parent.misc_inherited_data.text_decoration_skip_ink,

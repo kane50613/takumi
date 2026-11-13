@@ -865,7 +865,9 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     match *content {
-      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, surface),
+      OwnContent::Inline(_) | OwnContent::InlineLayer(..) => {
+        self.emit_node_text((node, *content), node_id, frame, surface)
+      }
       #[cfg(feature = "images")]
       OwnContent::Image(image) => {
         self.emit_image(image, &node.context, frame, surface);
@@ -1020,35 +1022,39 @@ impl Emitter<'_> {
   /// tree) or built on the fly (band trees).
   fn emit_node_text(
     &mut self,
-    node: &RenderNode,
+    (node, content): (&RenderNode, OwnContent<'_>),
     node_id: NodeId,
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     visit_inline_layout(
       self.inline,
-      node,
+      (node, content),
       node_id,
       frame.layout,
-      |painted, font_style| self.draw_runs(node, painted, frame, font_style, surface),
+      |painted, font_style| {
+        self.draw_runs(painted, frame, font_style, surface);
+
+        if let OwnContent::Inline(_) = content {
+          self.emit_inline_boxes(node, painted, frame, surface);
+        }
+      },
     )?;
     Ok(())
   }
 
-  /// Paints the runs on the lines this page owns through takumi-core's text painter, then the
-  /// inline boxes.
+  /// Paints the runs on the lines this page owns through takumi-core's text painter, the box
+  /// painting them at `frame`.
   fn draw_runs(
     &mut self,
-    node: &RenderNode,
     painted: &PaintedInline<'_>,
     frame: BoxFrame,
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
+    let frame = painted.frame(frame.origin);
     let y = frame.origin.y;
-    let lines = painted.runs.lines(frame.layout, |item| {
-      self.window.shows_line_item(item.below(y))
-    });
+    let lines = painted.lines(|item| self.window.shows_line_item(item.below(y)));
     let mut device = TextDevice {
       emitter: self,
       device: self.device(surface, false),
@@ -1058,7 +1064,6 @@ impl Emitter<'_> {
     };
 
     lines.paint(&painted.spans, font_style, frame, &mut device);
-    self.emit_inline_boxes(node, painted, frame, surface);
   }
 
   /// Paints the inline layout's replaced boxes.

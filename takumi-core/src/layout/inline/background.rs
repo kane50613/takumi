@@ -53,9 +53,9 @@ pub struct FragmentBackground<'c> {
 
 /// The background and outline fragments of each span's line fragments, which come grouped by span
 /// in line order.
-pub(super) fn resolve_span_fragments<'c>(
-  fragments: &[(Rc<DecorationLink<'c>>, SpanFragment)],
-) -> (Vec<InlineBackgroundFragment<'c>>, Vec<InlineOutlineRect>) {
+pub(super) fn resolve_span_fragments(
+  fragments: &[(&DecorationLink<'_>, SpanFragment)],
+) -> (Vec<BackgroundItem>, Vec<InlineOutlineRect>) {
   let mut backgrounds = Vec::new();
   let mut outlines = Vec::new();
 
@@ -83,12 +83,12 @@ pub(super) fn resolve_span_fragments<'c>(
 
 /// Resolves `fragment`, `strip_offset` along its span's strip of `strip_width`, into its
 /// background and outline fragments.
-fn resolve_fragment<'c>(
-  link: &Rc<DecorationLink<'c>>,
+fn resolve_fragment(
+  link: &DecorationLink<'_>,
   fragment: SpanFragment,
   strip_offset: f32,
   strip_width: f32,
-  backgrounds: &mut Vec<InlineBackgroundFragment<'c>>,
+  backgrounds: &mut Vec<BackgroundItem>,
   outlines: &mut Vec<InlineOutlineRect>,
 ) {
   let SpanFragment {
@@ -139,7 +139,7 @@ fn resolve_fragment<'c>(
       height,
       radius: fitted_radii(radii, width, height),
       outline,
-      opacity: decoration.opacity,
+      layer: link.layer(),
     });
   }
 
@@ -197,16 +197,11 @@ fn resolve_fragment<'c>(
         ),
       };
 
-      FragmentBackground {
-        node: decoration.owner,
-        strip_origin: Point { x: strip_x, y },
-        strip,
-        fragment,
-      }
+      (Point { x: strip_x, y }, strip, fragment)
     });
 
   if border.has_visible_sides() || background.is_some() {
-    backgrounds.push(InlineBackgroundFragment {
+    backgrounds.push(BackgroundItem {
       x,
       y,
       width,
@@ -215,8 +210,48 @@ fn resolve_fragment<'c>(
       padding,
       baseline,
       background,
-      link: Rc::clone(link),
+      span: id,
     });
+  }
+}
+
+/// An [`InlineBackgroundFragment`] naming its span by decoration id instead of holding its link.
+pub(super) struct BackgroundItem {
+  pub(super) x: f32,
+  pub(super) y: f32,
+  pub(super) width: f32,
+  pub(super) height: f32,
+  border: BorderProperties,
+  padding: Rect<f32>,
+  baseline: f32,
+  /// The strip's origin, the strip, and the fragment of the span's background.
+  background: Option<(Point<f32>, ComputedLayout, ComputedLayout)>,
+  pub(super) span: usize,
+}
+
+impl BackgroundItem {
+  /// The fragment, its span opening `link`.
+  pub(super) fn resolve<'c>(&self, link: Rc<DecorationLink<'c>>) -> InlineBackgroundFragment<'c> {
+    let owner = link.decoration.owner;
+
+    InlineBackgroundFragment {
+      x: self.x,
+      y: self.y,
+      width: self.width,
+      height: self.height,
+      border: self.border,
+      padding: self.padding,
+      baseline: self.baseline,
+      background: self
+        .background
+        .map(|(strip_origin, strip, fragment)| FragmentBackground {
+          node: owner,
+          strip_origin,
+          strip,
+          fragment,
+        }),
+      link,
+    }
   }
 }
 
@@ -363,7 +398,7 @@ impl<'c> InlineBackgroundFragment<'c> {
 /// by span in line order, after Blink's `OutOfFlowLayoutPart::AddInlineContainingBlockInfo`, in a
 /// `direction` formatting context.
 pub(super) fn containing_blocks<'c>(
-  fragments: &[(Rc<DecorationLink<'c>>, SpanFragment)],
+  fragments: &[(&DecorationLink<'c>, SpanFragment)],
   direction: Direction,
 ) -> Vec<InlineContainingBlock<'c>> {
   let rtl = direction == Direction::Rtl;

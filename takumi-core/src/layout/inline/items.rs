@@ -203,19 +203,11 @@ pub enum ProcessedInlineSpan<'c> {
 }
 
 impl<'c> ProcessedInlineSpan<'c> {
-  /// The spans around a text span, innermost first.
-  pub(crate) fn text_chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
-    match self {
-      Self::Text { decorations, .. } => decorations.as_ref(),
-      _ => None,
-    }
-  }
-
   /// The spans around this one, innermost first.
-  pub(crate) fn chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
+  pub(crate) fn chain(&self) -> Option<&DecorationLink<'c>> {
     match self {
-      Self::Text { decorations, .. } => decorations.as_ref(),
-      Self::Box(item) => item.decorations.as_ref(),
+      Self::Text { decorations, .. } => decorations.as_deref(),
+      Self::Box(item) => item.decorations.as_deref(),
     }
   }
 }
@@ -239,7 +231,8 @@ pub(crate) struct InlineDecoration<'c> {
   /// The corner radii as specified, since a percentage resolves against each fragment.
   pub(crate) radius: Sides<SpacePair<Length>>,
   pub(crate) outline: Option<InlineOutline>,
-  pub(crate) opacity: f32,
+  /// Whether the span paints as a layer of its own; see [`ComputedStyle::paints_inline_layer`].
+  pub(crate) layer: bool,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
   /// The span's sizing, which each fragment resolves its radii against.
@@ -277,6 +270,15 @@ impl<'c> DecorationLink<'c> {
   /// This span and the spans around it, innermost first.
   pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
     successors(Some(self), |link| link.parent.as_deref())
+  }
+
+  /// The id of the innermost span around this one, itself included, that paints as a layer of
+  /// its own, which paints what this span holds.
+  pub(crate) fn layer(&self) -> Option<usize> {
+    self
+      .ancestors()
+      .find(|link| link.decoration.layer)
+      .map(|link| link.decoration.id)
   }
 }
 
@@ -330,7 +332,7 @@ fn inline_span_decoration(
       style.surround_data.border_bottom_left_radius,
     ]),
     outline,
-    opacity: style.svg_data.opacity.0,
+    layer: style.paints_inline_layer(),
     direction: style.inherited_data.direction,
     sizing: node.context.sizing.clone(),
   })
@@ -512,17 +514,20 @@ impl<'c> InlineSpans<'c> {
   }
 
   /// The decoration the inline box `node` opens.
-  pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&Rc<DecorationLink<'c>>> {
-    self.node_decorations.get(&node.context.box_id())
+  pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&DecorationLink<'c>> {
+    self
+      .node_decorations
+      .get(&node.context.box_id())
+      .map(Rc::as_ref)
   }
 
   /// The decoration of every inline box the spans open, by decoration id, including a box with
   /// no content that no span lies inside.
-  pub(crate) fn links(&self) -> FxHashMap<usize, &Rc<DecorationLink<'c>>> {
+  pub(crate) fn links(&self) -> FxHashMap<usize, Rc<DecorationLink<'c>>> {
     self
       .node_decorations
       .values()
-      .map(|link| (link.decoration.id, link))
+      .map(|link| (link.decoration.id, Rc::clone(link)))
       .collect()
   }
 

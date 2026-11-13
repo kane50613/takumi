@@ -2,7 +2,7 @@ use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
-  Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
+  DrawPart, Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
   PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
 };
 
@@ -112,6 +112,15 @@ fn runs<'d>(document: &'d PaintDocument, node: &'d PaintNode) -> Vec<&'d TextRun
         .flat_map(|&child| runs(document, &document.nodes[child])),
     )
     .collect()
+}
+
+fn has_class(node: &PaintNode, class: &str) -> bool {
+  node.element.as_ref().is_some_and(|element| {
+    element
+      .class_name
+      .as_deref()
+      .is_some_and(|names| names.split_whitespace().any(|name| name == class))
+  })
 }
 
 fn roles(node: &PaintNode) -> Vec<Role> {
@@ -237,31 +246,55 @@ fn paint_tree_records_used_values() {
     .map(|&child| &document.nodes[child])
     .find(|node| matches!(node.kind, NodeKind::Text { .. }))
     .expect("paragraph text");
-  let mark = document
+  let group = document
     .nodes
     .iter()
-    .find(|node| {
-      node
-        .element
-        .as_ref()
-        .is_some_and(|element| element.class_name.as_deref() == Some("mark"))
-    })
-    .expect("the span's own box");
-  assert_eq!(mark.parent, Some(paragraph.id));
-  assert!(mark.drawables.iter().any(|drawable| matches!(
-    drawable,
-    Drawable::Group { opacity, drawables }
-      if *opacity == 0.5 && matches!(
-        drawables.as_slice(),
-        [Drawable::Fill {
-          role: Role::InlineBackground,
-          paint: Paint::Color {
-            color: [255, 255, 0, 255]
-          },
-          ..
-        }]
-      )
-  )));
+    .find(|node| has_class(node, "mark"))
+    .expect("the span's group");
+  assert_eq!(group.parent, Some(paragraph.id));
+  assert!(matches!(
+    &group.kind,
+    NodeKind::Box { effects: Some(effects), .. } if effects.opacity == 0.5
+  ));
+  let [fragment, marked] = group.children[..] else {
+    panic!("the group holds the span's fragment and its text");
+  };
+  let (fragment, marked) = (&document.nodes[fragment], &document.nodes[marked]);
+  assert!(matches!(
+    fragment.drawables.as_slice(),
+    [Drawable::Fill {
+      role: Role::InlineBackground,
+      paint: Paint::Color {
+        color: [255, 255, 0, 255]
+      },
+      ..
+    }]
+  ));
+  assert!(
+    matches!(&marked.kind, NodeKind::Text { runs, .. } if runs.len() == 1 && runs[0].text == "marked")
+  );
+  let steps = |node: usize| {
+    document
+      .steps
+      .iter()
+      .position(|step| match step {
+        PaintStep::Draw { node: drawn, .. } => *drawn == node,
+        _ => false,
+      })
+      .expect("a draw step")
+  };
+  let begin = document
+    .steps
+    .iter()
+    .position(|step| *step == PaintStep::BeginGroup { node: group.id })
+    .expect("the group begins");
+  let end = document
+    .steps
+    .iter()
+    .position(|step| *step == PaintStep::EndGroup { node: group.id })
+    .expect("the group ends");
+  assert!(steps(text.id) < begin);
+  assert!((begin..end).contains(&steps(fragment.id)) && (begin..end).contains(&steps(marked.id)));
   assert!(!roles(text).contains(&Role::InlineBackground));
   assert!(text.drawables.iter().any(|drawable| matches!(
     drawable,
@@ -292,6 +325,7 @@ fn paint_tree_records_used_values() {
   let glass = document
     .nodes
     .iter()
+    .filter(|node| has_class(node, "glass"))
     .find_map(|node| match &node.kind {
       NodeKind::Box {
         effects: Some(effects),
@@ -586,12 +620,6 @@ fn an_inline_span_with_a_background_and_border_gets_a_box_per_line() {
     .unwrap()
     .document
   };
-  let has_class = |node: &PaintNode, class: &str| {
-    node
-      .element
-      .as_ref()
-      .is_some_and(|element| element.class_name.as_deref() == Some(class))
-  };
   let is_span =
     |node: &&PaintNode| matches!(node.kind, NodeKind::Box { .. }) && has_class(node, "s");
   let one = document(Node::text("Hello "), "tag");
@@ -634,4 +662,165 @@ fn an_inline_span_with_a_background_and_border_gets_a_box_per_line() {
       .expect(class)
   };
   assert!(position("pic") < position("s"));
+}
+
+#[test]
+fn a_span_inside_another_records_its_fragment_and_group_inside_the_outer_ones() {
+  let css = "p { font-size: 16px; margin: 0 } \
+     .outer { background: #eaf0f9 } \
+     .inner { background: #7fa6d9 } \
+     .fade { opacity: 0.5 }";
+  let document = |outer: &str, inner: &str| {
+    build_with(
+      Node::container([Node::container([
+        Node::text("a "),
+        Node::container([Node::text("b")]).with_class_name(inner),
+      ])
+      .with_class_name(outer)])
+      .with_tag_name("p"),
+      css,
+    )
+  };
+  let node = |document: &'_ PaintDocument, class: &str, kind: fn(&NodeKind) -> bool| {
+    document
+      .nodes
+      .iter()
+      .find(|node| has_class(node, class) && kind(&node.kind))
+      .map(|node| node.id)
+      .expect(class)
+  };
+  let fragment = |kind: &NodeKind| matches!(kind, NodeKind::Box { effects: None, .. });
+  let group = |kind: &NodeKind| {
+    matches!(
+      kind,
+      NodeKind::Box {
+        effects: Some(_),
+        ..
+      }
+    )
+  };
+
+  let opaque = document("outer", "inner");
+  let outer = node(&opaque, "outer", fragment);
+  let inner = node(&opaque, "inner", fragment);
+  assert_eq!(opaque.nodes[inner].parent, Some(outer));
+
+  let faded = document("outer fade", "inner fade");
+  let outer = node(&faded, "outer", group);
+  let inner = node(&faded, "inner", group);
+  assert_eq!(faded.nodes[inner].parent, Some(outer));
+  assert_eq!(
+    faded.nodes[node(&faded, "inner", fragment)].parent,
+    Some(inner)
+  );
+}
+
+#[test]
+fn a_translucent_spans_outline_paints_inside_its_group() {
+  let document = build_with(
+    Node::container([
+      Node::text("a "),
+      Node::container([Node::text("b")]).with_class_name("fade"),
+    ])
+    .with_tag_name("p"),
+    "p { font-size: 16px; margin: 0 } \
+     .fade { opacity: 0.5; outline: 2px solid red }",
+  );
+  let group = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "fade"))
+    .expect("the translucent span's group");
+  let outlined = group
+    .children
+    .iter()
+    .map(|&child| &document.nodes[child])
+    .find(|node| roles(node).contains(&Role::Outline))
+    .expect("the group's text, with the outline");
+  let position = |wanted: &PaintStep| {
+    document
+      .steps
+      .iter()
+      .position(|step| step == wanted)
+      .expect("a step")
+  };
+  let drawn = position(&PaintStep::Draw {
+    node: outlined.id,
+    part: DrawPart::Drawables,
+  });
+
+  assert!(position(&PaintStep::BeginGroup { node: group.id }) < drawn);
+  assert!(drawn < position(&PaintStep::EndGroup { node: group.id }));
+}
+
+#[test]
+fn an_inline_block_inside_a_translucent_span_paints_in_its_group() {
+  let document = build_with(
+    Node::container([
+      Node::text("a "),
+      Node::container([
+        Node::text("b "),
+        Node::container([]).with_class_name("chip"),
+      ])
+      .with_class_name("fade"),
+    ])
+    .with_tag_name("p"),
+    "p { font-size: 16px; margin: 0 } \
+     .fade { opacity: 0.5 } \
+     .chip { display: inline-block; width: 20px; height: 10px; background: green }",
+  );
+  let group = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "fade"))
+    .expect("the translucent span's group");
+  let chip = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "chip"))
+    .expect("the inline-block's box");
+  let position = |wanted: &PaintStep| {
+    document
+      .steps
+      .iter()
+      .position(|step| step == wanted)
+      .expect("a step")
+  };
+  let drawn = position(&PaintStep::Draw {
+    node: chip.id,
+    part: DrawPart::Drawables,
+  });
+
+  assert!(position(&PaintStep::BeginGroup { node: group.id }) < drawn);
+  assert!(drawn < position(&PaintStep::EndGroup { node: group.id }));
+}
+
+#[test]
+fn a_positioned_span_clips_none_of_its_overflow() {
+  let document = build_with(
+    Node::container([
+      Node::text("a "),
+      Node::container([Node::text("b")]).with_class_name("moved"),
+    ])
+    .with_tag_name("p"),
+    "p { font-size: 16px; margin: 0 } \
+     .moved { position: relative; top: 4px; overflow: hidden }",
+  );
+  let layer = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "moved"))
+    .expect("the positioned span's layer");
+
+  assert!(matches!(
+    layer.kind,
+    NodeKind::Box {
+      overflow_clip: None,
+      ..
+    }
+  ));
+  assert!(!document.steps.iter().any(|step| matches!(
+    step,
+    PaintStep::BeginClip { node } if *node == layer.id
+  )));
 }

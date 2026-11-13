@@ -50,8 +50,9 @@ pub(super) struct Recorder {
   /// The open layers, innermost last: each one's opacity and the drawables outside it.
   layers: Vec<(f32, Vec<Drawable>)>,
   shadow: Option<SizedShadow>,
-  /// Whether the recorder records a text node, which alone draws glyph runs.
-  text_node: bool,
+  /// The block's index of each run of the text node it records, in order; empty for any other
+  /// node, which draws no glyph runs.
+  runs: Vec<usize>,
   /// Maps the node's space onto the page.
   transform: Affine,
 }
@@ -66,14 +67,15 @@ impl Recorder {
       clips: Vec::new(),
       layers: Vec::new(),
       shadow: None,
-      text_node: false,
+      runs: Vec::new(),
     }
   }
 
-  /// A recorder for a text node, its space mapped onto the page by `transform`.
-  pub(super) fn text(transform: Affine) -> Self {
+  /// A recorder for a text node holding the block's runs `runs`, in order, its space mapped onto
+  /// the page by `transform`.
+  pub(super) fn text(transform: Affine, runs: Vec<usize>) -> Self {
     Self {
-      text_node: true,
+      runs,
       ..Self::new(transform)
     }
   }
@@ -437,11 +439,9 @@ impl Recorder {
     style: &SizedFontStyle,
     frame: BoxFrame,
   ) {
-    if !self.text_node {
+    let Ok(index) = self.runs.binary_search(&run.index) else {
       return;
-    }
-
-    let index = run.index;
+    };
     let text_stroke = self.text_stroke(run, style);
 
     if let Some(shadow) = self.shadow {
@@ -472,7 +472,7 @@ impl Recorder {
       return;
     }
 
-    self.record_glyph_paint(run, style, frame);
+    self.record_glyph_paint(run, index, style, frame);
   }
 
   /// Records `run`'s glyphs in their own paint: the fill and the text stroke each over the whole
@@ -480,17 +480,18 @@ impl Recorder {
   fn record_glyph_paint(
     &mut self,
     run: &PositionedInlineRun,
+    index: usize,
     style: &SizedFontStyle,
     frame: BoxFrame,
   ) {
     for phase in run.glyph_run.brush.paint_order.text_phases() {
       match phase {
-        PaintPhase::Fill => self.record_glyph_fill(run, style, frame),
+        PaintPhase::Fill => self.record_glyph_fill(run, index, style, frame),
         PaintPhase::Stroke => {
           if let Some((stroke, color)) = self.text_stroke(run, style) {
             self.glyphs(
               Role::TextStroke,
-              run.index,
+              index,
               Paint::Color { color },
               PaintPoint { x: 0.0, y: 0.0 },
               0.0,
@@ -507,10 +508,10 @@ impl Recorder {
   fn record_glyph_fill(
     &mut self,
     run: &PositionedInlineRun,
+    index: usize,
     style: &SizedFontStyle,
     frame: BoxFrame,
   ) {
-    let index = run.index;
     let brush = &run.glyph_run.brush;
     let join = style.parent.misc_inherited_data.stroke_linejoin;
     let origin = PaintPoint { x: 0.0, y: 0.0 };

@@ -327,11 +327,17 @@ impl<'n> PlacedBox<'n> {
     }
   }
 
-  /// Emits the node's own content: its inline content or its image. Block children are
+  /// Emits `content`, the node's own: its inline content or its image. Block children are
   /// painted separately.
-  pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    match OwnContent::of(self.node) {
-      OwnContent::Inline(_) => emit_inline_content(self.node, self.frame, doc),
+  pub(crate) fn emit_own_content(
+    &self,
+    content: OwnContent<'_>,
+    doc: &mut SvgDocument,
+  ) -> io::Result<()> {
+    match content {
+      OwnContent::Inline(_) | OwnContent::InlineLayer(..) => {
+        emit_inline_content(content, &self.node.context, self.frame, doc)
+      }
       OwnContent::Image(image) => emit_image(image, &self.painter, self.frame, doc),
       OwnContent::None => Ok(()),
     }
@@ -782,7 +788,7 @@ pub(crate) fn emit_inline_box(
     .map(|data| doc.begin_clipped_group(&data))
     .transpose()?;
 
-  placed.emit_own_content(doc)?;
+  placed.emit_own_content(OwnContent::of(placed.node), doc)?;
   if let Some(group) = content_clip {
     doc.end_group(group)?;
   }

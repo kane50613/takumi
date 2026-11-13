@@ -721,7 +721,7 @@ pub struct RenderNode {
   pub(crate) is_flex_or_grid_item: bool,
   /// Whether it is a run of text and no element's box, so a flex or grid container wraps it and
   /// the runs beside it in one anonymous item.
-  is_text_run: bool,
+  pub(crate) is_text_run: bool,
   /// The part it plays in a text control, if any.
   pub(crate) text_control: Option<TextControlBox>,
   /// The fragment items its inline content last laid out to.
@@ -2622,7 +2622,7 @@ impl RenderNode {
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
-  pub(super) fn padding_px(&self) -> Rect<f32> {
+  pub(crate) fn padding_px(&self) -> Rect<f32> {
     self.padding_px_against(0.0)
   }
 
@@ -2683,7 +2683,7 @@ impl RenderNode {
   }
 
   /// Used border widths in pixels.
-  pub(super) fn border_px(&self) -> Rect<f32> {
+  pub(crate) fn border_px(&self) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {

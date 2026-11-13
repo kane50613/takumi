@@ -11,7 +11,7 @@ use takumi_core::{
   geometry::Point,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
-  painter::{BoxFrame, TableDecorations, TextClip, paint_collapsed_borders},
+  painter::{BoxFrame, OwnContent, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene},
   style::{Affine, Filter},
 };
@@ -71,11 +71,7 @@ impl<'a> SceneEmitter<'a> {
   /// beyond a translation.
   fn place(&self, paint: &NodePaint, current: Affine) -> Option<(PlacedBox<'a>, Affine)> {
     let node = self.scene.root.node_at_path(&paint.path)?;
-    let layout = self
-      .scene
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)
-      .ok()?;
+    let layout = paint.layout(self.scene.results.view()).ok()?;
     let relative = current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     let (origin, group_transform) = if relative.only_translation() {
       (
@@ -168,7 +164,10 @@ impl ChunkWriter<'_, '_, '_> {
           result.map_err(io::Error::other)?;
         }
         ChunkPart::CollapsedBorders => {}
-        ChunkPart::Content => placed.emit_own_content(doc)?,
+        ChunkPart::Content => placed.emit_own_content(
+          OwnContent::of_paint(&self.emitter.scene.root, placed.node, chunk.node),
+          doc,
+        )?,
         ChunkPart::Outline => placed.emit_outline(doc)?,
       }
 

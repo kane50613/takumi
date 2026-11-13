@@ -2,8 +2,8 @@
 //! [`OutlinePainter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/outline_painter.cc).
 
 use super::{
-  BoxBorderPainter, BoxPainter, FillShape, LayerBounds, OpacityLayer, PaintDevice, PaintRole,
-  StrokeStyle, border::StyledLine,
+  BoxBorderPainter, BoxPainter, FillShape, LayerBounds, PaintDevice, PaintRole, StrokeStyle,
+  border::StyledLine,
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Size},
@@ -52,10 +52,10 @@ impl BoxPainter<'_> {
 impl OutlineIsland {
   /// Paints the island's outline, as Blink's `PaintSingleRectOutline` or `ComplexOutlinePainter`.
   pub fn paint(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
-    let (outline, opacity) = self.outline();
+    let outline = self.outline();
     let (width, offset) = outline.painted();
 
-    if opacity <= 0.0 || width <= 0.0 {
+    if width <= 0.0 {
       return;
     }
 
@@ -80,13 +80,11 @@ impl OutlineIsland {
         y: origin.y + top,
       };
 
-      return device.with_opacity(opacity, None, |device| {
-        PendingOutline {
-          outline: geometry,
-          origin,
-        }
-        .paint(device)
-      });
+      return PendingOutline {
+        outline: geometry,
+        origin,
+      }
+      .paint(device);
     }
 
     let Some(outer) = self.right_angle_path(offset, width) else {
@@ -96,9 +94,7 @@ impl OutlineIsland {
     let painter = ComplexOutline::new(outer, width, offset, outline.style, outline.color, radius);
 
     device.set_role(PaintRole::Outline);
-    device.with_opacity(opacity, None, |device| {
-      painter.paint(Affine::translation(origin.x, origin.y), device)
-    });
+    painter.paint(Affine::translation(origin.x, origin.y), device);
   }
 }
 

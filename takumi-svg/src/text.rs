@@ -5,11 +5,9 @@
 use std::io;
 
 use takumi_core::{
+  context::RenderContext,
   font_style::SizedFontStyle,
-  layout::{
-    inline::{InlineBoxKind, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
-    tree::RenderNode,
-  },
+  layout::inline::{InlineBoxKind, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
   painter::{BoxFrame, OwnContent, PaintedInline},
   path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
@@ -21,23 +19,29 @@ use crate::{
   render::{DocumentDevice, emit_inline_box},
 };
 
-/// Emits a node's inline content at its frame: lays out its inline items in the content box,
-/// paints the runs, then recurses into each positioned inline box.
+/// Emits the inline `content` of the box at `frame` in `context`: lays out the inline items in
+/// the content box, paints the runs, then recurses into each positioned inline box.
 pub(crate) fn emit_inline_content(
-  node: &RenderNode,
+  content: OwnContent<'_>,
+  context: &RenderContext,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let context = &node.context;
-  let font_style = SizedFontStyle::from_style(&context.style, context);
-  let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, frame.layout) else {
+  let font_style = content.font_style(context);
+  let Some(painted) = content.lay_out_inline(&font_style, frame.layout) else {
     return Ok(());
   };
-  let PaintedInline { spans, runs, .. } = painted.map_err(font_error)?;
+  let painted = painted.map_err(font_error)?;
 
   DocumentDevice::paint(doc, |device| {
-    runs.paint(&spans, &font_style, frame, device);
+    painted.paint(&font_style, frame.origin, device);
   })?;
+
+  if !matches!(content, OwnContent::Inline(_)) {
+    return Ok(());
+  }
+
+  let PaintedInline { spans, runs, .. } = painted;
 
   for inline_box in runs
     .inline_boxes

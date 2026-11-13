@@ -2,7 +2,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
-  painter::{TableDecorations, TextClip, paint_collapsed_borders},
+  painter::{OwnContent, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
 use tiny_skia::PixmapMut;
@@ -137,7 +137,14 @@ impl ScenePainter<'_, '_> {
         result
       }
       ChunkPart::Decorations | ChunkPart::CollapsedBorders => Ok(()),
-      ChunkPart::Content => draw_node_content(node, context, canvas, layout, chunk.node.transform),
+      ChunkPart::Content => draw_node_content(
+        node,
+        OwnContent::of_paint(root, node, chunk.node),
+        context,
+        canvas,
+        layout,
+        chunk.node.transform,
+      ),
       ChunkPart::Outline => {
         DeferredOutline::of(context, layout).map_or(Ok(()), |outline| outline.paint(canvas))
       }
@@ -445,9 +452,11 @@ fn affine_max_scale(transform: Affine) -> f32 {
   }
 }
 
-/// Paints a node's own content and debug border, an inline formatting context over the border.
+/// Paints `content`, a node's own, and its debug border, an inline formatting context over the
+/// border.
 fn draw_node_content(
   node: &RenderNode,
+  content: OwnContent<'_>,
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
@@ -456,13 +465,13 @@ fn draw_node_content(
   let inline = node.should_create_inline_layout();
 
   if !inline {
-    draw_own_content(node, context, canvas, layout)?;
+    draw_own_content(content, context, canvas, layout)?;
   }
   if context.draw_debug_border() {
     draw_debug_border(canvas, layout, transform);
   }
   if inline {
-    draw_own_content(node, context, canvas, layout)?;
+    draw_own_content(content, context, canvas, layout)?;
   }
   Ok(())
 }

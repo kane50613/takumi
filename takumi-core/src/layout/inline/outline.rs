@@ -80,8 +80,8 @@ pub struct InlineOutlineRect {
   pub(crate) radius: Sides<SpacePair<f32>>,
   /// The element's outline.
   pub(crate) outline: InlineOutline,
-  /// The element's `opacity`.
-  pub(crate) opacity: f32,
+  /// The span whose layer paints the outline, none for the block's own content.
+  pub(crate) layer: Option<usize>,
 }
 
 impl InlineOutlineRect {
@@ -170,11 +170,9 @@ impl OutlineIsland {
     self.lone.then(|| self.rects[0])
   }
 
-  /// The element's outline and opacity.
-  pub fn outline(&self) -> (InlineOutline, f32) {
-    let rect = self.rects[0];
-
-    (rect.outline, rect.opacity)
+  /// The element's outline.
+  pub fn outline(&self) -> InlineOutline {
+    self.rects[0].outline
   }
 
   /// Blink's `ComputeRightAnglePath`: the pixel-snapped rects, each grown by `offset` (no further

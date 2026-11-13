@@ -2,11 +2,8 @@
 //! [css-text-decor-3](https://drafts.csswg.org/css-text-decor-3/#painting-order) gives: shadows,
 //! underlines and overlines, text, then line-through.
 
-use std::rc::Rc;
-
 use super::{
-  BoxBorderPainter, BoxFrame, FillShape, OpacityLayer, PaintDevice, PaintRole, SnappedBox,
-  StrokeStyle,
+  BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole, SnappedBox, StrokeStyle,
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
@@ -228,24 +225,29 @@ impl InlineRunLayout<'_> {
         .collect(),
     }
   }
-
-  /// Paints every line of the block at `frame`; see [`InlineLines::paint`].
-  pub fn paint(
-    &self,
-    spans: &[ProcessedInlineSpan<'_>],
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    device: &mut dyn GlyphDevice,
-  ) {
-    self
-      .lines(frame.layout, |_| true)
-      .paint(spans, style, frame, device);
-  }
 }
 
 impl InlineLines<'_> {
-  /// Paints the text of the block at `frame`, every shadow before any glyph, as css-text-decor-3
-  /// asks.
+  /// The items the layer of the span `layer` among `spans` paints, or the block itself for
+  /// `None`: those whose innermost span painting as a layer of its own is that one.
+  pub fn in_layer(mut self, spans: &[ProcessedInlineSpan<'_>], layer: Option<usize>) -> Self {
+    self
+      .runs
+      .retain(|run| run.span_chain(spans).and_then(DecorationLink::layer) == layer);
+    self
+      .background_fragments
+      .retain(|fragment| fragment.link.layer() == layer);
+    self.outline_rects.retain(|rect| rect.layer == layer);
+    self
+  }
+
+  /// The runs on these lines, in visual order.
+  pub fn runs(&self) -> &[&PositionedInlineRun] {
+    &self.runs
+  }
+
+  /// Paints the text of the block at `frame`: span backgrounds, every shadow before any glyph, as
+  /// css-text-decor-3 asks, then outlines.
   pub fn paint(
     &self,
     spans: &[ProcessedInlineSpan<'_>],
@@ -291,29 +293,27 @@ impl InlineLines<'_> {
     Self::paint_fragment(fragment, &runs, frame, device);
   }
 
-  /// Paints `fragment`'s background, then its border, at its span's opacity.
+  /// Paints `fragment`'s background, then its border.
   fn paint_fragment(
     fragment: &InlineBackgroundFragment,
     runs: &[PaintedRun],
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    device.with_opacity(fragment.link.decoration.opacity, None, |device| {
-      if let Some(background) = &fragment.background {
-        background.paint(fragment, frame, runs, device);
-      }
+    if let Some(background) = &fragment.background {
+      background.paint(fragment, frame, runs, device);
+    }
 
-      let snapped = fragment.snapped_box();
+    let snapped = fragment.snapped_box();
 
-      device.set_role(PaintRole::Border);
-      BoxBorderPainter::new(&fragment.border, snapped.size()).paint(
-        Point {
-          x: frame.origin.x + fragment.x,
-          y: frame.origin.y + fragment.y,
-        } + snapped.offset(),
-        device,
-      );
-    });
+    device.set_role(PaintRole::Border);
+    BoxBorderPainter::new(&fragment.border, snapped.size()).paint(
+      Point {
+        x: frame.origin.x + fragment.x,
+        y: frame.origin.y + fragment.y,
+      } + snapped.offset(),
+      device,
+    );
   }
 
   /// Paints the text of the block at `frame`, shadows then glyphs, and its outlines, without the
@@ -525,14 +525,13 @@ impl PositionedInlineRun {
   }
 
   /// The spans around the run, innermost first.
-  fn span_chain<'s, 'c>(
+  pub(crate) fn span_chain<'s, 'c>(
     &self,
     spans: &'s [ProcessedInlineSpan<'c>],
   ) -> Option<&'s DecorationLink<'c>> {
     spans
       .get(self.glyph_run.brush.source_span_id? as usize)?
-      .text_chain()
-      .map(Rc::as_ref)
+      .chain()
   }
 }
 
@@ -583,40 +582,36 @@ impl PaintedRun<'_> {
     // decoration.
     if let Some(symbol_marker) = run.glyph_run.symbol_marker {
       if !shadow_pass {
-        device.with_opacity(run.glyph_run.brush.opacity, None, |device| {
-          device.set_role(PaintRole::Text);
-          symbol_marker.paint(run, run.glyph_run.brush.color, frame, device);
-        });
+        device.set_role(PaintRole::Text);
+        symbol_marker.paint(run, run.glyph_run.brush.color, frame, device);
       }
       return;
     }
 
-    device.with_opacity(run.glyph_run.brush.opacity, None, |device| {
-      if paints_decorations {
-        if !shadow_pass {
-          device.set_role(PaintRole::TextDecoration);
-        }
-        for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-          decoration.paint(device);
-        }
+    if paints_decorations {
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
       }
+      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
+        decoration.paint(device);
+      }
+    }
 
-      if pass.paints_glyphs() {
-        if !shadow_pass {
-          device.set_role(PaintRole::Text);
-        }
-        device.draw_glyph_run(run, style, fill, frame);
+    if pass.paints_glyphs() {
+      if !shadow_pass {
+        device.set_role(PaintRole::Text);
       }
+      device.draw_glyph_run(run, style, fill, frame);
+    }
 
-      if paints_decorations {
-        if !shadow_pass {
-          device.set_role(PaintRole::TextDecoration);
-        }
-        for decoration in decorations.iter().filter(|decoration| decoration.over) {
-          decoration.paint(device);
-        }
+    if paints_decorations {
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
       }
-    });
+      for decoration in decorations.iter().filter(|decoration| decoration.over) {
+        decoration.paint(device);
+      }
+    }
   }
 }
 

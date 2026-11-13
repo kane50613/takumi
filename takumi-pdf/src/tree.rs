@@ -145,7 +145,7 @@ impl TreeInputs<'_> {
 /// would be non-empty.
 pub(crate) fn draws(content: &OwnContent<'_>) -> bool {
   match content {
-    OwnContent::Inline(_) => true,
+    OwnContent::Inline(_) | OwnContent::InlineLayer(..) => true,
     OwnContent::Image(_) => cfg!(feature = "images"),
     OwnContent::None => false,
   }
