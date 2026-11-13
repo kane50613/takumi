@@ -103,9 +103,9 @@ pub struct SvgSource {
   /// The key the cache keeps its pictures under, none for a source no cache holds.
   #[cfg(feature = "svg")]
   key: Option<u64>,
-  /// What a layout at each viewport, by the bits of its width and height, read from its host.
+  /// What a layout read from its host, by [`ReadsKey`].
   #[cfg(feature = "svg")]
-  reads: Mutex<FxHashMap<(u32, u32), HostReads>>,
+  reads: Mutex<FxHashMap<ReadsKey, HostReads>>,
 }
 
 /// An SVG laid out at one viewport in one host: its drawing ops, and the key every host that draws
@@ -186,10 +186,21 @@ impl SvgPicture {
   }
 }
 
-/// The bits of `viewport`'s width and height, which key what a layout at it read.
+/// What a layout's reads depend on: the bits of the viewport's width and height, and whether the
+/// host passes its `color` in.
 #[cfg(feature = "svg")]
-fn viewport_bits(viewport: Size<f32>) -> (u32, u32) {
-  (viewport.width.to_bits(), viewport.height.to_bits())
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ReadsKey(u32, u32, bool);
+
+#[cfg(feature = "svg")]
+impl ReadsKey {
+  fn of(host: &RenderContext, viewport: Size<f32>) -> Self {
+    Self(
+      viewport.width.to_bits(),
+      viewport.height.to_bits(),
+      host.svg_element,
+    )
+  }
 }
 
 #[cfg(feature = "svg-sizing")]
@@ -258,7 +269,7 @@ impl SvgSource {
     if self.key.is_some() && !self.inline {
       self.picture(host, viewport);
 
-      if let Some(reads) = self.known_reads(viewport) {
+      if let Some(reads) = self.known_reads(host, viewport) {
         return reads.color;
       }
     }
@@ -345,7 +356,7 @@ impl SvgSource {
     let (ops, reads) = lay_out();
 
     if let Ok(mut known) = self.reads.lock() {
-      known.insert(viewport_bits(viewport), reads);
+      known.insert(ReadsKey::of(host, viewport), reads);
     }
 
     host.cache().keep_picture(SvgPicture {
@@ -357,20 +368,21 @@ impl SvgSource {
   /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
   fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
     let source = self.key.filter(|_| !self.inline)?;
-    let reads = self.known_reads(viewport)?;
+    let reads = self.known_reads(host, viewport)?;
 
     Some(SvgPicture::key_of(source, viewport, reads, host))
   }
 
-  /// What a layout at `viewport` read from its host, once one has said.
-  fn known_reads(&self, viewport: Size<f32>) -> Option<HostReads> {
+  /// What a layout at `viewport` in `host` read from it, once one has said.
+  fn known_reads(&self, host: &RenderContext, viewport: Size<f32>) -> Option<HostReads> {
     self
       .reads
       .lock()
       .ok()?
-      .get(&viewport_bits(viewport))
+      .get(&ReadsKey::of(host, viewport))
       .copied()
   }
+
 
   /// The box the document draws in when the box `host` styles shows it.
   fn host<'a>(&self, host: &'a RenderContext) -> SvgHost<'a> {
@@ -378,7 +390,7 @@ impl SvgSource {
       SvgHost::Inline(host)
     } else {
       SvgHost::Image {
-        current_color: host.current_color,
+        current_color: host.svg_element.then_some(host.current_color),
         fonts: Some(host.fonts()),
         cache: Some(host.cache()),
       }
@@ -1932,23 +1944,22 @@ mod tests {
     Ok(())
   }
 
-  // `currentColor` resolves against the host color, like an inline SVG
-  // inheriting `color` from its parent element.
+  // `currentColor` resolves against the host color in an `svg` element, as an inline `svg`
+  // inherits `color`, and to black in an image, a document isolated from its host.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_current_color_resolves_to_host_color() -> Result<(), ImageError> {
+  fn svg_current_color_resolves_to_host_color_only_in_an_svg_element() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
+    let host = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let render =
+      |host: &RenderContext| image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, host);
 
-    let rendered = image.render_for_layout(
-      4,
-      4,
-      ImageScalingAlgorithm::Auto,
-      0,
-      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
-    )?;
-
-    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(
+      premul_at(&render(&host.for_svg_element())?, 2, 2),
+      [255, 0, 0, 255]
+    );
+    assert_eq!(premul_at(&render(&host)?, 2, 2), [0, 0, 0, 255]);
     Ok(())
   }
 
@@ -1965,21 +1976,21 @@ mod tests {
       4,
       ImageScalingAlgorithm::Auto,
       0,
-      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
+      &RenderContext::with_current_color(Color([255, 0, 0, 255])).for_svg_element(),
     )?;
 
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
     Ok(())
   }
 
-  /// The key of `svg`'s picture at 4 by 4 under a host of `color`.
+  /// The key of `svg`'s picture at 4 by 4 as the content of an `svg` element of `color`.
   #[cfg(feature = "svg")]
   fn picture_key(svg: &str, color: Color) -> Option<u64> {
     let source: SvgSource = svg.parse().ok()?;
 
     source
       .picture(
-        &RenderContext::with_current_color(color),
+        &RenderContext::with_current_color(color).for_svg_element(),
         Size {
           width: 4.0,
           height: 4.0,
@@ -1997,25 +2008,26 @@ mod tests {
       br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#,
     );
     let reads_the_host = [
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg { color: inherit }</style><rect width="4" height="4" fill="currentColor"/></svg>"#.to_owned(),
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg { color: inherit }</style><rect width="4" height="4" fill="currentColor"/></svg>"#,
+    ];
+    // A nested image is a document of its own, isolated from the host as any image is.
+    let reads_none = [
+      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##.to_owned(),
+      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#00ff00"/></svg>"##.to_owned(),
       format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image width="4" height="4" href="{nested}"/></svg>"#
       ),
     ];
-    let reads_none = [
-      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##,
-      r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#00ff00"/></svg>"##,
-    ];
     let red = Color([255, 0, 0, 255]);
     let blue = Color([0, 0, 255, 255]);
 
-    for svg in &reads_the_host {
+    for svg in reads_the_host {
       assert_ne!(picture_key(svg, red), picture_key(svg, blue), "{svg}");
     }
 
-    for svg in reads_none {
+    for svg in &reads_none {
       assert_eq!(picture_key(svg, red), picture_key(svg, blue), "{svg}");
     }
   }
@@ -2165,7 +2177,8 @@ mod tests {
         )
         .current_color(color)
         .cache(cache.clone())
-        .build();
+        .build()
+        .for_svg_element();
 
       image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, &host)
     };
@@ -2199,18 +2212,24 @@ mod tests {
     Ok(())
   }
 
-  // The markup a vector backend embeds carries the host color as a root
+  // The markup a vector backend embeds for an `svg` element carries the host color as a root
   // presentation attribute, so a standalone viewer resolves it identically.
   #[cfg(feature = "svg")]
   #[test]
   fn svg_embedded_source_injects_the_host_color_it_reads() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#;
     let source: SvgSource = svg.parse()?;
-    let red = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let image = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let red = image.for_svg_element();
     let small = Size::new(4.0, 4.0);
 
     let injected = source.embedded_source(&red, small);
     assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
+    // An image reads nothing of its host.
+    assert!(matches!(
+      source.embedded_source(&image, small),
+      Cow::Borrowed(_)
+    ));
 
     // A stylesheet that escapes the keyword still takes the host color.
     let escaped = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>rect { fill: currentcol\6f r }</style><rect width="4" height="4"/></svg>"#;

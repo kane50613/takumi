@@ -894,7 +894,7 @@ impl Emitter<'_> {
       }
       #[cfg(feature = "images")]
       OwnContent::Image(image) => {
-        self.emit_image(image, &node.context, frame, surface);
+        self.emit_image(image, &node.image_context(&node.context), frame, surface);
         Ok(())
       }
       _ => Ok(()),
@@ -1240,7 +1240,7 @@ impl Emitter<'_> {
       self.start_tagged_node(node, surface);
     }
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
-      self.emit_image(image, &node.context, frame, surface);
+      self.emit_image(image, &node.image_context(&node.context), frame, surface);
     }
     if tagged {
       surface.end_tagged();
