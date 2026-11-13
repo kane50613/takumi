@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use crate::geometry::NodeId;
 
 /// What layout has stopped reading.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Finished {
   /// The cached layouts of the box's fragments before `fragment`, which are never resumed again.
   LayoutsBefore { node: NodeId, fragment: usize },
@@ -43,7 +43,15 @@ impl Releases {
   }
 
   pub(crate) fn push(&mut self, finished: Finished) {
-    self.log.push_back((self.laid, finished));
+    self.log_at(self.laid, finished);
+  }
+
+  /// Logs `finished` for `laid`, behind what is logged for it or before, so that the log stays in
+  /// stamp order for [`Self::pop_up_to`].
+  fn log_at(&mut self, laid: usize, finished: Finished) {
+    let at = self.log.partition_point(|&(stamp, _)| stamp <= laid);
+
+    self.log.insert(at, (laid, finished));
   }
 
   /// Logs `finished`, which waits for `holder` to end.
@@ -74,9 +82,7 @@ impl Releases {
     let laid = page.map_or(self.laid + 1, |page| page + 1);
 
     self.items_placed.insert((node, fragment), laid);
-    self
-      .log
-      .push_back((laid, Finished::Items { node, fragment }));
+    self.log_at(laid, Finished::Items { node, fragment });
   }
 
   /// Whether the items of the fragment were last placed when `laid` pages were laid out, so that
@@ -101,5 +107,26 @@ impl Releases {
   /// What waited for `holder` to end.
   pub(crate) fn take_held(&mut self, holder: NodeId) -> Vec<(usize, Finished)> {
     self.held.remove(&holder).unwrap_or_default()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // A deferred entry for a later page lets an earlier one logged after it go first.
+  #[test]
+  fn entries_leave_the_log_in_stamp_order() {
+    let mut releases = Releases::default();
+    let ended = |node| Finished::Ended(NodeId::new(node));
+
+    releases.begin_page(3);
+    releases.defer_items(NodeId::new(1), 0, None);
+    releases.defer_items(NodeId::new(2), 0, Some(1));
+    releases.push(ended(3));
+
+    assert_eq!(releases.pop_up_to(3).map(|(laid, _)| laid), Some(2));
+    assert_eq!(releases.pop_up_to(3), Some((3, ended(3))));
+    assert_eq!(releases.pop_up_to(3), None);
   }
 }
