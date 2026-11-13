@@ -68,6 +68,17 @@ impl Releases {
     }
   }
 
+  /// Logs again the items of `node`'s fragment, which wait for `page` to be drawn, or for the page
+  /// laid out next when no page holds them yet.
+  pub(crate) fn defer_items(&mut self, node: NodeId, fragment: usize, page: Option<usize>) {
+    let laid = page.map_or(self.laid + 1, |page| page + 1);
+
+    self.items_placed.insert((node, fragment), laid);
+    self
+      .log
+      .push_back((laid, Finished::Items { node, fragment }));
+  }
+
   /// Whether the items of the fragment were last placed when `laid` pages were laid out, so that
   /// releasing them now is right.
   pub(crate) fn take_placed_items(&mut self, node: NodeId, fragment: usize, laid: usize) -> bool {
