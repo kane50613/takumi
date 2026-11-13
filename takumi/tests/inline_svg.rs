@@ -2,7 +2,10 @@
 //! document.
 
 use takumi::{
-  prelude::{FromHtml, FromHtmlOptions, Node, RenderOptions, StyleSheet, Viewport},
+  prelude::{
+    Color, ColorInput, Display, FromHtml, FromHtmlOptions, Node, RenderOptions, Style,
+    StyleDeclaration, StyleSheet, Viewport,
+  },
   render,
 };
 
@@ -10,7 +13,14 @@ use crate::test_utils::CONTEXT;
 
 /// The straight-alpha pixel at the center of a 10×10 render of `html` under `css`.
 fn center(html: &str, css: &str) -> [u8; 4] {
-  let node = Node::from_html(html, FromHtmlOptions::default()).unwrap();
+  center_of(
+    Node::from_html(html, FromHtmlOptions::default()).unwrap(),
+    css,
+  )
+}
+
+/// The straight-alpha pixel at the center of a 10×10 render of `node` under `css`.
+fn center_of(node: Node, css: &str) -> [u8; 4] {
   let bitmap = render(
     RenderOptions::builder()
       .viewport(Viewport::new((10, 10)))
@@ -142,4 +152,33 @@ fn an_inline_svg_scales_with_the_device_pixel_ratio() {
       assert_eq!(twice[(2 * y * 160) + 2 * x], once[y * 80 + x], "({x}, {y})");
     }
   }
+}
+
+/// The center of `image` drawn in a red box.
+fn center_in_red(image: Node) -> [u8; 4] {
+  let red = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::color(ColorInput::Value(Color([
+      255, 0, 0, 255,
+    ]))));
+
+  center_of(Node::container([image]).with_style(red), "")
+}
+
+const CURRENT_COLOR_RECT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="currentColor"/></svg>"#;
+
+#[test]
+fn an_svg_element_node_inherits_the_color_of_its_box() {
+  assert_eq!(
+    center_in_red(Node::image(CURRENT_COLOR_RECT).with_tag_name("svg")),
+    [255, 0, 0, 255]
+  );
+}
+
+#[test]
+fn an_svg_image_is_isolated_from_the_color_of_its_box() {
+  assert_eq!(
+    center_in_red(Node::image(CURRENT_COLOR_RECT)),
+    [0, 0, 0, 255]
+  );
 }

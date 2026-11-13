@@ -463,15 +463,16 @@ fn draw_node_content(
   transform: Affine,
 ) -> Result<()> {
   let inline = node.should_create_inline_layout();
+  let own_context = node.image_context(context);
 
   if !inline {
-    draw_own_content(content, context, canvas, layout)?;
+    draw_own_content(content, &own_context, canvas, layout)?;
   }
   if context.draw_debug_border() {
     draw_debug_border(canvas, layout, transform);
   }
   if inline {
-    draw_own_content(content, context, canvas, layout)?;
+    draw_own_content(content, &own_context, canvas, layout)?;
   }
   Ok(())
 }

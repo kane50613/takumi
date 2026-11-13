@@ -59,9 +59,11 @@ impl BitOrAssign for HostReads {
 /// The box an SVG document draws in, which its root element inherits from.
 #[derive(Clone, Copy)]
 pub(crate) enum SvgHost<'a> {
-  /// An image, whose root inherits only the `color` of the box.
+  /// An image, whose root inherits at most the `color` of the box.
   Image {
-    current_color: Color,
+    /// The box's `color`, none for a document isolated from it as Blink's `SVGImage` is, whose
+    /// root starts from black.
+    current_color: Option<Color>,
     fonts: Option<&'a FontsSnapshot>,
     /// What the layout keeps, [`Cache::shared`] when none is given.
     cache: Option<&'a Cache>,
@@ -73,7 +75,7 @@ pub(crate) enum SvgHost<'a> {
 impl SvgHost<'_> {
   /// An image in a box whose `color` is black.
   const BLACK: Self = Self::Image {
-    current_color: Color([0, 0, 0, 255]),
+    current_color: Some(Color([0, 0, 0, 255])),
     fonts: None,
     cache: None,
   };

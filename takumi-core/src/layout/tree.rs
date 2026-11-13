@@ -1882,6 +1882,23 @@ impl RenderNode {
     self.node.as_ref().is_some_and(Node::is_replaced_element)
   }
 
+  /// `context`, the node's own or one derived from it, as the node's image content draws in it: an
+  /// `svg` element's inherits the box's `color`, and any other image is a document isolated from
+  /// it, as Blink's `SVGImage` is.
+  pub fn image_context<'c>(&self, context: &'c RenderContext) -> Cow<'c, RenderContext> {
+    #[cfg(feature = "svg")]
+    if self
+      .node
+      .as_ref()
+      .and_then(Node::tag_name)
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("svg"))
+    {
+      return Cow::Owned(context.for_svg_element());
+    }
+
+    Cow::Borrowed(context)
+  }
+
   /// A box with no layout override.
   pub(super) fn new(
     context: RenderContext,

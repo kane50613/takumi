@@ -7518,17 +7518,15 @@ fn a_repeated_svg_image_with_a_soft_mask_draws_in_place() {
   );
 }
 
-/// An SVG image whose root `color` takes the host's draws in each host's color, however its
-/// draws repeat.
+/// An `svg` element whose root `color` takes the host's draws in each host's color, however its
+/// draws repeat, and the same SVG as an image draws black, isolated from its host.
 #[cfg(all(feature = "svg", feature = "images"))]
 #[test]
 fn a_repeated_svg_image_keeps_each_host_color() {
-  let svg = data_url(
-    "image/svg+xml",
-    br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" color="currentColor"><rect width="24" height="24" fill="currentColor"/></svg>"#,
-  );
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" color="currentColor"><rect width="24" height="24" fill="currentColor"/></svg>"#;
+  let image = data_url("image/svg+xml", svg.as_bytes());
   let html = format!(
-    r#"<img src="{svg}" style="color: #ff0000"><img src="{svg}" style="color: #0000ff"><img src="{svg}" style="color: #ff0000">"#
+    r#"<div style="color: #ff0000">{svg}</div><div style="color: #0000ff">{svg}</div><div style="color: #ff0000">{svg}</div><img src="{image}" style="color: #ff0000">"#
   );
   let fonts = fonts();
   let pdf = render_pinned(a4_options(&html, &fonts));
@@ -7540,4 +7538,5 @@ fn a_repeated_svg_image_keeps_each_host_color() {
 
   assert_eq!(fills("1 0 0 rg"), 2);
   assert_eq!(fills("0 0 1 rg"), 1);
+  assert_eq!(fills("0 0 0 rg"), 1);
 }

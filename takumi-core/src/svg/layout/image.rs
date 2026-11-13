@@ -287,7 +287,7 @@ impl SvgLayout<'_> {
     container: Size<f32>,
   ) -> Option<LayoutDocument> {
     let host = SvgHost::Image {
-      current_color: self.styles.root_context().current_color,
+      current_color: None,
       fonts: self.fonts,
       cache: Some(self.styles.root_context().cache()),
     };

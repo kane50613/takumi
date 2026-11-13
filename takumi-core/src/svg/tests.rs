@@ -30,7 +30,7 @@ fn ops(body: &str) -> Vec<SvgOp> {
       document
         .ops(
           SvgHost::Image {
-            current_color: BLACK,
+            current_color: Some(BLACK),
             fonts: None,
             cache: None,
           },
@@ -107,7 +107,7 @@ fn the_host_color_is_what_current_color_is() {
       document
         .ops(
           SvgHost::Image {
-            current_color: color,
+            current_color: Some(color),
             fonts: None,
             cache: None,
           },
@@ -350,7 +350,7 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
   )
   .ok()
   .and_then(|document| document.ops(SvgHost::Image {
-      current_color: BLACK,
+      current_color: Some(BLACK),
       fonts: None,
       cache: None,
     }, document.declared_size()).map(|(ops, _)| ops))
@@ -508,7 +508,7 @@ fn text_ops(body: &str) -> Vec<SvgOp> {
       document
         .ops(
           SvgHost::Image {
-            current_color: BLACK,
+            current_color: Some(BLACK),
             fonts: Some(&geist()),
             cache: None,
           },
@@ -556,7 +556,7 @@ fn text_draws_nothing_without_a_font() {
       document
         .ops(
           SvgHost::Image {
-            current_color: BLACK,
+            current_color: Some(BLACK),
             fonts: None,
             cache: None,
           },
@@ -791,7 +791,7 @@ fn bitmap_glyphs_stop_at_the_image_byte_budget() {
       document
         .ops(
           SvgHost::Image {
-            current_color: BLACK,
+            current_color: Some(BLACK),
             fonts: Some(&fonts.snapshot()),
             cache: None,
           },
@@ -1038,7 +1038,7 @@ fn a_root_and_attributes_with_declared_prefixes_resolve() {
   let ops = document
     .ops(
       SvgHost::Image {
-        current_color: BLACK,
+        current_color: Some(BLACK),
         fonts: None,
         cache: None,
       },

@@ -21,15 +21,15 @@ use crate::{Frame, ImageKey, SvgDocument, render::DocumentDevice, svg_image::is_
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
-/// Emits an image node's content into the content box of the box `painter` paints at `frame`,
-/// clipped to the content box's curve or edge where it has to be.
+/// Emits an image node's content, drawn in `context`, into the content box of the box `painter`
+/// paints at `frame`, clipped to the content box's curve or edge where it has to be.
 pub(crate) fn emit_image(
   image: &ImageData,
+  context: &RenderContext,
   painter: &BoxPainter,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let context = painter.context();
   let content = Frame::content_box(frame);
 
   if content.w <= 0.0 || content.h <= 0.0 {
