@@ -1,3 +1,87 @@
+## takumi-core@0.37.0
+
+### A forced break after a box with an absolute box running on applies once
+
+When an absolutely positioned box ran on past the page from inside a box with `break-after: page`, the forced break applied again on the next page, so a float after the box landed a page later than in Chromium. It now applies once, where the box's content ends.
+
+### Long documents share more of their layout styles
+
+Boxes with equal layout styles now share one copy across a longer run of the document, so a table that repeats a row's styles keeps one copy of each. An 11,000-row PDF peaks at 939 MB of heap in place of 1,073 MB, with the same bytes.
+
+### Documents with attributes on most elements take less memory
+
+An element keeps its attributes as a list in place of a map, which took 368 bytes for even one attribute. An 11,000-row PDF whose elements each carry a `data-` attribute peaks at 994 MB of heap in place of 1,073 MB, with the same bytes.
+
+### A `<style media>` element's `@import` rules load
+
+`ParsedHtml::styles` lists each `<style>` element with its text and `media` apart, and `StyleElement::css` wraps the text in the `@media` rule that `ParsedHtml::css` holds. The `takumi` command now loads the `@import` rules of a `<style>` element with a `media` attribute and applies them under that media, as Chrome does. Before, it dropped them.
+
+### An inline element that is positioned or a stacking context paints as a layer of its own
+
+A `display: inline` element with `position`, `opacity`, `filter`, `mix-blend-mode`, `clip-path`, or `mask` now paints as a layer of its own, as Chrome paints it. Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. The layer's box is the union of the element's line boxes, which approximates Chrome, where each line's box stays apart. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing. A text node with a style of its own now opens an inline box as a span does. In the paint tree, such an element is a box with `effects`, and its line boxes and its own text node are its children. `NodePaint::inline_layer`, `InlineLayer`, and `OwnContent::InlineLayer` are new, and `InlineBrush` no longer has an `opacity` field.
+
+### A long table in a column flexbox renders with less time and memory
+
+A column flexbox that broke across pages laid each item out in full once more before laying it out page by page, and kept every layout inside the item until the flexbox ended. It now reuses the item's measure for that pass, as Chromium does, and frees what the item holds as its pages are drawn. An 11,000-row table in a column flexbox peaks at 1.35 GB in place of 1.46 GB, with the same PDF.
+
+### A floated flex or grid item no longer floats
+
+`float` does not apply to a flex or grid item, but an item with `float: left` or `right` was still treated as a float when breaking, so its `break-after` was dropped and the container's background stopped short on the next page. Such an item now lays out as any other item, as in Chromium.
+
+### `FromHtmlOptions` can parse a fragment as a whole document
+
+`FromHtmlOptions::builder().document(true)` parses the source as a browser opens an HTML file, with `html` and `body` elements, even when it starts with neither a doctype nor `<html>`. Rules such as `body { font-family: … }` then match. Without it, such a source still parses as a fragment.
+
+### `display: contents` renders an element's children in its place
+
+An element with `display: contents` generates no box, so its children and its `::before` and `::after` lay out as children of its parent, and still inherit from it. A flex or grid container takes those children as its items. Replaced elements and form controls render nothing with it, and the root element computes to `block`, as in browsers. The Tailwind `contents` class sets it.
+
+Before, the value was not recognized and the declaration was dropped.
+
+### A flex row whose item margin runs past the page moves to the next page whole
+
+A flex row whose item margin ran past the end of the page stayed on that page and spilled onto the next, because breaking measured only how far the items reached. Breaking now measures the box's own block size too, as Chromium does, so the row moves to the next page whole when it fits there.
+
+### A forced break inside a flex or grid item reaches past the container
+
+A `break-after: page` on the last child of a flex or grid item, or on the last row of a table inside one, was dropped, so the content after the container stayed on the same page. It now propagates out through the item and the table, as Chromium does, and the content after the container starts a new page.
+
+### A negative `calc()` padding clamps to zero
+
+A `padding` written as a `calc()` that comes out negative, such as `calc(0px - 4px)`, was applied as a negative padding. It is now clamped to zero, as browsers do.
+
+### An inline element's background and border are a box in the paint tree
+
+An element with `display: inline` and a `background` or `border` now has a box node in the paint tree, one for each line it sits on, with the element and its `InlineBackground` and `Border` drawables. Before, those drawables were part of the enclosing text node and no box named the element, where a `display: inline-block` one had a box.
+
+### `parse_html` reports the style sheets a document links
+
+`ParsedHtml` now lists each `<link rel="stylesheet">` in `links` and the first `<base href>` in `base_href`, so a host can fetch linked CSS and resolve it as a browser does. `ParsedHtml::css_with_links` takes a fetch function and returns the CSS of every `<style>` element and fetched link in document order, wrapping a link's `media` in an `@media` rule. Titled and alternate style sheets follow the preferred style sheet set, as in Chrome, so only the first set's `<style>` elements stay in `css`.
+
+### An `<img>` without a source stays whole across pages
+
+`from_html` turned an `<img>` with no `src` into an empty box, so a tall one split across two pages. It is now a replaced element with no pixels, as HTML renders an image that represents nothing, so it moves to the next page whole when it does not fit, as in Chromium. It lays out at the same size as before.
+
+### The paint tree lists the elements painting skips
+
+`PaintDocument::unpainted` names each element that `opacity: 0` hides along with everything inside it. Those elements have no node, so the list is where a reader finds why one is absent.
+
+### Long documents with a positioned box in a box broken across every page render in linear time
+
+When an absolutely positioned box sat in a box broken across every page, and the box's containing block placed it on the last page, every page painted from the layout of the whole document. Rendering time grew with the square of the page count: a 2,000-row table took 49 seconds. Each page now paints from its own page and its neighbors, and the same table renders in 3 seconds, with the same PDF.
+
+### `paint-order: stroke` draws `-webkit-text-stroke` under the text
+
+On HTML text, `paint-order: stroke` or `stroke fill` now draws the stroke first and the fill on top, as Chrome does, so a thick outline no longer eats into the letters. The fill and the stroke each paint over a whole run, as in Chrome, so with `normal` a letter's fill no longer covers the previous letter's stroke where they overlap. Images, SVG output, PDFs, and the paint tree all follow it. `PaintOrder::text_phases` returns the order, and `InlineBrush` carries the run's `paint_order`.
+
+### `takumi image` warns of the characters no font draws
+
+`takumi image` now prints a warning that names each character no loaded font draws, where it drew an empty box without a word. `uncovered_characters` in `takumi` returns the same list for a node. The command line also lists a file that is not there as `missing` in `--list-resources`, refuses a `--margin` or `--page` number without a unit, and points to `--font`, `--root`, or `takumi pdf` in the errors those fix.
+
+### A `break-inside: avoid` box stays on its page when only an absolute box inside it runs past
+
+When an absolutely positioned box inside a `break-inside: avoid` box started past the end of the page, the whole box moved to the next page, even though it fit. It now stays where it fits, and only the absolute box continues on the next page, as Chromium prints it.
+
 ## takumi-core@0.36.0
 
 ### `@font-face` applies `size-adjust`, metric overrides, `font-feature-settings`, and `local()`
