@@ -57,8 +57,8 @@ pub struct CacheOptions {
   #[builder(default = CacheOptions::DEFAULT_IMAGES)]
   images: u64,
   /// SVG images laid out to drawing ops, which vector backends draw and rasters are drawn from.
+  #[cfg(feature = "svg")]
   #[builder(default = CacheOptions::DEFAULT_PICTURES)]
-  #[cfg_attr(not(feature = "svg"), allow(dead_code))]
   pictures: u64,
   /// Parsed stylesheets.
   #[builder(default = CacheOptions::DEFAULT_STYLESHEETS)]
@@ -82,6 +82,7 @@ impl CacheOptions {
   /// The default budget for images.
   pub const DEFAULT_IMAGES: u64 = 64 << 20;
   /// The default budget for pictures.
+  #[cfg(feature = "svg")]
   pub const DEFAULT_PICTURES: u64 = 16 << 20;
   /// The default budget for stylesheets.
   pub const DEFAULT_STYLESHEETS: u64 = 4 << 20;
@@ -196,13 +197,14 @@ impl Cache {
   }
 
   /// The old `ResourceCache::new`. Approximate: gives images and stylesheets a budget of
-  /// `max_bytes` each, where the old cache shared one between them.
-  #[deprecated(note = "use `Cache::builder().images(max_bytes).build()`")]
+  /// `max_bytes` each, and caps pictures at it, where the old cache shared one budget among them.
+  #[deprecated(note = "use `Cache::builder()`")]
   pub fn new(max_bytes: u64) -> Self {
-    Self::builder()
-      .images(max_bytes)
-      .stylesheets(max_bytes)
-      .build()
+    let builder = Self::builder().images(max_bytes).stylesheets(max_bytes);
+    #[cfg(feature = "svg")]
+    let builder = builder.pictures(max_bytes.min(CacheOptions::DEFAULT_PICTURES));
+
+    builder.build()
   }
 
   /// The old name of [`Self::decode_image`].
