@@ -14,7 +14,7 @@ use skrifa::FontRef;
 use smallvec::SmallVec;
 
 use super::{
-  background::{FragmentBackground, InlineBackgroundFragment},
+  background::BackgroundItem,
   decorations::DecorationPlacement,
   items::{DecorationLink, InlineSpans, ProcessedInlineSpan},
   metrics::VisualInlineBox,
@@ -27,9 +27,10 @@ use super::{
 };
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{border::BorderProperties, tree::RenderNode},
+  geometry::{ComputedLayout, Point, Size},
+  layout::tree::RenderNode,
   resources::{font::FontError, glyph::ResolvedGlyphs},
+  sort_key::sort_by_key,
 };
 
 /// The laid-out content of an inline formatting context.
@@ -75,66 +76,6 @@ pub(crate) struct InlineLayerRect {
   pub(crate) span: usize,
   pub(crate) origin: Point<f32>,
   pub(crate) size: Size<f32>,
-}
-
-/// An [`InlineBackgroundFragment`] naming its span by decoration id instead of holding its node.
-struct BackgroundItem {
-  x: f32,
-  y: f32,
-  width: f32,
-  height: f32,
-  border: BorderProperties,
-  padding: Rect<f32>,
-  baseline: f32,
-  /// The strip's origin, the strip, and the fragment of the span's background.
-  background: Option<(Point<f32>, ComputedLayout, ComputedLayout)>,
-  span: usize,
-}
-
-impl BackgroundItem {
-  fn of(fragment: InlineBackgroundFragment<'_>) -> Self {
-    Self {
-      x: fragment.x,
-      y: fragment.y,
-      width: fragment.width,
-      height: fragment.height,
-      border: fragment.border,
-      padding: fragment.padding,
-      baseline: fragment.baseline,
-      background: fragment.background.map(|background| {
-        (
-          background.strip_origin,
-          background.strip,
-          background.fragment,
-        )
-      }),
-      span: fragment.link.decoration.id,
-    }
-  }
-
-  /// The fragment, its span opening `link`.
-  fn resolve<'c>(&self, link: &Rc<DecorationLink<'c>>) -> InlineBackgroundFragment<'c> {
-    let owner = link.decoration.owner;
-
-    InlineBackgroundFragment {
-      x: self.x,
-      y: self.y,
-      width: self.width,
-      height: self.height,
-      border: self.border,
-      padding: self.padding,
-      baseline: self.baseline,
-      background: self
-        .background
-        .map(|(strip_origin, strip, fragment)| FragmentBackground {
-          node: owner,
-          strip_origin,
-          strip,
-          fragment,
-        }),
-      link: Rc::clone(link),
-    }
-  }
 }
 
 /// What an inline formatting context's ink covers.
@@ -505,6 +446,15 @@ impl FragmentItems {
     &self.inline_boxes
   }
 
+  /// The baseline of each line its runs sit on, top first, below the content box's top.
+  pub(crate) fn run_baselines(&self) -> Vec<f32> {
+    let mut baselines: Vec<f32> = self.text_items.iter().map(|item| item.baseline).collect();
+
+    sort_by_key(&mut baselines, |&baseline| baseline);
+    baselines.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+    baselines
+  }
+
   /// The spans on these lines painting as layers of their own, in the order they open.
   pub(crate) fn inline_layers(&self) -> &[InlineLayerRect] {
     &self.layers
@@ -580,17 +530,30 @@ impl FragmentItems {
   }
 
   /// The runs resolved for painting at `layout` in `context`, among `spans`: their glyphs'
-  /// outlines, the paint offset of the box they paint in, and the nodes of their spans.
+  /// outlines, the paint offset of the box they paint in, and the nodes of their spans. With
+  /// `layer`, only the runs, fragments, and outlines the inline layer of that span paints, and no
+  /// inline box.
   pub(crate) fn resolve_runs<'c>(
     &self,
     spans: &InlineSpans<'c>,
     context: &RenderContext,
     layout: ComputedLayout,
+    layer: Option<usize>,
   ) -> Result<InlineRunLayout<'c>, FontError> {
     let paint_offset = context.box_paint_offset(layout);
+    let in_layer = |link: Option<&DecorationLink>| {
+      layer.is_none_or(|layer| link.and_then(DecorationLink::layer) == Some(layer))
+    };
     let mut runs = Vec::with_capacity(self.text_items.len());
 
-    for item in &self.text_items {
+    for (index, item) in self.text_items.iter().enumerate() {
+      let span = self.faces[item.face as usize].brush.source_span_id;
+      let chain = span.and_then(|span| spans.spans.get(span as usize)?.chain());
+
+      if !in_layer(chain) {
+        continue;
+      }
+
       let (glyphs, cluster_ranges) = self.glyphs.get(&item.glyphs);
       let glyph_run = ShapedRun {
         glyphs,
@@ -613,8 +576,10 @@ impl FragmentItems {
         relative_offset: item.placement.relative_offset,
         line_box: item.placement.line_box,
         #[cfg(feature = "paint-tree")]
-        index: runs.len(),
+        index,
       });
+      #[cfg(not(feature = "paint-tree"))]
+      let _ = index;
     }
 
     let background_fragments = if self.backgrounds.is_empty() {
@@ -625,14 +590,23 @@ impl FragmentItems {
       self
         .backgrounds
         .iter()
-        .filter_map(|item| Some(item.resolve(links.get(&item.span)?)))
+        .filter_map(|item| Some(item.resolve(Rc::clone(links.get(&item.span)?))))
+        .filter(|fragment| in_layer(Some(&fragment.link)))
         .collect()
     };
 
     Ok(InlineRunLayout {
       runs,
-      inline_boxes: self.inline_boxes.clone(),
-      outline_rects: self.outline_rects.clone(),
+      inline_boxes: match layer {
+        Some(_) => Vec::new(),
+        None => self.inline_boxes.clone(),
+      },
+      outline_rects: self
+        .outline_rects
+        .iter()
+        .copied()
+        .filter(|rect| layer.is_none_or(|layer| rect.layer == Some(layer)))
+        .collect(),
       background_fragments,
     })
   }

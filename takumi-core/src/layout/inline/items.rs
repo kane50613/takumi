@@ -203,19 +203,11 @@ pub enum ProcessedInlineSpan<'c> {
 }
 
 impl<'c> ProcessedInlineSpan<'c> {
-  /// The spans around a text span, innermost first.
-  pub(crate) fn text_chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
-    match self {
-      Self::Text { decorations, .. } => decorations.as_ref(),
-      _ => None,
-    }
-  }
-
   /// The spans around this one, innermost first.
-  pub(crate) fn chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
+  pub(crate) fn chain(&self) -> Option<&DecorationLink<'c>> {
     match self {
-      Self::Text { decorations, .. } => decorations.as_ref(),
-      Self::Box(item) => item.decorations.as_ref(),
+      Self::Text { decorations, .. } => decorations.as_deref(),
+      Self::Box(item) => item.decorations.as_deref(),
     }
   }
 }
@@ -522,17 +514,20 @@ impl<'c> InlineSpans<'c> {
   }
 
   /// The decoration the inline box `node` opens.
-  pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&Rc<DecorationLink<'c>>> {
-    self.node_decorations.get(&node.context.box_id())
+  pub(crate) fn decoration_of(&self, node: &RenderNode) -> Option<&DecorationLink<'c>> {
+    self
+      .node_decorations
+      .get(&node.context.box_id())
+      .map(Rc::as_ref)
   }
 
   /// The decoration of every inline box the spans open, by decoration id, including a box with
   /// no content that no span lies inside.
-  pub(crate) fn links(&self) -> FxHashMap<usize, &Rc<DecorationLink<'c>>> {
+  pub(crate) fn links(&self) -> FxHashMap<usize, Rc<DecorationLink<'c>>> {
     self
       .node_decorations
       .values()
-      .map(|link| (link.decoration.id, link))
+      .map(|link| (link.decoration.id, Rc::clone(link)))
       .collect()
   }
 

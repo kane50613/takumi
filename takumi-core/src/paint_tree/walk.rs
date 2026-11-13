@@ -31,7 +31,6 @@ use crate::{
   },
   resources::image::{ImageSource as LoadedImage, sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
-  sort_key::sort_by_key,
   style::{Affine, BackgroundImage, Display, Filter, Isolation, TextAlign, ToCss},
 };
 use rustc_hash::FxHashMap;
@@ -134,7 +133,8 @@ impl Walker {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
-    // An inline layer's fragments paint its backgrounds, borders, and outline as its content.
+    // An inline layer's fragments paint its backgrounds, borders, and outline as its content, and
+    // its `display: inline` box has no overflow to clip.
     let drawables = if node.paints_own_box() && !inline_layer {
       decorations(&painter, layout, transform, text_clip, table)?
     } else {
@@ -154,8 +154,9 @@ impl Walker {
       .style
       .needs_offscreen_compositing()
       .then(|| Box::new(effects(&painter, layout)));
-    let overflow_clip =
-      OverflowClip::of(context, layout, context.box_paint_offset(layout)).map(|clip| {
+    let overflow_clip = OverflowClip::of(context, layout, context.box_paint_offset(layout))
+      .filter(|_| !inline_layer)
+      .map(|clip| {
         let (shape, origin) = clip.shape();
 
         Shape::of(&shape, Affine::translation(origin.x, origin.y))
@@ -416,16 +417,7 @@ impl Walker {
   ) {
     let lines = painted.lines(|_| true);
     let (transform, frame) = painted.block_placement(placed.transform);
-    let mut baselines: Vec<f32> = painted
-      .runs
-      .runs
-      .iter()
-      .map(|run| run.glyph_run.baseline)
-      .collect();
-
-    sort_by_key(&mut baselines, |&baseline| baseline);
-    baselines.dedup_by(|a, b| (*a - *b).abs() < 0.01);
-
+    let baselines = painted.line_baselines();
     let inline = InlineText {
       block,
       block_path,
@@ -1276,7 +1268,12 @@ fn enclosing_fragment(
   fragment: &InlineBackgroundFragment<'_>,
   fragments: &[(&InlineBackgroundFragment<'_>, usize)],
 ) -> Option<usize> {
-  for link in fragment.link.ancestors() {
+  // A span broken by bidi has several fragments on one line, none inside another.
+  if fragment.link.decoration.layer {
+    return None;
+  }
+
+  for link in fragment.link.parent.as_deref()?.ancestors() {
     let enclosing = fragments.iter().rev().find(|(outer, _)| {
       outer.link.decoration.id == link.decoration.id
         && (outer.y..=outer.y + outer.height).contains(&fragment.baseline)

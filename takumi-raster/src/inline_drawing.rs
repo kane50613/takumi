@@ -58,6 +58,10 @@ pub(crate) fn draw_own_content(
 
   draw_inline_layout(context, canvas, &painted, &font_style)?;
 
+  if !matches!(content, OwnContent::Inline(_)) {
+    return Ok(());
+  }
+
   for positioned in painted
     .runs
     .inline_boxes

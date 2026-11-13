@@ -580,7 +580,7 @@ fn build_layers(
       state,
       &visit.path,
       &current.context,
-      fragment,
+      (fragment, layer.is_none()),
       current_transform,
       child_base.paint_offset,
     );

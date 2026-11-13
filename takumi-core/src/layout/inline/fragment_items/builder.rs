@@ -5,9 +5,7 @@ use std::{ops::Range, rc::Rc};
 
 use rustc_hash::FxHashMap;
 
-use super::{
-  BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, InlineLayerRect, RunPlacement,
-};
+use super::{ContentBox, FragmentItems, GlyphStore, Ink, InkBox, InlineLayerRect, RunPlacement};
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
@@ -298,13 +296,13 @@ impl FragmentItems {
       );
     }
 
-    items.backgrounds = backgrounds.into_iter().map(BackgroundItem::of).collect();
+    items.backgrounds = backgrounds;
     items.outline_rects = outline_rects;
     items.span_ink_reach = spans
       .spans
       .iter()
       .filter_map(ProcessedInlineSpan::chain)
-      .flat_map(|chain| chain.ancestors())
+      .flat_map(DecorationLink::ancestors)
       .map(|link| link.decoration.reach())
       .chain(spans.spans.iter().filter_map(|span| match span {
         ProcessedInlineSpan::Text { style, .. } => Some(text_ink_reach(style)),
@@ -782,7 +780,7 @@ impl FragmentItems {
 
 impl InlineLayerRect {
   /// The layers among the spans of `fragments`, which come grouped by span.
-  fn of(fragments: &[(Rc<DecorationLink<'_>>, SpanFragment)]) -> Vec<Self> {
+  fn of(fragments: &[(&DecorationLink<'_>, SpanFragment)]) -> Vec<Self> {
     fragments
       .chunk_by(|(_, a), (_, b)| a.id == b.id)
       .filter(|span| span[0].0.decoration.layer)
@@ -811,11 +809,11 @@ impl InlineLayerRect {
 
 /// Each span's line fragments, in the border box whose content box sits at `content`, grouped by
 /// span in line order.
-pub(in crate::layout::inline) fn line_span_fragments<'c>(
+pub(in crate::layout::inline) fn line_span_fragments<'s, 'c>(
   lines: &[LineBoxFragment<'_, 'c>],
-  spans: &InlineSpans<'c>,
+  spans: &'s InlineSpans<'c>,
   content: Point<f32>,
-) -> Vec<(Rc<DecorationLink<'c>>, SpanFragment)> {
+) -> Vec<(&'s DecorationLink<'c>, SpanFragment)> {
   let mut fragments = Vec::new();
 
   for (line_index, line) in lines.iter().enumerate() {
@@ -844,7 +842,7 @@ pub(in crate::layout::inline) fn line_span_fragments<'c>(
       };
 
       fragments.push((
-        Rc::clone(decoration),
+        decoration,
         SpanFragment {
           id: decoration.decoration.id,
           line_index,

@@ -53,6 +53,11 @@ impl PaintedInline<'_> {
     )
   }
 
+  /// The baseline of each line of the block, top first, which numbers its lines.
+  pub fn line_baselines(&self) -> Vec<f32> {
+    self.items.run_baselines()
+  }
+
   /// The lines whose items `keep` accepts, holding what the box paints.
   pub fn lines(&self, keep: impl Fn(LineItem) -> bool) -> InlineLines<'_> {
     self
@@ -188,7 +193,7 @@ impl<'n> OwnContent<'n> {
 
     Some(
       items
-        .resolve_runs(&spans, &node.context, block_layout)
+        .resolve_runs(&spans, &node.context, block_layout, layer)
         .map(|runs| PaintedInline {
           spans: spans.spans,
           runs,

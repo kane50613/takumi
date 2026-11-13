@@ -2,8 +2,6 @@
 //! [css-text-decor-3](https://drafts.csswg.org/css-text-decor-3/#painting-order) gives: shadows,
 //! underlines and overlines, text, then line-through.
 
-use std::rc::Rc;
-
 use super::{
   BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole, SnappedBox, StrokeStyle,
   background::{BackgroundClipArea, BoxBackground},
@@ -533,8 +531,7 @@ impl PositionedInlineRun {
   ) -> Option<&'s DecorationLink<'c>> {
     spans
       .get(self.glyph_run.brush.source_span_id? as usize)?
-      .text_chain()
-      .map(Rc::as_ref)
+      .chain()
   }
 }
 

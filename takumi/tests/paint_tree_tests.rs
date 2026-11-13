@@ -794,3 +794,33 @@ fn an_inline_block_inside_a_translucent_span_paints_in_its_group() {
   assert!(position(&PaintStep::BeginGroup { node: group.id }) < drawn);
   assert!(drawn < position(&PaintStep::EndGroup { node: group.id }));
 }
+
+#[test]
+fn a_positioned_span_clips_none_of_its_overflow() {
+  let document = build_with(
+    Node::container([
+      Node::text("a "),
+      Node::container([Node::text("b")]).with_class_name("moved"),
+    ])
+    .with_tag_name("p"),
+    "p { font-size: 16px; margin: 0 } \
+     .moved { position: relative; top: 4px; overflow: hidden }",
+  );
+  let layer = document
+    .nodes
+    .iter()
+    .find(|node| has_class(node, "moved"))
+    .expect("the positioned span's layer");
+
+  assert!(matches!(
+    layer.kind,
+    NodeKind::Box {
+      overflow_clip: None,
+      ..
+    }
+  ));
+  assert!(!document.steps.iter().any(|step| matches!(
+    step,
+    PaintStep::BeginClip { node } if *node == layer.id
+  )));
+}
