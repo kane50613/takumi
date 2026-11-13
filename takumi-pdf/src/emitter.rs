@@ -137,6 +137,9 @@ enum PictureDraws {
   Once,
   /// Drawn more than once, each time by invoking this form XObject.
   Shared(Graphic),
+  /// Drawn in place each time, as a soft mask in it would wrap its form in a transparency group,
+  /// which blends its marks with each other before the blend mode it is drawn under.
+  InPlace,
 }
 
 impl<'a> DocumentState<'a> {
@@ -1037,19 +1040,27 @@ impl Emitter<'_> {
         }
         Entry::Occupied(mut entry) => {
           let graphic = match entry.get() {
-            PictureDraws::Shared(graphic) => graphic.clone(),
+            PictureDraws::Shared(graphic) => Some(graphic.clone()),
+            PictureDraws::InPlace => None,
             PictureDraws::Once => {
               let stream = draw_stream(surface, |content| {
                 self.paint_picture(&picture, viewport, content);
               });
-              let graphic = Graphic::new(stream, false);
+              let graphic = (!stream.uses_mask).then(|| Graphic::new(stream, false));
 
-              entry.insert(PictureDraws::Shared(graphic.clone()));
+              entry.insert(
+                graphic
+                  .clone()
+                  .map_or(PictureDraws::InPlace, PictureDraws::Shared),
+              );
               graphic
             }
           };
 
-          surface.draw_graphic(graphic);
+          match graphic {
+            Some(graphic) => surface.draw_graphic(graphic),
+            None => self.paint_picture(&picture, viewport, surface),
+          }
         }
       },
       None => self.paint_picture(&picture, viewport, surface),

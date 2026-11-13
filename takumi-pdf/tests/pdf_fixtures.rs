@@ -7497,6 +7497,27 @@ fn a_repeated_svg_image_draws_once_more() {
   );
 }
 
+/// An SVG image whose drawing uses a soft mask draws in place at every repeat, as a form would
+/// wrap it in a transparency group that changes how it blends under a blend mode.
+#[cfg(all(feature = "svg", feature = "images"))]
+#[test]
+fn a_repeated_svg_image_with_a_soft_mask_draws_in_place() {
+  let svg = data_url(
+    "image/svg+xml",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><linearGradient id="g"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue" stop-opacity="0"/></linearGradient><rect width="24" height="24" fill="url(#g)"/></svg>"#,
+  );
+  let html = format!(r#"<img src="{svg}"><img src="{svg}"><img src="{svg}">"#);
+  let fonts = fonts();
+  let pdf = render_pinned(a4_options(&html, &fonts));
+
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b" Do"))
+      .count(),
+    0
+  );
+}
+
 /// An SVG image whose root `color` takes the host's draws in each host's color, however its
 /// draws repeat.
 #[cfg(all(feature = "svg", feature = "images"))]
