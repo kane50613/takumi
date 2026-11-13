@@ -49,6 +49,11 @@ impl RendererOptions {
   pub fn cache(&self) -> Cache {
     Cache::builder()
       .images(self.cache_bytes().unwrap_or(CacheOptions::DEFAULT_IMAGES))
+      .stylesheets(
+        self
+          .cache_bytes()
+          .unwrap_or(CacheOptions::DEFAULT_STYLESHEETS),
+      )
       .build()
   }
 }
