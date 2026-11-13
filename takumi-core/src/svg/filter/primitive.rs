@@ -19,6 +19,55 @@ impl SvgFilter {
   pub(crate) fn region(&self) -> Rect<f32> {
     self.region
   }
+
+  /// The bytes the filter retains, for cache budgeting. Approximate: counts its primitives, their
+  /// names and kernels, transfer tables, and image ops, not allocator slack.
+  pub(crate) fn estimated_bytes(&self) -> usize {
+    size_of::<Self>()
+      + self
+        .primitives
+        .iter()
+        .map(Primitive::estimated_bytes)
+        .sum::<usize>()
+  }
+}
+
+impl Primitive {
+  fn estimated_bytes(&self) -> usize {
+    size_of::<Self>() + self.result.len() + self.kind.estimated_bytes()
+  }
+}
+
+impl Kind {
+  /// The bytes the primitive's kind owns outside itself.
+  fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Blend { input1, input2, .. } | Self::Composite { input1, input2, .. } => {
+        input1.estimated_bytes() + input2.estimated_bytes()
+      }
+      Self::ColorMatrix { input, .. }
+      | Self::GaussianBlur { input, .. }
+      | Self::Morphology { input, .. }
+      | Self::Offset { input, .. }
+      | Self::Tile { input } => input.estimated_bytes(),
+      Self::ComponentTransfer { input, tables } => {
+        input.estimated_bytes() + size_of_val(tables.as_ref())
+      }
+      Self::ConvolveMatrix(convolve) => {
+        convolve.input.estimated_bytes() + size_of_val(convolve.kernel.data.as_slice())
+      }
+      Self::DisplacementMap(map) => map.input1.estimated_bytes() + map.input2.estimated_bytes(),
+      Self::DropShadow(shadow) => shadow.input.estimated_bytes(),
+      Self::DiffuseLighting(lighting) => lighting.input.estimated_bytes(),
+      Self::SpecularLighting(lighting) => lighting.input.estimated_bytes(),
+      Self::Image(ops) => SvgOp::estimated_bytes(ops),
+      Self::Merge { inputs } => inputs
+        .iter()
+        .map(|input| size_of::<Input>() + input.estimated_bytes())
+        .sum(),
+      _ => 0,
+    }
+  }
 }
 
 #[derive(Debug)]
@@ -103,6 +152,14 @@ pub(in crate::svg) enum Input {
 }
 
 impl Input {
+  /// The bytes of the result name it reads.
+  fn estimated_bytes(&self) -> usize {
+    match self {
+      Self::Reference(name) => name.len(),
+      _ => 0,
+    }
+  }
+
   /// Whether the input is the result named `name`.
   pub(super) fn names(&self, name: &str) -> bool {
     matches!(self, Self::Reference(reference) if reference == name)

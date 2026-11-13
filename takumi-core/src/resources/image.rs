@@ -2012,6 +2012,40 @@ mod tests {
     Ok(())
   }
 
+  // A filter's kernel counts against the picture budget, as its picture keeps it.
+  #[cfg(feature = "svg-raster")]
+  #[test]
+  fn a_picture_weighs_the_filters_it_keeps() -> Result<(), ImageError> {
+    let bytes = |filter: &str| -> Result<usize, ImageError> {
+      let source: SvgSource = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">{filter}<rect width="4" height="4" filter="url(#f)"/></svg>"#
+      )
+      .parse()?;
+
+      Ok(
+        source
+          .picture(
+            &RenderContext::with_current_color(Color([0, 0, 0, 255])),
+            Size {
+              width: 4.0,
+              height: 4.0,
+            },
+          )
+          .estimated_bytes(),
+      )
+    };
+    let small = bytes(r#"<filter id="f"><feConvolveMatrix order="1" kernelMatrix="1"/></filter>"#)?;
+    let large = bytes(
+      r#"<filter id="f"><feConvolveMatrix order="9" kernelMatrix="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"/></filter>"#,
+    )?;
+
+    assert!(
+      large >= small + 80 * size_of::<f32>(),
+      "{small} then {large}"
+    );
+    Ok(())
+  }
+
   // Two hosts of different colors drawing one source through one cache each get their own color.
   #[cfg(feature = "svg")]
   #[test]
