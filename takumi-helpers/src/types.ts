@@ -169,7 +169,7 @@ export interface CacheOptions {
 export interface RendererOptions {
   /** The byte budget of each kind of data the renderer keeps across renders. */
   cache?: CacheOptions;
-  /** @deprecated Use `cache.images`. */
+  /** @deprecated Use `cache`. Sets the `images` and `stylesheets` budgets, and caps `pictures`. */
   cacheMaxBytes?: number;
   /** @deprecated Use `cache.fonts`. */
   fontCacheMaxBytes?: number;
