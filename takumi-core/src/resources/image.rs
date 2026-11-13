@@ -134,6 +134,36 @@ impl SvgPicture {
     self.key
   }
 
+  /// The pixels of `raster`.
+  #[cfg(feature = "svg-raster")]
+  fn rasterize(&self, raster: SvgRaster) -> Result<Arc<ImageBuffer>, ImageError> {
+    let SvgRaster {
+      origin,
+      size,
+      width,
+      height,
+      ..
+    } = raster;
+
+    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
+      return Err(ImageError::InvalidPixmapSize);
+    }
+
+    let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
+    let sx = width as f32 / size.width;
+    let sy = height as f32 / size.height;
+
+    svg_drawing::draw(
+      &self.ops,
+      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
+      &mut pixmap.as_mut(),
+    );
+
+    ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
+      .map(Arc::new)
+      .ok_or(ImageError::InvalidPixmapSize)
+  }
+
   /// The bytes the picture retains, for cache budgeting.
   pub(crate) fn estimated_bytes(&self) -> usize {
     SvgOp::estimated_bytes(&self.ops)
@@ -158,6 +188,12 @@ impl SvgPicture {
 
     hasher.digest()
   }
+}
+
+/// The bits of `viewport`'s width and height, which key what a layout at it read.
+#[cfg(feature = "svg")]
+fn viewport_bits(viewport: Size<f32>) -> (u32, u32) {
+  (viewport.width.to_bits(), viewport.height.to_bits())
 }
 
 #[cfg(feature = "svg-sizing")]
@@ -269,28 +305,31 @@ impl SvgSource {
         key: None,
       });
     };
-    let at = (viewport.width.to_bits(), viewport.height.to_bits());
-    let known = self
-      .reads
-      .lock()
-      .ok()
-      .and_then(|reads| reads.get(&at).copied());
-    let key = |reads| SvgPicture::key_of(source, viewport, reads, host);
-
-    if let Some(picture) = known.and_then(|reads| host.cache().picture(key(reads))) {
+    if let Some(picture) = self
+      .known_key(host, viewport)
+      .and_then(|key| host.cache().picture(key))
+    {
       return picture;
     }
 
     let (ops, reads) = lay_out();
 
     if let Ok(mut known) = self.reads.lock() {
-      known.insert(at, reads);
+      known.insert(viewport_bits(viewport), reads);
     }
 
     host.cache().keep_picture(SvgPicture {
       ops,
-      key: Some(key(reads)),
+      key: Some(SvgPicture::key_of(source, viewport, reads, host)),
     })
+  }
+
+  /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
+  fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
+    let source = self.key.filter(|_| !self.inline)?;
+    let reads = *self.reads.lock().ok()?.get(&viewport_bits(viewport))?;
+
+    Some(SvgPicture::key_of(source, viewport, reads, host))
   }
 
   /// The box the document draws in when the box `host` styles shows it.
@@ -342,39 +381,6 @@ impl SvgSource {
     }
   }
 
-  #[cfg(feature = "svg-raster")]
-  fn rasterize(
-    &self,
-    raster: SvgRaster,
-    host: &RenderContext,
-  ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let SvgRaster {
-      viewport,
-      origin,
-      size,
-      width,
-      height,
-    } = raster;
-
-    if !within_raster_pixel_budget(width, height) || size.width <= 0.0 || size.height <= 0.0 {
-      return Err(ImageError::InvalidPixmapSize);
-    }
-
-    let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
-    let sx = width as f32 / size.width;
-    let sy = height as f32 / size.height;
-
-    svg_drawing::draw(
-      self.picture(host, viewport).ops(),
-      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
-      &mut pixmap.as_mut(),
-    );
-
-    ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
-      .map(Arc::new)
-      .ok_or(ImageError::InvalidPixmapSize)
-  }
-
   /// The pixels of `raster`, from the cache when an image drew them before.
   #[cfg(feature = "svg-raster")]
   pub fn rasterize_cached(
@@ -383,12 +389,21 @@ impl SvgSource {
     image_rendering: ImageScalingAlgorithm,
     host: &RenderContext,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let picture = self.picture(host, raster.viewport);
     let sized = SizedKey::new(raster.hash(), raster.width, raster.height, image_rendering);
+    let picture = || self.picture(host, raster.viewport);
+
+    // A known key finds a kept raster without laying the document out again.
+    if let Some(key) = self.known_key(host, raster.viewport) {
+      return host
+        .cache()
+        .sized(Some(key), sized, || picture().rasterize(raster));
+    }
+
+    let picture = picture();
 
     host
       .cache()
-      .sized(picture.key(), sized, || self.rasterize(raster, host))
+      .sized(picture.key(), sized, || picture.rasterize(raster))
   }
 }
 
@@ -2323,18 +2338,14 @@ mod tests {
       path.display()
     );
     let source = svg.parse::<SvgSource>().unwrap();
+    let host = RenderContext::with_current_color(Color::black());
+    let viewport = Size {
+      width: 8.0,
+      height: 8.0,
+    };
     let rasterized = source
-      .rasterize(
-        SvgRaster::whole(
-          Size {
-            width: 8.0,
-            height: 8.0,
-          },
-          8,
-          8,
-        ),
-        &RenderContext::with_current_color(Color::black()),
-      )
+      .picture(&host, viewport)
+      .rasterize(SvgRaster::whole(viewport, 8, 8))
       .unwrap();
 
     std::fs::remove_file(&path).ok();
