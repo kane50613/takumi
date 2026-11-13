@@ -57,8 +57,8 @@ pub struct CacheOptions {
   #[builder(default = CacheOptions::DEFAULT_IMAGES)]
   images: u64,
   /// SVG images laid out to drawing ops, which vector backends draw and rasters are drawn from.
+  #[cfg(feature = "svg")]
   #[builder(default = CacheOptions::DEFAULT_PICTURES)]
-  #[cfg_attr(not(feature = "svg"), allow(dead_code))]
   pictures: u64,
   /// Parsed stylesheets.
   #[builder(default = CacheOptions::DEFAULT_STYLESHEETS)]
@@ -82,6 +82,7 @@ impl CacheOptions {
   /// The default budget for images.
   pub const DEFAULT_IMAGES: u64 = 64 << 20;
   /// The default budget for pictures.
+  #[cfg(feature = "svg")]
   pub const DEFAULT_PICTURES: u64 = 16 << 20;
   /// The default budget for stylesheets.
   pub const DEFAULT_STYLESHEETS: u64 = 4 << 20;
