@@ -2111,6 +2111,7 @@ fn svg_filters_masks_and_patterns() {
   );
 }
 
+#[cfg(all(feature = "svg", feature = "images"))]
 fn svg_image_node(svg: &str, width: f32, height: f32) -> Node {
   Node::image(ImageData {
     src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
@@ -2123,6 +2124,7 @@ fn data_url(mime: &str, bytes: &[u8]) -> String {
   format!("data:{mime};base64,{}", BASE64_STANDARD.encode(bytes))
 }
 
+#[cfg(all(feature = "svg", feature = "images"))]
 fn read_asset(name: &str) -> Vec<u8> {
   fs::read(
     Path::new(env!("CARGO_MANIFEST_DIR"))
