@@ -13,10 +13,10 @@
     "react-dom": "~19.3.0",
     "react-server-dom-webpack": "~19.3.0",
     "takumi-js": "workspace:*",
-    "waku": "1.0.0-rc.3"
+    "waku": "1.0.0-rc.4"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.3.3",
+    "@tailwindcss/vite": "4.3.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "tailwindcss": "^4.3.3",
