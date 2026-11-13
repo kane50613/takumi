@@ -941,6 +941,12 @@ fn within_cell(
 
 #[cfg(test)]
 mod tests {
+  use takumi_core::{
+    layout::node::{ImageData, ImageSourceInput},
+    resources::image::to_data_url,
+    style::{Color, ColorInput, Style, StyleDeclaration},
+  };
+
   use super::*;
 
   #[test]
@@ -958,5 +964,32 @@ mod tests {
     assert!(svg.contains("width=\"120\""));
     assert!(svg.contains("height=\"80\""));
     assert!(!svg.contains("base64"));
+  }
+
+  /// An SVG embedded as markup, here because a filter keeps its ops from SVG elements, takes the
+  /// host color when the viewport it is drawn at, not its own canvas, makes it read the color.
+  #[test]
+  fn embedded_svg_markup_reads_the_color_at_the_size_it_is_drawn() {
+    let markup = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter><style>rect { fill: red } @media (min-width: 8px) { rect { fill: currentColor } }</style><rect width="4" height="4" filter="url(#f)"/></svg>"#;
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(markup.as_bytes().to_vec()),
+      width: Some(16.0),
+      height: Some(16.0),
+    });
+    let blue = Style::default().with(StyleDeclaration::color(ColorInput::Value(Color([
+      0, 0, 255, 255,
+    ]))));
+    let fonts = Fonts::default();
+    let svg = render(
+      SvgOptions::builder()
+        .node(Node::container([image]).with_style(blue))
+        .viewport(Viewport::new((32, 32)))
+        .fonts(&fonts)
+        .build(),
+    )
+    .unwrap();
+    let embedded = markup.replacen("<svg", r##"<svg color="#0000ffff""##, 1);
+
+    assert!(svg.contains(&to_data_url("image/svg+xml", embedded.as_bytes())));
   }
 }
