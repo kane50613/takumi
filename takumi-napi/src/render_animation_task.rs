@@ -65,7 +65,7 @@ impl AnimationInput {
     };
     let options = &mut self.options;
     let images = decode_images(
-      &self.state.resource_cache,
+      &self.state.cache,
       &options.images.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
@@ -75,14 +75,14 @@ impl AnimationInput {
       NodeSource::into_parts,
     )?;
     let stylesheet = stylesheet(
-      &self.state.resource_cache,
+      &self.state.cache,
       css,
       options.keyframes.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
     let draw = Draw {
       fonts: &self.fonts,
-      cache: &self.state.resource_cache,
+      cache: &self.state.cache,
       stylesheet,
       images,
     };

@@ -10,7 +10,7 @@ use takumi_bindings_common::{
   options::RendererOptions,
   source_cache::SourceCache,
 };
-use takumi_core::{Fonts, resources::image::ResourceCache};
+use takumi_core::{Cache, Fonts};
 
 use crate::{
   JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
@@ -127,7 +127,7 @@ pub(crate) struct RendererState {
   /// on the JS thread that owns the renderer, so changes never race, and renders in flight keep
   /// the state they started with.
   font_state: ArcSwap<FontState>,
-  pub(crate) resource_cache: ResourceCache,
+  pub(crate) cache: Cache,
   pub(crate) sources: SourceCache,
 }
 
@@ -206,9 +206,9 @@ impl Renderer {
           fonts: Arc::new(default_fonts().map_err(map_error)?),
           cache: FontCache::new(options.font_cache_bytes()),
         }),
-        resource_cache: match options.cache_bytes() {
-          Some(bytes) => ResourceCache::new(bytes),
-          None => ResourceCache::default(),
+        cache: match options.cache_bytes() {
+          Some(bytes) => Cache::builder().images(bytes).stylesheets(bytes).build(),
+          None => Cache::default(),
         },
         sources: SourceCache::default(),
       }),

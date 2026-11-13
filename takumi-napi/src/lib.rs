@@ -249,7 +249,7 @@ impl RenderInput {
   pub(crate) fn resolve(self, state: &RendererState) -> Result<(Node, Arc<StyleSheet>)> {
     let (node, document_css) = self.source.into_parts(&state.sources)?;
     let stylesheet = stylesheet(
-      &state.resource_cache,
+      &state.cache,
       append_css(self.css, document_css),
       self.keyframes,
     )

@@ -23,10 +23,7 @@ use crate::{
   },
   geometry::{ComputedLayout, Point},
   layout::inline::InlineLayoutCache,
-  resources::{
-    font::FontsSnapshot,
-    image::{ImageSource, ResourceCache},
-  },
+  resources::{cache::Cache, font::FontsSnapshot, image::ImageSource},
   style::{
     Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
     StyleSheet,
@@ -37,7 +34,7 @@ use crate::{
 struct RenderShared {
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
-  resource_cache: Option<ResourceCache>,
+  cache: Cache,
   stylesheet: Arc<StyleSheet>,
   font_families: ExpandedFamilies,
   font_fallback_map: FontFallbackMap,
@@ -73,9 +70,9 @@ pub struct RenderContextInit {
   collapsed_borders: bool,
   #[builder(default)]
   images: Rc<HashMap<Arc<str>, ImageSource>>,
-  /// The cache `data:` URI images decode through.
-  #[builder(default)]
-  resource_cache: Option<ResourceCache>,
+  /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
+  #[builder(default = Cache::shared())]
+  cache: Cache,
   #[builder(default)]
   stylesheet: Arc<StyleSheet>,
 }
@@ -91,7 +88,7 @@ impl From<RenderContextInit> for RenderContext {
         #[cfg(not(feature = "font-face"))]
         fonts: init.fonts,
         images: init.images,
-        resource_cache: init.resource_cache,
+        cache: init.cache,
         stylesheet: init.stylesheet,
         font_families: ExpandedFamilies::default(),
         font_fallback_map: FontFallbackMap::default(),
@@ -223,9 +220,9 @@ impl RenderContext {
     &self.shared.images
   }
 
-  /// The cache `data:` URI images decode through, when the render has one.
-  pub(crate) fn resource_cache(&self) -> Option<&ResourceCache> {
-    self.shared.resource_cache.as_ref()
+  /// What the render keeps for the renders after it.
+  pub fn cache(&self) -> &Cache {
+    &self.shared.cache
   }
 
   /// The stylesheets to apply before layout/rendering.

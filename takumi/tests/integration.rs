@@ -1,5 +1,6 @@
 mod test_utils;
 
+mod cache_compat;
 mod cascade_tests;
 mod counter_tests;
 mod filter_clips;

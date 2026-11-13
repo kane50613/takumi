@@ -88,9 +88,10 @@ pub mod prelude {
   #[cfg(feature = "from-html")]
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
-    Error, Fonts, Result,
+    Cache, Error, Fonts, Result,
     layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
     resources::{
+      cache::{CacheBuilder, CacheOptions},
       font::{FontError, FontOverride, FontResource, FontSource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
       unicode_range::{UnicodeRange, UnicodeRangeSet},

@@ -17,7 +17,7 @@ use takumi_bindings_common::{
 };
 use takumi_core::{
   paint_tree::{PaintTree, PaintTreeOptions, paint_tree, paint_tree_needs},
-  resources::image::ResourceCache,
+  resources::cache::Cache,
   style::{CssSource, FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
@@ -98,7 +98,7 @@ impl RenderOptions {
 #[wasm_bindgen]
 pub struct Painter {
   fonts: FontStore,
-  resource_cache: ResourceCache,
+  cache: Cache,
   sources: SourceCache,
 }
 
@@ -114,11 +114,8 @@ impl Painter {
     let (node, document_css) = read_source(node.into(), &self.sources)?;
 
     options.css = append_css(options.css.take(), document_css);
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
+    let images = decode_images(&self.cache, options.images.as_deref().unwrap_or_default())
+      .map_err(map_error)?;
     let lang = options
       .lang
       .as_deref()
@@ -142,7 +139,8 @@ impl Painter {
         .fonts(&fonts)
         .node(node)
         .images(images)
-        .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
+        .cache(self.cache.clone())
+        .stylesheet(stylesheet(&self.cache, options.css, Vec::new()).map_err(map_error)?)
         .font_families(options.font_families.map(FontFamily::from_names))
         .lang(lang)
         .build(),
@@ -162,7 +160,7 @@ impl Painter {
 
     Ok(Painter {
       fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
-      resource_cache: ResourceCache::default(),
+      cache: Cache::default(),
       sources: SourceCache::default(),
     })
   }

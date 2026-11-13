@@ -23,7 +23,7 @@ use takumi_core::{
     PaintDevice, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
-  resources::image::ImageSource,
+  resources::{cache::Cache, image::ImageSource},
   scene::Scene,
   shadow::SizedShadow,
   style::{
@@ -55,6 +55,9 @@ pub struct SvgOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
+  /// What the render keeps for the renders after it, [`Cache::shared`] unless it has its own.
+  #[builder(default = Cache::shared())]
+  pub(crate) cache: Cache,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
@@ -81,6 +84,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(options.images))
+    .cache(options.cache)
     .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
     .style(Box::new(ComputedStyle::root(

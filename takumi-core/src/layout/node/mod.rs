@@ -2,12 +2,7 @@ mod container;
 mod image;
 mod input;
 
-use std::{
-  cell::RefCell,
-  collections::BTreeMap,
-  mem::take,
-  sync::{Arc, Weak},
-};
+use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
 use serde::Deserialize;
 
@@ -18,7 +13,7 @@ use crate::{
   context::RenderContext,
   layout::{inline::InlineContentKind, length_utils::NaturalSize},
   resources::{
-    image::{ImageError, ImageResult, ImageSource},
+    image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
   style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
@@ -166,7 +161,7 @@ impl ImageSourceInput {
   pub fn resolve(&self, context: &RenderContext) -> ImageResult {
     match self {
       Self::Url(src) => resolve_image(src, context),
-      Self::Buffer(data) => ImageSource::from_bytes_lazy(data, 0, Weak::new()),
+      Self::Buffer(data) => context.cache().decode_image(data, ImageCacheMode::Auto),
       Self::Rgba(raw) => Ok(raw.source.clone()),
       Self::Loaded(source) => Ok(source.clone()),
     }
