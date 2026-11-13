@@ -2027,27 +2027,34 @@ mod tests {
     Ok(())
   }
 
+  /// The bytes the picture of `svg`, a 4 by 4 document around `body`, retains.
+  #[cfg(feature = "svg")]
+  fn picture_bytes(body: &str) -> Result<usize, ImageError> {
+    let source: SvgSource =
+      format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">{body}</svg>"#)
+        .parse()?;
+
+    Ok(
+      source
+        .picture(
+          &RenderContext::with_current_color(Color([0, 0, 0, 255])),
+          Size {
+            width: 4.0,
+            height: 4.0,
+          },
+        )
+        .estimated_bytes(),
+    )
+  }
+
   // A filter's kernel counts against the picture budget, as its picture keeps it.
   #[cfg(feature = "svg-raster")]
   #[test]
   fn a_picture_weighs_the_filters_it_keeps() -> Result<(), ImageError> {
-    let bytes = |filter: &str| -> Result<usize, ImageError> {
-      let source: SvgSource = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">{filter}<rect width="4" height="4" filter="url(#f)"/></svg>"#
-      )
-      .parse()?;
-
-      Ok(
-        source
-          .picture(
-            &RenderContext::with_current_color(Color([0, 0, 0, 255])),
-            Size {
-              width: 4.0,
-              height: 4.0,
-            },
-          )
-          .estimated_bytes(),
-      )
+    let bytes = |filter: &str| {
+      picture_bytes(&format!(
+        r#"{filter}<rect width="4" height="4" filter="url(#f)"/>"#
+      ))
     };
     let small = bytes(r#"<filter id="f"><feConvolveMatrix order="1" kernelMatrix="1"/></filter>"#)?;
     let large = bytes(
@@ -2058,6 +2065,40 @@ mod tests {
       large >= small + 80 * size_of::<f32>(),
       "{small} then {large}"
     );
+    Ok(())
+  }
+
+  // A gradient's stops and a stroke's dashes count against the picture budget, as its picture keeps
+  // them.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_picture_weighs_the_stops_and_dashes_it_keeps() -> Result<(), ImageError> {
+    let gradient = |stops: usize| {
+      let stops: String = (0..stops)
+        .map(|stop| {
+          let color = ["red", "blue"][stop % 2];
+
+          format!(
+            r#"<stop offset="{}" stop-color="{color}"/>"#,
+            stop as f32 / stops as f32
+          )
+        })
+        .collect();
+
+      picture_bytes(&format!(
+        r#"<linearGradient id="g">{stops}</linearGradient><rect width="4" height="4" fill="url(#g)"/>"#
+      ))
+    };
+    let dashed = |dashes: usize| {
+      let dashes = vec!["1"; dashes].join(" ");
+
+      picture_bytes(&format!(
+        r#"<line x2="4" stroke="red" stroke-dasharray="{dashes}"/>"#
+      ))
+    };
+
+    assert!(gradient(64)? >= gradient(2)? + 60 * size_of::<SvgGradientStop>());
+    assert!(dashed(64)? >= dashed(2)? + 60 * size_of::<f32>());
     Ok(())
   }
 

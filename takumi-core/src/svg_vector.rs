@@ -82,8 +82,7 @@ pub enum SvgOp {
 }
 
 impl SvgOp {
-  /// The bytes `ops` retain, for cache budgeting. Approximate: leaves out gradient stops, dashes,
-  /// and filters.
+  /// The bytes `ops` retain, for cache budgeting.
   pub(crate) fn estimated_bytes(ops: &[SvgOp]) -> usize {
     ops
       .iter()
@@ -97,9 +96,13 @@ impl SvgOp {
             } => {
               size_of_val(path.as_slice())
                 + fill.as_ref().map_or(0, |fill| fill.paint.estimated_bytes())
-                + stroke
-                  .as_ref()
-                  .map_or(0, |stroke| stroke.paint.estimated_bytes())
+                + stroke.as_ref().map_or(0, |stroke| {
+                  stroke.paint.estimated_bytes()
+                    + stroke
+                      .dash
+                      .as_ref()
+                      .map_or(0, |(dashes, _)| size_of_val(dashes.as_slice()))
+                })
             }
             Self::Image { data, .. } => match data {
               SvgImageData::Encoded(bytes) => bytes.len(),
@@ -114,11 +117,14 @@ impl SvgOp {
 }
 
 impl SvgOpPaint {
-  /// The bytes the ops of a pattern retain, none for another paint.
+  /// The bytes the stops of a gradient or the ops of a pattern retain.
   fn estimated_bytes(&self) -> usize {
     match self {
+      Self::Linear { gradient, .. } | Self::Radial { gradient, .. } => {
+        size_of_val(gradient.stops.as_slice())
+      }
       Self::Pattern { ops, .. } => SvgOp::estimated_bytes(ops),
-      _ => 0,
+      Self::Color(_) => 0,
     }
   }
 }
