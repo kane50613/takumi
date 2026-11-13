@@ -23,7 +23,7 @@ use crate::{device_pixel_ratio, input::ImageSource, parse_lang, time_ms};
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RendererOptions {
-  /// Byte budget shared by every cached resource. `0` disables caching.
+  /// The budget of decoded images and of parsed stylesheets, each. `0` keeps neither.
   pub cache_max_bytes: Option<f64>,
   /// Bytes of decoded fonts that renders' `fonts` lists may keep registered.
   pub font_cache_max_bytes: Option<f64>,

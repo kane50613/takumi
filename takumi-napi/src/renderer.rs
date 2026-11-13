@@ -207,7 +207,7 @@ impl Renderer {
           cache: FontCache::new(options.font_cache_bytes()),
         }),
         cache: match options.cache_bytes() {
-          Some(bytes) => Cache::builder().images(bytes).build(),
+          Some(bytes) => Cache::builder().images(bytes).stylesheets(bytes).build(),
           None => Cache::default(),
         },
         sources: SourceCache::default(),
