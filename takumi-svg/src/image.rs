@@ -262,9 +262,7 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
     }
     ImageSource::Svg(svg) => Some(to_data_url(
       "image/svg+xml",
-      svg
-        .source_with_current_color(context.current_color)
-        .as_bytes(),
+      svg.embedded_source(context).as_bytes(),
     )),
     _ => None,
   }

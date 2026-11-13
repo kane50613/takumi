@@ -242,9 +242,32 @@ impl SvgSource {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
-  /// Markup for embedding in a vector backend, with the host `color` as a root presentation
-  /// attribute unless the root sets one, which a second would make malformed.
+  /// Markup for embedding in a vector backend, with `host`'s color as a root presentation
+  /// attribute when the document's layout reads it and the root sets none. An attribute it does
+  /// not read would still change what a `[color]` selector matches.
+  pub fn embedded_source(&self, host: &RenderContext) -> Cow<'_, str> {
+    let (width, height) = self.document.canvas_size();
+    let reads_color = self
+      .document
+      .ops(self.host(host), Size::new(width, height))
+      .is_some_and(|(_, reads)| reads.color);
+
+    if !reads_color {
+      return Cow::Borrowed(&self.source);
+    }
+    self.with_color_attribute(host.current_color)
+  }
+
+  /// Markup for embedding in a vector backend, with `current_color` as a root presentation
+  /// attribute unless the root sets one.
+  #[deprecated(note = "use `embedded_source`, which adds the color only when the SVG reads it")]
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
+    self.with_color_attribute(current_color)
+  }
+
+  /// The markup with `color` as a root presentation attribute, unless the root sets one, which a
+  /// second would make malformed.
+  fn with_color_attribute(&self, color: Color) -> Cow<'_, str> {
     if self.document.has_color() {
       return Cow::Borrowed(&self.source);
     }
@@ -262,7 +285,7 @@ impl SvgSource {
       return Cow::Borrowed(&self.source);
     }
 
-    let [red, green, blue, alpha] = current_color.0;
+    let [red, green, blue, alpha] = color.0;
     let mut markup = String::with_capacity(self.source.len() + 32);
 
     markup.push_str(&self.source[..insert_at]);
@@ -2159,11 +2182,12 @@ mod tests {
   // presentation attribute, so a standalone viewer resolves it identically.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_source_with_current_color_injects_root_attribute() -> Result<(), ImageError> {
+  fn svg_embedded_source_injects_the_host_color_it_reads() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#;
     let source: SvgSource = svg.parse()?;
+    let red = RenderContext::with_current_color(Color([255, 0, 0, 255]));
 
-    let injected = source.source_with_current_color(Color([255, 0, 0, 255]));
+    let injected = source.embedded_source(&red);
     assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
 
     // A stylesheet that escapes the keyword still takes the host color.
@@ -2172,17 +2196,20 @@ mod tests {
 
     assert!(
       source
-        .source_with_current_color(Color([255, 0, 0, 255]))
+        .embedded_source(&red)
         .starts_with(r##"<svg color="#ff0000ff""##)
     );
 
     let own = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##;
     let source: SvgSource = own.parse()?;
 
-    assert!(matches!(
-      source.source_with_current_color(Color([255, 0, 0, 255])),
-      Cow::Borrowed(_)
-    ));
+    assert!(matches!(source.embedded_source(&red), Cow::Borrowed(_)));
+
+    // A document that reads no color keeps its markup, so `svg[color]` still does not match.
+    let selected = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg[color] rect { fill: blue }</style><rect width="4" height="4" fill="red"/></svg>"#;
+    let source: SvgSource = selected.parse()?;
+
+    assert!(matches!(source.embedded_source(&red), Cow::Borrowed(_)));
     Ok(())
   }
 

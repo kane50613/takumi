@@ -6,6 +6,6 @@ packages:
     type: patch
 ---
 
-# An SVG image embedded in SVG output always draws in the host's color
+# An SVG image embedded in SVG output takes the host's color whenever it draws with it
 
-SVG output embeds an SVG image with the host's `color` on its root, so its `currentColor` draws as takumi's own renders draw it. The color used to be added only when the markup spelled `currentColor` out, so a stylesheet that escaped the keyword drew black in a viewer. A root with a `color` of its own keeps it.
+SVG output embeds an SVG image with the host's `color` on its root when the image draws with `currentColor`, so a viewer draws it as takumi's own renders do. Takumi used to decide by looking for the text `currentColor` in the markup, so a stylesheet that escaped the keyword drew black in a viewer. It now decides from what the image's layout reads, and leaves an image that never reads the color, or whose root sets its own, as written. `SvgSource::embedded_source` returns that markup. `source_with_current_color` still adds the color whenever the root sets none, and is deprecated.
