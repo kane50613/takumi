@@ -1,6 +1,10 @@
 //! Style recalc for an SVG document, after Blink's `StyleResolver`.
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+  cell::{Cell, RefCell},
+  rc::Rc,
+  sync::Arc,
+};
 
 use super::{SvgDocument, SvgHost};
 use crate::{
@@ -37,12 +41,15 @@ pub(super) struct StyleResolver<'a> {
   inline: bool,
   /// The contexts of elements resolved where they stand in the document.
   in_place: RefCell<FxHashMap<usize, RenderContext>>,
+  /// Set once a length of the document resolves against the host's font metrics.
+  font_read: Rc<Cell<bool>>,
 }
 
 impl<'a> StyleResolver<'a> {
   /// A resolver whose root inherits from `host`, laid out at `viewport`, which the viewport units
   /// of an image measure.
   pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>, viewport: Size<f32>) -> Self {
+    let font_read = Rc::default();
     let (root_context, matched, inline) = match host {
       SvgHost::Image {
         current_color,
@@ -61,7 +68,12 @@ impl<'a> StyleResolver<'a> {
               .cloned()
               .unwrap_or_else(|| Fonts::default().snapshot()),
           )
-          .sizing(SizingContext::builder().viewport(viewport).build())
+          .sizing(
+            SizingContext::builder()
+              .viewport(viewport)
+              .build()
+              .noting_font_reads(Rc::clone(&font_read)),
+          )
           .current_color(current_color)
           .style(ComputedStyle::default())
           .cache(cache.cloned().unwrap_or_else(Cache::shared))
@@ -81,7 +93,12 @@ impl<'a> StyleResolver<'a> {
         let page = host.stylesheet();
         let root_context = RenderContext::builder()
           .fonts(host.fonts().clone())
-          .sizing(host.sizing.in_css_pixels())
+          .sizing(
+            host
+              .sizing
+              .in_css_pixels()
+              .noting_font_reads(Rc::clone(&font_read)),
+          )
           .current_color(host.current_color)
           .style(Rc::clone(&host.style))
           .cache(host.cache().clone())
@@ -107,7 +124,13 @@ impl<'a> StyleResolver<'a> {
       root_context,
       inline,
       in_place: RefCell::default(),
+      font_read,
     }
+  }
+
+  /// Whether a length of the document resolved against the host's font metrics.
+  pub(super) fn read_fonts(&self) -> bool {
+    self.font_read.get()
   }
 
   /// The context the root element inherits from.

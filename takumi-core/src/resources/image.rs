@@ -1966,16 +1966,14 @@ mod tests {
     }
   }
 
-  // Text falls back through the families a render names, so a picture of text is not shared by
-  // renders that name other ones.
+  // Text falls back through the families a render names, and `ch` and `ex` read the face it
+  // picks, so a picture that reads either is not shared by renders that name other families.
   #[cfg(feature = "svg")]
   #[test]
-  fn a_picture_key_follows_the_fallback_families_of_its_text() -> Result<(), ImageError> {
+  fn a_picture_key_follows_the_fonts_its_layout_reads() -> Result<(), ImageError> {
     let fonts = Fonts::default();
-    let source: SvgSource =
-      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#
-        .parse()?;
-    let key = |fallbacks: &str| {
+    let key = |svg: &str, fallbacks: &str| -> Result<Option<u64>, ImageError> {
+      let source: SvgSource = svg.parse()?;
       let fallbacks = FontFamily::from_css_str(fallbacks).ok();
       let host = RenderContext::builder()
         .fonts(fonts.snapshot_with_fallbacks(fallbacks.as_ref()))
@@ -1986,19 +1984,31 @@ mod tests {
         )
         .build();
 
-      source
-        .picture(
-          &host,
-          Size {
-            width: 4.0,
-            height: 4.0,
-          },
-        )
-        .key()
+      Ok(
+        source
+          .picture(
+            &host,
+            Size {
+              width: 4.0,
+              height: 4.0,
+            },
+          )
+          .key(),
+      )
     };
+    let reads_fonts = [
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text y="4">a</text></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1ch" height="4"/></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" style="stroke-width: 1ex" stroke="red"/></svg>"#,
+    ];
+    let reads_none = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1em" height="4"/></svg>"#;
 
-    assert_eq!(key("A"), key("A"));
-    assert_ne!(key("A"), key("B"));
+    for svg in reads_fonts {
+      assert_eq!(key(svg, "A")?, key(svg, "A")?, "{svg}");
+      assert_ne!(key(svg, "A")?, key(svg, "B")?, "{svg}");
+    }
+
+    assert_eq!(key(reads_none, "A")?, key(reads_none, "B")?);
     Ok(())
   }
 
