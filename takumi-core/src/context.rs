@@ -186,6 +186,13 @@ impl RenderContext {
     }
   }
 
+  /// Whether an SVG drawn in this context is an `svg` element's content, which takes the box's
+  /// `color`.
+  #[cfg(feature = "svg")]
+  pub fn is_svg_element(&self) -> bool {
+    self.svg_element
+  }
+
   /// The box this context belongs to.
   pub fn box_id(&self) -> BoxId {
     self.identity.0

@@ -383,7 +383,6 @@ impl SvgSource {
       .copied()
   }
 
-
   /// The box the document draws in when the box `host` styles shows it.
   fn host<'a>(&self, host: &'a RenderContext) -> SvgHost<'a> {
     if self.inline {

@@ -1090,11 +1090,11 @@ impl SvgDocument {
 /// What an embedded image was made from, so a repeat reuses its encoding and its definition.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ImageKey {
-  /// The image `src` resolves to, with the `currentColor` an SVG source reads and the bits of the
-  /// viewport it is drawn at, which its media queries read.
+  /// The image `src` resolves to, with the host `color` an `svg` element's content takes and, for
+  /// an SVG source, the bits of the viewport it is drawn at, which its media queries read.
   Src {
     src: Arc<str>,
-    current_color: [u8; 4],
+    current_color: Option<[u8; 4]>,
     viewport: Option<[u32; 2]>,
   },
   /// A bitmap inside an SVG image, by a digest of its bytes or pixels.

@@ -1029,4 +1029,41 @@ mod tests {
     assert!(definition.contains(r#"width="4""#), "{definition}");
     assert!(!definition.contains(r#"width="16""#), "{definition}");
   }
+
+  /// One SVG URL embedded as markup for an `svg` element and for an image gets the markup of each,
+  /// whichever draws first.
+  #[test]
+  fn an_svg_url_embeds_apart_for_an_svg_element_and_an_image() {
+    let markup = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter><rect width="4" height="4" fill="currentColor" filter="url(#f)"/></svg>"#;
+    let url = to_data_url("image/svg+xml", markup.as_bytes());
+    let image = || Node::image(url.as_str());
+    let red = Style::default().with(StyleDeclaration::color(ColorInput::Value(Color([
+      255, 0, 0, 255,
+    ]))));
+    let fonts = Fonts::default();
+    let render_both = |first: Node, second: Node| {
+      render(
+        SvgOptions::builder()
+          .node(Node::container([first, second]).with_style(red.clone()))
+          .viewport(Viewport::new((16, 8)))
+          .fonts(&fonts)
+          .build(),
+      )
+      .unwrap()
+    };
+    let element = to_data_url(
+      "image/svg+xml",
+      markup
+        .replacen("<svg", r##"<svg color="#ff0000ff""##, 1)
+        .as_bytes(),
+    );
+
+    for svg in [
+      render_both(image().with_tag_name("svg"), image()),
+      render_both(image(), image().with_tag_name("svg")),
+    ] {
+      assert!(svg.contains(&format!(r#"href="{element}""#)));
+      assert!(svg.contains(&format!(r#"href="{url}""#)));
+    }
+  }
 }
