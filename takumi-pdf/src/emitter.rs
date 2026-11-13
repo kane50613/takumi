@@ -75,6 +75,8 @@ use crate::{
   tree::draws,
   window::{LineFrame, Window},
 };
+#[cfg(all(feature = "svg", feature = "images"))]
+use takumi_core::resources::image::SvgPicture;
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
@@ -997,8 +999,6 @@ impl Emitter<'_> {
       return;
     }
     let picture = svg.picture(context, viewport);
-    let canvas =
-      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
 
     surface.push_transform(&Transform::from_row(
       size.width / viewport.width,
@@ -1008,14 +1008,25 @@ impl Emitter<'_> {
       at.x,
       at.y,
     ));
+    self.paint_picture(&picture, viewport, surface);
+    surface.pop();
+  }
+
+  #[cfg(all(feature = "svg", feature = "images"))]
+  /// Paints `picture`, laid out at `viewport`, clipped to its canvas.
+  fn paint_picture(&self, picture: &SvgPicture, viewport: Size<f32>, surface: &mut Surface) {
+    let canvas =
+      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
     }
+
     SvgPainter::new(self.color_filter.as_deref()).draw(surface, picture.ops());
+
     if canvas.is_some() {
       surface.pop();
     }
-    surface.pop();
   }
 
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content
