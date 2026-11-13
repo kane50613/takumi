@@ -63,7 +63,15 @@ pub(crate) fn emit_image(
     (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context, replaced.container),
     _ => None,
   };
-  let Some(drawing) = vector.or_else(|| raster(&image.src, source.as_ref(), context, doc)) else {
+  let Some(drawing) = vector.or_else(|| {
+    raster(
+      &image.src,
+      source.as_ref(),
+      context,
+      replaced.container,
+      doc,
+    )
+  }) else {
     return Ok(());
   };
 
@@ -117,21 +125,25 @@ impl Drawing {
       _ => None,
     };
 
-    vector.or_else(|| Self::raster_of(url, &source, context, doc))
+    vector.or_else(|| Self::raster_of(url, &source, context, image_size, doc))
   }
 
-  /// `source`, resolved from `src`, as a `data:` URL encoded once per document.
+  /// `source`, resolved from `src` and drawn at `viewport`, as a `data:` URL encoded once per
+  /// document.
   fn raster_of(
     src: &Arc<str>,
     source: &ImageSource,
     context: &RenderContext,
+    viewport: Size<f32>,
     doc: &mut SvgDocument,
   ) -> Option<Self> {
     let key = ImageKey::Src {
       src: Arc::clone(src),
       current_color: context.current_color.0,
+      viewport: matches!(source, ImageSource::Svg(_))
+        .then(|| [viewport.width.to_bits(), viewport.height.to_bits()]),
     };
-    let href = doc.image_href(&key, || loaded_data_url(source, context))?;
+    let href = doc.image_href(&key, || loaded_data_url(source, context, viewport))?;
 
     Some(Self::Raster {
       href,
@@ -140,18 +152,20 @@ impl Drawing {
   }
 }
 
-/// The image `src` names, keyed by its `src` when it has one so a repeat reuses its encoding.
+/// The image `src` names, drawn at `viewport`, keyed by its `src` when it has one so a repeat
+/// reuses its encoding.
 fn raster(
   src: &ImageSourceInput,
   source: Option<&ImageSource>,
   context: &RenderContext,
+  viewport: Size<f32>,
   doc: &mut SvgDocument,
 ) -> Option<Drawing> {
   if let (ImageSourceInput::Url(url), Some(source)) = (src, source) {
-    return Drawing::raster_of(url, source, context, doc);
+    return Drawing::raster_of(url, source, context, viewport, doc);
   }
 
-  data_url(src, context).map(|href| Drawing::Raster {
+  data_url(src, context, viewport).map(|href| Drawing::Raster {
     href: href.into(),
     definition: None,
   })
@@ -224,7 +238,11 @@ impl SvgDocument {
   }
 }
 
-fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
+fn data_url(
+  src: &ImageSourceInput,
+  context: &RenderContext,
+  viewport: Size<f32>,
+) -> Option<String> {
   match src {
     // Embed the original encoded bytes losslessly. SVG markup resolves into a
     // parsed source first so the host `color` can reach `currentColor`.
@@ -232,20 +250,24 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
       "image/svg+xml" => src
         .resolve(context)
         .ok()
-        .and_then(|s| loaded_data_url(&s, context)),
+        .and_then(|s| loaded_data_url(&s, context, viewport)),
       mime => Some(to_data_url(mime, bytes)),
     },
-    ImageSourceInput::Loaded(source) => loaded_data_url(source, context),
+    ImageSourceInput::Loaded(source) => loaded_data_url(source, context, viewport),
     // Only resolvable when the render supplied a resource map (usually empty).
     ImageSourceInput::Url(_) => src
       .resolve(context)
       .ok()
-      .and_then(|s| loaded_data_url(&s, context)),
+      .and_then(|s| loaded_data_url(&s, context, viewport)),
     _ => None,
   }
 }
 
-fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<String> {
+fn loaded_data_url(
+  source: &ImageSource,
+  context: &RenderContext,
+  viewport: Size<f32>,
+) -> Option<String> {
   match source {
     ImageSource::Bitmap(buffer) => buffer
       .encode_png()
@@ -262,7 +284,7 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
     }
     ImageSource::Svg(svg) => Some(to_data_url(
       "image/svg+xml",
-      svg.embedded_source(context).as_bytes(),
+      svg.embedded_source(context, viewport).as_bytes(),
     )),
     _ => None,
   }

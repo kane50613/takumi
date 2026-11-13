@@ -20,6 +20,11 @@ version = "0.36.0"
 default-features = false
 features = ["svg", "png"]
 
+[dev-dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["svg-raster"]
+
 [lints]
 workspace = true
 

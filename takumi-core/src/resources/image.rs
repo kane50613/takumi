@@ -242,14 +242,13 @@ impl SvgSource {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
-  /// Markup for embedding in a vector backend, with `host`'s color as a root presentation
-  /// attribute when the document's layout reads it and the root sets none. An attribute it does
-  /// not read would still change what a `[color]` selector matches.
-  pub fn embedded_source(&self, host: &RenderContext) -> Cow<'_, str> {
-    let (width, height) = self.document.canvas_size();
+  /// Markup for embedding in a vector backend, drawn at `viewport`, with `host`'s color as a root
+  /// presentation attribute when the document's layout there reads it and the root sets none. An
+  /// attribute it does not read would still change what a `[color]` selector matches.
+  pub fn embedded_source(&self, host: &RenderContext, viewport: Size<f32>) -> Cow<'_, str> {
     let reads_color = self
       .document
-      .ops(self.host(host), Size::new(width, height))
+      .ops(self.host(host), viewport)
       .is_some_and(|(_, reads)| reads.color);
 
     if !reads_color {
@@ -2186,8 +2185,9 @@ mod tests {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#;
     let source: SvgSource = svg.parse()?;
     let red = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let small = Size::new(4.0, 4.0);
 
-    let injected = source.embedded_source(&red);
+    let injected = source.embedded_source(&red, small);
     assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
 
     // A stylesheet that escapes the keyword still takes the host color.
@@ -2196,20 +2196,40 @@ mod tests {
 
     assert!(
       source
-        .embedded_source(&red)
+        .embedded_source(&red, small)
         .starts_with(r##"<svg color="#ff0000ff""##)
     );
 
     let own = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##;
     let source: SvgSource = own.parse()?;
 
-    assert!(matches!(source.embedded_source(&red), Cow::Borrowed(_)));
+    assert!(matches!(
+      source.embedded_source(&red, small),
+      Cow::Borrowed(_)
+    ));
 
     // A document that reads no color keeps its markup, so `svg[color]` still does not match.
     let selected = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg[color] rect { fill: blue }</style><rect width="4" height="4" fill="red"/></svg>"#;
     let source: SvgSource = selected.parse()?;
 
-    assert!(matches!(source.embedded_source(&red), Cow::Borrowed(_)));
+    assert!(matches!(
+      source.embedded_source(&red, small),
+      Cow::Borrowed(_)
+    ));
+
+    // A media query reads the viewport the image is drawn at, not its own canvas.
+    let wide = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>rect { fill: red } @media (min-width: 8px) { rect { fill: currentColor } }</style><rect width="4" height="4"/></svg>"#;
+    let source: SvgSource = wide.parse()?;
+
+    assert!(matches!(
+      source.embedded_source(&red, small),
+      Cow::Borrowed(_)
+    ));
+    assert!(
+      source
+        .embedded_source(&red, Size::new(16.0, 16.0))
+        .starts_with(r##"<svg color="#ff0000ff""##)
+    );
     Ok(())
   }
 
