@@ -298,7 +298,7 @@ impl InlineLines<'_> {
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    device.with_opacity(fragment.opacity, None, |device| {
+    device.with_opacity(fragment.link.decoration.opacity, None, |device| {
       if let Some(background) = &fragment.background {
         background.paint(fragment, frame, runs, device);
       }
@@ -461,7 +461,7 @@ impl<'c> FragmentBackground<'c> {
     StripBackground {
       node: self.node,
       context: &self.node.context,
-      id: fragment.span,
+      id: fragment.link.decoration.id,
       background: BoxBackground::new(
         &self.node.context,
         self.strip,
@@ -551,7 +551,7 @@ impl PaintedRun<'_> {
     chain.is_some_and(|chain| {
       chain
         .ancestors()
-        .any(|link| link.decoration.id == fragment.span)
+        .any(|link| link.decoration.id == fragment.link.decoration.id)
     }) && (fragment.y..=fragment.y + fragment.height).contains(&baseline)
   }
 
@@ -698,7 +698,7 @@ impl InlineBackgroundFragment<'_> {
   /// The fragment's border box pixel-snapped where its span paints.
   fn snapped_box(&self) -> SnappedBox {
     SnappedBox::new(
-      self.owner.context.paint_offset()
+      self.owner().context.paint_offset()
         + Point {
           x: self.x,
           y: self.y,

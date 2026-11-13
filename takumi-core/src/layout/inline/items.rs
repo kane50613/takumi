@@ -516,13 +516,13 @@ impl<'c> InlineSpans<'c> {
     self.node_decorations.get(&node.context.box_id())
   }
 
-  /// The node of every inline box the spans open, by decoration id, including a box with no
-  /// content that no span lies inside.
-  pub(crate) fn owners(&self) -> FxHashMap<usize, &'c RenderNode> {
+  /// The decoration of every inline box the spans open, by decoration id, including a box with
+  /// no content that no span lies inside.
+  pub(crate) fn links(&self) -> FxHashMap<usize, &Rc<DecorationLink<'c>>> {
     self
       .node_decorations
       .values()
-      .map(|link| (link.decoration.id, link.decoration.owner))
+      .map(|link| (link.decoration.id, link))
       .collect()
   }
 

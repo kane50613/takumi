@@ -3,19 +3,16 @@
 use crate::{
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderProperties, corner_shape::KAPPA, tree::RenderNode},
-  style::{BackgroundClip, BoxDecorationBreak, Color, Direction, Sides, SpacePair},
+  style::{BackgroundClip, BoxDecorationBreak, Direction, Sides, SpacePair},
 };
 
 use std::rc::Rc;
 
-use super::{
-  items::{DecorationLink, InlineDecoration},
-  outline::InlineOutlineRect,
-};
+use super::{items::DecorationLink, outline::InlineOutlineRect};
 
 /// A resolved inline background fragment: one rounded rect a decorated span
 /// fills on one line, in border-box space, in paint order (outer spans first).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[non_exhaustive]
 pub struct InlineBackgroundFragment<'c> {
   /// Left edge.
@@ -30,18 +27,12 @@ pub struct InlineBackgroundFragment<'c> {
   pub border: BorderProperties,
   /// The padding, without the sides a line wraps at.
   pub padding: Rect<f32>,
-  /// Fill color.
-  pub color: Color,
-  /// The span's `opacity`.
-  pub opacity: f32,
   /// Baseline of the owning line in border-box space.
   pub baseline: f32,
   /// The span's background, when it paints one.
   pub background: Option<FragmentBackground<'c>>,
-  /// The span.
-  pub owner: &'c RenderNode,
-  /// The span's id.
-  pub(crate) span: usize,
+  /// The span and the spans around it.
+  pub(crate) link: Rc<DecorationLink<'c>>,
 }
 
 /// The background of a span on one line: its color, and its `background-image` layers laid over
@@ -77,7 +68,7 @@ pub(super) fn resolve_span_fragments<'c>(
 
       before += fragment.width;
       resolve_fragment(
-        &link.decoration,
+        link,
         *fragment,
         strip_offset,
         strip_width,
@@ -93,7 +84,7 @@ pub(super) fn resolve_span_fragments<'c>(
 /// Resolves `fragment`, `strip_offset` along its span's strip of `strip_width`, into its
 /// background and outline fragments.
 fn resolve_fragment<'c>(
-  decoration: &InlineDecoration<'c>,
+  link: &Rc<DecorationLink<'c>>,
   fragment: SpanFragment,
   strip_offset: f32,
   strip_width: f32,
@@ -111,6 +102,7 @@ fn resolve_fragment<'c>(
     has_start,
     has_end,
   } = fragment;
+  let decoration = &link.decoration;
 
   if !decoration.paints {
     return;
@@ -221,12 +213,9 @@ fn resolve_fragment<'c>(
       height,
       border,
       padding,
-      color: decoration.color,
-      opacity: decoration.opacity,
       baseline,
       background,
-      owner: decoration.owner,
-      span: decoration.id,
+      link: Rc::clone(link),
     });
   }
 }
@@ -297,7 +286,12 @@ fn fitted_radii(radii: [(f32, f32); 4], width: f32, height: f32) -> Sides<SpaceP
   Sides(radii.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)))
 }
 
-impl InlineBackgroundFragment<'_> {
+impl<'c> InlineBackgroundFragment<'c> {
+  /// The span.
+  pub fn owner(&self) -> &'c RenderNode {
+    self.link.decoration.owner
+  }
+
   /// The rounded-rect contour the fragment fills, with quarter-ellipse corners.
   pub fn path(&self) -> Vec<PathCommand> {
     let InlineBackgroundFragment {
