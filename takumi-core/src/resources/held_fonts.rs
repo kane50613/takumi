@@ -126,6 +126,11 @@ impl HeldFonts {
     self.store.peek(id).is_some()
   }
 
+  /// Whether a lease or a pin keeps the font `id` names from eviction, which counts as no lookup.
+  pub fn is_held(&self, id: u64) -> bool {
+    self.store.peek(id).is_some_and(|font| font.is_held())
+  }
+
   /// Keeps the font `id` names from eviction, or lets it go, until [`Self::forget`]; false once it
   /// was evicted.
   pub fn pin(&self, id: u64, pinned: bool) -> bool {
@@ -235,6 +240,19 @@ mod tests {
     assert!(cache.fonts().holds(0));
     assert_eq!(evicted.len(), 5);
     assert!(!evicted.contains(&0));
+  }
+
+  #[test]
+  fn a_font_is_held_while_leased_or_pinned() {
+    let cache = cache(None);
+    let lease = cache.fonts().keep(1, FONT);
+
+    assert!(cache.fonts().is_held(1));
+    drop(lease);
+    assert!(!cache.fonts().is_held(1));
+    cache.fonts().pin(1, true);
+    assert!(cache.fonts().is_held(1));
+    assert!(!cache.fonts().is_held(2));
   }
 
   #[test]
