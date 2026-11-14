@@ -105,6 +105,11 @@ const config: UserConfig = defineConfig({
     jsx: "src/jsx/index.ts",
     html: "src/html/index.ts",
     renderer: "src/renderer.ts",
+    "fallback-font": "src/fallback-font.ts",
+    "no-fallback-font": "src/no-fallback-font.ts",
+  },
+  loader: {
+    ".ttf": "base64",
   },
   format: ["esm", "cjs"],
   dts: true,

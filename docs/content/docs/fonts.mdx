@@ -269,6 +269,32 @@ Without `fontFamilies`, the chain is the render's `fonts` in list order. A rende
 
 A missing glyph walks the chain until a family covers it. `googleFonts` registers every subset under its family name with its `unicode-range`. Each character then uses the subset that covers it, as in a browser.
 
+### Leaving Geist out of a bundle
+
+The WebAssembly packages `@takumi-rs/wasm`, `takumi-paint`, and `takumi-pdf` import Geist from `@takumi-rs/helpers/fallback-font`, which adds about 25 KB (brotli) to a bundle. If you load your own fonts for every script your text uses, set the `takumi-no-fallback-font` export condition. Your bundler then resolves that module to an empty one, and Geist stays out of the bundle.
+
+| Tool    | Where to set the condition                                                                                 |
+| ------- | ---------------------------------------------------------------------------------------------------------- |
+| Vite    | `resolve.conditions`, or `ssr.resolve.conditions` for server code, together with Vite's default conditions |
+| esbuild | `conditions`                                                                                               |
+| webpack | `resolve.conditionNames`, together with webpack's default conditions                                       |
+| Node.js | `node --conditions=takumi-no-fallback-font`                                                                |
+| Bun     | `bun --conditions=takumi-no-fallback-font`                                                                 |
+
+```ts title="vite.config.ts"
+import { defaultServerConditions, defineConfig } from "vite";
+
+export default defineConfig({
+  ssr: {
+    resolve: {
+      conditions: ["takumi-no-fallback-font", ...defaultServerConditions],
+    },
+  },
+});
+```
+
+Without Geist, a renderer starts with no fonts, and `clearFonts()` leaves none. Text uses only the fonts you load. The Node.js package `@takumi-rs/core` builds Geist into its binary and ignores the condition.
+
 ### Variable axes & OpenType features
 
 Set font axes with `font-variation-settings` and OpenType features with `font-feature-settings`. In a variable font, `font-weight` drives the `wght` axis and `font-stretch` drives `wdth`. Kerning is on by default, and `font-kerning: none` turns it off.

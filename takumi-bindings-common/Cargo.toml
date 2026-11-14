@@ -57,6 +57,9 @@ wasm = [
   "dep:dlmalloc",
   "dep:wasm-bindgen",
 ]
+# Geist, the last-resort font, built into the binary. The wasm bindings import it from
+# `@takumi-rs/helpers/fallback-font` instead.
+embedded-fallback-font = []
 # Options for the bindings that render images.
 raster = ["dep:takumi-raster", "dep:takumi-svg"]
 

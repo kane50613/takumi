@@ -1,13 +1,14 @@
 //! Platform-agnostic glue shared by the napi and wasm bindings.
 //!
 //! Both bindings lower raw JS input into a takumi render request the same way —
-//! the embedded fallback fonts, a font resource from optional fields, the
+//! the fallback font, a font resource from optional fields, the
 //! stylesheet, and the per-render options. That lowering lives here so neither binding re-derives it. Each
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+mod fallback_font;
 pub mod font_cache;
 #[cfg(all(
   feature = "wasm",
@@ -39,48 +40,20 @@ use takumi_core::{
   Error as CoreError, Fonts,
   layout::{needs::RenderNeeds, node::Node},
   resources::{
-    font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
+    font::{FontError, FontSource, RegisteredFamily},
     image::ResourceCache,
   },
   style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
   viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 
-/// Last-resort only: no generic family claim, so `sans-serif` and friends
-/// resolve to caller-registered fonts via the fallback bucket instead of this
-/// face.
-const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
-  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
-  "Geist",
-)];
-
-/// The default font set holding the embedded last-resort fonts.
+/// The default font set holding the last-resort fallback font.
 pub fn default_fonts() -> Result<Fonts, FontError> {
   let mut fonts = Fonts::default();
 
-  register_embedded(&mut fonts, |_| true)?;
+  fallback_font::register(&mut fonts, |_| true)?;
 
   Ok(fonts)
-}
-
-/// Registers the embedded last-resort fonts whose family `wanted` accepts.
-fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result<(), FontError> {
-  for (bytes, name) in EMBEDDED_FONTS {
-    if !wanted(name) {
-      continue;
-    }
-
-    let resource = FontResource::new(FontSource::from_static(bytes))
-      .override_info(FontOverride {
-        family_name: Some((*name).into()),
-        ..Default::default()
-      })
-      .last_resort();
-
-    drop(fonts.register(resource)?);
-  }
-
-  Ok(())
 }
 
 /// Registered fonts for the single-threaded wasm bindings, copy-on-write like the napi
@@ -93,7 +66,7 @@ pub struct FontStore {
 }
 
 impl FontStore {
-  /// A store holding the embedded last-resort fonts, keeping at most `cache_max_bytes` of fonts
+  /// A store holding the last-resort fallback font, keeping at most `cache_max_bytes` of fonts
   /// that are not pinned.
   pub fn new(cache_max_bytes: Option<u64>) -> Result<Self, FontError> {
     Ok(Self {
@@ -231,7 +204,7 @@ impl FontStore {
     Ok(())
   }
 
-  /// Goes back to the embedded last-resort fonts alone.
+  /// Goes back to the last-resort fallback font alone.
   pub fn reset(&self) -> Result<(), FontError> {
     *self.fonts.borrow_mut() = Rc::new(default_fonts()?);
     self.cache.borrow_mut().clear();

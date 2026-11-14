@@ -84,6 +84,26 @@
         "types": "./dist/renderer.d.cts",
         "default": "./dist/renderer.cjs"
       }
+    },
+    "./fallback-font": {
+      "takumi-no-fallback-font": {
+        "import": {
+          "types": "./dist/no-fallback-font.d.mts",
+          "default": "./dist/no-fallback-font.mjs"
+        },
+        "require": {
+          "types": "./dist/no-fallback-font.d.cts",
+          "default": "./dist/no-fallback-font.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/fallback-font.d.mts",
+        "default": "./dist/fallback-font.mjs"
+      },
+      "require": {
+        "types": "./dist/fallback-font.d.cts",
+        "default": "./dist/fallback-font.cjs"
+      }
     }
   },
   "publishConfig": {

@@ -12,7 +12,7 @@ use takumi_core::{
   resources::font::{FontError, FontSource, RegisteredFamily},
 };
 
-use crate::register_embedded;
+use crate::fallback_font;
 
 /// A family as the registry matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
@@ -278,7 +278,7 @@ impl FontCache {
         }
 
         fonts.unregister_family(&family);
-        register_embedded(fonts, |name| fold(name) == family)?;
+        fallback_font::register(fonts, |name| fold(name) == family)?;
         self.forget(&family);
       }
     }
@@ -348,7 +348,7 @@ mod tests {
   use takumi_core::resources::font::{FontOverride, FontResource};
 
   use super::*;
-  use crate::{default_fonts, input::register_resource};
+  use crate::input::register_resource;
 
   /// Geist registered under `family`, as a render's `fonts` list or `registerFont` would.
   fn register(fonts: &mut Fonts, cache: &mut FontCache, family: &str, pinned: bool) -> u64 {
@@ -439,7 +439,10 @@ mod tests {
   }
 
   #[test]
+  #[cfg(feature = "embedded-fallback-font")]
   fn registers_the_embedded_font_again_after_releasing_its_family() {
+    use crate::default_fonts;
+
     let (_, mut cache) = fitting(1);
     let mut fonts = default_fonts().unwrap();
 
