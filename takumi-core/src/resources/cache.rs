@@ -524,7 +524,10 @@ impl Pool {
   /// [`CacheReservationManager`](https://github.com/facebook/rocksdb/blob/main/cache/cache_reservation_manager.h),
   /// unless `kind` no longer has that budget.
   fn charge(&self, kind: Kind, budget: &Budget) {
-    if budget.held() == budget.charged.load(Ordering::Relaxed) {
+    // A budget the others squeezed refits on every insert, so it grows back once they shrink.
+    let squeezed = budget.store.capacity() < budget.max_bytes.load(Ordering::Relaxed);
+
+    if !squeezed && budget.held() == budget.charged.load(Ordering::Relaxed) {
       return;
     }
 
@@ -585,9 +588,15 @@ impl Pool {
       }
     }
 
-    for kind in Kind::ALL {
-      if let Some(budget) = &*self.budgets[kind].load() {
-        self.fit(&mut charged, budget);
+    // Budgets that give bytes back fit first, so the budgets that grow see what they released.
+    for shrinks in [true, false] {
+      for kind in Kind::ALL {
+        if let Some(budget) = &*self.budgets[kind].load()
+          && (budget.charged.load(Ordering::Relaxed) > budget.max_bytes.load(Ordering::Relaxed))
+            == shrinks
+        {
+          self.fit(&mut charged, budget);
+        }
       }
     }
 
@@ -1251,6 +1260,32 @@ mod tests {
     let cache = Cache::builder().max_bytes(1 << 20).images(8 << 20).build();
 
     assert_eq!(cache.0.images.budget(), Some(1 << 20));
+  }
+
+  /// A budget the others squeezed to nothing gets room once a shrinking budget releases it, in the
+  /// same `set_options` call and on its next insert.
+  #[test]
+  fn a_squeezed_budget_grows_into_what_another_releases() {
+    let max_bytes = 4 << 20;
+    let options = |stylesheets| CacheOptions {
+      max_bytes,
+      images: Some(2 << 20),
+      stylesheets: Some(stylesheets),
+      ..CacheOptions::default()
+    };
+    let cache = Cache::builder().max_bytes(max_bytes).build();
+    let images_held = || cache.stats().images.current;
+
+    cache.set_options(options(max_bytes));
+
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    cache.set_options(options(1 << 20));
+    keep_buffer(&cache, 0, 512);
+
+    assert!(images_held() >= 1 << 20, "{}", images_held());
   }
 
   #[test]
