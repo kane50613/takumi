@@ -340,29 +340,13 @@ impl CssFontSelector {
       })
   }
 
-  /// Approximate: where Blink takes the best bucket alone, the other buckets follow it, since
-  /// `auto` descriptors split one family's subsets apart.
+  /// The faces of `family` matching `font_description`.
   fn font_data_for_family(
     &self,
     font_description: &FontSelectionDescription,
     family: &str,
   ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
-    let ranked = self
-      .font_face_cache
-      .get_ranked(font_description.font_selection_request, family);
-    let (best, others) = ranked.split_first()?;
-    let mut faces = best.get_font_data(font_description)?;
-
-    if faces.iter().any(|face| !face.range_set().is_entire_range()) {
-      faces.extend(
-        others
-          .iter()
-          .filter_map(|segmented| segmented.get_font_data(font_description))
-          .flatten(),
-      );
-    }
-
-    Some(faces)
+    self.font_face_cache.get_font_data(font_description, family)
   }
 }
 
