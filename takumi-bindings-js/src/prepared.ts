@@ -175,8 +175,10 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
 ): Promise<Prepared<TSource, TLayout>> {
   const state = await collect(registry, source, layout, extras, needs, true);
 
-  await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
-  extras.signal?.throwIfAborted();
+  await registry.dropOnFailure(state.fonts, async () => {
+    await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
+    extras.signal?.throwIfAborted();
+  });
 
   return createPrepared(state);
 }
@@ -347,22 +349,24 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const reread = (failed: string[]) =>
     needs({ ...request, images: entries, failedFontFiles: failed });
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
-  const reached = await registry.leased((lease) =>
-    loadReached(
-      registry,
-      firstReached,
-      reread,
-      {
-        tried,
-        failedFontFiles,
-        fetch: fetchMissing ? { ...fontFileFetch, signal } : undefined,
-        uncachedOf: (needs) =>
-          listed && resolvedFonts
-            ? unseen(needs?.fonts ?? [], cached).flatMap((id) => resolvedFonts[id] ?? [])
-            : [],
-        signal,
-      },
-      lease,
+  const reached = await registry.dropOnFailure(resolvedFonts, () =>
+    registry.leased((lease) =>
+      loadReached(
+        registry,
+        firstReached,
+        reread,
+        {
+          tried,
+          failedFontFiles,
+          fetch: fetchMissing ? { ...fontFileFetch, signal } : undefined,
+          uncachedOf: (needs) =>
+            listed && resolvedFonts
+              ? unseen(needs?.fonts ?? [], cached).flatMap((id) => resolvedFonts[id] ?? [])
+              : [],
+          signal,
+        },
+        lease,
+      ),
     ),
   );
 

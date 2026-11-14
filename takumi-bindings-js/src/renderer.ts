@@ -359,6 +359,10 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly bufferKeys = new WeakMap<ByteBuf, string>();
   /** The keys of fonts loaded with `cache: "none"` that no render has asked to keep since. */
   private readonly transient = new Set<string>();
+  /** The keys of `transient` whose renders settled, forgotten once no render leases their files. */
+  private readonly unkept = new Set<string>();
+  /** The leases `leased` holds open. */
+  private readonly open = new Set<number>();
 
   constructor(
     private readonly backend: FontBackend<TFamily>,
@@ -379,7 +383,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     if (held) {
       if (keeps) {
-        this.transient.delete(key);
+        this.keep(key);
       }
 
       return held;
@@ -403,9 +407,15 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       })
       .then((families) => {
         if (keeps) {
-          this.transient.delete(key);
+          this.keep(key);
         } else {
           this.transient.add(key);
+
+          // The render that loaded it failed before the load finished, and dropped its fonts already.
+          if (lease !== undefined && !this.open.has(lease)) {
+            this.unkept.add(key);
+            this.dropSettled();
+          }
         }
 
         return families;
@@ -437,29 +447,59 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   async leased<T>(use: (lease: number) => Awaitable<T>): Promise<T> {
     const lease = this.backend.leaseFonts();
 
+    this.open.add(lease);
+
     try {
       return await use(lease);
     } finally {
+      this.open.delete(lease);
       this.backend.releaseFonts(lease);
+    }
+  }
+
+  /** Calls `use`, and forgets the fonts of `fonts` loaded with `cache: "none"` when it fails. */
+  async dropOnFailure<T>(fonts: FontLoader[] | undefined, use: () => Promise<T>): Promise<T> {
+    try {
+      return await use();
+    } catch (error) {
+      this.dropUnkept(fonts);
+      throw error;
     }
   }
 
   /**
    * Forgets the fonts of `fonts` loaded with `cache: "none"` that no render asked to keep, once no
-   * render leases their files. A render calls it after it settles.
+   * render leases their files. A render calls it after it settles, which also forgets the ones an
+   * earlier render left because another render leased them then.
    */
   dropUnkept(fonts: FontLoader[] | undefined): void {
-    const keys = (fonts ?? [])
-      .map((font) => this.keyOf(this.toLoader(font)))
-      .filter((key) => this.transient.has(key));
+    for (const font of fonts ?? []) {
+      const key = this.keyOf(this.toLoader(font));
 
-    if (keys.length === 0) {
+      if (this.transient.has(key)) {
+        this.unkept.add(key);
+      }
+    }
+
+    this.dropSettled();
+  }
+
+  /** Forgets the fonts under `unkept` that no render leases, leaving the others for a later call. */
+  private dropSettled() {
+    if (this.unkept.size === 0) {
       return;
     }
 
-    for (const key of this.backend.dropFonts(keys)) {
+    for (const key of this.backend.dropFonts([...this.unkept])) {
       this.transient.delete(key);
+      this.unkept.delete(key);
     }
+  }
+
+  /** Marks the font under `key` as one a render asked to keep. */
+  private keep(key: string) {
+    this.transient.delete(key);
+    this.unkept.delete(key);
   }
 
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
