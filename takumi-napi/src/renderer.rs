@@ -5,8 +5,8 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use takumi_bindings_common::{
   default_fonts,
-  font_cache::FontCache,
   input::{ListedFont, ListedFonts},
+  registrations::{FontRegistrations, RenderLeases},
   renderer::{CacheOptions, CacheStats, RendererOptions},
   source_cache::SourceCache,
 };
@@ -119,7 +119,7 @@ pub struct Renderer {
 #[derive(Clone)]
 pub(crate) struct FontState {
   fonts: Arc<Fonts>,
-  cache: FontCache,
+  registrations: FontRegistrations,
 }
 
 pub(crate) struct RendererState {
@@ -129,20 +129,37 @@ pub(crate) struct RendererState {
   font_state: ArcSwap<FontState>,
   pub(crate) cache: Cache,
   pub(crate) sources: SourceCache,
+  /// The leases each render in flight holds on the font files it uses.
+  pub(crate) leases: RenderLeases,
 }
 
 impl RendererState {
   /// Applies `change` to a copy of the fonts and publishes it. Call it on the JS thread only.
   pub(crate) fn update_fonts<T>(
     &self,
-    change: impl FnOnce(&mut Fonts, &mut FontCache) -> Result<T>,
+    change: impl FnOnce(&mut Fonts, &mut FontRegistrations) -> Result<T>,
   ) -> Result<T> {
     let mut state = FontState::clone(&self.font_state.load());
-    let changed = change(Arc::make_mut(&mut state.fonts), &mut state.cache)?;
+    let changed = change(Arc::make_mut(&mut state.fonts), &mut state.registrations)?;
 
     self.font_state.store(Arc::new(state));
 
     Ok(changed)
+  }
+
+  /// Unregisters what the font files the cache evicted held. Call it on the JS thread only.
+  pub(crate) fn release_evicted(&self) {
+    let evicted = self.cache.fonts().take_evicted();
+
+    if evicted.is_empty() {
+      return;
+    }
+
+    let _ = self.update_fonts(|fonts, registrations| {
+      registrations.release(fonts, &evicted);
+
+      Ok(())
+    });
   }
 
   /// A render's `fonts` list read against the fonts this renderer holds.
@@ -151,7 +168,9 @@ impl RendererState {
     families: &mut Option<Vec<String>>,
     listed: Option<Vec<ListedFont>>,
   ) -> Option<ListedFonts> {
-    let listed = ListedFonts::read(&self.font_state.load().cache, listed?);
+    self.release_evicted();
+
+    let listed = ListedFonts::read(&self.font_state.load().registrations, listed?);
 
     if families.is_none() {
       families.clone_from(&listed.families);
@@ -160,16 +179,11 @@ impl RendererState {
     Some(listed)
   }
 
-  /// The fonts for a render that names `families`, which are marked used, with the `@font-face`
-  /// files its document `failed` to download.
-  pub(crate) fn fonts_for_render(
-    &self,
-    families: Option<&[String]>,
-    failed: Option<&[String]>,
-  ) -> Arc<Fonts> {
-    let state = self.font_state.load();
+  /// The fonts for a render, with the `@font-face` files its document `failed` to download.
+  pub(crate) fn fonts_for_render(&self, failed: Option<&[String]>) -> Arc<Fonts> {
+    self.release_evicted();
 
-    state.cache.touch(families.unwrap_or_default());
+    let state = self.font_state.load();
 
     match failed {
       Some(failed) if !failed.is_empty() => Arc::new(state.fonts.with_failed_font_files(failed)),
@@ -204,16 +218,17 @@ impl Renderer {
       state: Arc::new(RendererState {
         font_state: ArcSwap::from_pointee(FontState {
           fonts: Arc::new(default_fonts().map_err(map_error)?),
-          cache: FontCache::new(options.font_cache_bytes()),
+          registrations: FontRegistrations::default(),
         }),
         cache: options.cache(),
         sources: SourceCache::default(),
+        leases: RenderLeases::default(),
       }),
     })
   }
 
   /// Register font into the renderer, under `key` when its loader gives one, returning the
-  /// families produced. It is never released for space.
+  /// families produced. It is never evicted.
   #[napi(
     js_name = "registerFont",
     ts_args_type = "fonts: Font, key?: string | null, signal?: AbortSignal",
@@ -226,14 +241,14 @@ impl Renderer {
     key: Option<String>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_font(env, font, key, true, signal)
+    self.load_font(env, font, key, true, None, signal)
   }
 
-  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
-  /// font cache is past its budget.
+  /// Registers a font a render's `fonts` list loaded under `key`, its file leased to `lease` and
+  /// evicted once no lease holds it and the cache needs the room.
   #[napi(
     js_name = "cacheFont",
-    ts_args_type = "fonts: Font, key: string, signal?: AbortSignal",
+    ts_args_type = "fonts: Font, key: string, lease?: number | null, signal?: AbortSignal",
     ts_return_type = "Promise<RegisteredFamily[]>"
   )]
   pub fn cache_font(
@@ -241,29 +256,49 @@ impl Renderer {
     env: Env,
     font: Object,
     key: String,
+    lease: Option<u32>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_font(env, font, Some(key), false, signal)
+    self.load_font(env, font, Some(key), false, lease, signal)
   }
 
-  /// The families a registration under `key` added, when the renderer still holds them; `pin`
-  /// keeps them from being released for space.
+  /// The families a registration under `key` added, while the renderer holds its file. Leases the
+  /// file to `lease`, or with `pin` keeps it from eviction for good.
   #[napi(js_name = "cachedFonts")]
-  pub fn cached_fonts(&self, key: String, pin: bool) -> Result<Option<Vec<RegisteredFamily>>> {
+  pub fn cached_fonts(
+    &self,
+    key: String,
+    pin: bool,
+    lease: Option<u32>,
+  ) -> Result<Option<Vec<RegisteredFamily>>> {
+    self.state.release_evicted();
+
     let registered = if pin {
-      self.state.update_fonts(|_, cache| Ok(cache.pin(&key)))?
+      self
+        .state
+        .update_fonts(|_, registrations| Ok(registrations.pin(&self.state.cache, &key)))?
     } else {
-      self.state.font_state.load().cache.lookup(&key)
+      self
+        .state
+        .font_state
+        .load()
+        .registrations
+        .lease(&self.state.cache, &key)
+        .map(|(families, held)| {
+          self.state.leases.hold(lease, held);
+
+          families
+        })
     };
 
     Ok(registered.map(|registered| registered.into_iter().map(Into::into).collect()))
   }
 
-  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
-  /// font cache is past its budget.
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, leased to `lease` and evicted
+  /// once no lease holds it and the cache needs the room.
   #[napi(
     js_name = "cacheFontFile",
-    ts_args_type = "url: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
+    ts_args_type = "url: string, data: Uint8Array | ArrayBuffer, lease?: number | null, signal?: AbortSignal",
     ts_return_type = "Promise<void>"
   )]
   pub fn cache_font_file(
@@ -271,6 +306,7 @@ impl Renderer {
     env: Env,
     url: String,
     data: Object,
+    lease: Option<u32>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontFileTask>> {
     Ok(AsyncTask::with_optional_signal(
@@ -278,9 +314,60 @@ impl Renderer {
         state: Arc::clone(&self.state),
         url,
         buffer: JsBytes::from_object(env, data)?,
+        lease,
       },
       signal,
     ))
+  }
+
+  /// Whether the renderer still holds the `@font-face` file `url`, leasing it to `lease` when it
+  /// does.
+  #[napi(js_name = "cachedFontFile")]
+  pub fn cached_font_file(&self, url: String, lease: u32) -> bool {
+    self.state.release_evicted();
+
+    let Some(held) = self
+      .state
+      .font_state
+      .load()
+      .registrations
+      .lease_file(&self.state.cache, &url)
+    else {
+      return false;
+    };
+
+    self.state.leases.hold(Some(lease), held);
+
+    true
+  }
+
+  /// Opens a set of leases that keeps the font files a render uses from eviction until
+  /// `releaseFonts`.
+  #[napi(js_name = "leaseFonts")]
+  pub fn lease_fonts(&self) -> u32 {
+    self.state.leases.open()
+  }
+
+  /// Releases the leases of the set `lease` names, evicting what no longer fits.
+  #[napi(js_name = "releaseFonts")]
+  pub fn release_fonts(&self, lease: u32) {
+    self.state.leases.close(lease);
+    self.state.release_evicted();
+  }
+
+  /// Gives the faces registered under `keys` precedence in their families, a later key over an
+  /// earlier one, as a render's `fonts` list orders them.
+  #[napi(js_name = "orderFonts")]
+  pub fn order_fonts(&self, keys: Vec<String>) {
+    let state = self.state.font_state.load();
+    let mut fonts = Fonts::clone(&state.fonts);
+
+    if state.registrations.prefer(&mut fonts, &keys) {
+      self.state.font_state.store(Arc::new(FontState {
+        fonts: Arc::new(fonts),
+        registrations: state.registrations.clone(),
+      }));
+    }
   }
 
   fn load_font(
@@ -289,6 +376,7 @@ impl Renderer {
     font: Object,
     key: Option<String>,
     pinned: bool,
+    lease: Option<u32>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
     let resource = read_font(env, font, &self.state.font_state.load().fonts)?;
@@ -299,6 +387,7 @@ impl Renderer {
         resource: Some(resource),
         key,
         pinned,
+        lease,
       },
       signal,
     ))
@@ -311,28 +400,23 @@ impl Renderer {
     let options: CacheOptions = deserialize_with_tracing(options)?;
 
     self.state.cache.set_options(options.pool());
-    self.state.update_fonts(|fonts, cache| {
-      cache
-        .set_max_bytes(fonts, options.font_bytes())
-        .map_err(map_error)
-    })
+    self.state.release_evicted();
+
+    Ok(())
   }
 
   /// What the renderer's caches hold and how their lookups went since it was created.
   #[napi(js_name = "cacheStats", ts_return_type = "CacheStats")]
   pub fn cache_stats<'env>(&self, env: &'env Env) -> Result<Unknown<'env>> {
-    env.to_js_value(&CacheStats::new(
-      &self.state.cache,
-      self.state.font_state.load().cache.stats(),
-    ))
+    env.to_js_value(&CacheStats::new(&self.state.cache))
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[napi(js_name = "unregisterFont")]
   pub fn unregister_font(&self, family: String) -> Result<bool> {
-    self.state.update_fonts(|fonts, cache| {
-      cache.forget(&family);
+    self.state.update_fonts(|fonts, registrations| {
+      registrations.forget_family(&self.state.cache, &family);
 
       Ok(fonts.unregister_family(&family))
     })
@@ -341,9 +425,9 @@ impl Renderer {
   /// Removes every registered font, leaving the bundled fallback font.
   #[napi(js_name = "clearFonts")]
   pub fn clear_fonts(&self) -> Result<()> {
-    self.state.update_fonts(|fonts, cache| {
+    self.state.update_fonts(|fonts, registrations| {
       *fonts = default_fonts().map_err(map_error)?;
-      cache.clear();
+      registrations.clear(&self.state.cache);
 
       Ok(())
     })

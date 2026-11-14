@@ -23,7 +23,7 @@ pub struct RendererOptions {
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheOptions {
-  /// The bytes every kind of data but fonts shares, [`PoolOptions::DEFAULT_MAX_BYTES`] when absent.
+  /// The bytes every kind of data shares, [`PoolOptions::DEFAULT_MAX_BYTES`] when absent.
   pub max_bytes: Option<f64>,
   /// The most bytes each kind of data may hold.
   pub budgets: Option<CacheBudgets>,
@@ -31,7 +31,7 @@ pub struct CacheOptions {
 
 /// The most bytes each kind of data a renderer keeps may hold, in JavaScript byte counts. An
 /// absent budget leaves its kind in the shared pool, except `glyphs`, which takes the budget the
-/// last [`set_glyph_cache_max_bytes`] set, and `fonts`, which leaves the fonts unbounded.
+/// last [`set_glyph_cache_max_bytes`] set.
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheBudgets {
@@ -49,13 +49,13 @@ pub struct CacheBudgets {
   pub intercepts: Option<f64>,
   /// [`PoolOptions`]'s `font_faces`.
   pub font_faces: Option<f64>,
-  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered, apart from the pool.
+  /// [`PoolOptions`]'s `fonts`, the decoded font files registered fonts and `@font-face` files hold.
   pub fonts: Option<f64>,
 }
 
 impl CacheOptions {
-  /// The options of the cache that holds every kind but fonts. A glyph budget they leave out is the
-  /// one the last [`set_glyph_cache_max_bytes`] set.
+  /// The options of the renderer's cache. A glyph budget they leave out is the one the last
+  /// [`set_glyph_cache_max_bytes`] set.
   pub fn pool(&self) -> PoolOptions {
     let budgets = self.budgets.unwrap_or_default();
     let mut options = PoolOptions::default();
@@ -71,13 +71,9 @@ impl CacheOptions {
     options.glyphs = budgets.glyphs.map(bytes);
     options.intercepts = budgets.intercepts.map(bytes);
     options.font_faces = budgets.font_faces.map(bytes);
+    options.fonts = budgets.fonts.map(bytes);
 
     options
-  }
-
-  /// The font budget, unbounded without one.
-  pub fn font_bytes(&self) -> Option<u64> {
-    self.budgets.and_then(|budgets| budgets.fonts).map(bytes)
   }
 }
 
@@ -96,11 +92,6 @@ impl RendererOptions {
     }
   }
 
-  /// The font budget, unbounded when neither name sets one.
-  pub fn font_cache_bytes(&self) -> Option<u64> {
-    self.cache_options().font_bytes()
-  }
-
   /// The cache a renderer built with these options keeps.
   pub fn cache(&self) -> Cache {
     Cache::from(self.cache_options().pool())
@@ -115,7 +106,7 @@ pub struct CacheStats {
   budgets: CacheBudgetStats,
 }
 
-/// The bytes the pool holds of every kind but fonts.
+/// The bytes the pool holds of every kind together.
 #[derive(Serialize)]
 struct CacheMemoryStats {
   current: f64,
@@ -142,7 +133,7 @@ struct CacheBudgetStats {
 pub struct CacheKindStats {
   /// The bytes held now.
   pub current: f64,
-  /// The kind's budget, none when it has no bound of its own.
+  /// The kind's budget, none when it shares the pool.
   pub max: Option<f64>,
   /// Lookups that found an entry.
   pub hits: f64,
@@ -165,8 +156,8 @@ impl From<PoolKindStats> for CacheKindStats {
 }
 
 impl CacheStats {
-  /// What `cache` holds, with `fonts` for the fonts it does not.
-  pub fn new(cache: &Cache, fonts: CacheKindStats) -> Self {
+  /// What `cache` holds.
+  pub fn new(cache: &Cache) -> Self {
     let stats = cache.stats();
 
     Self {
@@ -186,7 +177,7 @@ impl CacheStats {
         glyphs: stats.glyphs.into(),
         intercepts: stats.intercepts.into(),
         font_faces: stats.font_faces.into(),
-        fonts,
+        fonts: stats.fonts.into(),
       },
     }
   }
@@ -208,7 +199,6 @@ mod tests {
   use std::sync::Arc;
 
   use super::*;
-  use crate::font_cache::FontCache;
 
   fn options(json: &str) -> RendererOptions {
     serde_json::from_str(json).unwrap()
@@ -232,7 +222,7 @@ mod tests {
       options.cache_options().pool().max_bytes,
       PoolOptions::DEFAULT_MAX_BYTES
     );
-    assert_eq!(options.font_cache_bytes(), None);
+    assert_eq!(options.cache_options().pool().fonts, None);
     assert!(keeps_stylesheets(r#"{ "cache": null }"#));
     assert!(keeps_stylesheets(r#"{ "cache": { "budgets": null } }"#));
   }
@@ -273,13 +263,11 @@ mod tests {
 
   #[test]
   fn the_fonts_budget_wins_over_the_old_name() {
+    let fonts = |json| options(json).cache_options().pool().fonts;
+
+    assert_eq!(fonts(r#"{ "fontCacheMaxBytes": 2 }"#), Some(2));
     assert_eq!(
-      options(r#"{ "fontCacheMaxBytes": 2 }"#).font_cache_bytes(),
-      Some(2)
-    );
-    assert_eq!(
-      options(r#"{ "cache": { "budgets": { "fonts": 1 } }, "fontCacheMaxBytes": 2 }"#)
-        .font_cache_bytes(),
+      fonts(r#"{ "cache": { "budgets": { "fonts": 1 } }, "fontCacheMaxBytes": 2 }"#),
       Some(1)
     );
   }
@@ -302,8 +290,7 @@ mod tests {
   #[test]
   fn stats_report_under_the_option_keys() {
     let options = options(r#"{ "cache": { "budgets": { "images": 1024, "fonts": 2048 } } }"#);
-    let fonts = FontCache::new(options.font_cache_bytes());
-    let stats = serde_json::to_value(CacheStats::new(&options.cache(), fonts.stats())).unwrap();
+    let stats = serde_json::to_value(CacheStats::new(&options.cache())).unwrap();
 
     assert_eq!(
       stats["memory"]["max"],

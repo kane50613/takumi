@@ -263,48 +263,99 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
   );
 }
 
-/** How many times a render registers its fonts before it renders with whichever the backend still holds. */
-const REGISTER_ATTEMPTS = 3;
-
 /**
- * What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it.
+ * What a {@link FontRegistry} needs from a backend: its registration, and the cache behind it. The
+ * cache evicts one font file at a time, and a render leases the files it uses until it settles.
  *
  * @internal
  */
 export type FontBackend<TFamily extends RegisteredFamilyLike> = {
-  /** Registers a font under `key`; it is never released for space. */
+  /** Registers a font under `key`; it is never evicted. */
   registerFont(font: Font, key: string): Awaitable<TFamily[]>;
-  /** Registers a font a render's `fonts` list loaded under `key`, released for space past the budget. */
-  cacheFont(font: Font, key: string): Awaitable<TFamily[]>;
-  /** The families a registration under `key` added while the backend holds them; `pin` keeps them. */
-  cachedFonts(key: string, pin: boolean): TFamily[] | null | undefined;
-  /** Loads the `@font-face` file `url` names, released for space past the budget. */
-  cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Awaitable<void>;
+  /** Registers a font a render's `fonts` list loaded under `key`, its file leased to `lease`. */
+  cacheFont(font: Font, key: string, lease: number): Awaitable<TFamily[]>;
+  /**
+   * The families a registration under `key` added while the backend holds its file. `pin` keeps the
+   * file for good, and `lease` leases it.
+   */
+  cachedFonts(key: string, pin: boolean, lease?: number): TFamily[] | null | undefined;
+  /** Loads the `@font-face` file `url` names, leased to `lease`. */
+  cacheFontFile(url: string, data: ArrayBuffer | Uint8Array, lease: number): Awaitable<void>;
+  /** Whether the backend holds the `@font-face` file `url`, leasing it to `lease` when it does. */
+  cachedFontFile(url: string, lease: number): boolean;
+  /** Opens a set of leases, which keeps the files a render uses from eviction until `releaseFonts`. */
+  leaseFonts(): number;
+  /** Releases the leases `leaseFonts` opened, so the backend can evict their files. */
+  releaseFonts(lease: number): void;
+  /** Gives the faces registered under `keys` precedence in their families, a later key over an earlier one. */
+  orderFonts(keys: string[]): void;
 };
+
+/**
+ * The `@font-face` files a prepared render loaded, and how to load the ones evicted since.
+ *
+ * @internal
+ */
+export type HeldFontFiles = {
+  urls: string[];
+  /** Loads `urls` leased to `lease`, returning the ones that failed. */
+  load(urls: string[], lease: number): Promise<string[]>;
+};
+
+/** The resources a render uses, as the binding expects them. */
+type ResolvedResources = {
+  images?: ImageSource[];
+  fontFamilies?: string[];
+  /** The held `@font-face` files that failed to load again. */
+  failedFontFiles?: string[];
+};
+
+/**
+ * A 53-bit hash of `bytes` with their length, after
+ * [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js).
+ */
+function hashBytes(bytes: Uint8Array): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+
+  for (let index = 0; index < bytes.length; index++) {
+    const byte = bytes[index] ?? 0;
+
+    h1 = Math.imul(h1 ^ byte, 2654435761);
+    h2 = Math.imul(h2 ^ byte, 1597334677);
+  }
+
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+  return `${bytes.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
 
 /**
  * Font registration shared by every backend: asks the backend whether it still holds a font before
  * loading it, loads a font once however many renders ask for it at the same time, and turns a set
  * of {@link FontLoader}s plus an {@link ImagesInput} into the `fontFamilies`/`images` the binding
- * expects. The backend keeps the fonts and releases them; this keeps no record of its own.
+ * expects. The backend keeps the fonts and evicts them; this keeps no record of its own.
  * @internal
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly loading = new Map<string, Promise<TFamily[]>>();
-  /** A key for each buffer passed as a font, since the backend only takes string keys. */
+  /** A key for each buffer passed as a font, by its bytes, since the backend only takes string keys. */
   private readonly bufferKeys = new WeakMap<ByteBuf, string>();
-  private buffers = 0;
 
   constructor(private readonly backend: FontBackend<TFamily>) {}
 
   /**
-   * Registers one font unless the backend still holds it. A `pinned` font, as `registerFont`
-   * registers, is never released for space.
+   * Registers one font unless the backend still holds it, its file leased to the render that
+   * `lease` names. Without a lease, as `registerFont` registers, it is never evicted.
    */
-  async register(font: FontLoader, pinned = true): Promise<TFamily[]> {
+  async register(font: FontLoader, lease?: number): Promise<TFamily[]> {
     const loader = toLoader(font);
     const key = this.keyOf(loader);
-    const held = this.backend.cachedFonts(key, pinned);
+    const pinned = lease === undefined;
+    const held = this.backend.cachedFonts(key, pinned, lease);
 
     if (held) {
       return held;
@@ -313,9 +364,10 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const pending = this.loading.get(key);
 
     if (pending) {
-      return pinned
-        ? pending.then(() => this.backend.cachedFonts(key, true) ?? this.register(loader))
-        : pending;
+      // The render loading it leases its file until that render settles, after this continues.
+      return pending.then(
+        () => this.backend.cachedFonts(key, pinned, lease) ?? this.register(loader, lease),
+      );
     }
 
     const load = Promise.resolve(extractFontBuffer(loader))
@@ -323,7 +375,9 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
         const view = asView(data);
         const input = isBuffer(loader) ? view : { ...loader, data: view };
 
-        return pinned ? this.backend.registerFont(input, key) : this.backend.cacheFont(input, key);
+        return lease === undefined
+          ? this.backend.registerFont(input, key)
+          : this.backend.cacheFont(input, key, lease);
       })
       .finally(() => this.loading.delete(key));
 
@@ -332,20 +386,31 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return load;
   }
 
-  /** Loads the `@font-face` file `url` names. A wasm backend reads only a `Uint8Array`. */
-  async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Promise<void> {
-    await this.backend.cacheFontFile(url, asView(data));
+  /** Loads the `@font-face` file `url` names, leased to `lease`. A wasm backend reads only a `Uint8Array`. */
+  async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array, lease: number): Promise<void> {
+    await this.backend.cacheFontFile(url, asView(data), lease);
   }
 
-  /** Loads each of `fonts` the backend does not hold, released for space, and returns whether any was loaded. */
-  async cache(fonts: FontLoader[]): Promise<boolean> {
+  /** Loads each of `fonts` the backend does not hold, leased to `lease`, and returns whether any was loaded. */
+  async cache(fonts: FontLoader[], lease: number): Promise<boolean> {
     const loaders = fonts
       .map(toLoader)
-      .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false));
+      .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
 
-    await Promise.all(loaders.map((loader) => this.register(loader, false)));
+    await Promise.all(loaders.map((loader) => this.register(loader, lease)));
 
     return loaders.length > 0;
+  }
+
+  /** Calls `use` with a set of leases, released once what it returns settles. */
+  async leased<T>(use: (lease: number) => Awaitable<T>): Promise<T> {
+    const lease = this.backend.leaseFonts();
+
+    try {
+      return await use(lease);
+    } finally {
+      this.backend.releaseFonts(lease);
+    }
   }
 
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
@@ -388,40 +453,51 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return known;
     }
 
-    const assigned = `buffer:${++this.buffers}`;
+    const assigned = `buffer:${hashBytes(asView(buffer))}`;
 
     this.bufferKeys.set(buffer, assigned);
 
     return assigned;
   }
 
+  /** Leases each held file the backend still holds, and loads the others again, returning the ones that failed. */
+  private async holdFiles({ urls, load }: HeldFontFiles, lease: number): Promise<string[]> {
+    const evicted = urls.filter((url) => !this.backend.cachedFontFile(url, lease));
+
+    return evicted.length > 0 ? load(evicted, lease) : [];
+  }
+
   /**
-   * Registers `fonts` and resolves lazy `images`, then calls `use` with the `images` and
-   * `fontFamilies` the binding expects while the backend holds every font. Explicit `fontFamilies`
-   * wins over the registered set.
+   * Registers `fonts`, resolves lazy `images`, and leases the `@font-face` `files` a prepared render
+   * loaded, then calls `use` with the `images` and `fontFamilies` the binding expects. Every font
+   * stays leased until what `use` returns settles. Explicit `fontFamilies` wins over the registered
+   * set.
    */
   async resolveResources<T>(
     fonts: FontLoader[] | undefined,
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
-    use: (resources: { images?: ImageSource[]; fontFamilies?: string[] }) => Awaitable<T>,
+    use: (resources: ResolvedResources) => Awaitable<T>,
+    files?: HeldFontFiles,
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
     const loaders = fonts?.map(toLoader) ?? [];
 
-    for (let attempt = 1; ; attempt++) {
-      const families = await Promise.all(loaders.map((loader) => this.register(loader, false)));
+    return this.leased(async (lease) => {
+      const families = await Promise.all(loaders.map((loader) => this.register(loader, lease)));
+      const failedFontFiles = files ? await this.holdFiles(files, lease) : [];
+      const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
 
-      // Nothing yields from this check into `use`, and backends only release fonts on this
-      // thread, so no other render can release these fonts before the render takes them.
-      if (
-        attempt === REGISTER_ATTEMPTS ||
-        loaders.every((loader) => this.backend.cachedFonts(this.keyOf(loader), false))
-      ) {
-        const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
-
-        return use({ images: resolvedImages, fontFamilies: fontFamilies ?? registered });
+      // Nothing yields from here into `use`, so the order stands when the render takes its fonts.
+      if (loaders.length > 0) {
+        this.backend.orderFonts(loaders.map((loader) => this.keyOf(loader)));
       }
-    }
+
+      return use({
+        images: resolvedImages,
+        fontFamilies: fontFamilies ?? registered,
+        ...(failedFontFiles.length > 0 ? { failedFontFiles } : {}),
+      });
+    });
   }
 }
