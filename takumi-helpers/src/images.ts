@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Node } from "./types";
 import type { FetchOptions } from "./fetch";
 import { fetchImages, isRemoteUrl } from "./fetch/images";
+import type { DownloadStore } from "./fetch/store";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -50,7 +51,11 @@ function collectImageUrls(node: Node, urls: Set<string>) {
   }
 }
 
-/** Image fetches by URL, shared across renders to dedupe requests. Any `Map`-like object works. */
+/**
+ * Image fetches by URL, shared across renders to dedupe requests. Any `Map`-like object works.
+ *
+ * @deprecated Use a `DownloadStore`, which a renderer takes as `cache.store`.
+ */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
   set(url: string, data: Promise<ArrayBuffer>): unknown;
@@ -70,7 +75,12 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
   node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */
   sources?: T[];
-  /** Single-flight byte cache shared across renders. */
+  /**
+   * The store that keeps the downloaded bytes. `null` keeps none. Left out, emoji SVGs go to a
+   * store for each `fetch` function, 32 MiB at most, and other images to none.
+   */
+  store?: DownloadStore | null;
+  /** @deprecated Use `store`. When both are set, this wins. */
   fetchCache?: ImageFetchCache;
   /** Throw on any fetch failure; if `false`, failed URLs are dropped. @default true */
   throwOnError?: boolean;
