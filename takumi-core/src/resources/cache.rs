@@ -4,6 +4,7 @@ use std::{
   array,
   convert::Infallible,
   marker::PhantomData,
+  mem::take,
   ops::{Index, IndexMut},
   ptr,
   sync::{
@@ -29,6 +30,7 @@ use crate::{
   layout::intercept::{CachedSpans, InterceptCache, InterceptKey},
   resources::{
     glyph_cache::{self, GlyphCache, GlyphEntry, GlyphKey},
+    held_fonts::{HeldFont, HeldFonts},
     image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
@@ -47,8 +49,8 @@ const SHARD_BYTES: u64 = 64 << 20;
 const CHARGE_STEP: u64 = 1 << 20;
 
 /// What renders keep across renders: decoded images and the rasters drawn from them, parsed
-/// stylesheets and Tailwind classes, glyphs and their masks, and the faces of `@font-face` rules.
-/// Every kind shares one pool of bytes. Clones share the same data.
+/// stylesheets and Tailwind classes, glyphs and their masks, the faces of `@font-face` rules, and
+/// the font files a host holds. Every kind shares one pool of bytes. Clones share the same data.
 #[derive(Clone)]
 pub struct Cache(Arc<Caches>);
 
@@ -64,6 +66,7 @@ struct Caches {
   intercepts: InterceptCache,
   #[cfg(feature = "font-face")]
   font_faces: DocumentRegistries,
+  fonts: HeldFonts,
 }
 
 /// The bytes a [`Cache`] keeps, and the most bytes each kind of data may hold within them. A kind
@@ -96,6 +99,8 @@ pub struct CacheOptions {
   /// The faces `@font-face` rules add, weighed by the font files they hold.
   #[cfg(feature = "font-face")]
   pub font_faces: Option<u64>,
+  /// The decoded font files a host holds through [`Cache::fonts`].
+  pub fonts: Option<u64>,
 }
 
 impl CacheOptions {
@@ -119,6 +124,7 @@ impl CacheOptions {
         Kind::FontFaces => self.font_faces,
         #[cfg(not(feature = "font-face"))]
         Kind::FontFaces => None,
+        Kind::Fonts => self.fonts,
       };
 
       budget.map(|budget| budget.min(self.max_bytes))
@@ -139,6 +145,7 @@ impl Default for CacheOptions {
       intercepts: None,
       #[cfg(feature = "font-face")]
       font_faces: None,
+      fonts: None,
     }
   }
 }
@@ -158,6 +165,7 @@ impl From<CacheOptions> for Cache {
       intercepts: InterceptCache::new(KindStore::new(&pool)),
       #[cfg(feature = "font-face")]
       font_faces: DocumentRegistries::new(KindStore::new(&pool)),
+      fonts: HeldFonts::new(KindStore::new(&pool)),
       pool,
     }))
   }
@@ -296,6 +304,11 @@ impl Cache {
     &self.0.font_faces
   }
 
+  /// The font files a host holds, such as the fonts a binding registers.
+  pub fn fonts(&self) -> &HeldFonts {
+    &self.0.fonts
+  }
+
   /// The buffer an image with the cache key `source` draws at a size, `compute`d once across
   /// concurrent misses. A source with no key computes on every call.
   pub(crate) fn sized(
@@ -338,6 +351,8 @@ pub struct CacheStats {
   /// [`CacheOptions::font_faces`].
   #[cfg(feature = "font-face")]
   pub font_faces: CacheKindStats,
+  /// [`CacheOptions::fonts`].
+  pub fonts: CacheKindStats,
 }
 
 /// The bytes a [`Cache`] holds of every kind together.
@@ -378,9 +393,10 @@ pub(crate) enum Kind {
   Glyphs,
   Intercepts,
   FontFaces,
+  Fonts,
 }
 
-const KINDS: usize = 7;
+const KINDS: usize = 8;
 
 impl Kind {
   const ALL: [Self; KINDS] = [
@@ -391,7 +407,23 @@ impl Kind {
     Self::Glyphs,
     Self::Intercepts,
     Self::FontFaces,
+    Self::Fonts,
   ];
+
+  /// Moves what `from` holds of this kind into `to` when it is [`Kind::Fonts`], whose host must
+  /// hear of each font before it goes, so a budget they gain or lose keeps them where every other
+  /// kind starts empty.
+  fn move_held(self, from: &PoolStore, to: &PoolStore) {
+    if self != Self::Fonts {
+      return;
+    }
+
+    for (key, entry) in from.iter() {
+      if key.kind() == self {
+        to.insert(key, entry);
+      }
+    }
+  }
 
   /// The approximate bytes of one entry, a hint for how many a budget holds.
   fn entry_bytes(self) -> u64 {
@@ -401,7 +433,7 @@ impl Kind {
       Self::Tailwind => 256,
       Self::Glyphs => 4 << 10,
       Self::Intercepts => 64,
-      Self::FontFaces => 256 << 10,
+      Self::FontFaces | Self::Fonts => 256 << 10,
     }
   }
 }
@@ -455,7 +487,7 @@ impl KindCounts {
   }
 }
 
-type PoolStore = Store<PoolKey, PoolEntry, ByBytes, DefaultHashBuilder, CountEvictions>;
+type PoolStore = Store<PoolKey, PoolEntry, ByBytes, DefaultHashBuilder, PoolLifecycle>;
 
 /// The bytes every kind shares: a store for the kinds without a budget, which gives up what the
 /// budgets hold, and a store of its own for each kind with one.
@@ -465,27 +497,33 @@ struct Pool {
   /// The most bytes the pool and its budgets held together after an entry was kept.
   high: AtomicU64,
   budgets: PerKind<ArcSwapOption<Budget>>,
-  counts: Arc<PerKind<KindCounts>>,
+  lifecycle: PoolLifecycle,
   /// The bytes budgets hold, each rounded up to a [`CHARGE_STEP`]. Held while budgets resize.
   charged: Mutex<u64>,
 }
 
 impl Pool {
   fn new(options: CacheOptions) -> Self {
-    let counts = Arc::new(PerKind::from_fn(|_| KindCounts::default()));
+    let lifecycle = PoolLifecycle::default();
     let budgets = options.budgets();
 
     Self {
       // ~4 KiB average entry, as glyphs and masks outnumber the rest ⇒ an item-count hint.
-      store: store(options.max_bytes, 4 << 10, &counts),
+      store: store(options.max_bytes, 4 << 10, &lifecycle),
       max_bytes: AtomicU64::new(options.max_bytes),
       high: AtomicU64::new(0),
       budgets: PerKind::from_fn(|kind| {
-        ArcSwapOption::new(budgets[kind].map(|bytes| Arc::new(Budget::new(kind, bytes, &counts))))
+        ArcSwapOption::new(
+          budgets[kind].map(|bytes| Arc::new(Budget::new(kind, bytes, &lifecycle))),
+        )
       }),
-      counts,
+      lifecycle,
       charged: Mutex::new(0),
     }
+  }
+
+  fn counts(&self) -> &PerKind<KindCounts> {
+    &self.lifecycle.counts
   }
 
   fn lock_charged(&self) -> MutexGuard<'_, u64> {
@@ -518,6 +556,29 @@ impl Pool {
       })
       .sum::<u64>()
       + self.store.weight()
+  }
+
+  /// Evicts what `kind` holds past its store's capacity, as an entry that was pinned when it was kept
+  /// no longer is.
+  fn trim(&self, kind: Kind) {
+    let budget = self.budgets[kind].load();
+    let store = self.store_for(budget.as_deref());
+
+    if store.weight() <= store.capacity() {
+      return;
+    }
+
+    let mut charged = self.lock_charged();
+
+    match &*self.budgets[kind].load() {
+      Some(budget) => self.fit(&mut charged, budget),
+      None => self.store.set_capacity(
+        self
+          .max_bytes
+          .load(Ordering::Relaxed)
+          .saturating_sub(*charged),
+      ),
+    }
   }
 
   /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
@@ -588,10 +649,14 @@ impl Pool {
         (Some(budget), None) => {
           slot.store(None);
           *charged -= budget.charged.load(Ordering::Relaxed);
+          kind.move_held(&budget.store, &self.store);
           budget.store.clear();
         }
         (None, Some(bytes)) => {
-          slot.store(Some(Arc::new(Budget::new(kind, bytes, &self.counts))));
+          let budget = Budget::new(kind, bytes, &self.lifecycle);
+
+          kind.move_held(&self.store, &budget.store);
+          slot.store(Some(Arc::new(budget)));
           self.store.retain(|key, _| key.kind() != kind);
         }
         (None, None) => {}
@@ -627,7 +692,7 @@ impl Pool {
 
     let current = held.0.iter().sum();
     let kind = |kind: Kind| {
-      self.counts[kind].stats(
+      self.counts()[kind].stats(
         held[kind],
         budgets[kind]
           .as_ref()
@@ -650,6 +715,7 @@ impl Pool {
       intercepts: kind(Kind::Intercepts),
       #[cfg(feature = "font-face")]
       font_faces: kind(Kind::FontFaces),
+      fonts: kind(Kind::Fonts),
     }
   }
 }
@@ -666,9 +732,9 @@ struct Budget {
 
 impl Budget {
   /// A store for `kind` holding at most `max_bytes`.
-  fn new(kind: Kind, max_bytes: u64, counts: &Arc<PerKind<KindCounts>>) -> Self {
+  fn new(kind: Kind, max_bytes: u64, lifecycle: &PoolLifecycle) -> Self {
     Self {
-      store: store(max_bytes, kind.entry_bytes(), counts),
+      store: store(max_bytes, kind.entry_bytes(), lifecycle),
       max_bytes: AtomicU64::new(max_bytes),
       charged: AtomicU64::new(0),
     }
@@ -686,6 +752,15 @@ pub(crate) struct KindStore<V> {
   kind: PhantomData<fn() -> V>,
 }
 
+impl<V> Clone for KindStore<V> {
+  fn clone(&self) -> Self {
+    Self {
+      pool: Arc::clone(&self.pool),
+      kind: PhantomData,
+    }
+  }
+}
+
 impl<V: Kept> KindStore<V> {
   fn new(pool: &Arc<Pool>) -> Self {
     Self {
@@ -695,7 +770,7 @@ impl<V: Kept> KindStore<V> {
   }
 
   fn counts(&self) -> &KindCounts {
-    &self.pool.counts[V::KIND]
+    &self.pool.counts()[V::KIND]
   }
 
   fn budget_slot(&self) -> &ArcSwapOption<Budget> {
@@ -728,6 +803,32 @@ impl<V: Kept> KindStore<V> {
     self.counts().looked_up(value.is_some());
 
     value
+  }
+
+  /// The value kept under `key`, without counting a lookup or marking it used.
+  pub(crate) fn peek(&self, key: V::Key) -> Option<V> {
+    let budget = self.budget_slot().load();
+
+    self
+      .pool
+      .store_for(budget.as_deref())
+      .peek(&V::pool_key(key))
+      .and_then(V::from_entry)
+  }
+
+  /// Drops the value kept under `key`, which counts as no eviction.
+  pub(crate) fn remove(&self, key: V::Key) {
+    let budget = self.budget_slot().load();
+
+    self
+      .pool
+      .store_for(budget.as_deref())
+      .remove(&V::pool_key(key));
+  }
+
+  /// Evicts what the kind holds past its capacity, once values pinned when they were kept are not.
+  pub(crate) fn trim(&self) {
+    self.pool.trim(V::KIND);
   }
 
   /// Keeps `value` under `key`.
@@ -772,29 +873,74 @@ impl<V: Kept> KindStore<V> {
   }
 }
 
-/// Counts the entries each kind loses to eviction, and releases them as `quick_cache`'s default
-/// lifecycle does.
+impl KindStore<Arc<HeldFont>> {
+  /// The ids of the fonts evicted since the last call, without the ones kept again since.
+  pub(crate) fn take_evicted(&self) -> Vec<u64> {
+    let mut evicted = take(
+      &mut *self
+        .pool
+        .lifecycle
+        .evicted_fonts
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner),
+    );
+
+    evicted.sort_unstable();
+    evicted.dedup();
+    evicted.retain(|&id| self.peek(id).is_none());
+
+    evicted
+  }
+}
+
+/// Counts the entries each kind loses to eviction, keeps a held font from eviction and records the
+/// fonts evicted, and releases entries as `quick_cache`'s default lifecycle does.
 #[derive(Clone)]
-struct CountEvictions {
+struct PoolLifecycle {
   counts: Arc<PerKind<KindCounts>>,
+  /// The ids of the fonts evicted since [`HeldFonts::take_evicted`] last took them.
+  evicted_fonts: Arc<Mutex<Vec<u64>>>,
   release: DefaultLifecycle<PoolKey, PoolEntry>,
 }
 
-impl Lifecycle<PoolKey, PoolEntry> for CountEvictions {
+impl Default for PoolLifecycle {
+  fn default() -> Self {
+    Self {
+      counts: Arc::new(PerKind::from_fn(|_| KindCounts::default())),
+      evicted_fonts: Arc::default(),
+      release: DefaultLifecycle::default(),
+    }
+  }
+}
+
+impl Lifecycle<PoolKey, PoolEntry> for PoolLifecycle {
   type RequestState =
     <DefaultLifecycle<PoolKey, PoolEntry> as Lifecycle<PoolKey, PoolEntry>>::RequestState;
+
+  fn is_pinned(&self, _key: &PoolKey, entry: &PoolEntry) -> bool {
+    matches!(entry, PoolEntry::Font(font) if font.is_held())
+  }
 
   fn on_evict(&self, state: &mut Self::RequestState, key: PoolKey, entry: PoolEntry) {
     self.counts[key.kind()]
       .evictions
       .fetch_add(1, Ordering::Relaxed);
+
+    if let PoolKey::Font(id) = key {
+      self
+        .evicted_fonts
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(id);
+    }
+
     self.release.on_evict(state, key, entry);
   }
 }
 
-/// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`, counting its
-/// evictions in `counts`.
-fn store(max_bytes: u64, entry_bytes: u64, counts: &Arc<PerKind<KindCounts>>) -> PoolStore {
+/// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`, with the
+/// lifecycle every store of the pool shares.
+fn store(max_bytes: u64, entry_bytes: u64, lifecycle: &PoolLifecycle) -> PoolStore {
   let estimated_items = (max_bytes / entry_bytes).max(1) as usize;
   let parallelism = available_parallelism().map_or(1, |n| n.get() as u64);
   let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
@@ -808,19 +954,19 @@ fn store(max_bytes: u64, entry_bytes: u64, counts: &Arc<PerKind<KindCounts>>) ->
     .weight_capacity(max_bytes)
     .shards(shards)
     .build();
-  let lifecycle = CountEvictions {
-    counts: Arc::clone(counts),
-    release: DefaultLifecycle::default(),
-  };
-
   match options {
-    Ok(options) => Store::with_options(options, ByBytes, DefaultHashBuilder::default(), lifecycle),
+    Ok(options) => Store::with_options(
+      options,
+      ByBytes,
+      DefaultHashBuilder::default(),
+      lifecycle.clone(),
+    ),
     Err(_) => Store::with(
       estimated_items,
       max_bytes,
       ByBytes,
       DefaultHashBuilder::default(),
-      lifecycle,
+      lifecycle.clone(),
     ),
   }
 }
@@ -903,6 +1049,7 @@ kinds! {
   Intercept(InterceptKey) => CachedSpans, Intercepts;
   #[cfg(feature = "font-face")]
   FontFaces(DocumentKey) => CachedRegistry, FontFaces;
+  Font(u64) => Arc<HeldFont>, Fonts;
 }
 
 /// How large an image draws: its buffer size and the filter it scales with.
