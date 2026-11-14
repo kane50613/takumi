@@ -8,7 +8,6 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-pub mod font_cache;
 #[cfg(all(
   feature = "wasm",
   target_arch = "wasm32",
@@ -18,6 +17,7 @@ pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
+pub mod registrations;
 pub mod renderer;
 #[cfg(feature = "wasm")]
 pub mod source;
@@ -27,11 +27,10 @@ pub mod source_cache;
 use std::fmt::Display;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use font_cache::FontCache;
 use input::{Font, ListedFonts, register_font};
+use registrations::{FontRegistrations, RenderLeases, Retention};
 #[cfg(feature = "wasm")]
-use renderer::CacheOptions;
-use renderer::CacheStats;
+use renderer::{CacheOptions, CacheStats};
 use serde::Serialize;
 #[cfg(feature = "wasm")]
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
@@ -93,23 +92,25 @@ fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result
 /// builds abort on panic) leaves the store usable.
 pub struct FontStore {
   fonts: RefCell<Rc<Fonts>>,
-  cache: RefCell<FontCache>,
+  registrations: RefCell<FontRegistrations>,
+  cache: Cache,
+  leases: RenderLeases,
 }
 
 impl FontStore {
-  /// A store holding the embedded last-resort fonts, keeping at most `cache_max_bytes` of fonts
-  /// that are not pinned.
-  pub fn new(cache_max_bytes: Option<u64>) -> Result<Self, FontError> {
+  /// A store holding the embedded last-resort fonts, whose font files `cache` holds.
+  pub fn new(cache: Cache) -> Result<Self, FontError> {
     Ok(Self {
       fonts: RefCell::new(Rc::new(default_fonts()?)),
-      cache: RefCell::new(FontCache::new(cache_max_bytes)),
+      registrations: RefCell::default(),
+      cache,
+      leases: RenderLeases::default(),
     })
   }
 
-  /// The registry for a render that names `families`, which are marked used, with the
-  /// `@font-face` files its document `failed` to download.
-  pub fn for_render(&self, families: Option<&[String]>, failed: Option<&[String]>) -> Rc<Fonts> {
-    self.cache.borrow().touch(families.unwrap_or_default());
+  /// The registry for a render, with the `@font-face` files its document `failed` to download.
+  pub fn for_render(&self, failed: Option<&[String]>) -> Rc<Fonts> {
+    self.release_evicted();
 
     let failed = failed.unwrap_or_default();
 
@@ -128,35 +129,44 @@ impl FontStore {
     failed: Option<&[String]>,
   ) -> Rc<Fonts> {
     let Some(listed) = listed else {
-      return self.for_render(families.as_deref(), failed);
+      return self.for_render(failed);
     };
 
     if families.is_none() {
       families.clone_from(&listed.families);
     }
 
-    Rc::new(listed.fonts(&self.for_render(families.as_deref(), failed)))
+    Rc::new(listed.fonts(&self.for_render(failed)))
   }
 
-  /// Registers the font JavaScript describes under `key`. One that is not `pinned` can be released.
+  /// Registers the font JavaScript describes under `key`, its file leased to `lease`, kept as
+  /// `retention` says.
   #[cfg(feature = "wasm")]
   pub fn register_value<T: JsCast>(
     &self,
     font: impl Into<JsValue>,
     key: Option<&str>,
-    pinned: bool,
+    retention: Retention,
+    lease: Option<u32>,
   ) -> Result<T, js_sys::Error> {
     let font = Font::from_js(font.into()).map_err(js_error)?;
-    let registered = self.register(font, key, pinned).map_err(js_error)?;
+    let registered = self
+      .register(font, key, retention, lease)
+      .map_err(js_error)?;
 
     Ok(to_value(&registered).map_err(js_error)?.unchecked_into())
   }
 
   /// [`Self::cached`] as the binding's JavaScript type `T`.
   #[cfg(feature = "wasm")]
-  pub fn cached_value<T: JsCast>(&self, key: &str, pin: bool) -> Result<Option<T>, js_sys::Error> {
+  pub fn cached_value<T: JsCast>(
+    &self,
+    key: &str,
+    pin: bool,
+    lease: Option<u32>,
+  ) -> Result<Option<T>, js_sys::Error> {
     self
-      .cached(key, pin)
+      .cached(key, pin, lease)
       .map(|registered| Ok(to_value(&registered).map_err(js_error)?.unchecked_into()))
       .transpose()
   }
@@ -164,126 +174,172 @@ impl FontStore {
   /// A render's `fonts` list, as JavaScript describes it, read against the fonts this store holds.
   #[cfg(feature = "wasm")]
   pub fn listed(&self, listed: Option<JsValue>) -> Result<Option<ListedFonts>, js_sys::Error> {
+    self.release_evicted();
+
     listed
       .map(|listed| {
         from_value(listed)
-          .map(|listed| ListedFonts::read(&self.cache.borrow(), listed))
+          .map(|listed| ListedFonts::read(&self.registrations.borrow(), listed))
           .map_err(js_error)
       })
       .transpose()
   }
 
-  /// Applies the cache options JavaScript describes to `cache` and to the fonts this store holds.
+  /// Applies the cache options JavaScript describes to the cache, evicting what no longer fits.
   #[cfg(feature = "wasm")]
-  pub fn set_cache_options_value(
-    &self,
-    cache: &Cache,
-    options: JsValue,
-  ) -> Result<(), js_sys::Error> {
+  pub fn set_cache_options_value(&self, options: JsValue) -> Result<(), js_sys::Error> {
     let options: CacheOptions = from_value(options).map_err(js_error)?;
 
-    cache.set_options(options.pool());
-    self
-      .set_cache_max_bytes(options.font_bytes())
-      .map_err(js_error)
+    self.cache.set_options(options.pool());
+    self.release_evicted();
+
+    Ok(())
   }
 
-  /// [`Self::cache_stats`] as the binding's JavaScript type `T`.
+  /// What the cache holds, as the binding's JavaScript type `T`.
   #[cfg(feature = "wasm")]
-  pub fn cache_stats_value<T: JsCast>(&self, cache: &Cache) -> Result<T, js_sys::Error> {
-    let stats = self
-      .cache_stats(cache)
+  pub fn cache_stats_value<T: JsCast>(&self) -> Result<T, js_sys::Error> {
+    let stats = CacheStats::new(&self.cache)
       .serialize(&Serializer::new().serialize_missing_as_null(true))
       .map_err(js_error)?;
 
     Ok(stats.unchecked_into())
   }
 
-  /// What `cache` holds, with the fonts this store holds.
-  pub fn cache_stats(&self, cache: &Cache) -> CacheStats {
-    CacheStats::new(cache, self.cache.borrow().stats())
-  }
-
-  /// Gives the font cache a budget of `max_bytes`, unbounded without one, and releases what it no
-  /// longer fits.
-  pub fn set_cache_max_bytes(&self, max_bytes: Option<u64>) -> Result<(), FontError> {
-    let mut fonts = Fonts::clone(&self.current());
-
-    self
-      .cache
-      .borrow_mut()
-      .set_max_bytes(&mut fonts, max_bytes)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
-
-    Ok(())
-  }
-
   fn current(&self) -> Rc<Fonts> {
     self.fonts.borrow().clone()
   }
 
-  /// The families a registration under `key` added, marked used and pinned when `pin` is set; see
-  /// [`FontCache::lookup`] and [`FontCache::pin`].
-  pub fn cached(&self, key: &str, pin: bool) -> Option<Vec<RegisteredFamily>> {
-    if pin {
-      self.cache.borrow_mut().pin(key)
-    } else {
-      self.cache.borrow().lookup(key)
-    }
+  /// Applies `change` to a copy of the registry and to the registrations, then publishes the copy.
+  fn update<T>(
+    &self,
+    change: impl FnOnce(&mut Fonts, &mut FontRegistrations) -> Result<T, FontError>,
+  ) -> Result<T, FontError> {
+    let mut fonts = Fonts::clone(&self.current());
+    let changed = change(&mut fonts, &mut self.registrations.borrow_mut())?;
+
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(changed)
   }
 
-  /// Registers `font` under `key`; one that is not `pinned` can be released for space.
+  /// Unregisters what the font files the cache evicted held.
+  fn release_evicted(&self) {
+    let evicted = self.cache.fonts().take_evicted();
+
+    if evicted.is_empty() {
+      return;
+    }
+
+    let _ = self.update(|fonts, registrations| {
+      registrations.release(fonts, &evicted);
+
+      Ok(())
+    });
+  }
+
+  /// The families a registration under `key` added, while the cache holds its file. Leases the file
+  /// to `lease`, or pins it for good when `pin` is set.
+  pub fn cached(&self, key: &str, pin: bool, lease: Option<u32>) -> Option<Vec<RegisteredFamily>> {
+    self.release_evicted();
+
+    if pin {
+      return self.registrations.borrow_mut().pin(&self.cache, key);
+    }
+
+    let (families, held) = self.registrations.borrow().lease(&self.cache, key)?;
+
+    self.leases.hold(lease, held);
+
+    Some(families)
+  }
+
+  /// Registers `font` under `key`, its file leased to `lease`, kept as `retention` says.
   pub fn register(
     &self,
     font: Font,
     key: Option<&str>,
-    pinned: bool,
+    retention: Retention,
+    lease: Option<u32>,
   ) -> Result<Vec<RegisteredFamily>, FontError> {
-    let mut fonts = Fonts::clone(&self.current());
-    let (registered, bytes) = register_font(&mut fonts, font)?;
+    let (families, held) = self.update(|fonts, registrations| {
+      let registered = register_font(fonts, font)?;
 
-    self
-      .cache
-      .borrow_mut()
-      .admit(&mut fonts, key, &registered, bytes, pinned)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
+      Ok(registrations.admit(fonts, &self.cache, key, registered, retention))
+    })?;
 
-    Ok(registered)
+    self.leases.hold(lease, held);
+    self.release_evicted();
+
+    Ok(families)
   }
 
   /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
   pub fn unregister_family(&self, family: &str) -> bool {
-    let mut fonts = Fonts::clone(&self.current());
-    let removed = fonts.unregister_family(family);
+    self
+      .update(|fonts, registrations| {
+        registrations.forget_family(&self.cache, family);
 
-    self.cache.borrow_mut().forget(family);
-
-    if removed {
-      *self.fonts.borrow_mut() = Rc::new(fonts);
-    }
-
-    removed
+        Ok(fonts.unregister_family(family))
+      })
+      .unwrap_or_default()
   }
 
-  /// Loads the `@font-face` file `url` names, as a needs pass reported it; it can be released for
-  /// space.
-  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), FontError> {
+  /// Loads the `@font-face` file `url` names, as a needs pass reported it, leased to `lease`.
+  pub fn cache_font_file(
+    &self,
+    url: &str,
+    data: Vec<u8>,
+    lease: Option<u32>,
+  ) -> Result<(), FontError> {
     let (source, bytes) = FontSource::from(data).into_decoded()?;
-    let mut fonts = Fonts::clone(&self.current());
+    let held = self.update(|fonts, registrations| {
+      registrations.admit_file(fonts, &self.cache, url, source, bytes as u64)
+    })?;
 
-    self
-      .cache
-      .borrow_mut()
-      .admit_file(&mut fonts, url, source, bytes as u64)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
+    self.leases.hold(lease, held);
+    self.release_evicted();
 
     Ok(())
+  }
+
+  /// Whether the cache still holds the `@font-face` file `url`, leasing it to `lease` when it does.
+  pub fn cached_font_file(&self, url: &str, lease: u32) -> bool {
+    self.release_evicted();
+
+    let Some(held) = self.registrations.borrow().lease_file(&self.cache, url) else {
+      return false;
+    };
+
+    self.leases.hold(Some(lease), held);
+
+    true
+  }
+
+  /// Opens a set of leases a render holds until [`Self::release_fonts`].
+  pub fn lease_fonts(&self) -> u32 {
+    self.leases.open()
+  }
+
+  /// Releases the leases of the set `lease` names, evicting what no longer fits.
+  pub fn release_fonts(&self, lease: u32) {
+    self.leases.close(lease);
+    self.release_evicted();
+  }
+
+  /// Gives the faces registered under `keys` precedence in their families, in that order.
+  pub fn order_fonts(&self, keys: &[String]) {
+    let mut fonts = Fonts::clone(&self.current());
+
+    if self.registrations.borrow().prefer(&mut fonts, keys) {
+      *self.fonts.borrow_mut() = Rc::new(fonts);
+    }
   }
 
   /// Goes back to the embedded last-resort fonts alone.
   pub fn reset(&self) -> Result<(), FontError> {
     *self.fonts.borrow_mut() = Rc::new(default_fonts()?);
-    self.cache.borrow_mut().clear();
+    self.registrations.borrow_mut().clear(&self.cache);
 
     Ok(())
   }
@@ -397,6 +453,7 @@ pub struct NeedsOutput {
   images: Vec<String>,
   fonts: Vec<usize>,
   font_files: Vec<String>,
+  loaded_font_files: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -406,6 +463,7 @@ impl NeedsOutput {
       fonts: listed.map_or_else(Vec::new, |listed| listed.to_load(&needs.faces)),
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
+      loaded_font_files: needs.loaded_font_files.into_iter().collect(),
     }
   }
 }

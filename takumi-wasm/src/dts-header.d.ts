@@ -284,6 +284,10 @@ export type RenderNeeds = {
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */
   fonts: number[];
+  /** The `@font-face` file URLs the render loads, sorted. */
+  fontFiles: string[];
+  /** The URLs of the loaded `@font-face` files the render draws with, sorted. */
+  loadedFontFiles: string[];
 };
 
 export type AnimationScene = {

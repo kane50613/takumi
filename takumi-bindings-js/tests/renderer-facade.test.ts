@@ -142,6 +142,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
       [{ src: "a", data: bytes(), cache: undefined }],
       ["Explicit"],
       expect.any(Function),
+      undefined,
     );
   });
 
@@ -152,7 +153,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function));
+    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function), undefined);
   });
 
   test("the characters the backend reads drive font subsetting", async () => {
@@ -162,7 +163,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: [font] }, textNode("0"));
 
-    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function));
+    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function), undefined);
   });
 });
 
@@ -227,6 +228,61 @@ describe("@font-face files", () => {
     expect(backend.cacheFontFile).toHaveBeenCalledTimes(1);
     expect(files.has("https://fonts.test/face.woff2")).toBe(true);
     expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual(["https://fonts.test/missing.woff2"]);
+  });
+});
+
+describe("@font-face files a prepared render loaded", () => {
+  const url = "https://fonts.test/face.woff2";
+  const prepare = async (
+    fonts: ReturnType<typeof fontBackend>["fonts"],
+    fetch: (input: string | URL | Request) => Promise<Response>,
+  ) =>
+    prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
+      images: [],
+      fonts: [],
+      fontFiles: [url],
+    }));
+
+  test("stay leased while the render runs", async () => {
+    const { fonts, backend, leases } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const prepared = await prepare(fonts, fetch);
+    let leased: number[] = [];
+
+    await renderPrepared(fonts, prepared, {}, () => {
+      leased = [...leases];
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(backend.cachedFontFile).toHaveBeenCalledWith(url, leased[0]);
+  });
+
+  test("load again when the renderer evicted them since prepare", async () => {
+    const { fonts, files, backend } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const prepared = await prepare(fonts, fetch);
+
+    files.clear();
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(backend.cacheFontFile).toHaveBeenCalledTimes(2);
+    expect(files.has(url)).toBe(true);
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toBeUndefined();
+  });
+
+  test("move their rule on when loading them again fails", async () => {
+    const { fonts, files } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const prepared = await prepare(fonts, fetch);
+
+    files.clear();
+    fetch.mockImplementation(async () => new Response(null, { status: 404 }));
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual([url]);
   });
 });
 

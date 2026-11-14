@@ -59,7 +59,9 @@ describe("FontRegistry", () => {
     await render;
 
     expect(backend.registerFont).not.toHaveBeenCalled();
-    expect(backend.cachedFonts.mock.calls.filter(([, pin]) => pin)).toEqual([
+    expect(
+      backend.cachedFonts.mock.calls.filter(([, pin]) => pin).map(([key, pin]) => [key, pin]),
+    ).toEqual([
       ["Inter::::", true],
       ["Inter::::", true],
     ]);
@@ -79,30 +81,58 @@ describe("FontRegistry", () => {
     expect(backend.registerFont).toHaveBeenCalledTimes(1);
   });
 
-  test("loads a render's fonts again when another render pushed them out", async () => {
-    const { held, backend, fonts } = fontBackend();
-    const inter = font("Inter");
-    const geist = {
-      name: "Geist",
-      data: async () => {
-        await new Promise((resolve) => setTimeout(resolve));
-        held.clear();
+  test("leases a render's fonts until the render settles", async () => {
+    const { leases, backend, fonts } = fontBackend();
+    let during: number[] = [];
 
-        return new Uint8Array([1]);
-      },
-    };
+    await fonts.resolveResources([font("Inter")], undefined, undefined, async () => {
+      during = [...leases];
+      await new Promise((resolve) => setTimeout(resolve));
+    });
 
-    expect(await families(fonts, [inter, geist])).toEqual(["Inter", "Geist"]);
-    expect(backend.cacheFont).toHaveBeenCalledTimes(3);
+    expect(during).toHaveLength(1);
+    expect(backend.cacheFont.mock.calls[0]?.[2]).toBe(during[0]);
+    expect(leases.size).toBe(0);
   });
 
-  test("keys a buffer by its identity", async () => {
+  test("releases a render's leases when it fails", async () => {
+    const { leases, fonts } = fontBackend();
+    const failing = fonts.resolveResources([font("Inter")], undefined, undefined, () => {
+      throw new Error("render failed");
+    });
+
+    await expect(failing).rejects.toThrow("render failed");
+    expect(leases.size).toBe(0);
+  });
+
+  test("leases a font another render is loading under its own lease", async () => {
+    const { backend, fonts } = fontBackend();
+    const inter = font("Inter");
+
+    await Promise.all([families(fonts, [inter]), families(fonts, [inter])]);
+
+    const leased = backend.cachedFonts.mock.calls.flatMap(([, , lease]) => lease ?? []);
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(1);
+    expect(new Set(leased).size).toBe(2);
+  });
+
+  test("orders a render's fonts as it lists them", async () => {
+    const { backend, fonts } = fontBackend();
+
+    await families(fonts, [font("Inter"), font("Geist")]);
+
+    expect(backend.orderFonts).toHaveBeenCalledWith(["Inter::::", "Geist::::"]);
+  });
+
+  test("keys a buffer by its bytes", async () => {
     const { backend, fonts } = fontBackend();
     const buffer = new Uint8Array([1]);
 
     await fonts.register(buffer);
     await fonts.register(buffer);
     await fonts.register(new Uint8Array([1]));
+    await fonts.register(new Uint8Array([2]).buffer);
 
     expect(backend.registerFont).toHaveBeenCalledTimes(2);
   });

@@ -20,7 +20,7 @@ use super::{
   font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
   font_face_cache::{FontFaceCache, fold_family_name},
 };
-use crate::resources::font::SharedBytes;
+use crate::resources::font::{RegisteredSource, SharedBytes};
 
 /// Blink's `CSSFontSelector`.
 #[derive(Clone, Debug, Default)]
@@ -205,6 +205,85 @@ impl CssFontSelector {
     let key = fold_family_name(family);
 
     self.remove_font_faces(|font_face| fold_family_name(&font_face.family) == key)
+  }
+
+  /// Removes the faces `family` draws from `source`, keeping its other faces; false when it has
+  /// none.
+  pub(crate) fn unregister_source(&mut self, family: &str, source: &RegisteredSource) -> bool {
+    let key = fold_family_name(family);
+
+    self.remove_font_faces(|font_face| {
+      font_face.is_from(source) && fold_family_name(&font_face.family) == key
+    })
+  }
+
+  /// `listed` `(family, source)` pairs with each family folded, a pair listed twice kept where it
+  /// is listed last, or none when every family already ends with the faces of its sources in that
+  /// order.
+  pub(crate) fn sources_to_prefer(
+    &self,
+    listed: &[(&str, &RegisteredSource)],
+  ) -> Option<Vec<(String, RegisteredSource)>> {
+    let mut sources: Vec<(String, RegisteredSource)> = Vec::new();
+
+    for &(family, source) in listed.iter().rev() {
+      let source = (fold_family_name(family), source.clone());
+
+      if !sources.contains(&source) {
+        sources.push(source);
+      }
+    }
+
+    sources.reverse();
+
+    let preferred = sources.iter().all(|(family, _)| {
+      let faces: Vec<*const FontFace> = self.faces_of(family, None).collect();
+      let wanted: Vec<*const FontFace> = sources
+        .iter()
+        .filter(|(each, _)| each == family)
+        .flat_map(|(_, source)| self.faces_of(family, Some(source)))
+        .collect();
+
+      faces.ends_with(&wanted)
+    });
+
+    (!preferred).then_some(sources)
+  }
+
+  /// Moves the faces of each source [`Self::sources_to_prefer`] gave after every other face of its
+  /// family, in order, as registering them again in that order would.
+  pub(crate) fn prefer_sources(&mut self, sources: &[(String, RegisteredSource)]) {
+    for (family, source) in sources {
+      let (moved, kept): (Vec<_>, Vec<_>) = self.font_faces.drain(..).partition(|registered| {
+        registered.font_face.is_from(source)
+          && fold_family_name(&registered.font_face.family) == *family
+      });
+
+      self.font_faces = kept;
+
+      for registered in moved {
+        self.font_face_cache.remove_font_face(&registered.font_face);
+        self
+          .font_face_cache
+          .add_font_face(Arc::clone(&registered.font_face));
+        self.font_faces.push(registered);
+      }
+    }
+  }
+
+  /// The faces of the folded `family`, the ones `source` added when one is given, in order.
+  fn faces_of<'a>(
+    &'a self,
+    family: &'a str,
+    source: Option<&'a RegisteredSource>,
+  ) -> impl Iterator<Item = *const FontFace> + 'a {
+    self
+      .font_faces()
+      .filter(move |font_face| {
+        source.is_none_or(|source| font_face.is_from(source))
+          && fold_family_name(&font_face.family) == family
+      })
+      .map(Arc::as_ptr)
   }
 
   /// Removes the faces `is_removed` picks, and from each family list the families left without a
