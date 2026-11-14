@@ -28,7 +28,7 @@ use std::fmt::Display;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use input::{Font, ListedFonts, register_font};
-use registrations::{FontRegistrations, RenderLeases};
+use registrations::{FontRegistrations, RenderLeases, Retention};
 #[cfg(feature = "wasm")]
 use renderer::{CacheOptions, CacheStats};
 use serde::Serialize;
@@ -139,18 +139,20 @@ impl FontStore {
     Rc::new(listed.fonts(&self.for_render(failed)))
   }
 
-  /// Registers the font JavaScript describes under `key`, its file leased to `lease`. One that is
-  /// not `pinned` can be evicted.
+  /// Registers the font JavaScript describes under `key`, its file leased to `lease`, kept as
+  /// `retention` says.
   #[cfg(feature = "wasm")]
   pub fn register_value<T: JsCast>(
     &self,
     font: impl Into<JsValue>,
     key: Option<&str>,
-    pinned: bool,
+    retention: Retention,
     lease: Option<u32>,
   ) -> Result<T, js_sys::Error> {
     let font = Font::from_js(font.into()).map_err(js_error)?;
-    let registered = self.register(font, key, pinned, lease).map_err(js_error)?;
+    let registered = self
+      .register(font, key, retention, lease)
+      .map_err(js_error)?;
 
     Ok(to_value(&registered).map_err(js_error)?.unchecked_into())
   }
@@ -252,19 +254,18 @@ impl FontStore {
     Some(families)
   }
 
-  /// Registers `font` under `key`, its file leased to `lease`; one that is not `pinned` can be
-  /// evicted.
+  /// Registers `font` under `key`, its file leased to `lease`, kept as `retention` says.
   pub fn register(
     &self,
     font: Font,
     key: Option<&str>,
-    pinned: bool,
+    retention: Retention,
     lease: Option<u32>,
   ) -> Result<Vec<RegisteredFamily>, FontError> {
     let (families, held) = self.update(|fonts, registrations| {
       let registered = register_font(fonts, font)?;
 
-      Ok(registrations.admit(fonts, &self.cache, key, registered, pinned))
+      Ok(registrations.admit(fonts, &self.cache, key, registered, retention))
     })?;
 
     self.leases.hold(lease, held);

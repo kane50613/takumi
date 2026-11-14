@@ -11,6 +11,7 @@ use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   FontStore, NeedsOutput, append_css,
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
+  registrations::Retention,
   renderer::RendererOptions,
   source::read_source,
   source_cache::SourceCache,
@@ -183,7 +184,9 @@ impl Painter {
     font: FontType,
     key: Option<String>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.fonts.register_value(font, key.as_deref(), true, None)
+    self
+      .fonts
+      .register_value(font, key.as_deref(), Retention::Pinned, None)
   }
 
   /// Registers a font a render's `fonts` list loaded under `key`, its file leased to `lease` and
@@ -195,7 +198,9 @@ impl Painter {
     key: &str,
     lease: Option<u32>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.fonts.register_value(font, Some(key), false, lease)
+    self
+      .fonts
+      .register_value(font, Some(key), Retention::Evictable, lease)
   }
 
   /// The families a registration under `key` added, while the renderer holds its file. Leases the

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
 
-use takumi_bindings_common::input::RegisteredFont;
+use takumi_bindings_common::{input::RegisteredFont, registrations::Retention};
 use takumi_core::resources::font::FontResource;
 
 use crate::{RegisteredFamily, map_error, renderer::RendererState};
@@ -11,7 +11,7 @@ pub struct LoadFontTask {
   pub(crate) state: Arc<RendererState>,
   pub(crate) resource: Option<FontResource<'static>>,
   pub(crate) key: Option<String>,
-  pub(crate) pinned: bool,
+  pub(crate) retention: Retention,
   /// The leases of the render that loads it, which hold its file.
   pub(crate) lease: Option<u32>,
 }
@@ -43,7 +43,7 @@ impl Task for LoadFontTask {
         &self.state.cache,
         self.key.as_deref(),
         registered,
-        self.pinned,
+        self.retention,
       ))
     })?;
 

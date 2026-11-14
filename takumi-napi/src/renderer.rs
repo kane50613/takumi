@@ -6,7 +6,7 @@ use napi_derive::napi;
 use takumi_bindings_common::{
   default_fonts,
   input::{ListedFont, ListedFonts},
-  registrations::{FontRegistrations, RenderLeases},
+  registrations::{FontRegistrations, RenderLeases, Retention},
   renderer::{CacheOptions, CacheStats, RendererOptions},
   source_cache::SourceCache,
 };
@@ -244,7 +244,7 @@ impl Renderer {
     key: Option<String>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_font(env, font, key, true, None, signal)
+    self.load_font(env, font, key, Retention::Pinned, None, signal)
   }
 
   /// Registers a font a render's `fonts` list loaded under `key`, its file leased to `lease` and
@@ -262,7 +262,7 @@ impl Renderer {
     lease: Option<u32>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
-    self.load_font(env, font, Some(key), false, lease, signal)
+    self.load_font(env, font, Some(key), Retention::Evictable, lease, signal)
   }
 
   /// The families a registration under `key` added, while the renderer holds its file. Leases the
@@ -378,7 +378,7 @@ impl Renderer {
     env: Env,
     font: Object,
     key: Option<String>,
-    pinned: bool,
+    retention: Retention,
     lease: Option<u32>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<LoadFontTask>> {
@@ -389,7 +389,7 @@ impl Renderer {
         state: Arc::clone(&self.state),
         resource: Some(resource),
         key,
-        pinned,
+        retention,
         lease,
       },
       signal,

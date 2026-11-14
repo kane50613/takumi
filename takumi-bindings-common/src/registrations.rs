@@ -61,6 +61,14 @@ impl Registration {
   }
 }
 
+/// Whether a registered font stays until it is unregistered, as `registerFont` asks, or leaves
+/// when the cache evicts it, as a render's `fonts` list does.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Retention {
+  Pinned,
+  Evictable,
+}
+
 /// The registrations of a renderer's fonts and the `@font-face` files it loaded, each by the font
 /// file it holds in the renderer's cache. Clones share no state, so a binding can change a copy and
 /// publish it.
@@ -106,7 +114,7 @@ impl FontRegistrations {
   }
 
   /// Records `font`, which `fonts` registered under `key`, returning its families with a lease on
-  /// its file. A `pinned` file is never evicted. The faces `key` added before go unless another
+  /// its file. A [`Retention::Pinned`] file is never evicted. The faces `key` added before go unless another
   /// registration added them too, and their file goes once nothing holds it.
   pub fn admit(
     &mut self,
@@ -114,11 +122,11 @@ impl FontRegistrations {
     cache: &Cache,
     key: Option<&str>,
     font: RegisteredFont,
-    pinned: bool,
+    retention: Retention,
   ) -> (Vec<RegisteredFamily>, FontLease) {
     let id = font.source.id();
     let lease = cache.fonts().keep(id, font.bytes);
-    let pinned = pinned
+    let pinned = retention == Retention::Pinned
       || key
         .and_then(|key| self.by_key.get(key))
         .is_some_and(|held| held.id() == id && held.pinned);
@@ -391,7 +399,7 @@ mod tests {
   ) {
     let registered = register_resource(fonts, resource).unwrap();
 
-    drop(registrations.admit(fonts, cache, Some(key), registered, false));
+    drop(registrations.admit(fonts, cache, Some(key), registered, Retention::Evictable));
     registrations.release(fonts, &cache.fonts().take_evicted());
   }
 
@@ -509,7 +517,13 @@ mod tests {
     let mut fonts = Fonts::default();
     let mut registrations = FontRegistrations::default();
     let registered = register_resource(&mut fonts, FontResource::new(geist(0))).unwrap();
-    let (_, held) = registrations.admit(&mut fonts, &cache, Some("k"), registered, false);
+    let (_, held) = registrations.admit(
+      &mut fonts,
+      &cache,
+      Some("k"),
+      registered,
+      Retention::Evictable,
+    );
 
     leases.hold(Some(lease), held);
     registrations.release(&mut fonts, &cache.fonts().take_evicted());
@@ -539,7 +553,13 @@ mod tests {
 
     let registered = register_resource(&mut fonts, FontResource::new(geist(1))).unwrap();
 
-    drop(registrations.admit(&mut fonts, &cache, Some("pinned"), registered, true));
+    drop(registrations.admit(
+      &mut fonts,
+      &cache,
+      Some("pinned"),
+      registered,
+      Retention::Pinned,
+    ));
     registrations.release(&mut fonts, &cache.fonts().take_evicted());
 
     assert!(registrations.families("k").is_none());
