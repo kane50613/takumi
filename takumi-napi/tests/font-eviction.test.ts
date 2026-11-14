@@ -189,7 +189,8 @@ describe("@font-face files", () => {
 
     expect(tight.cacheStats().budgets.fonts.current).toBe(0);
     expect(Buffer.compare(await tight.render(prepared, pageOptions), expected)).toBe(0);
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(tight.cacheStats().store?.hits).toBe(1);
   });
 
   test("a prepare made while the renderer held a file loads it again once evicted", async () => {

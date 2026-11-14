@@ -358,6 +358,17 @@ impl Renderer {
     self.state.release_evicted();
   }
 
+  /// Forgets the fonts registered under `keys` whose files no render leases, as a font with
+  /// `cache: "none"` asks once its render settles, returning those keys and the ones nothing is
+  /// registered under.
+  #[napi(js_name = "dropFonts")]
+  pub fn drop_fonts(&self, keys: Vec<String>) -> Result<Vec<String>> {
+    self.state.release_evicted();
+    self.state.update_fonts(|fonts, registrations| {
+      Ok(registrations.forget_unleased(fonts, &self.state.cache, &keys))
+    })
+  }
+
   /// Gives the faces registered under `keys` precedence in their families, a later key over an
   /// earlier one, as a render's `fonts` list orders them.
   #[napi(js_name = "orderFonts")]

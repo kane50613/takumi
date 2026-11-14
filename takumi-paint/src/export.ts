@@ -128,7 +128,7 @@ export function initSync(source: { module: SyncInitInput }): void {
 
 export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
   constructor(options?: RendererOptions) {
-    super(new PainterInternal(options));
+    super((native) => new PainterInternal(native), options);
   }
 
   /** Reads what a node tree, JSX, or HTML needs under `options`, then loads its font subsets and fetches its images. */

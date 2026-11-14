@@ -20,8 +20,10 @@ import {
   prepareSource,
   needsArgs,
   readSource,
+  RendererStore,
   renderPrepared,
   toNativeSource,
+  withoutStore,
 } from "@takumi-rs/bindings-js";
 import type {
   BackendAnimationOptions,
@@ -70,8 +72,8 @@ export class Renderer {
   private fonts: FontRegistry<RegisteredFamily>;
 
   constructor(options?: RendererOptions) {
-    this.inner = new RendererInternal(options);
-    this.fonts = new FontRegistry(this.inner);
+    this.inner = new RendererInternal(withoutStore(options));
+    this.fonts = new FontRegistry(this.inner, new RendererStore(options?.cache));
   }
 
   /** Reads what `source` needs under `options`, then loads its font subsets and fetches its images. */
@@ -221,12 +223,12 @@ export class Renderer {
    * size or budget releases what no longer fits right away.
    */
   setCacheOptions(options: CacheOptions): void {
-    this.inner.setCacheOptions(options);
+    this.fonts.store.apply(options, (memory) => this.inner.setCacheOptions(memory));
   }
 
   /** What the renderer's caches hold and how their lookups went since it was created. */
   cacheStats(): CacheStats {
-    return this.inner.cacheStats();
+    return { ...this.inner.cacheStats(), store: this.fonts.store.stats() };
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */
