@@ -74,7 +74,7 @@ const renderer = new Renderer({
 
 A kind with a budget evicts only its own entries to stay within the budget, so other kinds cannot push them out. The bytes it holds still count against `maxBytes`, so the pool shrinks as the kind fills its budget, and a budget the kind does not use stays available to the other kinds. A budget of `0` keeps none of that kind. The `fonts` budget works apart from the pool, as [Release fonts](#release-fonts) describes.
 
-One budget never holds more than `maxBytes`. Several budgets can add up to more than `maxBytes`, and then the renderer can keep up to their sum.
+Budgets never hold more than `maxBytes` together. Once the kinds with budgets fill it, a kind that needs more evicts its own entries instead of growing.
 
 ### The shared renderer
 

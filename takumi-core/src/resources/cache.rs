@@ -279,6 +279,8 @@ impl Pool {
 
   /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
   /// [`CacheReservationManager`](https://github.com/facebook/rocksdb/blob/main/cache/cache_reservation_manager.h).
+  /// A budget grows only into what the other budgets leave of the pool, so together they hold at
+  /// most `max_bytes`.
   fn charge(&self, budget: &Budget) {
     let held = || budget.store.weight().next_multiple_of(CHARGE_STEP);
 
@@ -287,9 +289,16 @@ impl Pool {
     }
 
     let mut charged = self.charged.lock().unwrap_or_else(PoisonError::into_inner);
+    let others = *charged - budget.charged.load(Ordering::Relaxed);
+
+    budget
+      .store
+      .set_capacity(budget.max_bytes.min(self.max_bytes.saturating_sub(others)));
+
     let held = held();
 
-    *charged = *charged + held - budget.charged.swap(held, Ordering::Relaxed);
+    budget.charged.store(held, Ordering::Relaxed);
+    *charged = others + held;
     self
       .store
       .set_capacity(self.max_bytes.saturating_sub(*charged));
@@ -299,6 +308,9 @@ impl Pool {
 /// A kind's own store, holding at most its budget, whose weight the pool gives up.
 struct Budget {
   store: Store<PoolKey, PoolEntry, ByBytes>,
+  /// The most the kind may hold, which its store's capacity shrinks from while other budgets fill
+  /// the pool.
+  max_bytes: u64,
   /// The bytes this budget last charged the pool.
   charged: AtomicU64,
 }
@@ -316,8 +328,11 @@ impl<V: Kept> KindStore<V> {
     Self {
       pool: Arc::clone(pool),
       budget: budget.map(|budget| {
+        let max_bytes = budget.min(pool.max_bytes);
+
         Arc::new(Budget {
-          store: store(budget.min(pool.max_bytes), V::ENTRY_BYTES),
+          store: store(max_bytes, V::ENTRY_BYTES),
+          max_bytes,
           charged: AtomicU64::new(0),
         })
       }),
@@ -343,7 +358,7 @@ impl<V: Kept> KindStore<V> {
 
   /// The budget's bytes, none for a kind that shares the pool.
   pub(crate) fn budget(&self) -> Option<u64> {
-    self.budget.as_ref().map(|budget| budget.store.capacity())
+    self.budget.as_ref().map(|budget| budget.max_bytes)
   }
 
   /// The bytes the whole cache keeps.
@@ -808,6 +823,33 @@ mod tests {
     assert_eq!(
       pool_capacity(&cache),
       max_bytes - images.store.weight().next_multiple_of(CHARGE_STEP)
+    );
+  }
+
+  #[test]
+  fn budgets_together_hold_at_most_the_size() {
+    let max_bytes = 4 << 20;
+    let cache = Cache::builder()
+      .max_bytes(max_bytes)
+      .images(3 << 20)
+      .stylesheets(3 << 20)
+      .build();
+    let held = |budget: &Option<Arc<Budget>>| budget.as_ref().unwrap().store.weight();
+
+    for source in 0..3 {
+      keep_buffer(&cache, source, 512);
+    }
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    let images = held(&cache.0.images.budget);
+    let sheets = held(&cache.0.stylesheets.budget);
+
+    assert!(images >= 2 << 20, "{images}");
+    assert!(
+      images + sheets <= max_bytes + CHARGE_STEP,
+      "{images} + {sheets}"
     );
   }
 
