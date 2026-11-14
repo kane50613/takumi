@@ -424,6 +424,69 @@ describe("fonts with cache none", () => {
 
     expect(held.size).toBe(1);
   });
+
+  test("go with the last render to settle, though it lists other fonts", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const later = render(
+      fonts,
+      { fonts: [{ ...font("Inter", "none"), data: () => loading.promise.then(bytes) }] },
+      textNode("a"),
+    );
+
+    await render(fonts, { fonts: [font("Noto", "none")] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+
+    loading.resolve();
+    await later;
+
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when prepare is aborted after loading them", async () => {
+    const { held, fonts } = fontBackend();
+    const controller = new AbortController();
+    const aborting = {
+      ...font("Noto", "none"),
+      data: () => {
+        controller.abort(new Error("cancelled"));
+
+        return bytes();
+      },
+    };
+    const prepared = prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { fonts: [aborting], signal: controller.signal },
+      ({ fonts: listed }) => ({ images: [], fonts: fontsFor("a", listed) }),
+    );
+
+    await expect(prepared).rejects.toThrow("cancelled");
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when they finish loading after their render failed", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const failed = render(
+      fonts,
+      {
+        fonts: [
+          { ...font("Noto", "none"), data: () => Promise.reject(new Error("unreachable")) },
+          { ...font("Inter", "none"), data: () => loading.promise.then(bytes) },
+        ],
+      },
+      textNode("a"),
+    );
+
+    await expect(failed).rejects.toThrow("unreachable");
+    loading.resolve();
+    await Bun.sleep(0);
+
+    expect(held.size).toBe(0);
+  });
 });
 
 describe("the renderer's download store", () => {
