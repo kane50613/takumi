@@ -1,0 +1,220 @@
+---
+title: Caching
+description: What Takumi keeps between renders, which renderer keeps it, and how to size, skip, or share it.
+---
+
+Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and you can give Takumi a store for the bytes it downloads. This page covers both layers, and how to size or skip each one.
+
+## What a renderer keeps
+
+A renderer keeps these kinds of work in one pool of memory, 128 MiB by default:
+
+| Work                                           | `budgets` key |
+| :--------------------------------------------- | :------------ |
+| Decoded images and the rasters drawn from them | `images`      |
+| SVG images laid out to drawing ops             | `pictures`    |
+| Parsed stylesheets                             | `stylesheets` |
+| Compiled Tailwind classes                      | `tailwind`    |
+| Glyph outlines and rasterized masks            | `glyphs`      |
+| Where glyphs cross a `text-decoration` line    | `intercepts`  |
+| Faces that `@font-face` rules add              | `fontFaces`   |
+
+Every render on that renderer reads from the pool and adds to it. When the pool is full, the renderer evicts the entries renders have not reused, whatever their kind, and a later render that needs one does the work again. A page heavy with images can use most of the pool, and a page of CJK text can fill it with glyphs, without either needing a setting.
+
+The pool counts the estimated size of each entry, not the memory of the whole process. It does not count:
+
+- Fonts that renders' `fonts` lists load, which have their own [`fonts` budget](#release-fonts).
+- Fonts from `registerFont`.
+- Active renders, output buffers, and allocator overhead.
+
+See [Performance](/docs/performance) for measuring memory and render time.
+
+Three more caches sit outside the renderer:
+
+- Downloaded image bytes, in a [`fetchCache`](#downloaded-image-bytes) you pass in.
+- Emoji images, up to 8 MiB for each `fetch` function.
+- Google Fonts CSS responses, up to 1 MiB and 64 responses for each `fetch` function.
+
+## Which renderer owns a cache
+
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` share one renderer, which `takumi-js` creates the first time you call any of them. Its pool lives for the life of the process.
+
+A `Renderer`, `PdfRenderer`, or `Painter` you create keeps a pool of its own. Create it once, outside the request handler, so what it keeps survives between renders. Pass it to `ImageResponse` with the `renderer` option.
+
+## Set a renderer's cache size
+
+Pass `cache.maxBytes` when you create the renderer:
+
+```ts twoslash title="Cache size"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer({
+  cache: { maxBytes: 256 * 1024 * 1024 }, // [!code highlight]
+});
+```
+
+Raise `maxBytes` when renders keep redoing work that earlier renders did, such as decoding the same images. A larger pool helps only when later renders reuse what it keeps, so benchmark your own content first. A `maxBytes` of `0` keeps nothing in the pool between renders. Fonts are counted apart, as [Release fonts](#release-fonts) describes.
+
+`PdfRenderer` and `Painter` take the same `cache` option.
+
+### Give one kind a budget
+
+A budget caps how many bytes one kind of work may hold. Most renderers need none. Set one when you measured that one kind pushes out the others, such as a route that draws a different large photo on every request and evicts the glyphs every render reuses:
+
+```ts twoslash title="Cap the images"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer({
+  cache: {
+    maxBytes: 256 * 1024 * 1024,
+    budgets: { images: 64 * 1024 * 1024 }, // [!code highlight]
+  },
+});
+```
+
+A kind with a budget evicts only its own entries to stay within the budget, so other kinds cannot push them out. The bytes it holds still count against `maxBytes`, so the pool shrinks as the kind fills its budget, and a budget the kind does not use stays available to the other kinds. A budget of `0` keeps none of that kind. The `fonts` budget works apart from the pool, as [Release fonts](#release-fonts) describes.
+
+Budgets never hold more than `maxBytes` together. Once the kinds with budgets fill it, a kind that needs more evicts its own entries instead of growing.
+
+### The shared renderer
+
+`setCacheOptions` sets the cache of the renderer that `render` and the other functions share:
+
+```ts twoslash title="Shared renderer cache"
+import { setCacheOptions } from "takumi-js";
+
+setCacheOptions({ maxBytes: 256 * 1024 * 1024 }); // [!code highlight]
+```
+
+<Callout type="warn">
+  Call `setCacheOptions` before your first call to any of these functions. The shared renderer keeps
+  the options it was created with, and ignores a later call without an error.
+</Callout>
+
+## Skip caching an image
+
+Every image source takes a `cache` mode, which decides whether the renderer keeps its decoded pixels:
+
+- `auto`, the default, keeps the decoded image in the renderer's pool.
+- `none` uses an image the cache already holds, but never adds one.
+
+Use `none` for an image shown once, so it does not push out images worth keeping:
+
+```tsx twoslash title="Skip caching one image"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET(request: Request) {
+  return new ImageResponse(<img src="banner" />, {
+    images: [
+      {
+        src: "banner",
+        data: () => fetch(new URL("/banner.png", request.url)).then((res) => res.arrayBuffer()),
+        cache: "none", // [!code ++]
+      },
+    ],
+  });
+}
+```
+
+To set the mode for every image in a render, pass `images` as an object instead of an array. The mode then covers the images Takumi fetches itself too, and a source's own `cache` still wins. A route that draws a different avatar on every request can keep the avatars out of the cache while its logo stays in:
+
+```tsx twoslash title="Cache the logo, skip the avatars"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET(request: Request) {
+  const avatar = new URL(request.url).searchParams.get("avatar") ?? "";
+
+  return new ImageResponse(<OgImage avatar={avatar} />, {
+    images: {
+      cache: "none", // [!code ++]
+      sources: [
+        {
+          src: "logo",
+          data: () => fetch(new URL("/logo.png", request.url)).then((res) => res.arrayBuffer()),
+          cache: "auto", // [!code ++]
+        },
+      ],
+    },
+  });
+}
+
+function OgImage({ avatar }: { avatar: string }) {
+  return (
+    <div>
+      <img src="logo" />
+      <img src={avatar} />
+    </div>
+  );
+}
+```
+
+Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo's own `auto` keeps it cached.
+
+The decoded-image cache is keyed by a hash of the image's bytes, so the same image under two URLs decodes once. A `data:` URI in an `<img>` or a CSS `url()` always caches in `auto` mode, because the `cache` mode applies only to `sources` and to URLs Takumi fetches. A template that inlines its logo as a `data:` URI decodes it once.
+
+## Downloaded image bytes
+
+The renderer keeps decoded pixels, not the bytes Takumi downloads. To reuse downloaded bytes and pending requests across renders, pass a `fetchCache`:
+
+```tsx twoslash title="Share downloaded image bytes"
+import { render } from "takumi-js";
+
+const element = <img src="https://example.com/image.png" />;
+
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+
+const image = await render(element, {
+  images: {
+    fetchCache, // [!code highlight]
+  },
+});
+```
+
+`fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. It is keyed by URL, and its values are promises, not raw buffers. The renderer's `maxBytes` does not cover it.
+
+<Callout type="warn">
+  A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
+  as an LRU, or leave `fetchCache` out.
+</Callout>
+
+A `fetchCache` hit checks only the requested URL, because the cache does not record where a redirect led. If two routes check URLs differently, such as one with an [`allowUrl`](/docs/images#urls-from-user-input) for user input and one that loads only your own files, give each route its own `fetchCache`. Otherwise one route can serve bytes the other fetched through a redirect its own check would have refused.
+
+Emoji images from the [`emoji`](/docs/reference/image-response) option are cached without a `fetchCache`, up to 8 MiB for each `fetch` function.
+
+## Release fonts
+
+A renderer keeps every font a render loads. The `fonts` budget caps the decoded bytes that renders' `fonts` lists may keep. These bytes count apart from `maxBytes`, so the pool and the fonts each keep their own bytes:
+
+```ts twoslash title="Cap the fonts a renderer keeps"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer({ cache: { budgets: { fonts: 64 * 1024 * 1024 } } }); // [!code highlight]
+```
+
+Past the cap, the least recently used families are released, and a later render that lists one loads it again. Fonts from `registerFont` always stay. The font loaded last also stays, even if it alone exceeds the cap, so with a cap of `0` the renderer keeps only its registered fonts and the last font a render loaded. Set the cap above what one render needs. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
+
+## Google Fonts CSS
+
+`googleFonts` keeps the CSS responses it fetches, up to 1 MiB and 64 responses for each `fetch` function, and concurrent requests for the same URL share one fetch. Its `cache` option replaces that cache with your own `Map`. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
+
+## In Rust
+
+The `takumi` crate keeps the same pool in a `Cache`. Build one with its own size, and pass it to each render that should share it:
+
+```rust title="Share a cache across renders"
+use takumi::prelude::*;
+
+let cache = Cache::builder()
+  .max_bytes(256 << 20)
+  .images(64 << 20)
+  .build();
+
+let options = RenderOptions::builder()
+  .viewport(Viewport::new((1200, 630)))
+  .fonts(&fonts)
+  .node(node)
+  .cache(cache.clone())
+  .build();
+```
+
+`max_bytes` sets the pool in bytes. Each `budgets` key has a setter of the same name in snake case, such as `images`, `stylesheets`, or `font_faces`, which gives that kind a budget in bytes. The `fonts` budget belongs to the JavaScript renderers, so `Cache` has no setter for it. A render without `cache` uses `Cache::shared()`, one 128 MiB cache for the whole process. `Cache::decode_image` and `Cache::parse_stylesheet` decode images and parse CSS through a cache before a render, as the JavaScript renderers do.

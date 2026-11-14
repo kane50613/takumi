@@ -17,11 +17,11 @@ import {
   WasmRenderer,
 } from "@takumi-rs/bindings-js";
 import initWasm, {
-  type FontCacheOptions,
   type InitInput,
   initSync as initWasmSync,
   Painter as PainterInternal,
   type RegisteredFamily,
+  type RendererOptions,
   type SyncInitInput,
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
@@ -30,6 +30,8 @@ export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bin
 export { Prepared } from "@takumi-rs/bindings-js";
 export type {
   BlendMode,
+  CacheBudgets,
+  CacheOptions,
   ColorStop,
   CornerRadii,
   ElementInfo,
@@ -45,6 +47,7 @@ export type {
   Rect,
   RegisteredFace,
   RegisteredFamily,
+  RendererOptions,
   Rgba,
   Role,
   Sampling,
@@ -124,7 +127,7 @@ export function initSync(source: { module: SyncInitInput }): void {
 }
 
 export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
-  constructor(options?: FontCacheOptions) {
+  constructor(options?: RendererOptions) {
     super(new PainterInternal(options));
   }
 

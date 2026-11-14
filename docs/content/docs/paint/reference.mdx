@@ -17,7 +17,7 @@ description: Look up paint options, tree methods, and the fields of nodes, runs,
 
 `node` accepts JSX, an HTML string, or a takumi node tree.
 
-`new Painter({ fontCacheMaxBytes })` caps the decoded fonts that `fonts` lists keep. Past the cap, the least recently used families are released and load again when a call lists them. Fonts from `registerFont()` are never released.
+`new Painter({ cache })` sets the memory the painter keeps between renders, and the budget of the fonts that `fonts` lists load. See [Caching](/docs/caching).
 
 ## Paint options
 

@@ -1,7 +1,10 @@
 use std::{assert_matches, collections::HashMap, ptr, sync::Arc};
 
 use super::{builder::TailwindDeclarationBuilder, parser::*, *};
-use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage};
+use crate::{
+  Cache,
+  style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage},
+};
 
 /// The declarations a utility emits with no variable defined, which is what these assertions are
 /// about.
@@ -1891,15 +1894,13 @@ fn a_cache_compiles_a_class_list_once() {
   let second: TailwindValues = "flex items-center gap-2".parse().unwrap();
   let deserialized: TailwindValues = serde_json::from_str("\"flex items-center gap-2\"").unwrap();
 
-  let cache = TailwindCache::new(1 << 20);
+  let cache = Cache::default();
+  let cache = cache.tailwind();
 
+  assert!(ptr::eq(first.rules(Some(cache)), second.rules(Some(cache))));
   assert!(ptr::eq(
-    first.rules(Some(&cache)),
-    second.rules(Some(&cache))
-  ));
-  assert!(ptr::eq(
-    first.rules(Some(&cache)),
-    deserialized.rules(Some(&cache))
+    first.rules(Some(cache)),
+    deserialized.rules(Some(cache))
   ));
   assert_eq!(first, second);
   assert_eq!(first, " flex  items-center gap-2 ".parse().unwrap());

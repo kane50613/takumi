@@ -11,6 +11,8 @@ export type {
 } from "@takumi-rs/helpers";
 export type {
   AnimationOutputFormat,
+  CacheBudgets,
+  CacheOptions,
   DitheringAlgorithm,
   Font,
   FontDetails,
@@ -23,7 +25,7 @@ export type {
   MeasuredTextRun,
   OutputFormat,
 } from "@takumi-rs/core";
-export { setGlyphCacheMaxBytes } from "./glyph-cache";
+export { setCacheOptions, setGlyphCacheMaxBytes } from "./cache";
 export { measure, render, renderAnimation, renderSvg } from "./render";
 
 export type {

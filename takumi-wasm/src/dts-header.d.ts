@@ -1,4 +1,12 @@
-import type { CssInput, Node } from "@takumi-rs/helpers";
+import type {
+  CacheBudgets,
+  CacheOptions,
+  CssInput,
+  Node,
+  RendererOptions,
+} from "@takumi-rs/helpers";
+
+export type { CacheBudgets, CacheOptions, RendererOptions };
 import type { Properties } from "csstype";
 
 export {
@@ -42,23 +50,6 @@ export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 export type ImageCacheMode = "auto" | "none";
-
-export type RendererOptions = {
-  /**
-   * Byte budget shared by every cached resource — decoded images, SVG
-   * rasters, parsed stylesheets. `0` disables caching.
-   * @default 64 MiB
-   */
-  cacheMaxBytes?: number;
-  /**
-   * Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
-   * recently used families are released and load again when a render lists them. Fonts from
-   * `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
-   * render keeps the fonts it started with.
-   * @default unbounded
-   */
-  fontCacheMaxBytes?: number;
-};
 
 export type RenderOptions = {
   /**

@@ -1,8 +1,12 @@
-//! What renders keep for the renders after them, each kind of data under its own byte budget.
+//! What renders keep for the renders after them, in one pool of bytes every kind of data shares.
 
 use std::{
-  hash::Hash,
-  sync::{Arc, LazyLock},
+  convert::Infallible,
+  marker::PhantomData,
+  sync::{
+    Arc, LazyLock, Mutex, PoisonError,
+    atomic::{AtomicU64, Ordering},
+  },
   thread::available_parallelism,
 };
 
@@ -14,34 +18,42 @@ use typed_builder::TypedBuilder;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "font-face")]
-use crate::resources::font::DocumentRegistries;
+use crate::resources::font::{CachedRegistry, DocumentKey, DocumentRegistries};
 #[cfg(feature = "svg")]
 use crate::resources::image::SvgPicture;
 use crate::{
-  layout::intercept::InterceptCache,
+  layout::intercept::{CachedSpans, InterceptCache, InterceptKey},
   resources::{
-    glyph_cache::{self, GlyphCache},
+    glyph_cache::{self, GlyphCache, GlyphEntry, GlyphKey},
     image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{ImageScalingAlgorithm, StyleSheet, tw::TailwindCache},
+  style::{
+    ImageScalingAlgorithm, StyleSheet,
+    tw::{CompiledClasses, TailwindCache},
+  },
 };
 
 /// Bytes each shard holds, enough for one decoded photo, since `quick_cache` rejects an entry over
 /// 97% of its shard.
 const SHARD_BYTES: u64 = 64 << 20;
 
+/// The step a budget's charge against the pool rounds up to, so the pool resizes only when the
+/// bytes a budgeted kind holds cross one.
+const CHARGE_STEP: u64 = 1 << 20;
+
 /// What renders keep across renders: decoded images and the rasters drawn from them, parsed
 /// stylesheets and Tailwind classes, glyphs and their masks, and the faces of `@font-face` rules.
-/// Clones share the same data.
+/// Every kind shares one pool of bytes. Clones share the same data.
 #[derive(Clone)]
 pub struct Cache(Arc<Caches>);
 
 struct Caches {
-  images: Store<ImageKey, ImageEntry, ByBytes>,
+  images: KindStore<ImageSource>,
+  sized_images: KindStore<Arc<ImageBuffer>>,
   #[cfg(feature = "svg")]
-  pictures: Store<u64, PictureEntry, ByBytes>,
-  stylesheets: Store<u64, SheetEntry, ByBytes>,
+  pictures: KindStore<Arc<SvgPicture>>,
+  stylesheets: KindStore<SheetEntry>,
   tailwind: TailwindCache,
   glyphs: GlyphCache,
   intercepts: InterceptCache,
@@ -49,69 +61,61 @@ struct Caches {
   font_faces: DocumentRegistries,
 }
 
-/// The byte budget of each kind of data a [`Cache`] keeps, where `0` keeps none of that kind.
+/// The bytes a [`Cache`] keeps, and the most bytes each kind of data may hold within them. A kind
+/// without a budget competes for the whole pool. `0` keeps nothing, of every kind or of one.
 #[derive(TypedBuilder)]
-#[builder(builder_type(name = CacheBuilder), build_method(into = Cache))]
+#[builder(
+  builder_type(name = CacheBuilder),
+  build_method(into = Cache),
+  field_defaults(default, setter(strip_option(ignore_invalid, fallback_suffix = "_opt")))
+)]
 pub struct CacheOptions {
+  /// The bytes every kind of data shares. Approximate: entries are weighed by estimated size.
+  #[builder(default = CacheOptions::DEFAULT_MAX_BYTES)]
+  max_bytes: u64,
   /// Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
-  #[builder(default = CacheOptions::DEFAULT_IMAGES)]
-  images: u64,
+  images: Option<u64>,
   /// SVG images laid out to drawing ops, which vector backends draw and rasters are drawn from.
   #[cfg(feature = "svg")]
-  #[builder(default = CacheOptions::DEFAULT_PICTURES)]
-  pictures: u64,
+  pictures: Option<u64>,
   /// Parsed stylesheets.
-  #[builder(default = CacheOptions::DEFAULT_STYLESHEETS)]
-  stylesheets: u64,
+  stylesheets: Option<u64>,
   /// The rules Tailwind classes compile to.
-  #[builder(default = CacheOptions::DEFAULT_TAILWIND)]
-  tailwind: u64,
-  /// Resolved glyphs, and the masks rasterized from glyphs and shapes.
-  #[builder(default = glyph_cache::default_max_bytes())]
-  glyphs: u64,
+  tailwind: Option<u64>,
+  /// Resolved glyphs, and the masks rasterized from glyphs and shapes. Without one, the budget the
+  /// deprecated [`set_glyph_cache_max_bytes`](glyph_cache::set_glyph_cache_max_bytes) set.
+  glyphs: Option<u64>,
   /// Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
-  #[builder(default = CacheOptions::DEFAULT_INTERCEPTS)]
-  intercepts: u64,
+  intercepts: Option<u64>,
   /// The faces `@font-face` rules add, weighed by the font files they hold.
   #[cfg(feature = "font-face")]
-  #[builder(default = CacheOptions::DEFAULT_FONT_FACES)]
-  font_faces: u64,
+  font_faces: Option<u64>,
 }
 
 impl CacheOptions {
-  /// The default budget for images.
-  pub const DEFAULT_IMAGES: u64 = 64 << 20;
-  /// The default budget for pictures.
-  #[cfg(feature = "svg")]
-  pub const DEFAULT_PICTURES: u64 = 16 << 20;
-  /// The default budget for stylesheets.
-  pub const DEFAULT_STYLESHEETS: u64 = 4 << 20;
-  /// The default budget for tailwind.
-  pub const DEFAULT_TAILWIND: u64 = 1 << 20;
-  /// The default budget for glyphs.
-  pub const DEFAULT_GLYPHS: u64 = 8 << 20;
-  /// The default budget for intercepts.
-  pub const DEFAULT_INTERCEPTS: u64 = 1 << 20;
-  /// The default budget for font faces.
-  #[cfg(feature = "font-face")]
-  pub const DEFAULT_FONT_FACES: u64 = 16 << 20;
+  /// The bytes a cache keeps unless its builder sets `max_bytes`.
+  pub const DEFAULT_MAX_BYTES: u64 = 128 << 20;
 }
 
 impl From<CacheOptions> for Cache {
   fn from(options: CacheOptions) -> Self {
+    let pool = Arc::new(Pool::new(options.max_bytes));
+    let images = KindStore::new(&pool, options.images);
+
     Self(Arc::new(Caches {
-      // ~64 KiB average decoded image ⇒ an item-count hint for the budget.
-      images: store(options.images, 64 << 10),
-      // ~16 KiB of ops per picture ⇒ an item-count hint for the budget.
+      sized_images: images.sharing(),
+      images,
       #[cfg(feature = "svg")]
-      pictures: store(options.pictures, 16 << 10),
-      // ~16 KiB average sheet ⇒ an item-count hint for the budget.
-      stylesheets: store(options.stylesheets, 16 << 10),
-      tailwind: TailwindCache::new(options.tailwind),
-      glyphs: GlyphCache::new(options.glyphs),
-      intercepts: InterceptCache::new(options.intercepts),
+      pictures: KindStore::new(&pool, options.pictures),
+      stylesheets: KindStore::new(&pool, options.stylesheets),
+      tailwind: TailwindCache::new(KindStore::new(&pool, options.tailwind)),
+      glyphs: GlyphCache::new(KindStore::new(
+        &pool,
+        options.glyphs.or_else(glyph_cache::default_budget),
+      )),
+      intercepts: InterceptCache::new(KindStore::new(&pool, options.intercepts)),
       #[cfg(feature = "font-face")]
-      font_faces: DocumentRegistries::new(options.font_faces),
+      font_faces: DocumentRegistries::new(KindStore::new(&pool, options.font_faces)),
     }))
   }
 }
@@ -123,12 +127,12 @@ impl Default for Cache {
 }
 
 impl Cache {
-  /// A builder for a cache with its own budgets.
+  /// A builder for a cache with its own size and budgets.
   pub fn builder() -> CacheBuilder {
     CacheOptions::builder()
   }
 
-  /// The cache every render without one of its own shares, with the default budgets.
+  /// The cache every render without one of its own shares, with the default size.
   pub fn shared() -> Self {
     static SHARED: LazyLock<Cache> = LazyLock::new(Cache::default);
 
@@ -139,25 +143,18 @@ impl Cache {
   /// [`ImageCacheMode::None`].
   pub fn decode_image(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
     let hash = xxh3_64(bytes);
-    let key = ImageKey::source(hash);
 
     if matches!(mode, ImageCacheMode::None) {
-      return match self.0.images.get(&key) {
-        Some(ImageEntry::Source(source)) => Ok(source),
-        _ => ImageSource::from_bytes_uncached(bytes),
+      return match self.0.images.get(hash) {
+        Some(source) => Ok(source),
+        None => ImageSource::from_bytes_uncached(bytes),
       };
     }
 
-    match self.0.images.get_value_or_guard(&key, None) {
-      GuardResult::Value(ImageEntry::Source(source)) => Ok(source),
-      GuardResult::Guard(guard) => {
-        let source = ImageSource::from_bytes_keyed(bytes, hash)?;
-        let _ = guard.insert(ImageEntry::Source(source.clone()));
-        Ok(source)
-      }
-      // `None` timeout never times out.
-      GuardResult::Value(_) | GuardResult::Timeout => ImageSource::from_bytes_keyed(bytes, hash),
-    }
+    self
+      .0
+      .images
+      .get_or_insert_with(hash, || ImageSource::from_bytes_keyed(bytes, hash))
   }
 
   /// The stylesheet `sources` parse to, parsed once across renders that send the same CSS.
@@ -175,36 +172,24 @@ impl Cache {
       .map(String::len)
       .sum::<usize>()
       .saturating_mul(3);
-    let parse = || Arc::new(StyleSheet::parse_owned_list_loosy(sources));
 
-    match self
+    self
       .0
       .stylesheets
-      .get_value_or_guard(&hasher.digest(), None)
-    {
-      GuardResult::Value(entry) => entry.sheet,
-      GuardResult::Guard(guard) => {
-        let sheet = parse();
-        let _ = guard.insert(SheetEntry {
-          sheet: sheet.clone(),
+      .get_or_insert_with(hasher.digest(), || {
+        Ok::<_, Infallible>(SheetEntry {
+          sheet: Arc::new(StyleSheet::parse_owned_list_loosy(sources)),
           bytes,
-        });
-        sheet
-      }
-      // `None` timeout never times out.
-      GuardResult::Timeout => parse(),
-    }
+        })
+      })
+      .unwrap_or_else(|never| match never {})
+      .sheet
   }
 
-  /// The old `ResourceCache::new`. Approximate: gives images and stylesheets a budget of
-  /// `max_bytes` each, and caps pictures at it, where the old cache shared one budget among them.
-  #[deprecated(note = "use `Cache::builder()`")]
+  /// The old `ResourceCache::new`, a cache of `max_bytes`.
+  #[deprecated(note = "use `Cache::builder().max_bytes(max_bytes)`")]
   pub fn new(max_bytes: u64) -> Self {
-    let builder = Self::builder().images(max_bytes).stylesheets(max_bytes);
-    #[cfg(feature = "svg")]
-    let builder = builder.pictures(max_bytes.min(CacheOptions::DEFAULT_PICTURES));
-
-    builder.build()
+    Self::builder().max_bytes(max_bytes).build()
   }
 
   /// The old name of [`Self::decode_image`].
@@ -222,7 +207,7 @@ impl Cache {
   /// The picture kept under `key`.
   #[cfg(feature = "svg")]
   pub(crate) fn picture(&self, key: u64) -> Option<Arc<SvgPicture>> {
-    self.0.pictures.get(&key).map(|entry| entry.0)
+    self.0.pictures.get(key)
   }
 
   /// `picture`, kept under its key when it has one.
@@ -231,7 +216,7 @@ impl Cache {
     let picture = Arc::new(picture);
 
     if let Some(key) = picture.key() {
-      self.0.pictures.insert(key, PictureEntry(picture.clone()));
+      self.0.pictures.insert(key, picture.clone());
     }
 
     picture
@@ -266,27 +251,161 @@ impl Cache {
     let Some(source) = source else {
       return compute();
     };
-    let key = ImageKey::sized(source, sized);
 
-    match self.0.images.get_value_or_guard(&key, None) {
-      GuardResult::Value(ImageEntry::Sized(buffer)) => Ok(buffer),
+    self
+      .0
+      .sized_images
+      .get_or_insert_with((source, sized), compute)
+  }
+}
+
+/// The bytes every kind without a budget shares, shrunk by what budgeted kinds hold.
+struct Pool {
+  store: Store<PoolKey, PoolEntry, ByBytes>,
+  max_bytes: u64,
+  /// The bytes budgets hold, each rounded up to a [`CHARGE_STEP`].
+  charged: Mutex<u64>,
+}
+
+impl Pool {
+  fn new(max_bytes: u64) -> Self {
+    Self {
+      // ~4 KiB average entry, as glyphs and masks outnumber the rest ⇒ an item-count hint.
+      store: store(max_bytes, 4 << 10),
+      max_bytes,
+      charged: Mutex::new(0),
+    }
+  }
+
+  /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
+  /// [`CacheReservationManager`](https://github.com/facebook/rocksdb/blob/main/cache/cache_reservation_manager.h).
+  /// A budget grows only into what the other budgets leave of the pool, so together they hold at
+  /// most `max_bytes`.
+  fn charge(&self, budget: &Budget) {
+    let held = || budget.store.weight().next_multiple_of(CHARGE_STEP);
+
+    if held() == budget.charged.load(Ordering::Relaxed) {
+      return;
+    }
+
+    let mut charged = self.charged.lock().unwrap_or_else(PoisonError::into_inner);
+    let others = *charged - budget.charged.load(Ordering::Relaxed);
+
+    budget
+      .store
+      .set_capacity(budget.max_bytes.min(self.max_bytes.saturating_sub(others)));
+
+    let held = held();
+
+    budget.charged.store(held, Ordering::Relaxed);
+    *charged = others + held;
+    self
+      .store
+      .set_capacity(self.max_bytes.saturating_sub(*charged));
+  }
+}
+
+/// A kind's own store, holding at most its budget, whose weight the pool gives up.
+struct Budget {
+  store: Store<PoolKey, PoolEntry, ByBytes>,
+  /// The most the kind may hold, which its store's capacity shrinks from while other budgets fill
+  /// the pool.
+  max_bytes: u64,
+  /// The bytes this budget last charged the pool.
+  charged: AtomicU64,
+}
+
+/// Where one kind of data is kept: the shared pool, or a store of its own under a budget.
+pub(crate) struct KindStore<V> {
+  pool: Arc<Pool>,
+  budget: Option<Arc<Budget>>,
+  kind: PhantomData<fn() -> V>,
+}
+
+impl<V: Kept> KindStore<V> {
+  /// A kind in `pool`, held in a store of its own when it has a `budget`, which `pool` caps.
+  fn new(pool: &Arc<Pool>, budget: Option<u64>) -> Self {
+    Self {
+      pool: Arc::clone(pool),
+      budget: budget.map(|budget| {
+        let max_bytes = budget.min(pool.max_bytes);
+
+        Arc::new(Budget {
+          store: store(max_bytes, V::ENTRY_BYTES),
+          max_bytes,
+          charged: AtomicU64::new(0),
+        })
+      }),
+      kind: PhantomData,
+    }
+  }
+
+  /// Another kind kept where this one is, under the same budget.
+  fn sharing<W>(&self) -> KindStore<W> {
+    KindStore {
+      pool: Arc::clone(&self.pool),
+      budget: self.budget.clone(),
+      kind: PhantomData,
+    }
+  }
+
+  fn store(&self) -> &Store<PoolKey, PoolEntry, ByBytes> {
+    self
+      .budget
+      .as_ref()
+      .map_or(&self.pool.store, |budget| &budget.store)
+  }
+
+  /// The budget's bytes, none for a kind that shares the pool.
+  pub(crate) fn budget(&self) -> Option<u64> {
+    self.budget.as_ref().map(|budget| budget.max_bytes)
+  }
+
+  /// The bytes the whole cache keeps.
+  pub(crate) fn max_bytes(&self) -> u64 {
+    self.pool.max_bytes
+  }
+
+  /// The value kept under `key`.
+  pub(crate) fn get(&self, key: V::Key) -> Option<V> {
+    self.store().get(&V::pool_key(key)).and_then(V::from_entry)
+  }
+
+  /// Keeps `value` under `key`.
+  pub(crate) fn insert(&self, key: V::Key, value: V) {
+    self.store().insert(V::pool_key(key), value.into_entry());
+    self.charge();
+  }
+
+  /// The value kept under `key`, `compute`d once across concurrent misses and kept unless it fails.
+  pub(crate) fn get_or_insert_with<E>(
+    &self,
+    key: V::Key,
+    compute: impl FnOnce() -> Result<V, E>,
+  ) -> Result<V, E> {
+    match self.store().get_value_or_guard(&V::pool_key(key), None) {
+      GuardResult::Value(entry) => V::from_entry(entry).map_or_else(compute, Ok),
       GuardResult::Guard(guard) => {
-        let buffer = compute()?;
-        let _ = guard.insert(ImageEntry::Sized(buffer.clone()));
-        Ok(buffer)
+        let value = compute()?;
+        let _ = guard.insert(value.clone().into_entry());
+
+        self.charge();
+        Ok(value)
       }
       // `None` timeout never times out.
-      GuardResult::Value(_) | GuardResult::Timeout => compute(),
+      GuardResult::Timeout => compute(),
+    }
+  }
+
+  fn charge(&self) {
+    if let Some(budget) = &self.budget {
+      self.pool.charge(budget);
     }
   }
 }
 
 /// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`.
-pub(crate) fn store<K, V>(max_bytes: u64, entry_bytes: u64) -> Store<K, V, ByBytes>
-where
-  K: Eq + Hash + Clone,
-  V: Clone + Weighed,
-{
+fn store(max_bytes: u64, entry_bytes: u64) -> Store<PoolKey, PoolEntry, ByBytes> {
   let estimated_items = (max_bytes / entry_bytes).max(1) as usize;
   let parallelism = available_parallelism().map_or(1, |n| n.get() as u64);
   let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
@@ -310,6 +429,78 @@ where
     ),
     Err(_) => Store::with_weighter(estimated_items, max_bytes, ByBytes),
   }
+}
+
+/// One kind of data the pool keeps, as a variant of its key and of its entry.
+pub(crate) trait Kept: Clone {
+  /// What finds a value of this kind.
+  type Key;
+  /// The approximate bytes of one value, a hint for how many a budget holds.
+  const ENTRY_BYTES: u64;
+
+  fn pool_key(key: Self::Key) -> PoolKey;
+  fn into_entry(self) -> PoolEntry;
+  fn from_entry(entry: PoolEntry) -> Option<Self>;
+}
+
+/// Declares the kinds of data the pool keeps: the variants of [`PoolKey`] and [`PoolEntry`], and
+/// the [`Kept`] impl that moves each kind in and out of them.
+macro_rules! kinds {
+  ($($(#[$attr:meta])* $kind:ident($key:ty) => $value:ty, $entry_bytes:expr;)*) => {
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    pub(crate) enum PoolKey {
+      $($(#[$attr])* $kind($key),)*
+    }
+
+    #[derive(Clone)]
+    pub(crate) enum PoolEntry {
+      $($(#[$attr])* $kind($value),)*
+    }
+
+    impl Weighed for PoolEntry {
+      fn bytes(&self) -> usize {
+        match self {
+          $($(#[$attr])* Self::$kind(value) => value.bytes(),)*
+        }
+      }
+    }
+
+    $(
+      $(#[$attr])*
+      impl Kept for $value {
+        type Key = $key;
+        const ENTRY_BYTES: u64 = $entry_bytes;
+
+        fn pool_key(key: $key) -> PoolKey {
+          PoolKey::$kind(key)
+        }
+
+        fn into_entry(self) -> PoolEntry {
+          PoolEntry::$kind(self)
+        }
+
+        fn from_entry(entry: PoolEntry) -> Option<Self> {
+          match entry {
+            PoolEntry::$kind(value) => Some(value),
+            _ => None,
+          }
+        }
+      }
+    )*
+  };
+}
+
+kinds! {
+  Image(u64) => ImageSource, 64 << 10;
+  SizedImage((u64, SizedKey)) => Arc<ImageBuffer>, 64 << 10;
+  #[cfg(feature = "svg")]
+  Picture(u64) => Arc<SvgPicture>, 16 << 10;
+  Stylesheet(u64) => SheetEntry, 16 << 10;
+  Tailwind(u64) => CompiledClasses, 256;
+  Glyph(GlyphKey) => GlyphEntry, 4 << 10;
+  Intercept(InterceptKey) => CachedSpans, 64;
+  #[cfg(feature = "font-face")]
+  FontFaces(DocumentKey) => CachedRegistry, 256 << 10;
 }
 
 /// How large an image draws: its buffer size and the filter it scales with.
@@ -342,48 +533,8 @@ impl SizedKey {
   }
 }
 
-/// An image source, or one of its buffers at a size.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct ImageKey {
-  source: u64,
-  sized: Option<SizedKey>,
-}
-
-impl ImageKey {
-  fn source(source: u64) -> Self {
-    Self {
-      source,
-      sized: None,
-    }
-  }
-
-  fn sized(source: u64, sized: SizedKey) -> Self {
-    Self {
-      source,
-      sized: Some(sized),
-    }
-  }
-}
-
 #[derive(Clone)]
-enum ImageEntry {
-  Source(ImageSource),
-  Sized(Arc<ImageBuffer>),
-}
-
-#[cfg(feature = "svg")]
-#[derive(Clone)]
-struct PictureEntry(Arc<SvgPicture>);
-
-#[cfg(feature = "svg")]
-impl Weighed for PictureEntry {
-  fn bytes(&self) -> usize {
-    self.0.estimated_bytes()
-  }
-}
-
-#[derive(Clone)]
-struct SheetEntry {
+pub(crate) struct SheetEntry {
   sheet: Arc<StyleSheet>,
   bytes: usize,
 }
@@ -393,12 +544,22 @@ pub(crate) trait Weighed {
   fn bytes(&self) -> usize;
 }
 
-impl Weighed for ImageEntry {
+impl Weighed for ImageSource {
   fn bytes(&self) -> usize {
-    match self {
-      Self::Source(source) => source.estimated_bytes(),
-      Self::Sized(buffer) => buffer.data().len(),
-    }
+    self.estimated_bytes()
+  }
+}
+
+impl Weighed for Arc<ImageBuffer> {
+  fn bytes(&self) -> usize {
+    self.data().len()
+  }
+}
+
+#[cfg(feature = "svg")]
+impl Weighed for Arc<SvgPicture> {
+  fn bytes(&self) -> usize {
+    self.estimated_bytes()
   }
 }
 
@@ -409,10 +570,10 @@ impl Weighed for SheetEntry {
 }
 
 #[derive(Clone)]
-pub(crate) struct ByBytes;
+struct ByBytes;
 
-impl<K, V: Weighed> Weighter<K, V> for ByBytes {
-  fn weight(&self, _key: &K, entry: &V) -> u64 {
+impl Weighter<PoolKey, PoolEntry> for ByBytes {
+  fn weight(&self, _key: &PoolKey, entry: &PoolEntry) -> u64 {
     (entry.bytes() as u64).max(1)
   }
 }
@@ -435,6 +596,29 @@ mod tests {
 
   fn sized(width: u32, height: u32) -> SizedKey {
     SizedKey::new(0, width, height, ImageScalingAlgorithm::Auto)
+  }
+
+  /// Keeps a `side`×`side` buffer for `source`, `width × height × 4` bytes.
+  fn keep_buffer(cache: &Cache, source: u64, side: u32) {
+    let _ = cache.sized(Some(source), sized(side, side), || {
+      Ok(Arc::new(ImageBuffer::new(side, side).unwrap()))
+    });
+  }
+
+  /// Keeps a stylesheet of about `bytes` bytes, unique to `seed`.
+  fn keep_sheet(cache: &Cache, seed: u64, bytes: usize) -> Arc<StyleSheet> {
+    let mut source = format!(".s{seed} {{ color: red }}");
+
+    source.push_str(&" ".repeat(bytes / 3 - source.len()));
+    cache.parse_stylesheet(vec![source])
+  }
+
+  fn pool_weight(cache: &Cache) -> u64 {
+    cache.0.images.pool.store.weight()
+  }
+
+  fn pool_capacity(cache: &Cache) -> u64 {
+    cache.0.images.pool.store.capacity()
   }
 
   #[test]
@@ -510,8 +694,8 @@ mod tests {
   }
 
   #[test]
-  fn a_sized_entry_near_the_budget_is_retained() {
-    let cache = Cache::builder().images(16 << 20).build();
+  fn a_sized_entry_near_the_size_is_retained() {
+    let cache = Cache::builder().max_bytes(16 << 20).build();
     let buffer = Arc::new(ImageBuffer::new(2400, 1601).unwrap());
     let kept = cache
       .sized(Some(1), sized(2400, 1601), || Ok(buffer.clone()))
@@ -526,8 +710,8 @@ mod tests {
   }
 
   #[test]
-  fn an_uneven_budget_keeps_a_whole_shard_per_entry() {
-    let cache = Cache::builder().images(192 << 20).build();
+  fn an_uneven_size_keeps_a_whole_shard_per_entry() {
+    let cache = Cache::builder().max_bytes(192 << 20).build();
     let buffer = Arc::new(ImageBuffer::new(4000, 3900).unwrap());
 
     cache
@@ -542,9 +726,10 @@ mod tests {
   }
 
   #[test]
-  fn a_zero_budget_keeps_nothing() {
-    let cache = Cache::builder().images(0).build();
+  fn a_zero_size_keeps_nothing() {
+    let cache = Cache::builder().max_bytes(0).images(1 << 20).build();
     let bytes = png_bytes();
+    let sheet = || cache.parse_stylesheet(vec![".a { color: red }".to_owned()]);
 
     let a = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
     let b = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
@@ -553,20 +738,146 @@ mod tests {
       (ImageSource::Encoded(x), ImageSource::Encoded(y)) => assert!(!Arc::ptr_eq(x, y)),
       _ => panic!("expected encoded bitmaps"),
     }
+    assert!(!Arc::ptr_eq(&sheet(), &sheet()));
   }
 
   #[test]
-  fn eviction_stays_within_the_byte_budget() {
+  fn a_zero_budget_keeps_none_of_its_kind() {
+    let cache = Cache::builder().images(0).build();
+    let bytes = png_bytes();
+    let sheet = || cache.parse_stylesheet(vec![".a { color: red }".to_owned()]);
+
+    let a = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
+    let b = cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
+
+    match (&a, &b) {
+      (ImageSource::Encoded(x), ImageSource::Encoded(y)) => assert!(!Arc::ptr_eq(x, y)),
+      _ => panic!("expected encoded bitmaps"),
+    }
+    assert!(Arc::ptr_eq(&sheet(), &sheet()));
+  }
+
+  #[test]
+  fn eviction_stays_within_the_size() {
     let max_bytes = 4096;
-    let cache = Cache::builder().images(max_bytes).build();
+    let cache = Cache::builder().max_bytes(max_bytes).build();
 
     for source in 0..64 {
-      let _ = cache.sized(Some(source), sized(16, 16), || {
-        Ok(Arc::new(ImageBuffer::new(16, 16).unwrap()))
-      });
+      keep_buffer(&cache, source, 16);
     }
 
-    assert!(cache.0.images.weight() <= max_bytes);
+    assert!(pool_weight(&cache) <= max_bytes);
+  }
+
+  #[test]
+  fn kinds_share_the_pool() {
+    let max_bytes = 4 << 20;
+    let cache = Cache::builder().max_bytes(max_bytes).build();
+    let images_kept = || {
+      (0..4)
+        .filter(|&source| {
+          cache
+            .0
+            .sized_images
+            .get((source, sized(512, 512)))
+            .is_some()
+        })
+        .count()
+    };
+
+    for source in 0..4 {
+      keep_buffer(&cache, source, 512);
+    }
+    assert!(pool_weight(&cache) > 3 << 20);
+
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    assert!(images_kept() < 4);
+    assert!(Arc::ptr_eq(
+      &keep_sheet(&cache, 63, 64 << 10),
+      &keep_sheet(&cache, 63, 64 << 10)
+    ));
+    assert!(pool_weight(&cache) <= max_bytes);
+  }
+
+  #[test]
+  fn a_budget_caps_its_kind_and_charges_only_what_it_holds() {
+    let max_bytes = 16 << 20;
+    let budget = 4 << 20;
+    let cache = Cache::builder().max_bytes(max_bytes).images(budget).build();
+    let images = cache.0.images.budget.as_ref().unwrap();
+
+    assert_eq!(pool_capacity(&cache), max_bytes);
+
+    keep_buffer(&cache, 0, 512);
+    assert_eq!(pool_capacity(&cache), max_bytes - (1 << 20));
+
+    for source in 1..16 {
+      keep_buffer(&cache, source, 512);
+    }
+
+    assert!(images.store.weight() <= budget);
+    assert!(images.store.weight() >= 3 << 20);
+    assert_eq!(
+      pool_capacity(&cache),
+      max_bytes - images.store.weight().next_multiple_of(CHARGE_STEP)
+    );
+  }
+
+  #[test]
+  fn budgets_together_hold_at_most_the_size() {
+    let max_bytes = 4 << 20;
+    let cache = Cache::builder()
+      .max_bytes(max_bytes)
+      .images(3 << 20)
+      .stylesheets(3 << 20)
+      .build();
+    let held = |budget: &Option<Arc<Budget>>| budget.as_ref().unwrap().store.weight();
+
+    for source in 0..3 {
+      keep_buffer(&cache, source, 512);
+    }
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    let images = held(&cache.0.images.budget);
+    let sheets = held(&cache.0.stylesheets.budget);
+
+    assert!(images >= 2 << 20, "{images}");
+    assert!(
+      images + sheets <= max_bytes + CHARGE_STEP,
+      "{images} + {sheets}"
+    );
+  }
+
+  #[test]
+  fn a_budget_is_capped_at_the_size() {
+    let cache = Cache::builder().max_bytes(1 << 20).images(8 << 20).build();
+
+    assert_eq!(cache.0.images.budget(), Some(1 << 20));
+  }
+
+  /// Sets the old default glyph budget, which every cache built after it in this process takes.
+  #[test]
+  fn the_old_glyph_setter_gives_later_caches_a_glyph_budget() {
+    let mask_bytes = |cache: Cache| cache.glyphs().max_entry_bytes();
+
+    assert_eq!(
+      mask_bytes(Cache::builder().glyphs(1 << 20).build()),
+      32 << 10
+    );
+
+    #[allow(deprecated)]
+    glyph_cache::set_glyph_cache_max_bytes(4 << 20);
+
+    assert_eq!(mask_bytes(Cache::default()), 128 << 10);
+    assert_eq!(
+      mask_bytes(Cache::builder().glyphs(1 << 20).build()),
+      32 << 10
+    );
   }
 
   #[test]

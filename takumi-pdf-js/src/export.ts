@@ -17,15 +17,20 @@ import {
   WasmRenderer,
 } from "@takumi-rs/bindings-js";
 import {
-  type FontCacheOptions,
   type PageOverride,
   type PageRules,
   PdfRenderer as PdfRendererInternal,
   type RegisteredFamily,
+  type RendererOptions,
 } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
-export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
+export type {
+  CacheBudgets,
+  CacheOptions,
+  FontCacheOptions,
+  RendererOptions,
+} from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
@@ -457,7 +462,7 @@ async function resolveLayout(
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
 export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInternal> {
-  constructor(options?: FontCacheOptions) {
+  constructor(options?: RendererOptions) {
     super(new PdfRendererInternal(options));
   }
 

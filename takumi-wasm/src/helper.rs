@@ -9,13 +9,11 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
   js_sys::Error::new(&err.to_string())
 }
 
-/// Sets the byte budget of the resolved-glyph and glyph-mask cache of each
-/// `Renderer` created after this call; `0` stops caching. Defaults to 8 MiB.
+/// Gives each `Renderer` created after this call a glyph budget, the most bytes its resolved
+/// glyphs and glyph masks may hold. `0` stops caching glyphs.
 ///
-/// Raise it for scripts with large glyph sets: a CJK outline runs a few
-/// kilobytes, so the default holds around a thousand of them and a page of
-/// Chinese re-rasterizes glyphs it just evicted.
+/// @deprecated Use `new Renderer({ cache: { budgets: { glyphs } } })`.
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::options::set_glyph_cache_max_bytes(bytes);
+  takumi_bindings_common::renderer::set_glyph_cache_max_bytes(bytes);
 }

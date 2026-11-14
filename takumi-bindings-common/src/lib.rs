@@ -18,6 +18,7 @@ pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
+pub mod renderer;
 #[cfg(feature = "wasm")]
 pub mod source;
 pub mod source_cache;
@@ -28,7 +29,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
 use input::{Font, ListedFonts, register_font};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 #[cfg(feature = "wasm")]
 use serde_wasm_bindgen::{from_value, to_value};
 use source_cache::{ParsedSource, SourceCache};
@@ -244,14 +245,6 @@ impl FontStore {
 #[cfg(feature = "wasm")]
 fn js_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
-}
-
-/// Options for a renderer whose only option is its font cache budget.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct FontCacheOptions {
-  /// Bytes of fonts from renders' `fonts` lists to keep registered.
-  pub font_cache_max_bytes: Option<u64>,
 }
 
 /// A render's default language, parsed from its BCP-47 tag.

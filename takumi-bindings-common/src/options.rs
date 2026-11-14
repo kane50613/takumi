@@ -7,11 +7,7 @@ use takumi_core::{
   Error, Fonts,
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::{
-    cache::{Cache, CacheOptions},
-    glyph_cache,
-    image::ImageSource as DecodedImage,
-  },
+  resources::{cache::Cache, image::ImageSource as DecodedImage},
   style::{CssSource, FontFamily, KeyframesRule, StyleSheet},
   viewport::Viewport,
 };
@@ -22,52 +18,6 @@ use takumi_raster::{
 use takumi_svg::SvgOptions;
 
 use crate::{device_pixel_ratio, input::ImageSource, parse_lang, time_ms};
-
-/// Options for constructing a renderer.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct RendererOptions {
-  /// The budget of decoded images and of parsed stylesheets, each. `0` keeps neither.
-  pub cache_max_bytes: Option<f64>,
-  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered.
-  pub font_cache_max_bytes: Option<f64>,
-}
-
-impl RendererOptions {
-  /// [`Self::cache_max_bytes`] as a byte count.
-  pub fn cache_bytes(&self) -> Option<u64> {
-    self.cache_max_bytes.map(bytes)
-  }
-
-  /// [`Self::font_cache_max_bytes`] as a byte count.
-  pub fn font_cache_bytes(&self) -> Option<u64> {
-    self.font_cache_max_bytes.map(bytes)
-  }
-
-  /// The cache a renderer built with these options keeps, with the glyph budget the last
-  /// [`set_glyph_cache_max_bytes`] set.
-  pub fn cache(&self) -> Cache {
-    Cache::builder()
-      .images(self.cache_bytes().unwrap_or(CacheOptions::DEFAULT_IMAGES))
-      .stylesheets(
-        self
-          .cache_bytes()
-          .unwrap_or(CacheOptions::DEFAULT_STYLESHEETS),
-      )
-      .build()
-  }
-}
-
-/// Sets the glyph budget of the renderers created after this call, from a JavaScript byte count.
-pub fn set_glyph_cache_max_bytes(value: f64) {
-  #[allow(deprecated)]
-  glyph_cache::set_glyph_cache_max_bytes(bytes(value) as usize);
-}
-
-/// A JavaScript byte count, negative ones read as zero.
-fn bytes(value: f64) -> u64 {
-  value.max(0.0) as u64
-}
 
 /// Options for rendering an image or an SVG document.
 #[derive(Deserialize, Default)]

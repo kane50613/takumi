@@ -150,13 +150,13 @@ export function GET() {
 
 ## Bring your own renderer
 
-Without `renderer`, every response in the process shares one default renderer and its caches. Pass your own `Renderer` to configure it: set cache budgets, or [register fonts up front](/docs/fonts#preloading-with-registerfont).
+Without `renderer`, every response in the process shares one default renderer and its caches. Pass your own `Renderer` to configure it: set its [cache size](/docs/caching#set-a-renderers-cache-size), or [register fonts up front](/docs/fonts#preloading-with-registerfont).
 
 ```tsx twoslash title="Reuse a native renderer"
 import { Renderer } from "takumi-js/node";
 import { ImageResponse } from "takumi-js/response";
 
-const renderer = new Renderer({ cacheMaxBytes: 128 * 1024 * 1024 }); // [!code highlight]
+const renderer = new Renderer({ cache: { maxBytes: 256 * 1024 * 1024 } }); // [!code highlight]
 
 export function GET() {
   return new ImageResponse(<div>Hello Takumi</div>, {

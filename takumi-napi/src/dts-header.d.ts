@@ -1,4 +1,10 @@
-import type { CssInput, Node } from "@takumi-rs/helpers";
+import type {
+  CacheBudgets,
+  CacheOptions,
+  CssInput,
+  Node,
+  RendererOptions,
+} from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
 export type {
@@ -9,7 +15,7 @@ export type {
   TextNode,
 } from "@takumi-rs/helpers";
 
-export type { CssInput, Node };
+export type { CacheBudgets, CacheOptions, CssInput, Node, RendererOptions };
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -147,24 +153,6 @@ export interface RenderAnimationOptions {
   failedFontFiles?: Array<string>;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
-}
-
-/** Options for constructing a [`Renderer`]. */
-export interface RendererOptions {
-  /**
-   * Byte budget shared by every cached resource — decoded images, SVG
-   * rasters, parsed stylesheets. `0` disables caching.
-   * @default 64 MiB
-   */
-  cacheMaxBytes?: number;
-  /**
-   * Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
-   * recently used families are released and load again when a render lists them. Fonts from
-   * `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
-   * render keeps the fonts it started with.
-   * @default unbounded
-   */
-  fontCacheMaxBytes?: number;
 }
 
 /** Options for rendering an image. */

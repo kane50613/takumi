@@ -17,13 +17,13 @@ use std::{
 };
 
 pub(crate) use namespace::Namespace;
-use quick_cache::sync::Cache as Store;
 pub(crate) use rule::TwRule;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 pub(crate) use variant::{Breakpoint, BreakpointOverrides};
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
-  resources::cache::{ByBytes, Weighed, store},
+  resources::cache::{KindStore, Weighed},
   style::*,
   viewport::Viewport,
 };
@@ -85,11 +85,13 @@ const ENTRY_OVERHEAD: usize = 64;
 
 /// The rules a [`Cache`](crate::Cache) keeps, by the class list they compile from.
 pub(crate) struct TailwindCache {
-  store: Store<String, CompiledClasses, ByBytes>,
+  store: KindStore<CompiledClasses>,
 }
 
 #[derive(Clone)]
-struct CompiledClasses {
+pub(crate) struct CompiledClasses {
+  /// The class list, which a lookup by its hash compares.
+  source: Box<str>,
   rules: Rules,
   bytes: usize,
 }
@@ -101,19 +103,15 @@ impl Weighed for CompiledClasses {
 }
 
 impl TailwindCache {
-  /// A cache holding at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    Self {
-      // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
-      store: store(max_bytes, 256),
-    }
+  pub(crate) fn new(store: KindStore<CompiledClasses>) -> Self {
+    Self { store }
   }
 
   /// The rules `source` compiles to, compiled once across the renders that send it.
   fn compile(&self, source: &str) -> Rules {
-    self
+    let compiled = self
       .store
-      .get_or_insert_with::<str, Infallible>(source, || {
+      .get_or_insert_with(xxh3_64(source.as_bytes()), || {
         let rules = compile(source);
         // Counts the compiled rules, not the heap their declarations own.
         let bytes = source.len()
@@ -121,13 +119,19 @@ impl TailwindCache {
           + rules.len() * size_of::<TwRule>()
           + ENTRY_OVERHEAD;
 
-        Ok(CompiledClasses {
+        Ok::<_, Infallible>(CompiledClasses {
+          source: source.into(),
           rules: Arc::new(rules),
           bytes,
         })
       })
-      .unwrap_or_else(|never| match never {})
-      .rules
+      .unwrap_or_else(|never| match never {});
+
+    if *compiled.source == *source {
+      compiled.rules
+    } else {
+      Arc::new(compile(source))
+    }
   }
 }
 
