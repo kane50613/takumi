@@ -11,6 +11,8 @@ pub struct LoadFontFileTask {
   pub(crate) state: Arc<RendererState>,
   pub(crate) url: String,
   pub(crate) buffer: JsBytes,
+  /// The leases of the render that loads it, which hold the file.
+  pub(crate) lease: Option<u32>,
 }
 
 impl Task for LoadFontFileTask {
@@ -24,13 +26,18 @@ impl Task for LoadFontFileTask {
       .map_err(map_error)
   }
 
-  /// Hands the file over on the JS thread, where every font change runs, then releases what the
-  /// budget no longer fits.
+  /// Hands the file over on the JS thread, where every font change runs, then unregisters the
+  /// fonts the cache evicted to make room.
   fn resolve(&mut self, _env: Env, (source, bytes): Self::Output) -> Result<Self::JsValue> {
-    self.state.update_fonts(|fonts, cache| {
-      cache
-        .admit_file(fonts, &self.url, source, bytes as u64)
+    let held = self.state.update_fonts(|fonts, registrations| {
+      registrations
+        .admit_file(fonts, &self.state.cache, &self.url, source, bytes as u64)
         .map_err(map_error)
-    })
+    })?;
+
+    self.state.leases.hold(self.lease, held);
+    self.state.release_evicted();
+
+    Ok(())
   }
 }

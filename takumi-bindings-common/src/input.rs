@@ -24,7 +24,7 @@ use takumi_core::{
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::font_cache::FontCache;
+use crate::registrations::FontRegistrations;
 
 /// The node tree in `json`, failing with the message reading the tree from an object reports,
 /// which carries no line and column.
@@ -63,16 +63,16 @@ pub struct ListedFonts {
 }
 
 impl ListedFonts {
-  /// `listed` read against `cache`, which knows the fonts a renderer still holds.
-  pub fn read(cache: &FontCache, listed: Vec<ListedFont>) -> Self {
+  /// `listed` read against `registrations`, which know the fonts a renderer still holds.
+  pub fn read(registrations: &FontRegistrations, listed: Vec<ListedFont>) -> Self {
     let len = listed.len();
     let mut pending = Vec::new();
     let mut families: Vec<String> = Vec::new();
     let mut subsets = Vec::new();
 
     for (id, font) in listed.into_iter().enumerate() {
-      if let Some(held) = cache.lookup(&font.key) {
-        families.extend(held.into_iter().map(|family| family.name));
+      if let Some(held) = registrations.families(&font.key) {
+        families.extend(held.iter().map(|family| family.name.clone()));
         continue;
       }
 
@@ -279,11 +279,18 @@ pub fn retain_svg(images: &mut Option<Vec<ImageSource>>) {
   }
 }
 
-/// Registers a font input, returning the families it produced and the bytes of font data it holds.
-pub fn register_font(
-  fonts: &mut Fonts,
-  font: Font,
-) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
+/// What registering one font added, and the font file it holds.
+pub struct RegisteredFont {
+  /// The families it produced.
+  pub families: Vec<RegisteredFamily>,
+  /// The id of its decoded bytes, [`FontResource::id`].
+  pub id: u64,
+  /// The bytes of its decoded font data.
+  pub bytes: u64,
+}
+
+/// Registers a font input.
+pub fn register_font(fonts: &mut Fonts, font: Font) -> Result<RegisteredFont, FontError> {
   match font {
     Font::Buffer(buffer) => register_resource(fonts, FontResource::new(buffer.into_vec())),
     Font::Object(details) => {
@@ -292,18 +299,31 @@ pub fn register_font(
   }
 }
 
-/// Registers `resource` decoded, returning the families it produced and its decoded bytes.
+/// Registers `resource` decoded.
 pub fn register_resource(
   fonts: &mut Fonts,
   resource: FontResource<'_>,
-) -> Result<(Vec<RegisteredFamily>, u64), FontError> {
+) -> Result<RegisteredFont, FontError> {
   let resource = match fonts.resolved(&resource) {
     Some(resolved) => resolved,
     None => resource.into_resolved()?.into_owned(),
   };
-  let bytes = resource.byte_len() as u64;
 
-  Ok((fonts.register(resource)?, bytes))
+  RegisteredFont::register(fonts, resource)
+}
+
+impl RegisteredFont {
+  /// Registers `resource`, which [`FontResource::into_resolved`] or [`Fonts::resolved`] gave.
+  pub fn register(fonts: &mut Fonts, resource: FontResource<'_>) -> Result<Self, FontError> {
+    let id = resource.id().ok_or(FontError::UnsupportedFormat)?;
+    let bytes = resource.byte_len() as u64;
+
+    Ok(Self {
+      families: fonts.register(resource)?,
+      id,
+      bytes,
+    })
+  }
 }
 
 /// Decodes the per-render image inputs into a `src`-keyed map through `cache`.

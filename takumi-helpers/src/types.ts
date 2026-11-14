@@ -118,9 +118,9 @@ export type ImageNode = NodeMetadata & {
 /** The memory a renderer keeps across renders, one pool of bytes every kind of data shares. */
 export interface CacheOptions {
   /**
-   * The bytes the renderer keeps for later renders, shared by every kind of data except fonts.
-   * When it is full, the entries used least recently go first, whatever their kind. `0` keeps
-   * nothing. Sizes are estimates, and the process uses memory this does not count.
+   * The bytes the renderer keeps for later renders, shared by every kind of data. When it is full,
+   * the entries used least recently go first, whatever their kind. `0` keeps nothing but the fonts
+   * from `registerFont`. Sizes are estimates, and the process uses memory this does not count.
    * @default 128 MiB
    */
   maxBytes?: number;
@@ -130,7 +130,8 @@ export interface CacheOptions {
 
 /**
  * The most bytes each kind of data may hold. A kind with a budget keeps its entries apart, and the
- * bytes it holds come out of `maxBytes`. `0` keeps none of that kind, except as `fonts` says.
+ * bytes it holds come out of `maxBytes`. `0` keeps none of that kind between renders, except as
+ * `fonts` says.
  */
 export interface CacheBudgets {
   /** Decoded images, and the SVG rasters and downscaled bitmaps drawn from them. */
@@ -152,11 +153,10 @@ export interface CacheBudgets {
   /** The faces `@font-face` rules add, weighed by the font files they hold. */
   fontFaces?: number;
   /**
-   * Decoded fonts that renders' `fonts` lists may keep registered, counted apart from `maxBytes`.
-   * Past it, the least recently used families are released and load again when a render lists
-   * them. Fonts from `registerFont` stay, and so does the font loaded last, even past the budget
-   * alone. A running render keeps the fonts it started with.
-   * @default unbounded
+   * Decoded font files, each counted once. Past it, the files renders used least recently are
+   * evicted one at a time and load again when a render lists them. A render keeps every file it
+   * uses until it finishes, even past the budget. Fonts from `registerFont` always stay and count
+   * toward it.
    */
   fonts?: number;
 }
@@ -166,13 +166,13 @@ export interface CacheBudgets {
  * the keys `CacheOptions` uses. Sizes are the same estimates the budgets count, not process memory.
  */
 export interface CacheStats {
-  /** The pool that every kind of data except fonts shares. */
+  /** The pool that every kind of data shares. */
   memory: CacheMemoryStats;
   /** Each kind of data, whether it has a budget or shares the pool. */
   budgets: Record<keyof CacheBudgets, CacheKindStats>;
 }
 
-/** The bytes the pool holds, every kind of data except fonts together. */
+/** The bytes the pool holds, every kind of data together. */
 export interface CacheMemoryStats {
   /** The bytes held now, budgets included. */
   current: number;
@@ -184,7 +184,7 @@ export interface CacheMemoryStats {
 
 /** What one kind of data holds and how lookups for it went. */
 export interface CacheKindStats {
-  /** The bytes held now. For `fonts`, the fonts that renders' `fonts` lists loaded. */
+  /** The bytes held now. For `fonts`, fonts from `registerFont` included. */
   current: number;
   /** The kind's budget, or `null` when it has none. */
   max: number | null;
