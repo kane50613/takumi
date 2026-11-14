@@ -74,6 +74,8 @@ impl HeldFonts {
   /// Holds the font file whose decoded bytes `id` names, `bytes` long, leased. A file the cache
   /// already holds, under any key, counts once.
   pub fn keep(&self, id: u64, bytes: u64) -> FontLease {
+    let _still = self.store.hold_still();
+
     loop {
       let mut kept = None;
       let font = self
@@ -107,6 +109,8 @@ impl HeldFonts {
 
   /// A lease on the font `id` names, none once it was evicted.
   pub fn lease(&self, id: u64) -> Option<FontLease> {
+    let _still = self.store.hold_still();
+
     self.lease_found(self.store.get(id)?, id)
   }
 
@@ -125,6 +129,8 @@ impl HeldFonts {
   /// Keeps the font `id` names from eviction, or lets it go, until [`Self::forget`]; false once it
   /// was evicted.
   pub fn pin(&self, id: u64, pinned: bool) -> bool {
+    let _still = self.store.hold_still();
+
     self
       .store
       .peek(id)
@@ -153,6 +159,8 @@ impl HeldFonts {
 
   /// Drops the font `id` names, which counts as no eviction, as a host does when it unregisters it.
   pub fn forget(&self, id: u64) {
+    let _still = self.store.hold_still();
+
     self.store.remove(id);
   }
 
@@ -165,6 +173,8 @@ impl HeldFonts {
 
 #[cfg(test)]
 mod tests {
+  use std::thread;
+
   use crate::{Cache, resources::cache::CacheOptions};
 
   const FONT: u64 = 64 << 10;
@@ -318,5 +328,32 @@ mod tests {
     drop(lease);
     assert!(cache.fonts().holds(1));
     assert_eq!(cache.stats().fonts.current, FONT);
+  }
+
+  /// Fonts kept while the fonts budget comes and goes stay in whichever store the cache moved them
+  /// to, so none is dropped without an eviction.
+  #[test]
+  fn fonts_kept_while_the_budget_changes_stay_held() {
+    let cache = Cache::default();
+    let fonts = cache.fonts();
+    let keeper = thread::scope(|scope| {
+      let keeper = scope.spawn(|| {
+        (0..2000)
+          .map(|id| (id, fonts.keep(id, 64)))
+          .collect::<Vec<_>>()
+      });
+
+      for round in 0..400 {
+        cache.set_options(CacheOptions {
+          fonts: (round % 2 == 0).then_some(64 << 20),
+          ..CacheOptions::default()
+        });
+      }
+
+      keeper.join().unwrap()
+    });
+    let lost = keeper.iter().filter(|(id, _)| !fonts.holds(*id)).count();
+
+    assert_eq!(lost, 0);
   }
 }

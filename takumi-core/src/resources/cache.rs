@@ -8,7 +8,7 @@ use std::{
   ops::{Index, IndexMut},
   ptr,
   sync::{
-    Arc, LazyLock, Mutex, MutexGuard, PoisonError,
+    Arc, LazyLock, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard,
     atomic::{AtomicU64, Ordering},
   },
   thread::available_parallelism,
@@ -500,6 +500,9 @@ struct Pool {
   lifecycle: PoolLifecycle,
   /// The bytes budgets hold, each rounded up to a [`CHARGE_STEP`]. Held while budgets resize.
   charged: Mutex<u64>,
+  /// Held exclusively while fonts move between the shared store and a budget, and shared while a
+  /// font is kept, leased, pinned, or forgotten, so none lands in a store the move already left.
+  fonts_moving: RwLock<()>,
 }
 
 impl Pool {
@@ -519,6 +522,7 @@ impl Pool {
       }),
       lifecycle,
       charged: Mutex::new(0),
+      fonts_moving: RwLock::new(()),
     }
   }
 
@@ -570,15 +574,11 @@ impl Pool {
 
     let mut charged = self.lock_charged();
 
-    match &*self.budgets[kind].load() {
-      Some(budget) => self.fit(&mut charged, budget),
-      None => self.store.set_capacity(
-        self
-          .max_bytes
-          .load(Ordering::Relaxed)
-          .saturating_sub(*charged),
-      ),
+    if let Some(budget) = &*self.budgets[kind].load() {
+      self.fit(&mut charged, budget);
     }
+
+    self.resize(*charged);
   }
 
   /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
@@ -636,6 +636,10 @@ impl Pool {
   /// Resizes the stores to `options` in place. A render that started before keeps its entries
   /// where the old options put them, until they are evicted.
   fn set_options(&self, options: CacheOptions) {
+    let _moving = self
+      .fonts_moving
+      .write()
+      .unwrap_or_else(PoisonError::into_inner);
     let mut charged = self.lock_charged();
     let budgets = options.budgets();
 
@@ -879,6 +883,15 @@ impl<V: Kept> KindStore<V> {
 }
 
 impl KindStore<Arc<HeldFont>> {
+  /// Keeps fonts from moving between stores while the guard lives.
+  pub(crate) fn hold_still(&self) -> RwLockReadGuard<'_, ()> {
+    self
+      .pool
+      .fonts_moving
+      .read()
+      .unwrap_or_else(PoisonError::into_inner)
+  }
+
   /// The ids of the fonts evicted since the last call, without the ones kept again since.
   pub(crate) fn take_evicted(&self) -> Vec<u64> {
     let mut evicted = take(
