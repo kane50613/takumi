@@ -798,7 +798,8 @@ impl<V: Kept> KindStore<V> {
       .and_then(V::from_entry)
   }
 
-  /// Drops the value kept under `key`, which counts as no eviction.
+  /// Drops the value kept under `key`, which counts as no eviction, and returns what its budget
+  /// no longer holds to the pool.
   pub(crate) fn remove(&self, key: V::Key) {
     let budget = self.budget_slot().load();
 
@@ -806,6 +807,10 @@ impl<V: Kept> KindStore<V> {
       .pool
       .store_for(budget.as_deref())
       .remove(&V::pool_key(key));
+
+    if let Some(budget) = budget.as_deref() {
+      self.pool.charge(V::KIND, budget);
+    }
   }
 
   /// Evicts what the kind holds past its capacity, once values pinned when they were kept are not.
@@ -1554,6 +1559,19 @@ mod tests {
 
     assert!(keeps_buffer(&cache, 0, 512));
     assert!(pool_weight(&cache) >= 1 << 20);
+  }
+
+  #[test]
+  fn a_removed_entry_returns_its_charge_to_the_pool() {
+    let max_bytes = 16 << 20;
+    let cache = Cache::builder().max_bytes(max_bytes).fonts(4 << 20).build();
+
+    drop(cache.fonts().keep(1, 64 << 10));
+    assert_eq!(pool_capacity(&cache), max_bytes - (1 << 20));
+
+    cache.fonts().forget(1);
+
+    assert_eq!(pool_capacity(&cache), max_bytes);
   }
 
   #[test]
