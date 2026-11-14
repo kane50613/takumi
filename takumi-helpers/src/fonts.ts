@@ -151,7 +151,7 @@ function familyValue(
   return `${family}:${tags.join(",")}@${tuples.join(";")}`;
 }
 
-function buildUrl(options: GoogleFontsOptions) {
+function buildUrl(options: GoogleFontsOptions, text: string | undefined) {
   const url = new URL(options.baseUrl ?? GOOGLE_FONTS_CSS);
   for (const family of options.families) {
     if (typeof family === "string") {
@@ -174,7 +174,6 @@ function buildUrl(options: GoogleFontsOptions) {
   if (options.display) {
     url.searchParams.set("display", options.display);
   }
-  const text = options.text === undefined ? undefined : textParameter(options.text);
   if (text) {
     url.searchParams.set("text", text);
   }
@@ -197,7 +196,7 @@ type SubsetFace = {
 export type FontSubset = {
   /** The family authors reference in `font-family`, shared by every subset of it. */
   name: string;
-  /** Stable dedup key (`"{name} {subset}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
+  /** Stable dedup key (`"{name} {subset}:{weight}:{style}:{range}:{generic}"`, then `:{text}` with `text`), independent of the rotating woff2 URL. */
   key: string;
   weight?: number;
   style?: string;
@@ -214,15 +213,17 @@ export type FontSubset = {
 function toSubset(
   face: SubsetFace,
   options: FetchOptions & { store: DownloadStore | null; cache?: FontCacheMode },
-  generic?: GenericFontFamily,
+  generic: GenericFontFamily | undefined,
+  text: string | undefined,
 ): FontSubset {
   const range = face.ranges.map(([lo, hi]) => `${lo}-${hi}`).join(",");
+  const coverage = `${face.family} ${face.subset}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`;
 
   return {
     name: face.family,
     // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
-    // across calls yet never merges two subsets that cover different ranges.
-    key: `${face.family} ${face.subset}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
+    // across calls yet never merges two subsets that cover different ranges or characters.
+    key: text ? `${coverage}:${text}` : coverage,
     weight: face.weight,
     style: face.style,
     unicodeRange: face.ranges,
@@ -436,7 +437,8 @@ export async function googleFonts(
   const store = storeOf(options);
   const { cache, ...fetchOptions } = options;
   const policy = typeof cache === "string" ? cache : undefined;
-  const css = await loadFontStylesheet(buildUrl(options), {
+  const text = options.text === undefined ? undefined : textParameter(options.text);
+  const css = await loadFontStylesheet(buildUrl(options, text), {
     ...fetchOptions,
     cache: typeof cache === "string" ? undefined : cache,
     store,
@@ -459,6 +461,6 @@ export async function googleFonts(
   return mergeVariableFaces(parseSubsetFaces(css))
     .sort((a, b) => (familyOrder.get(a.family) ?? 0) - (familyOrder.get(b.family) ?? 0))
     .map((face) =>
-      toSubset(face, { ...fetchOptions, store, cache: policy }, generics.get(face.family)),
+      toSubset(face, { ...fetchOptions, store, cache: policy }, generics.get(face.family), text),
     );
 }
