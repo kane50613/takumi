@@ -204,6 +204,43 @@ describe("download store", () => {
     expect(await Promise.all(loads)).toHaveLength(5);
   });
 
+  test("an abandoned download that finishes later leaves the newer one in the store", async () => {
+    const bodies: ReadableStreamDefaultController<Uint8Array>[] = [];
+    const fetch = mock(() => {
+      const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          bodies.push(controller);
+        },
+      });
+
+      return Promise.resolve(new Response(body));
+    });
+    const finish = (index: number, body: string) => {
+      bodies[index]?.enqueue(new TextEncoder().encode(body));
+      bodies[index]?.close();
+    };
+    const store = new MemoryStore();
+    const controller = new AbortController();
+    const abandoned = prepareImages({ node, fetch, store, signal: controller.signal });
+
+    await Bun.sleep(0);
+    controller.abort(new Error("cancelled"));
+    await expect(abandoned).rejects.toThrow("cancelled");
+
+    const newer = prepareImages({ node, fetch, store });
+
+    await Bun.sleep(0);
+    finish(1, "newer");
+    await newer;
+    finish(0, "older");
+    await Bun.sleep(0);
+
+    const stored = store.get(url);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(stored && text(stored.bytes)).toBe("newer");
+  });
+
   test("a stored redirect serves only callers whose allowUrl accepts where it ended", async () => {
     const entry = "https://allowed.example.com/image.png";
     const destination = "https://other.example.com/image.png";
