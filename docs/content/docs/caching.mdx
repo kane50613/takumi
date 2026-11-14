@@ -258,11 +258,11 @@ export const store: DownloadStore = {
 };
 ```
 
-On Node.js, a directory keeps downloads across restarts. This one never drops a file, so clear the directory on your own schedule:
+On Node.js, a directory keeps downloads across restarts. Each file holds the URL a download came from on its first line, then the bytes. The store writes a download to a temporary file and renames it into place, so a reader never pairs bytes with the URL of another download. It never drops a file, so clear the directory on your own schedule:
 
 ```ts title="A store on disk"
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type { DownloadStore } from "takumi-js/helpers";
 
 const directory = "/var/cache/takumi";
@@ -271,20 +271,23 @@ const pathOf = (url: string) => `${directory}/${createHash("sha256").update(url)
 export const store: DownloadStore = {
   async get(url) {
     try {
-      const [bytes, finalUrl] = await Promise.all([
-        readFile(pathOf(url)),
-        readFile(`${pathOf(url)}.url`, "utf8"),
-      ]);
+      const record = await readFile(pathOf(url));
+      const newline = record.indexOf("\n");
 
-      return { bytes: new Uint8Array(bytes).buffer, url: finalUrl };
+      return {
+        url: record.subarray(0, newline).toString(),
+        bytes: new Uint8Array(record.subarray(newline + 1)).buffer,
+      };
     } catch {
       return undefined;
     }
   },
   async set(url, download) {
+    const temporary = `${pathOf(url)}.${randomUUID()}`;
+
     await mkdir(directory, { recursive: true });
-    await writeFile(pathOf(url), new Uint8Array(download.bytes));
-    await writeFile(`${pathOf(url)}.url`, download.url);
+    await writeFile(temporary, [`${download.url}\n`, new Uint8Array(download.bytes)]);
+    await rename(temporary, pathOf(url));
   },
 };
 ```
