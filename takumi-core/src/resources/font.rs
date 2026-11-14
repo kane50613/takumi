@@ -163,6 +163,21 @@ pub struct RegisteredFace {
   pub index: u32,
 }
 
+/// The font file and descriptors one registration draws its faces from, which pick those faces
+/// out of their family apart from the faces other registrations of the same file added.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegisteredSource {
+  pub(crate) id: u64,
+  pub(crate) descriptors: FontFaceDescriptors,
+}
+
+impl RegisteredSource {
+  /// The id of the font file, [`FontResource::id`].
+  pub fn id(&self) -> u64 {
+    self.id
+  }
+}
+
 fn font_style_css(style: Style) -> String {
   match style {
     Style::Normal => "normal".to_string(),
@@ -516,13 +531,13 @@ impl Fonts {
 
     registry.revise();
 
+    let descriptors = font.descriptors();
     let FontResource {
       source,
-      info_override,
       generic_family,
-      unicode_range,
       last_resort,
       origin,
+      ..
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
 
@@ -542,13 +557,6 @@ impl Fonts {
         });
     }
 
-    let descriptors = FontFaceDescriptors {
-      unicode_range,
-      ..info_override
-        .as_ref()
-        .map(FontOverride::descriptors)
-        .unwrap_or_default()
-    };
     let faces = registry.selector.register(
       data,
       id,
@@ -615,13 +623,12 @@ impl Fonts {
     true
   }
 
-  /// Removes the faces `family` draws from the font whose bytes [`FontResource::id`] names, as
-  /// registering that font under `family` added them, and keeps the family's other faces; false
-  /// when it has none.
-  pub fn unregister_source(&mut self, family: &str, id: u64) -> bool {
+  /// Removes the faces `family` draws from `source`, as registering it under `family` added them,
+  /// and keeps the family's other faces; false when it has none.
+  pub fn unregister_source(&mut self, family: &str, source: &RegisteredSource) -> bool {
     let registry = Arc::make_mut(&mut self.registry);
 
-    if !registry.selector.unregister_source(family, id) {
+    if !registry.selector.unregister_source(family, source) {
       return false;
     }
 
@@ -630,10 +637,10 @@ impl Fonts {
     true
   }
 
-  /// Gives the faces of each `(family, id)` source precedence over the other faces of its family,
+  /// Gives the faces each `(family, source)` added precedence over the other faces of its family,
   /// a later source over an earlier one, as registering them again in that order would. Changes
   /// nothing, and returns false, when they already have it.
-  pub fn prefer_sources(&mut self, sources: &[(&str, u64)]) -> bool {
+  pub fn prefer_sources(&mut self, sources: &[(&str, &RegisteredSource)]) -> bool {
     let Some(sources) = self.registry.selector.sources_to_prefer(sources) else {
       return false;
     };
@@ -1217,6 +1224,26 @@ impl<'a> FontResource<'a> {
     self.source.id()
   }
 
+  /// The source registering it adds faces from, none before it resolves.
+  pub fn registered_source(&self) -> Option<RegisteredSource> {
+    Some(RegisteredSource {
+      id: self.id()?,
+      descriptors: self.descriptors(),
+    })
+  }
+
+  /// The descriptors its faces register with.
+  fn descriptors(&self) -> FontFaceDescriptors {
+    FontFaceDescriptors {
+      unicode_range: self.unicode_range.clone(),
+      ..self
+        .info_override
+        .as_ref()
+        .map(FontOverride::descriptors)
+        .unwrap_or_default()
+    }
+  }
+
   /// Decompresses and hashes the font, so registering it after costs the same at any size.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     if self.source.is_decoded {
@@ -1438,20 +1465,25 @@ mod tests {
       .collect()
   }
 
-  /// `bytes` registered under `family`, returning their id.
-  fn register_source(fonts: &mut Fonts, bytes: Vec<u8>, family: &str) -> u64 {
-    let resource = FontResource::new(bytes)
-      .override_info(FontOverride {
+  /// `bytes` registered under `family`, returning their source.
+  fn register_source(fonts: &mut Fonts, bytes: Vec<u8>, family: &str) -> RegisteredSource {
+    register_resource(
+      fonts,
+      FontResource::new(bytes).override_info(FontOverride {
         family_name: Some(family.into()),
         ..Default::default()
-      })
-      .into_resolved()
-      .unwrap();
-    let id = resource.id().unwrap();
+      }),
+    )
+  }
+
+  /// `resource` registered, returning its source.
+  fn register_resource(fonts: &mut Fonts, resource: FontResource) -> RegisteredSource {
+    let resource = resource.into_resolved().unwrap();
+    let source = resource.registered_source().unwrap();
 
     fonts.register(resource).unwrap();
 
-    id
+    source
   }
 
   #[test]
@@ -1464,13 +1496,34 @@ mod tests {
 
     let revision = fonts.registry.revision;
 
-    assert!(fonts.unregister_source("shared", sans));
+    assert!(fonts.unregister_source("shared", &sans));
     assert_ne!(fonts.registry.revision, revision);
-    assert_eq!(source_ids(&fonts, "Shared"), [mono]);
-    assert_eq!(source_ids(&fonts, "Other"), [sans]);
-    assert!(!fonts.unregister_source("Shared", sans));
-    assert!(fonts.unregister_source("Shared", mono));
+    assert_eq!(source_ids(&fonts, "Shared"), [mono.id()]);
+    assert_eq!(source_ids(&fonts, "Other"), [sans.id()]);
+    assert!(!fonts.unregister_source("Shared", &sans));
+    assert!(fonts.unregister_source("Shared", &mono));
     assert_eq!(order(&fonts), ["Other"]);
+  }
+
+  /// The same bytes registered into one family twice, once under a `unicode-range`.
+  #[test]
+  fn each_source_of_one_file_keeps_its_own_faces() {
+    let mut fonts = Fonts::default();
+    let latin = register_resource(
+      &mut fonts,
+      FontResource::new(geist_bytes())
+        .override_info(FontOverride {
+          family_name: Some("Shared".into()),
+          ..Default::default()
+        })
+        .unicode_range([UnicodeRange::new(0x20, 0x7e)].into_iter().collect()),
+    );
+    let mono = register_source(&mut fonts, geist_mono_bytes(), "Shared");
+    let all = register_source(&mut fonts, geist_bytes(), "Shared");
+
+    assert!(!fonts.prefer_sources(&[("Shared", &latin), ("Shared", &mono), ("Shared", &all)]));
+    assert!(fonts.unregister_source("Shared", &latin));
+    assert_eq!(source_ids(&fonts, "Shared"), [mono.id(), all.id()]);
   }
 
   #[test]
@@ -1480,13 +1533,13 @@ mod tests {
     let mono = register_source(&mut fonts, geist_mono_bytes(), "Shared");
     let revision = fonts.registry.revision;
 
-    assert!(!fonts.prefer_sources(&[("Shared", sans), ("shared", mono)]));
+    assert!(!fonts.prefer_sources(&[("Shared", &sans), ("shared", &mono)]));
     assert_eq!(fonts.registry.revision, revision);
-    assert!(fonts.prefer_sources(&[("Shared", mono), ("Shared", sans)]));
-    assert_eq!(source_ids(&fonts, "Shared"), [mono, sans]);
-    assert!(!fonts.prefer_sources(&[("Shared", sans)]));
-    assert!(fonts.prefer_sources(&[("Shared", mono), ("Shared", sans), ("Shared", mono)]));
-    assert_eq!(source_ids(&fonts, "Shared"), [sans, mono]);
+    assert!(fonts.prefer_sources(&[("Shared", &mono), ("Shared", &sans)]));
+    assert_eq!(source_ids(&fonts, "Shared"), [mono.id(), sans.id()]);
+    assert!(!fonts.prefer_sources(&[("Shared", &sans)]));
+    assert!(fonts.prefer_sources(&[("Shared", &mono), ("Shared", &sans), ("Shared", &mono)]));
+    assert_eq!(source_ids(&fonts, "Shared"), [sans.id(), mono.id()]);
   }
 
   /// A face registered again takes precedence over faces registered since.
