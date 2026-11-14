@@ -1,9 +1,9 @@
 ---
 title: Caching
-description: What Takumi keeps between renders, which renderer keeps it, and how to size, skip, or share it.
+description: What Takumi keeps between renders, which renderer keeps it, and how to size, inspect, skip, or share it.
 ---
 
-Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and you can give Takumi a store for the bytes it downloads. This page covers both layers, and how to size or skip each one.
+Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and you can give Takumi a store for the bytes it downloads. This page covers both layers, how to size or skip each one, and how to see what a renderer holds.
 
 ## What a renderer keeps
 
@@ -76,9 +76,23 @@ A kind with a budget evicts only its own entries to stay within the budget, so o
 
 Budgets never hold more than `maxBytes` together. Once the kinds with budgets fill it, a kind that needs more evicts its own entries instead of growing.
 
+### Change the cache of a running renderer
+
+A renderer's `setCacheOptions` method replaces its cache options while it keeps running:
+
+```ts twoslash title="Shrink the cache at runtime"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer();
+
+renderer.setCacheOptions({ maxBytes: 32 * 1024 * 1024 }); // [!code highlight]
+```
+
+It takes the same options as `cache` in the constructor, and replaces all of them. A key you leave out returns to its default, so the call above also removes any budget the renderer had. A smaller size or budget evicts what no longer fits right away. Changing only a size keeps what still fits. A kind that gains or loses a budget starts empty, and renders that are running when you call it finish with the entries they started with. `PdfRenderer` and `Painter` have the same method.
+
 ### The shared renderer
 
-`setCacheOptions` sets the cache of the renderer that `render` and the other functions share:
+`setCacheOptions` from `takumi-js` sets the cache of the renderer that `render` and the other functions share:
 
 ```ts twoslash title="Shared renderer cache"
 import { setCacheOptions } from "takumi-js";
@@ -86,10 +100,35 @@ import { setCacheOptions } from "takumi-js";
 setCacheOptions({ maxBytes: 256 * 1024 * 1024 }); // [!code highlight]
 ```
 
-<Callout type="warn">
-  Call `setCacheOptions` before your first call to any of these functions. The shared renderer keeps
-  the options it was created with, and ignores a later call without an error.
-</Callout>
+You can call it at any time. Once the shared renderer exists, the call applies to it right away, as the renderer's own `setCacheOptions` does. Before then, the renderer takes the options when it is created.
+
+## See what the cache holds
+
+A renderer's `cacheStats` method reports what its caches hold and how often renders found what they looked up:
+
+```ts twoslash title="Read a renderer's cache stats"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer();
+
+const { memory, budgets } = renderer.cacheStats(); // [!code highlight]
+
+console.log(memory.current, memory.high, memory.max);
+console.log(budgets.images.hits, budgets.images.misses, budgets.images.evictions);
+```
+
+`memory` covers the pool that every kind except fonts shares. `current` is the bytes it holds now, budgets included. `high` is the most it held at once since the renderer was created, and `max` is its `maxBytes`.
+
+`budgets` reports each kind under its `budgets` key, whether the kind has a budget or shares the pool. Each entry has these fields:
+
+- `current` is the bytes the kind holds now.
+- `max` is the kind's budget, or `null` when it has none.
+- `hits` counts lookups that found an entry, and `misses` counts lookups that had to do the work again.
+- `evictions` counts entries released to stay within `maxBytes` or the budget.
+
+The `fonts` entry counts the fonts that renders' `fonts` lists loaded. It leaves out fonts from `registerFont`, since the budget never releases them. All sizes are the same estimates the budgets count, not the memory of the process, and the counts start when the renderer is created.
+
+A high miss count with many evictions means renders keep redoing work the cache dropped, so a larger `maxBytes` may help. A kind that holds most of `memory.current` while its hits stay low is a candidate for a budget.
 
 ## Skip caching an image
 
@@ -217,4 +256,4 @@ let options = RenderOptions::builder()
   .build();
 ```
 
-`max_bytes` sets the pool in bytes. Each `budgets` key has a setter of the same name in snake case, such as `images`, `stylesheets`, or `font_faces`, which gives that kind a budget in bytes. The `fonts` budget belongs to the JavaScript renderers, so `Cache` has no setter for it. A render without `cache` uses `Cache::shared()`, one 128 MiB cache for the whole process. `Cache::decode_image` and `Cache::parse_stylesheet` decode images and parse CSS through a cache before a render, as the JavaScript renderers do.
+`max_bytes` sets the pool in bytes. Each `budgets` key has a setter of the same name in snake case, such as `images`, `stylesheets`, or `font_faces`, which gives that kind a budget in bytes. `Cache::set_options` takes a `CacheOptions` with the same fields and applies it to a cache in use, as `setCacheOptions` does. `Cache::stats` returns a `CacheStats` with the fields `cacheStats` reports, except `fonts`. The `fonts` budget belongs to the JavaScript renderers, so `Cache` has no setter for it. A render without `cache` uses `Cache::shared()`, one 128 MiB cache for the whole process. `Cache::decode_image` and `Cache::parse_stylesheet` decode images and parse CSS through a cache before a render, as the JavaScript renderers do.
