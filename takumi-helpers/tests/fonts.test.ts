@@ -460,6 +460,25 @@ describe("googleFonts", () => {
     expect(new Set([kanji?.key, kana?.key]).size).toBe(2);
   });
 
+  test("keys the subsets of different text apart when the stylesheet names no unicode-range", async () => {
+    const rangeless = textCss.ぁ.replace(/\s*unicode-range:[^;]*;/, "");
+    const fetchMock = mock((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response(rangeless)),
+    );
+    const load = (text: string) =>
+      googleFonts({
+        families: [{ name: "Noto Sans JP", weight: "100..900" }],
+        text,
+        fetch: fetchMock,
+        store: null,
+      });
+    const [kanji] = await load("組選");
+    const [kana] = await load("ぁ");
+
+    expect(kanji?.unicodeRange).toEqual([]);
+    expect(kanji?.key).not.toBe(kana?.key);
+  });
+
   test("loads range subsets when the encoded text runs past 6000 characters", async () => {
     const fetchMock = textFetch();
     // Each kanji encodes to 9 characters, so 666 of them fit and 667 do not.
