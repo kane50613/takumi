@@ -199,7 +199,7 @@ Replace the example URL with your font file. A font loads once, however many ren
 | `clearFonts()`            | Removes every registered font except the bundled fallback |
 | `free()`                  | Releases the renderer's WebAssembly memory                |
 
-`new PdfRenderer({ cache })` sets the byte budget of each cache the renderer keeps, including the fonts that renders' `fonts` lists load. See [Caching](/docs/caching).
+`new PdfRenderer({ cache })` sets the memory the renderer keeps between renders, and the budget of the fonts that renders' `fonts` lists load. See [Caching](/docs/caching).
 
 ## Runtimes
 
