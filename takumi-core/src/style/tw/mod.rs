@@ -108,7 +108,7 @@ impl TailwindCache {
   }
 
   /// The rules `source` compiles to, compiled once across the renders that send it.
-  fn compile(&self, source: &str) -> Rules {
+  pub(crate) fn compile(&self, source: &str) -> Rules {
     let compiled = self
       .store
       .get_or_insert_with(xxh3_64(source.as_bytes()), || {

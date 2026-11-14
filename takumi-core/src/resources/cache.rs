@@ -1,17 +1,21 @@
 //! What renders keep for the renders after them, in one pool of bytes every kind of data shares.
 
 use std::{
+  array,
   convert::Infallible,
   marker::PhantomData,
+  ops::{Index, IndexMut},
+  ptr,
   sync::{
-    Arc, LazyLock, Mutex, PoisonError,
+    Arc, LazyLock, Mutex, MutexGuard, PoisonError,
     atomic::{AtomicU64, Ordering},
   },
   thread::available_parallelism,
 };
 
+use arc_swap::ArcSwapOption;
 use quick_cache::{
-  DefaultHashBuilder, OptionsBuilder, Weighter,
+  DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter,
   sync::{Cache as Store, DefaultLifecycle, GuardResult},
 };
 use typed_builder::TypedBuilder;
@@ -49,6 +53,7 @@ const CHARGE_STEP: u64 = 1 << 20;
 pub struct Cache(Arc<Caches>);
 
 struct Caches {
+  pool: Arc<Pool>,
   images: KindStore<ImageSource>,
   sized_images: KindStore<Arc<ImageBuffer>>,
   #[cfg(feature = "svg")]
@@ -63,7 +68,8 @@ struct Caches {
 
 /// The bytes a [`Cache`] keeps, and the most bytes each kind of data may hold within them. A kind
 /// without a budget competes for the whole pool. `0` keeps nothing, of every kind or of one.
-#[derive(TypedBuilder)]
+#[derive(TypedBuilder, Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 #[builder(
   builder_type(name = CacheBuilder),
   build_method(into = Cache),
@@ -72,50 +78,87 @@ struct Caches {
 pub struct CacheOptions {
   /// The bytes every kind of data shares. Approximate: entries are weighed by estimated size.
   #[builder(default = CacheOptions::DEFAULT_MAX_BYTES)]
-  max_bytes: u64,
+  pub max_bytes: u64,
   /// Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
-  images: Option<u64>,
+  pub images: Option<u64>,
   /// SVG images laid out to drawing ops, which vector backends draw and rasters are drawn from.
   #[cfg(feature = "svg")]
-  pictures: Option<u64>,
+  pub pictures: Option<u64>,
   /// Parsed stylesheets.
-  stylesheets: Option<u64>,
+  pub stylesheets: Option<u64>,
   /// The rules Tailwind classes compile to.
-  tailwind: Option<u64>,
+  pub tailwind: Option<u64>,
   /// Resolved glyphs, and the masks rasterized from glyphs and shapes. Without one, the budget the
   /// deprecated [`set_glyph_cache_max_bytes`](glyph_cache::set_glyph_cache_max_bytes) set.
-  glyphs: Option<u64>,
+  pub glyphs: Option<u64>,
   /// Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
-  intercepts: Option<u64>,
+  pub intercepts: Option<u64>,
   /// The faces `@font-face` rules add, weighed by the font files they hold.
   #[cfg(feature = "font-face")]
-  font_faces: Option<u64>,
+  pub font_faces: Option<u64>,
 }
 
 impl CacheOptions {
   /// The bytes a cache keeps unless its builder sets `max_bytes`.
   pub const DEFAULT_MAX_BYTES: u64 = 128 << 20;
+
+  /// The budget of each kind, each capped at `max_bytes`.
+  fn budgets(&self) -> PerKind<Option<u64>> {
+    PerKind::from_fn(|kind| {
+      let budget = match kind {
+        Kind::Images => self.images,
+        #[cfg(feature = "svg")]
+        Kind::Pictures => self.pictures,
+        #[cfg(not(feature = "svg"))]
+        Kind::Pictures => None,
+        Kind::Stylesheets => self.stylesheets,
+        Kind::Tailwind => self.tailwind,
+        Kind::Glyphs => self.glyphs.or_else(glyph_cache::default_budget),
+        Kind::Intercepts => self.intercepts,
+        #[cfg(feature = "font-face")]
+        Kind::FontFaces => self.font_faces,
+        #[cfg(not(feature = "font-face"))]
+        Kind::FontFaces => None,
+      };
+
+      budget.map(|budget| budget.min(self.max_bytes))
+    })
+  }
+}
+
+impl Default for CacheOptions {
+  fn default() -> Self {
+    Self {
+      max_bytes: Self::DEFAULT_MAX_BYTES,
+      images: None,
+      #[cfg(feature = "svg")]
+      pictures: None,
+      stylesheets: None,
+      tailwind: None,
+      glyphs: None,
+      intercepts: None,
+      #[cfg(feature = "font-face")]
+      font_faces: None,
+    }
+  }
 }
 
 impl From<CacheOptions> for Cache {
   fn from(options: CacheOptions) -> Self {
-    let pool = Arc::new(Pool::new(options.max_bytes));
-    let images = KindStore::new(&pool, options.images);
+    let pool = Arc::new(Pool::new(options));
 
     Self(Arc::new(Caches {
-      sized_images: images.sharing(),
-      images,
+      images: KindStore::new(&pool),
+      sized_images: KindStore::new(&pool),
       #[cfg(feature = "svg")]
-      pictures: KindStore::new(&pool, options.pictures),
-      stylesheets: KindStore::new(&pool, options.stylesheets),
-      tailwind: TailwindCache::new(KindStore::new(&pool, options.tailwind)),
-      glyphs: GlyphCache::new(KindStore::new(
-        &pool,
-        options.glyphs.or_else(glyph_cache::default_budget),
-      )),
-      intercepts: InterceptCache::new(KindStore::new(&pool, options.intercepts)),
+      pictures: KindStore::new(&pool),
+      stylesheets: KindStore::new(&pool),
+      tailwind: TailwindCache::new(KindStore::new(&pool)),
+      glyphs: GlyphCache::new(KindStore::new(&pool)),
+      intercepts: InterceptCache::new(KindStore::new(&pool)),
       #[cfg(feature = "font-face")]
-      font_faces: DocumentRegistries::new(KindStore::new(&pool, options.font_faces)),
+      font_faces: DocumentRegistries::new(KindStore::new(&pool)),
+      pool,
     }))
   }
 }
@@ -137,6 +180,19 @@ impl Cache {
     static SHARED: LazyLock<Cache> = LazyLock::new(Cache::default);
 
     SHARED.clone()
+  }
+
+  /// Gives the cache `options` in place of the ones it has, evicting at once what a smaller size
+  /// or budget no longer fits. A kind that gains or loses a budget drops what it held. A store
+  /// keeps the shards it was built with, so after a large cache shrinks, the largest entry it keeps
+  /// can be smaller than in a cache built at the new size.
+  pub fn set_options(&self, options: CacheOptions) {
+    self.0.pool.set_options(options);
+  }
+
+  /// What the cache holds and how its lookups went since it was built.
+  pub fn stats(&self) -> CacheStats {
+    self.0.pool.stats()
   }
 
   /// The image `bytes` hold, decoded once across concurrent misses, and kept unless `mode` is
@@ -259,122 +315,430 @@ impl Cache {
   }
 }
 
-/// The bytes every kind without a budget shares, shrunk by what budgeted kinds hold.
+/// What a [`Cache`] holds of every kind together and of each kind, and how its lookups went since
+/// it was built. Sizes are the estimates the cache weighs entries by, not process memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CacheStats {
+  /// Every kind together.
+  pub memory: CacheMemoryStats,
+  /// [`CacheOptions::images`].
+  pub images: CacheKindStats,
+  /// [`CacheOptions::pictures`].
+  #[cfg(feature = "svg")]
+  pub pictures: CacheKindStats,
+  /// [`CacheOptions::stylesheets`].
+  pub stylesheets: CacheKindStats,
+  /// [`CacheOptions::tailwind`].
+  pub tailwind: CacheKindStats,
+  /// [`CacheOptions::glyphs`].
+  pub glyphs: CacheKindStats,
+  /// [`CacheOptions::intercepts`].
+  pub intercepts: CacheKindStats,
+  /// [`CacheOptions::font_faces`].
+  #[cfg(feature = "font-face")]
+  pub font_faces: CacheKindStats,
+}
+
+/// The bytes a [`Cache`] holds of every kind together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CacheMemoryStats {
+  /// The bytes held now.
+  pub current: u64,
+  /// The most bytes held at once since the cache was built, as measured after each entry it kept.
+  pub high: u64,
+  /// [`CacheOptions::max_bytes`].
+  pub max: u64,
+}
+
+/// What a [`Cache`] holds of one kind of data, and how lookups of that kind went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CacheKindStats {
+  /// The bytes held now.
+  pub current: u64,
+  /// The kind's budget, none when it shares the pool.
+  pub max: Option<u64>,
+  /// Lookups that found an entry.
+  pub hits: u64,
+  /// Lookups that found none.
+  pub misses: u64,
+  /// Entries dropped to stay within the bytes, counting entries too large to keep at all.
+  pub evictions: u64,
+}
+
+/// A kind of data a budget covers, one for each budget of [`CacheOptions`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+  Images,
+  Pictures,
+  Stylesheets,
+  Tailwind,
+  Glyphs,
+  Intercepts,
+  FontFaces,
+}
+
+const KINDS: usize = 7;
+
+impl Kind {
+  const ALL: [Self; KINDS] = [
+    Self::Images,
+    Self::Pictures,
+    Self::Stylesheets,
+    Self::Tailwind,
+    Self::Glyphs,
+    Self::Intercepts,
+    Self::FontFaces,
+  ];
+
+  /// The approximate bytes of one entry, a hint for how many a budget holds.
+  fn entry_bytes(self) -> u64 {
+    match self {
+      Self::Images => 64 << 10,
+      Self::Pictures | Self::Stylesheets => 16 << 10,
+      Self::Tailwind => 256,
+      Self::Glyphs => 4 << 10,
+      Self::Intercepts => 64,
+      Self::FontFaces => 256 << 10,
+    }
+  }
+}
+
+/// One value for each kind of data.
+struct PerKind<T>([T; KINDS]);
+
+impl<T> PerKind<T> {
+  fn from_fn(mut value: impl FnMut(Kind) -> T) -> Self {
+    Self(array::from_fn(|index| value(Kind::ALL[index])))
+  }
+}
+
+impl<T> Index<Kind> for PerKind<T> {
+  type Output = T;
+
+  fn index(&self, kind: Kind) -> &T {
+    &self.0[kind as usize]
+  }
+}
+
+impl<T> IndexMut<Kind> for PerKind<T> {
+  fn index_mut(&mut self, kind: Kind) -> &mut T {
+    &mut self.0[kind as usize]
+  }
+}
+
+/// How lookups of one kind went, and how many of its entries were evicted.
+#[derive(Default)]
+struct KindCounts {
+  hits: AtomicU64,
+  misses: AtomicU64,
+  evictions: AtomicU64,
+}
+
+impl KindCounts {
+  fn looked_up(&self, found: bool) {
+    let counter = if found { &self.hits } else { &self.misses };
+
+    counter.fetch_add(1, Ordering::Relaxed);
+  }
+
+  fn stats(&self, current: u64, max: Option<u64>) -> CacheKindStats {
+    CacheKindStats {
+      current,
+      max,
+      hits: self.hits.load(Ordering::Relaxed),
+      misses: self.misses.load(Ordering::Relaxed),
+      evictions: self.evictions.load(Ordering::Relaxed),
+    }
+  }
+}
+
+type PoolStore = Store<PoolKey, PoolEntry, ByBytes, DefaultHashBuilder, CountEvictions>;
+
+/// The bytes every kind shares: a store for the kinds without a budget, which gives up what the
+/// budgets hold, and a store of its own for each kind with one.
 struct Pool {
-  store: Store<PoolKey, PoolEntry, ByBytes>,
-  max_bytes: u64,
-  /// The bytes budgets hold, each rounded up to a [`CHARGE_STEP`].
+  store: PoolStore,
+  max_bytes: AtomicU64,
+  /// The most bytes the pool and its budgets held together after an entry was kept.
+  high: AtomicU64,
+  budgets: PerKind<ArcSwapOption<Budget>>,
+  counts: Arc<PerKind<KindCounts>>,
+  /// The bytes budgets hold, each rounded up to a [`CHARGE_STEP`]. Held while budgets resize.
   charged: Mutex<u64>,
 }
 
 impl Pool {
-  fn new(max_bytes: u64) -> Self {
+  fn new(options: CacheOptions) -> Self {
+    let counts = Arc::new(PerKind::from_fn(|_| KindCounts::default()));
+    let budgets = options.budgets();
+
     Self {
       // ~4 KiB average entry, as glyphs and masks outnumber the rest ⇒ an item-count hint.
-      store: store(max_bytes, 4 << 10),
-      max_bytes,
+      store: store(options.max_bytes, 4 << 10, &counts),
+      max_bytes: AtomicU64::new(options.max_bytes),
+      high: AtomicU64::new(0),
+      budgets: PerKind::from_fn(|kind| {
+        ArcSwapOption::new(budgets[kind].map(|bytes| Arc::new(Budget::new(kind, bytes, &counts))))
+      }),
+      counts,
       charged: Mutex::new(0),
     }
   }
 
-  /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
-  /// [`CacheReservationManager`](https://github.com/facebook/rocksdb/blob/main/cache/cache_reservation_manager.h).
-  /// A budget grows only into what the other budgets leave of the pool, so together they hold at
-  /// most `max_bytes`.
-  fn charge(&self, budget: &Budget) {
-    let held = || budget.store.weight().next_multiple_of(CHARGE_STEP);
+  fn lock_charged(&self) -> MutexGuard<'_, u64> {
+    self.charged.lock().unwrap_or_else(PoisonError::into_inner)
+  }
 
-    if held() == budget.charged.load(Ordering::Relaxed) {
+  /// `budget`'s store, or the shared one without a budget.
+  fn store_for<'a>(&'a self, budget: Option<&'a Budget>) -> &'a PoolStore {
+    budget.map_or(&self.store, |budget| &budget.store)
+  }
+
+  /// Charges what `kind`'s `budget` holds after it kept an entry, and records the bytes held.
+  fn kept(&self, kind: Kind, budget: Option<&Budget>) {
+    if let Some(budget) = budget {
+      self.charge(kind, budget);
+    }
+
+    self.high.fetch_max(self.held(), Ordering::Relaxed);
+  }
+
+  /// The bytes the pool and its budgets hold together.
+  fn held(&self) -> u64 {
+    Kind::ALL
+      .into_iter()
+      .filter_map(|kind| {
+        self.budgets[kind]
+          .load()
+          .as_ref()
+          .map(|budget| budget.store.weight())
+      })
+      .sum::<u64>()
+      + self.store.weight()
+  }
+
+  /// Charges what `budget` holds against the pool once it crossed a [`CHARGE_STEP`], after RocksDB's
+  /// [`CacheReservationManager`](https://github.com/facebook/rocksdb/blob/main/cache/cache_reservation_manager.h),
+  /// unless `kind` no longer has that budget.
+  fn charge(&self, kind: Kind, budget: &Budget) {
+    // A budget the others squeezed refits on every insert, so it grows back once they shrink.
+    let squeezed = budget.store.capacity() < budget.max_bytes.load(Ordering::Relaxed);
+
+    if !squeezed && budget.held() == budget.charged.load(Ordering::Relaxed) {
       return;
     }
 
-    let mut charged = self.charged.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut charged = self.lock_charged();
+    let current = self.budgets[kind].load();
+
+    if current
+      .as_deref()
+      .is_some_and(|current| ptr::eq(current, budget))
+    {
+      self.fit(&mut charged, budget);
+      self.resize(*charged);
+    }
+  }
+
+  /// Fits `budget` into what the other budgets leave of the pool, then gives the pool what the
+  /// budgets leave, so together they hold at most `max_bytes`.
+  fn fit(&self, charged: &mut u64, budget: &Budget) {
+    let max_bytes = self.max_bytes.load(Ordering::Relaxed);
     let others = *charged - budget.charged.load(Ordering::Relaxed);
 
-    budget
-      .store
-      .set_capacity(budget.max_bytes.min(self.max_bytes.saturating_sub(others)));
+    budget.store.set_capacity(
+      budget
+        .max_bytes
+        .load(Ordering::Relaxed)
+        .min(max_bytes.saturating_sub(others)),
+    );
 
-    let held = held();
+    let held = budget.held();
 
     budget.charged.store(held, Ordering::Relaxed);
     *charged = others + held;
-    self
-      .store
-      .set_capacity(self.max_bytes.saturating_sub(*charged));
+  }
+
+  /// Gives the shared store what the budgets leave of `max_bytes`.
+  fn resize(&self, charged: u64) {
+    self.store.set_capacity(
+      self
+        .max_bytes
+        .load(Ordering::Relaxed)
+        .saturating_sub(charged),
+    );
+  }
+
+  /// Resizes the stores to `options` in place. A render that started before keeps its entries
+  /// where the old options put them, until they are evicted.
+  fn set_options(&self, options: CacheOptions) {
+    let mut charged = self.lock_charged();
+    let budgets = options.budgets();
+
+    self.max_bytes.store(options.max_bytes, Ordering::Relaxed);
+
+    for kind in Kind::ALL {
+      let slot = &self.budgets[kind];
+
+      match (slot.load_full(), budgets[kind]) {
+        (Some(budget), Some(bytes)) => budget.max_bytes.store(bytes, Ordering::Relaxed),
+        (Some(budget), None) => {
+          slot.store(None);
+          *charged -= budget.charged.load(Ordering::Relaxed);
+          budget.store.clear();
+        }
+        (None, Some(bytes)) => {
+          slot.store(Some(Arc::new(Budget::new(kind, bytes, &self.counts))));
+          self.store.retain(|key, _| key.kind() != kind);
+        }
+        (None, None) => {}
+      }
+    }
+
+    // Budgets that give bytes back fit first, so the budgets that grow see what they released.
+    for shrinks in [true, false] {
+      for kind in Kind::ALL {
+        if let Some(budget) = &*self.budgets[kind].load()
+          && (budget.charged.load(Ordering::Relaxed) > budget.max_bytes.load(Ordering::Relaxed))
+            == shrinks
+        {
+          self.fit(&mut charged, budget);
+        }
+      }
+    }
+
+    self.resize(*charged);
+  }
+
+  fn stats(&self) -> CacheStats {
+    let budgets = PerKind::from_fn(|kind| self.budgets[kind].load_full());
+    let mut held = PerKind::from_fn(|kind| {
+      budgets[kind]
+        .as_ref()
+        .map_or(0, |budget| budget.store.weight())
+    });
+
+    for (key, entry) in self.store.iter() {
+      held[key.kind()] += ByBytes.weight(&key, &entry);
+    }
+
+    let current = held.0.iter().sum();
+    let kind = |kind: Kind| {
+      self.counts[kind].stats(
+        held[kind],
+        budgets[kind]
+          .as_ref()
+          .map(|budget| budget.max_bytes.load(Ordering::Relaxed)),
+      )
+    };
+
+    CacheStats {
+      memory: CacheMemoryStats {
+        current,
+        high: self.high.fetch_max(current, Ordering::Relaxed).max(current),
+        max: self.max_bytes.load(Ordering::Relaxed),
+      },
+      images: kind(Kind::Images),
+      #[cfg(feature = "svg")]
+      pictures: kind(Kind::Pictures),
+      stylesheets: kind(Kind::Stylesheets),
+      tailwind: kind(Kind::Tailwind),
+      glyphs: kind(Kind::Glyphs),
+      intercepts: kind(Kind::Intercepts),
+      #[cfg(feature = "font-face")]
+      font_faces: kind(Kind::FontFaces),
+    }
   }
 }
 
 /// A kind's own store, holding at most its budget, whose weight the pool gives up.
 struct Budget {
-  store: Store<PoolKey, PoolEntry, ByBytes>,
+  store: PoolStore,
   /// The most the kind may hold, which its store's capacity shrinks from while other budgets fill
   /// the pool.
-  max_bytes: u64,
+  max_bytes: AtomicU64,
   /// The bytes this budget last charged the pool.
   charged: AtomicU64,
+}
+
+impl Budget {
+  /// A store for `kind` holding at most `max_bytes`.
+  fn new(kind: Kind, max_bytes: u64, counts: &Arc<PerKind<KindCounts>>) -> Self {
+    Self {
+      store: store(max_bytes, kind.entry_bytes(), counts),
+      max_bytes: AtomicU64::new(max_bytes),
+      charged: AtomicU64::new(0),
+    }
+  }
+
+  /// The bytes the store holds, rounded up to a [`CHARGE_STEP`].
+  fn held(&self) -> u64 {
+    self.store.weight().next_multiple_of(CHARGE_STEP)
+  }
 }
 
 /// Where one kind of data is kept: the shared pool, or a store of its own under a budget.
 pub(crate) struct KindStore<V> {
   pool: Arc<Pool>,
-  budget: Option<Arc<Budget>>,
   kind: PhantomData<fn() -> V>,
 }
 
 impl<V: Kept> KindStore<V> {
-  /// A kind in `pool`, held in a store of its own when it has a `budget`, which `pool` caps.
-  fn new(pool: &Arc<Pool>, budget: Option<u64>) -> Self {
+  fn new(pool: &Arc<Pool>) -> Self {
     Self {
       pool: Arc::clone(pool),
-      budget: budget.map(|budget| {
-        let max_bytes = budget.min(pool.max_bytes);
-
-        Arc::new(Budget {
-          store: store(max_bytes, V::ENTRY_BYTES),
-          max_bytes,
-          charged: AtomicU64::new(0),
-        })
-      }),
       kind: PhantomData,
     }
   }
 
-  /// Another kind kept where this one is, under the same budget.
-  fn sharing<W>(&self) -> KindStore<W> {
-    KindStore {
-      pool: Arc::clone(&self.pool),
-      budget: self.budget.clone(),
-      kind: PhantomData,
-    }
+  fn counts(&self) -> &KindCounts {
+    &self.pool.counts[V::KIND]
   }
 
-  fn store(&self) -> &Store<PoolKey, PoolEntry, ByBytes> {
-    self
-      .budget
-      .as_ref()
-      .map_or(&self.pool.store, |budget| &budget.store)
+  fn budget_slot(&self) -> &ArcSwapOption<Budget> {
+    &self.pool.budgets[V::KIND]
   }
 
   /// The budget's bytes, none for a kind that shares the pool.
   pub(crate) fn budget(&self) -> Option<u64> {
-    self.budget.as_ref().map(|budget| budget.max_bytes)
+    self
+      .budget_slot()
+      .load()
+      .as_ref()
+      .map(|budget| budget.max_bytes.load(Ordering::Relaxed))
   }
 
   /// The bytes the whole cache keeps.
   pub(crate) fn max_bytes(&self) -> u64 {
-    self.pool.max_bytes
+    self.pool.max_bytes.load(Ordering::Relaxed)
   }
 
   /// The value kept under `key`.
   pub(crate) fn get(&self, key: V::Key) -> Option<V> {
-    self.store().get(&V::pool_key(key)).and_then(V::from_entry)
+    let budget = self.budget_slot().load();
+    let value = self
+      .pool
+      .store_for(budget.as_deref())
+      .get(&V::pool_key(key))
+      .and_then(V::from_entry);
+
+    self.counts().looked_up(value.is_some());
+
+    value
   }
 
   /// Keeps `value` under `key`.
   pub(crate) fn insert(&self, key: V::Key, value: V) {
-    self.store().insert(V::pool_key(key), value.into_entry());
-    self.charge();
+    let budget = self.budget_slot().load();
+
+    self
+      .pool
+      .store_for(budget.as_deref())
+      .insert(V::pool_key(key), value.into_entry());
+    self.pool.kept(V::KIND, budget.as_deref());
   }
 
   /// The value kept under `key`, `compute`d once across concurrent misses and kept unless it fails.
@@ -383,29 +747,54 @@ impl<V: Kept> KindStore<V> {
     key: V::Key,
     compute: impl FnOnce() -> Result<V, E>,
   ) -> Result<V, E> {
-    match self.store().get_value_or_guard(&V::pool_key(key), None) {
+    let budget = self.budget_slot().load();
+    let found = self
+      .pool
+      .store_for(budget.as_deref())
+      .get_value_or_guard(&V::pool_key(key), None);
+
+    self
+      .counts()
+      .looked_up(matches!(found, GuardResult::Value(_)));
+
+    match found {
       GuardResult::Value(entry) => V::from_entry(entry).map_or_else(compute, Ok),
       GuardResult::Guard(guard) => {
         let value = compute()?;
         let _ = guard.insert(value.clone().into_entry());
 
-        self.charge();
+        self.pool.kept(V::KIND, budget.as_deref());
         Ok(value)
       }
       // `None` timeout never times out.
       GuardResult::Timeout => compute(),
     }
   }
+}
 
-  fn charge(&self) {
-    if let Some(budget) = &self.budget {
-      self.pool.charge(budget);
-    }
+/// Counts the entries each kind loses to eviction, and releases them as `quick_cache`'s default
+/// lifecycle does.
+#[derive(Clone)]
+struct CountEvictions {
+  counts: Arc<PerKind<KindCounts>>,
+  release: DefaultLifecycle<PoolKey, PoolEntry>,
+}
+
+impl Lifecycle<PoolKey, PoolEntry> for CountEvictions {
+  type RequestState =
+    <DefaultLifecycle<PoolKey, PoolEntry> as Lifecycle<PoolKey, PoolEntry>>::RequestState;
+
+  fn on_evict(&self, state: &mut Self::RequestState, key: PoolKey, entry: PoolEntry) {
+    self.counts[key.kind()]
+      .evictions
+      .fetch_add(1, Ordering::Relaxed);
+    self.release.on_evict(state, key, entry);
   }
 }
 
-/// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`.
-fn store(max_bytes: u64, entry_bytes: u64) -> Store<PoolKey, PoolEntry, ByBytes> {
+/// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`, counting its
+/// evictions in `counts`.
+fn store(max_bytes: u64, entry_bytes: u64, counts: &Arc<PerKind<KindCounts>>) -> PoolStore {
   let estimated_items = (max_bytes / entry_bytes).max(1) as usize;
   let parallelism = available_parallelism().map_or(1, |n| n.get() as u64);
   let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
@@ -419,15 +808,20 @@ fn store(max_bytes: u64, entry_bytes: u64) -> Store<PoolKey, PoolEntry, ByBytes>
     .weight_capacity(max_bytes)
     .shards(shards)
     .build();
+  let lifecycle = CountEvictions {
+    counts: Arc::clone(counts),
+    release: DefaultLifecycle::default(),
+  };
 
   match options {
-    Ok(options) => Store::with_options(
-      options,
+    Ok(options) => Store::with_options(options, ByBytes, DefaultHashBuilder::default(), lifecycle),
+    Err(_) => Store::with(
+      estimated_items,
+      max_bytes,
       ByBytes,
       DefaultHashBuilder::default(),
-      DefaultLifecycle::default(),
+      lifecycle,
     ),
-    Err(_) => Store::with_weighter(estimated_items, max_bytes, ByBytes),
   }
 }
 
@@ -435,8 +829,8 @@ fn store(max_bytes: u64, entry_bytes: u64) -> Store<PoolKey, PoolEntry, ByBytes>
 pub(crate) trait Kept: Clone {
   /// What finds a value of this kind.
   type Key;
-  /// The approximate bytes of one value, a hint for how many a budget holds.
-  const ENTRY_BYTES: u64;
+  /// The budget that covers values of this kind.
+  const KIND: Kind;
 
   fn pool_key(key: Self::Key) -> PoolKey;
   fn into_entry(self) -> PoolEntry;
@@ -446,21 +840,29 @@ pub(crate) trait Kept: Clone {
 /// Declares the kinds of data the pool keeps: the variants of [`PoolKey`] and [`PoolEntry`], and
 /// the [`Kept`] impl that moves each kind in and out of them.
 macro_rules! kinds {
-  ($($(#[$attr:meta])* $kind:ident($key:ty) => $value:ty, $entry_bytes:expr;)*) => {
+  ($($(#[$attr:meta])* $variant:ident($key:ty) => $value:ty, $kind:ident;)*) => {
     #[derive(Clone, PartialEq, Eq, Hash)]
     pub(crate) enum PoolKey {
-      $($(#[$attr])* $kind($key),)*
+      $($(#[$attr])* $variant($key),)*
+    }
+
+    impl PoolKey {
+      fn kind(&self) -> Kind {
+        match self {
+          $($(#[$attr])* Self::$variant(_) => Kind::$kind,)*
+        }
+      }
     }
 
     #[derive(Clone)]
     pub(crate) enum PoolEntry {
-      $($(#[$attr])* $kind($value),)*
+      $($(#[$attr])* $variant($value),)*
     }
 
     impl Weighed for PoolEntry {
       fn bytes(&self) -> usize {
         match self {
-          $($(#[$attr])* Self::$kind(value) => value.bytes(),)*
+          $($(#[$attr])* Self::$variant(value) => value.bytes(),)*
         }
       }
     }
@@ -469,19 +871,19 @@ macro_rules! kinds {
       $(#[$attr])*
       impl Kept for $value {
         type Key = $key;
-        const ENTRY_BYTES: u64 = $entry_bytes;
+        const KIND: Kind = Kind::$kind;
 
         fn pool_key(key: $key) -> PoolKey {
-          PoolKey::$kind(key)
+          PoolKey::$variant(key)
         }
 
         fn into_entry(self) -> PoolEntry {
-          PoolEntry::$kind(self)
+          PoolEntry::$variant(self)
         }
 
         fn from_entry(entry: PoolEntry) -> Option<Self> {
           match entry {
-            PoolEntry::$kind(value) => Some(value),
+            PoolEntry::$variant(value) => Some(value),
             _ => None,
           }
         }
@@ -491,16 +893,16 @@ macro_rules! kinds {
 }
 
 kinds! {
-  Image(u64) => ImageSource, 64 << 10;
-  SizedImage((u64, SizedKey)) => Arc<ImageBuffer>, 64 << 10;
+  Image(u64) => ImageSource, Images;
+  SizedImage((u64, SizedKey)) => Arc<ImageBuffer>, Images;
   #[cfg(feature = "svg")]
-  Picture(u64) => Arc<SvgPicture>, 16 << 10;
-  Stylesheet(u64) => SheetEntry, 16 << 10;
-  Tailwind(u64) => CompiledClasses, 256;
-  Glyph(GlyphKey) => GlyphEntry, 4 << 10;
-  Intercept(InterceptKey) => CachedSpans, 64;
+  Picture(u64) => Arc<SvgPicture>, Pictures;
+  Stylesheet(u64) => SheetEntry, Stylesheets;
+  Tailwind(u64) => CompiledClasses, Tailwind;
+  Glyph(GlyphKey) => GlyphEntry, Glyphs;
+  Intercept(InterceptKey) => CachedSpans, Intercepts;
   #[cfg(feature = "font-face")]
-  FontFaces(DocumentKey) => CachedRegistry, 256 << 10;
+  FontFaces(DocumentKey) => CachedRegistry, FontFaces;
 }
 
 /// How large an image draws: its buffer size and the filter it scales with.
@@ -580,7 +982,7 @@ impl Weighter<PoolKey, PoolEntry> for ByBytes {
 
 #[cfg(all(test, feature = "png"))]
 mod tests {
-  use std::sync::Arc;
+  use std::{sync::Arc, thread};
 
   use super::*;
   #[cfg(feature = "svg-raster")]
@@ -614,11 +1016,20 @@ mod tests {
   }
 
   fn pool_weight(cache: &Cache) -> u64 {
-    cache.0.images.pool.store.weight()
+    cache.0.pool.store.weight()
   }
 
   fn pool_capacity(cache: &Cache) -> u64 {
-    cache.0.images.pool.store.capacity()
+    cache.0.pool.store.capacity()
+  }
+
+  /// Whether `cache` still keeps the buffer [`keep_buffer`] kept for `source`.
+  fn keeps_buffer(cache: &Cache, source: u64, side: u32) -> bool {
+    cache
+      .0
+      .sized_images
+      .get((source, sized(side, side)))
+      .is_some()
   }
 
   #[test]
@@ -807,7 +1218,7 @@ mod tests {
     let max_bytes = 16 << 20;
     let budget = 4 << 20;
     let cache = Cache::builder().max_bytes(max_bytes).images(budget).build();
-    let images = cache.0.images.budget.as_ref().unwrap();
+    let images = || cache.stats().images.current;
 
     assert_eq!(pool_capacity(&cache), max_bytes);
 
@@ -818,11 +1229,11 @@ mod tests {
       keep_buffer(&cache, source, 512);
     }
 
-    assert!(images.store.weight() <= budget);
-    assert!(images.store.weight() >= 3 << 20);
+    assert!(images() <= budget);
+    assert!(images() >= 3 << 20);
     assert_eq!(
       pool_capacity(&cache),
-      max_bytes - images.store.weight().next_multiple_of(CHARGE_STEP)
+      max_bytes - images().next_multiple_of(CHARGE_STEP)
     );
   }
 
@@ -834,8 +1245,6 @@ mod tests {
       .images(3 << 20)
       .stylesheets(3 << 20)
       .build();
-    let held = |budget: &Option<Arc<Budget>>| budget.as_ref().unwrap().store.weight();
-
     for source in 0..3 {
       keep_buffer(&cache, source, 512);
     }
@@ -843,8 +1252,9 @@ mod tests {
       keep_sheet(&cache, seed, 64 << 10);
     }
 
-    let images = held(&cache.0.images.budget);
-    let sheets = held(&cache.0.stylesheets.budget);
+    let stats = cache.stats();
+    let images = stats.images.current;
+    let sheets = stats.stylesheets.current;
 
     assert!(images >= 2 << 20, "{images}");
     assert!(
@@ -858,6 +1268,290 @@ mod tests {
     let cache = Cache::builder().max_bytes(1 << 20).images(8 << 20).build();
 
     assert_eq!(cache.0.images.budget(), Some(1 << 20));
+  }
+
+  /// A budget the others squeezed to nothing gets room once a shrinking budget releases it, in the
+  /// same `set_options` call and on its next insert.
+  #[test]
+  fn a_squeezed_budget_grows_into_what_another_releases() {
+    let max_bytes = 4 << 20;
+    let options = |stylesheets| CacheOptions {
+      max_bytes,
+      images: Some(2 << 20),
+      stylesheets: Some(stylesheets),
+      ..CacheOptions::default()
+    };
+    let cache = Cache::builder().max_bytes(max_bytes).build();
+    let images_held = || cache.stats().images.current;
+
+    cache.set_options(options(max_bytes));
+
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    cache.set_options(options(1 << 20));
+    keep_buffer(&cache, 0, 512);
+
+    assert!(images_held() >= 1 << 20, "{}", images_held());
+  }
+
+  /// The shared store resizes once every budget fits the new options, so it never evicts entries
+  /// that fit them on the way there.
+  #[test]
+  fn new_options_shrink_the_shared_store_only_to_their_final_size() {
+    let mib = 1 << 20;
+    let cache = Cache::builder()
+      .max_bytes(16 * mib)
+      .images(4 * mib)
+      .stylesheets(4 * mib)
+      .build();
+
+    for source in 0..4 {
+      keep_buffer(&cache, source, 512);
+    }
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+    for seed in 0..32 {
+      cache
+        .tailwind()
+        .compile(&format!("w-{seed} {}", " ".repeat(64 << 10)));
+    }
+
+    let shared = cache.stats().tailwind.current;
+
+    assert!(shared >= 2 * mib, "{shared}");
+
+    cache.set_options(CacheOptions {
+      max_bytes: 6 * mib,
+      images: Some(mib),
+      stylesheets: Some(mib),
+      ..CacheOptions::default()
+    });
+
+    assert_eq!(cache.stats().tailwind.evictions, 0);
+    assert_eq!(cache.stats().tailwind.current, shared);
+  }
+
+  #[test]
+  fn a_smaller_size_evicts_at_once() {
+    let cache = Cache::builder().max_bytes(4 << 20).build();
+
+    for source in 0..3 {
+      keep_buffer(&cache, source, 512);
+    }
+    assert!(pool_weight(&cache) >= 3 << 20);
+
+    cache.set_options(CacheOptions {
+      max_bytes: 1 << 20,
+      ..CacheOptions::default()
+    });
+
+    assert!(pool_weight(&cache) <= 1 << 20);
+    assert!(cache.stats().images.evictions >= 2);
+    assert_eq!(cache.stats().memory.max, 1 << 20);
+  }
+
+  #[test]
+  fn a_larger_size_keeps_what_the_cache_holds() {
+    let cache = Cache::builder().max_bytes(2 << 20).build();
+
+    keep_buffer(&cache, 0, 512);
+    cache.set_options(CacheOptions {
+      max_bytes: 8 << 20,
+      ..CacheOptions::default()
+    });
+
+    assert!(keeps_buffer(&cache, 0, 512));
+
+    for source in 1..6 {
+      keep_buffer(&cache, source, 512);
+    }
+
+    assert!((0..6).all(|source| keeps_buffer(&cache, source, 512)));
+  }
+
+  #[test]
+  fn a_new_budget_drops_its_kind_from_the_pool() {
+    let cache = Cache::builder().max_bytes(16 << 20).build();
+    let sheet = keep_sheet(&cache, 0, 64 << 10);
+
+    keep_buffer(&cache, 0, 512);
+    cache.set_options(CacheOptions {
+      max_bytes: 16 << 20,
+      images: Some(2 << 20),
+      ..CacheOptions::default()
+    });
+
+    assert!(!keeps_buffer(&cache, 0, 512));
+    assert!(Arc::ptr_eq(&sheet, &keep_sheet(&cache, 0, 64 << 10)));
+
+    for source in 0..4 {
+      keep_buffer(&cache, source, 512);
+    }
+
+    let images = cache.stats().images;
+
+    assert_eq!(images.max, Some(2 << 20));
+    assert!(images.current <= 2 << 20);
+    assert_eq!(pool_capacity(&cache), (16 << 20) - (2 << 20));
+  }
+
+  #[test]
+  fn a_removed_budget_returns_its_kind_to_the_pool() {
+    let max_bytes = 16 << 20;
+    let cache = Cache::builder()
+      .max_bytes(max_bytes)
+      .images(4 << 20)
+      .build();
+
+    keep_buffer(&cache, 0, 512);
+    assert_eq!(pool_capacity(&cache), max_bytes - (1 << 20));
+
+    cache.set_options(CacheOptions {
+      max_bytes,
+      ..CacheOptions::default()
+    });
+
+    assert_eq!(pool_capacity(&cache), max_bytes);
+    assert_eq!(cache.stats().images.max, None);
+    assert!(!keeps_buffer(&cache, 0, 512));
+
+    keep_buffer(&cache, 0, 512);
+
+    assert!(keeps_buffer(&cache, 0, 512));
+    assert!(pool_weight(&cache) >= 1 << 20);
+  }
+
+  #[test]
+  fn a_smaller_budget_evicts_at_once() {
+    let max_bytes = 16 << 20;
+    let cache = Cache::builder()
+      .max_bytes(max_bytes)
+      .images(4 << 20)
+      .build();
+
+    for source in 0..3 {
+      keep_buffer(&cache, source, 512);
+    }
+
+    cache.set_options(CacheOptions {
+      max_bytes,
+      images: Some(1 << 20),
+      ..CacheOptions::default()
+    });
+
+    let images = cache.stats().images;
+
+    assert!(images.current <= 1 << 20, "{}", images.current);
+    assert!(images.evictions >= 2);
+    assert_eq!(pool_capacity(&cache), max_bytes - (1 << 20));
+  }
+
+  #[test]
+  fn stats_count_each_kind_apart() {
+    let cache = Cache::builder().max_bytes(1 << 20).build();
+    let bytes = png_bytes();
+
+    for _ in 0..2 {
+      cache.decode_image(&bytes, ImageCacheMode::Auto).unwrap();
+      keep_sheet(&cache, 0, 64 << 10);
+    }
+
+    let stats = cache.stats();
+
+    assert_eq!((stats.images.hits, stats.images.misses), (1, 1));
+    assert_eq!((stats.stylesheets.hits, stats.stylesheets.misses), (1, 1));
+    assert_eq!(stats.stylesheets.evictions, 0);
+    assert!(stats.stylesheets.current >= 60 << 10);
+    assert_eq!(
+      stats.memory.current,
+      stats.images.current + stats.stylesheets.current
+    );
+
+    for source in 0..8 {
+      keep_buffer(&cache, source, 256);
+    }
+
+    let stats = cache.stats();
+
+    assert!(stats.images.evictions >= 4, "{}", stats.images.evictions);
+    assert!(stats.memory.current <= 1 << 20);
+    assert!(stats.memory.high >= stats.memory.current);
+  }
+
+  #[test]
+  fn the_high_mark_outlasts_a_smaller_size() {
+    let cache = Cache::builder().max_bytes(4 << 20).build();
+
+    for seed in 0..3 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+
+    let held = cache.stats().memory;
+
+    cache.set_options(CacheOptions {
+      max_bytes: 0,
+      ..CacheOptions::default()
+    });
+
+    let memory = cache.stats().memory;
+
+    assert!(held.current >= 3 * (60 << 10), "{}", held.current);
+    assert_eq!(held.high, held.current);
+    assert_eq!(memory.current, 0);
+    assert_eq!(memory.high, held.high);
+  }
+
+  #[test]
+  fn options_change_while_renders_keep_entries() {
+    let max_bytes = 8 << 20;
+    let cache = Cache::builder().max_bytes(max_bytes).build();
+    let budgeted = CacheOptions {
+      max_bytes,
+      images: Some(2 << 20),
+      stylesheets: Some(1 << 20),
+      ..CacheOptions::default()
+    };
+
+    thread::scope(|scope| {
+      for worker in 0..4 {
+        let cache = &cache;
+
+        scope.spawn(move || {
+          for round in 0..64 {
+            keep_buffer(cache, worker * 64 + round, 256);
+            keep_sheet(cache, worker * 64 + round, 16 << 10);
+          }
+        });
+      }
+
+      for round in 0..32 {
+        cache.set_options(if round % 2 == 0 {
+          budgeted
+        } else {
+          CacheOptions {
+            max_bytes: max_bytes / 2,
+            ..CacheOptions::default()
+          }
+        });
+      }
+    });
+
+    cache.set_options(budgeted);
+
+    let stats = cache.stats();
+
+    assert!(stats.images.current <= 2 << 20);
+    assert!(stats.stylesheets.current <= 1 << 20);
+    assert!(stats.memory.current <= max_bytes + CHARGE_STEP);
+    assert_eq!(
+      pool_capacity(&cache),
+      max_bytes
+        - (stats.images.current.next_multiple_of(CHARGE_STEP)
+          + stats.stylesheets.current.next_multiple_of(CHARGE_STEP))
+    );
   }
 
   /// Sets the old default glyph budget, which every cache built after it in this process takes.

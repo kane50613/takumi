@@ -4,7 +4,7 @@ import {
   FontRegistry,
   type RegisteredFamilyLike,
 } from "./renderer";
-import type { CssInput } from "@takumi-rs/helpers";
+import type { CacheOptions, CacheStats, CssInput } from "@takumi-rs/helpers";
 
 /**
  * A wasm binding renderer whose fonts a {@link FontRegistry} loads.
@@ -14,6 +14,8 @@ import type { CssInput } from "@takumi-rs/helpers";
 export type WasmBinding<TFamily extends RegisteredFamilyLike> = FontBackend<TFamily> & {
   unregisterFont(family: string): boolean;
   clearFonts(): void;
+  setCacheOptions(options: CacheOptions): void;
+  cacheStats(): CacheStats;
   free(): void;
 };
 
@@ -42,6 +44,19 @@ export class WasmRenderer<
   /** Removes every face registered under the family `name`, returning whether it had any. */
   unregisterFont(family: RegisteredFamilyLike): boolean {
     return this.inner.unregisterFont(family.name);
+  }
+
+  /**
+   * Applies `options` to what the renderer keeps now, as if it were created with them. A smaller
+   * size or budget releases what no longer fits right away.
+   */
+  setCacheOptions(options: CacheOptions): void {
+    this.inner.setCacheOptions(options);
+  }
+
+  /** What the renderer's caches hold and how their lookups went since it was created. */
+  cacheStats(): CacheStats {
+    return this.inner.cacheStats();
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */

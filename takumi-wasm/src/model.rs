@@ -19,6 +19,14 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RendererOptions")]
   pub type RendererOptionsType;
 
+  /// JavaScript object holding the options of a renderer's cache.
+  #[wasm_bindgen(typescript_type = "CacheOptions")]
+  pub type CacheOptionsType;
+
+  /// JavaScript object reporting what a renderer's caches hold.
+  #[wasm_bindgen(typescript_type = "CacheStats")]
+  pub type CacheStatsType;
+
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "RenderOptions")]
   pub type RenderOptionsType;

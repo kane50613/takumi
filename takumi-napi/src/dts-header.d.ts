@@ -1,6 +1,9 @@
 import type {
   CacheBudgets,
+  CacheKindStats,
+  CacheMemoryStats,
   CacheOptions,
+  CacheStats,
   CssInput,
   Node,
   RendererOptions,
@@ -15,7 +18,16 @@ export type {
   TextNode,
 } from "@takumi-rs/helpers";
 
-export type { CacheBudgets, CacheOptions, CssInput, Node, RendererOptions };
+export type {
+  CacheBudgets,
+  CacheKindStats,
+  CacheMemoryStats,
+  CacheOptions,
+  CacheStats,
+  CssInput,
+  Node,
+  RendererOptions,
+};
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
