@@ -153,7 +153,7 @@ describe("allowUrl policy", () => {
 });
 
 describe("shared fetchCache policy enforcement", () => {
-  test("cached images recheck the entry URL, not the original redirect chain", async () => {
+  test("a cached redirect serves only a caller whose allowUrl accepts where it ended", async () => {
     const entry = "https://allowed.example.com/image.png";
     const destination = "https://other.example.com/image.png";
     const payload = new Uint8Array([1, 2, 3]);
@@ -173,14 +173,19 @@ describe("shared fetchCache policy enforcement", () => {
       return url === entry;
     };
 
-    const images = await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl });
-    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
-    expect(checked).toEqual([entry]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl })).rejects.toThrow(
+      "URL blocked by allowUrl policy",
+    );
+    expect(checked).toEqual([entry, destination, entry, destination]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    await expect(
-      prepareImages({ node, fetchCache: new Map(), fetch: fetchMock, allowUrl }),
-    ).rejects.toThrow("URL blocked by allowUrl policy");
+    const images = await prepareImages({
+      node,
+      fetchCache,
+      fetch: fetchMock,
+      allowUrl: () => true,
+    });
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

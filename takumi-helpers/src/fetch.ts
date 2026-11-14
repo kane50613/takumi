@@ -27,6 +27,17 @@ export async function fetchOk(
   url: string,
   options: FetchOptions & { init?: RequestInit } = {},
 ): Promise<Response> {
+  return (await fetchFollowed(url, options)).response;
+}
+
+/** A response, with the URL it came from after redirects. */
+type FollowedResponse = { response: Response; url: string };
+
+/** Fetches a URL as {@link fetchOk} does, with the URL it ended at after redirects. */
+export async function fetchFollowed(
+  url: string,
+  options: FetchOptions & { init?: RequestInit },
+): Promise<FollowedResponse> {
   return new FetchRequest(url, options).send();
 }
 
@@ -49,14 +60,19 @@ class FetchRequest {
     };
   }
 
-  async send() {
-    const response = this.allowUrl
+  async send(): Promise<FollowedResponse> {
+    const followed = this.allowUrl
       ? await this.followRedirects(this.allowUrl)
-      : await this.attempt(this.url, this.init);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${this.url}`);
+      : await this.attempt(this.url, this.init).then((response) => ({
+          response,
+          url: response.url || this.url,
+        }));
+    if (!followed.response.ok) {
+      const { status, statusText } = followed.response;
+
+      throw new Error(`HTTP ${status} ${statusText} fetching ${this.url}`);
     }
-    return response;
+    return followed;
   }
 
   private async attempt(url: string, init: RequestInit): Promise<Response> {
@@ -120,7 +136,7 @@ class FetchRequest {
     });
   }
 
-  private async followRedirects(allowUrl: (url: string) => boolean): Promise<Response> {
+  private async followRedirects(allowUrl: (url: string) => boolean): Promise<FollowedResponse> {
     let current = this.url;
     let init: RequestInit = {
       ...this.init,
@@ -133,7 +149,7 @@ class FetchRequest {
       const location = response.headers.get("location");
 
       if (!redirectStatuses.has(response.status) || location === null) {
-        return response;
+        return { response, url: current };
       }
 
       await response.body?.cancel().catch(() => {});
