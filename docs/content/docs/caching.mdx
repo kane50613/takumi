@@ -241,7 +241,7 @@ const renderer = new Renderer({ cache: { budgets: { fonts: 64 * 1024 * 1024 } } 
 
 A render holds every font file it uses until it finishes, whether it succeeds or fails, so another render cannot evict them. While renders hold more than the budget, the renderer keeps them all, and it evicts what no longer fits once they finish. With a budget or `maxBytes` of `0`, no font a render loaded stays after that render.
 
-Fonts from `registerFont` always stay. They count toward `maxBytes` and the `fonts` budget, so they leave that much less room for the rest. A prepared render loads any `@font-face` file the renderer evicted after `prepare`. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
+Fonts from `registerFont` always stay. They count toward `maxBytes` and the `fonts` budget, so they leave that much less room for the rest. A prepared render loads any `@font-face` file it draws with that the renderer evicted after `prepare`, and tries a rule's next `src` when that file fails to load again. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
 
 ## Google Fonts CSS
 
