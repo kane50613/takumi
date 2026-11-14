@@ -9,6 +9,8 @@ fn read_font(path: &str) -> Vec<u8> {
 }
 
 const LATIN: UnicodeRange = UnicodeRange::new(0x0000, 0x00FF);
+const LATIN_EXTENDED: UnicodeRange = UnicodeRange::new(0x0100, 0x024F);
+const CYRILLIC: UnicodeRange = UnicodeRange::new(0x0400, 0x04FF);
 const DEVANAGARI: UnicodeRange = UnicodeRange::new(0x0900, 0x097F);
 
 /// Registers `path` under `family`, serving only `range`, as one `@font-face` subset would.
@@ -392,4 +394,50 @@ fn uncovered_characters_names_each_character_no_font_draws_once() {
     uncovered("Hi \u{0F40}\u{0F41}\u{0F40}"),
     ['\u{0F40}', '\u{0F41}']
   );
+}
+
+const LAST_RESORT_SIZE: (u32, u32) = (240, 180);
+
+/// A family registered under the name of a last-resort font draws before it, and the last-resort
+/// font still draws what the family lacks.
+#[test]
+fn a_registered_family_draws_before_a_last_resort_font_of_its_name() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(
+      FontResource::new(read_font("geist/geist-latin-wght-300-800.ttf"))
+        .override_info(FontOverride {
+          family_name: Some("Geist".into()),
+          ..Default::default()
+        })
+        .last_resort(),
+    )
+    .unwrap();
+  register_subset(
+    &mut fonts,
+    "geist/Geist[wght].woff2",
+    "Geist",
+    LATIN_EXTENDED,
+  );
+  register_subset(&mut fonts, "geist/Geist[wght].woff2", "Geist", CYRILLIC);
+
+  let rows = ["Hi", "Łódź", "Файли"]
+    .map(|text| format!("<span>{text}</span>"))
+    .join("");
+  let html = format!(
+    r#"<div style="display: flex; flex-direction: column; width: 240px; height: 180px; background-color: white; color: black; font-family: Geist; font-size: 40px">{rows}</div>"#
+  );
+  let options = || {
+    RenderOptions::builder()
+      .viewport(Viewport::new(LAST_RESORT_SIZE))
+      .node(Node::from_html(&html, FromHtmlOptions::default()).unwrap())
+      .fonts(&fonts)
+      .build()
+  };
+  let uncovered = takumi::uncovered_characters(options()).unwrap();
+
+  assert!(uncovered.is_empty(), "no font drew {uncovered:?}");
+
+  write_goldens(options(), "font_registered_before_last_resort").unwrap();
 }
