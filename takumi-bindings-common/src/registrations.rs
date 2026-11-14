@@ -85,12 +85,11 @@ impl FontRegistrations {
   pub fn pin(&mut self, cache: &Cache, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registration = self.by_key.get_mut(key)?;
 
-    if !cache.fonts().holds(registration.id) {
+    if !cache.fonts().pin(registration.id, true) {
       return None;
     }
 
     registration.pinned = true;
-    cache.fonts().pin(registration.id, true);
 
     Some(registration.families.clone())
   }
