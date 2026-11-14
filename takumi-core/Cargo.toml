@@ -23,6 +23,7 @@ typed-builder.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true
 quick_cache.workspace = true
+arc-swap.workspace = true
 smallvec.workspace = true
 bitflags.workspace = true
 cssparser.workspace = true

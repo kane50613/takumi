@@ -1851,6 +1851,7 @@ dependencies = [
 name = "takumi-core"
 version = "0.36.0"
 dependencies = [
+ "arc-swap",
  "bitflags",
  "bytemuck",
  "color",
