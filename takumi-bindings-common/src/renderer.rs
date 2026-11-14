@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 use takumi_core::resources::{
-  cache::{Cache, CacheOptions},
+  cache::{Cache, CacheOptions as PoolOptions},
   glyph_cache,
 };
 
@@ -10,60 +10,80 @@ use takumi_core::resources::{
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RendererOptions {
-  /// The byte budget of each kind of data the renderer keeps across renders.
-  pub cache: Option<CacheBudgets>,
-  /// The old size of the one store that held images, SVG rasters, and stylesheets, now the bytes
-  /// the whole cache keeps, as the deprecated `Cache::new` reads it.
+  /// The memory the renderer keeps across renders.
+  pub cache: Option<CacheOptions>,
+  /// The old name of [`CacheOptions::max_bytes`].
   pub cache_max_bytes: Option<f64>,
   /// The old name of [`CacheBudgets::fonts`].
   pub font_cache_max_bytes: Option<f64>,
 }
 
-/// The byte budget of each kind of data a renderer keeps, in JavaScript byte counts. An absent
-/// budget leaves its kind in the shared pool, except `glyphs`, which takes the budget the last
-/// [`set_glyph_cache_max_bytes`] set, and `fonts`, which leaves the fonts unbounded.
+/// The memory a renderer keeps across renders, in JavaScript byte counts.
+#[derive(Deserialize, Default, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheOptions {
+  /// The bytes every kind of data but fonts shares, [`PoolOptions::DEFAULT_MAX_BYTES`] when absent.
+  pub max_bytes: Option<f64>,
+  /// The most bytes each kind of data may hold.
+  pub budgets: Option<CacheBudgets>,
+}
+
+/// The most bytes each kind of data a renderer keeps may hold, in JavaScript byte counts. An
+/// absent budget leaves its kind in the shared pool, except `glyphs`, which takes the budget the
+/// last [`set_glyph_cache_max_bytes`] set, and `fonts`, which leaves the fonts unbounded.
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheBudgets {
-  /// [`CacheOptions`]'s `images`.
+  /// [`PoolOptions`]'s `images`.
   pub images: Option<f64>,
-  /// [`CacheOptions`]'s `pictures`, ignored without the `svg` feature.
+  /// [`PoolOptions`]'s `pictures`, ignored without the `svg` feature.
   pub pictures: Option<f64>,
-  /// [`CacheOptions`]'s `stylesheets`.
+  /// [`PoolOptions`]'s `stylesheets`.
   pub stylesheets: Option<f64>,
-  /// [`CacheOptions`]'s `tailwind`.
+  /// [`PoolOptions`]'s `tailwind`.
   pub tailwind: Option<f64>,
-  /// [`CacheOptions`]'s `glyphs`.
+  /// [`PoolOptions`]'s `glyphs`.
   pub glyphs: Option<f64>,
-  /// [`CacheOptions`]'s `intercepts`.
+  /// [`PoolOptions`]'s `intercepts`.
   pub intercepts: Option<f64>,
-  /// [`CacheOptions`]'s `font_faces`.
+  /// [`PoolOptions`]'s `font_faces`.
   pub font_faces: Option<f64>,
-  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered, unbounded when
-  /// absent.
+  /// Bytes of decoded fonts that renders' `fonts` lists may keep registered, apart from the pool.
   pub fonts: Option<f64>,
 }
 
 impl RendererOptions {
+  fn budgets(&self) -> CacheBudgets {
+    self
+      .cache
+      .and_then(|cache| cache.budgets)
+      .unwrap_or_default()
+  }
+
   /// The font budget, unbounded when neither name sets one.
   pub fn font_cache_bytes(&self) -> Option<u64> {
     self
-      .cache
-      .and_then(|budgets| budgets.fonts)
+      .budgets()
+      .fonts
       .or(self.font_cache_max_bytes)
       .map(bytes)
+  }
+
+  /// The bytes the cache keeps, from `cache.maxBytes` or the old `cacheMaxBytes`.
+  fn max_bytes(&self) -> u64 {
+    self
+      .cache
+      .and_then(|cache| cache.max_bytes)
+      .or(self.cache_max_bytes)
+      .map_or(PoolOptions::DEFAULT_MAX_BYTES, bytes)
   }
 
   /// The cache a renderer built with these options keeps. A glyph budget it leaves out is the one
   /// the last [`set_glyph_cache_max_bytes`] set.
   pub fn cache(&self) -> Cache {
-    let budgets = self.cache.unwrap_or_default();
+    let budgets = self.budgets();
     let builder = Cache::builder()
-      .max_bytes(
-        self
-          .cache_max_bytes
-          .map_or(CacheOptions::DEFAULT_MAX_BYTES, bytes),
-      )
+      .max_bytes(self.max_bytes())
       .images_opt(budgets.images.map(bytes))
       .stylesheets_opt(budgets.stylesheets.map(bytes))
       .tailwind_opt(budgets.tailwind.map(bytes))
@@ -94,38 +114,69 @@ mod tests {
 
   use super::*;
 
+  fn options(json: &str) -> RendererOptions {
+    serde_json::from_str(json).unwrap()
+  }
+
+  /// Whether a cache built from `json` keeps a stylesheet across renders.
+  fn keeps_stylesheets(json: &str) -> bool {
+    let cache = options(json).cache();
+    let sheet = || cache.parse_stylesheet(vec!["p { color: red }".to_owned()]);
+
+    Arc::ptr_eq(&sheet(), &sheet())
+  }
+
   // JavaScript's `{ cache: undefined }` reaches serde as a unit value, as JSON's `null` does.
   #[test]
   fn an_absent_cache_keeps_every_default() {
-    let options: RendererOptions = serde_json::from_str(r#"{ "cache": null }"#).unwrap();
+    let options = options(r#"{ "cache": null }"#);
 
     assert!(options.cache.is_none());
+    assert_eq!(options.max_bytes(), PoolOptions::DEFAULT_MAX_BYTES);
     assert_eq!(options.font_cache_bytes(), None);
+    assert!(keeps_stylesheets(r#"{ "cache": null }"#));
+    assert!(keeps_stylesheets(r#"{ "cache": { "budgets": null } }"#));
   }
 
   #[test]
-  fn the_cache_fonts_budget_wins_over_the_old_name() {
-    let options: RendererOptions =
-      serde_json::from_str(r#"{ "cache": { "fonts": 1 }, "fontCacheMaxBytes": 2 }"#).unwrap();
-
-    assert_eq!(options.font_cache_bytes(), Some(1));
+  fn max_bytes_sets_the_pool() {
+    assert_eq!(
+      options(r#"{ "cache": { "maxBytes": 1024 } }"#).max_bytes(),
+      1024
+    );
+    assert!(!keeps_stylesheets(r#"{ "cache": { "maxBytes": 0 } }"#));
   }
 
   #[test]
-  fn the_old_cache_size_covers_stylesheets() {
-    let kept = |json: &str| {
-      let cache = serde_json::from_str::<RendererOptions>(json)
-        .unwrap()
-        .cache();
-      let sheet = || cache.parse_stylesheet(vec!["p { color: red }".to_owned()]);
-
-      Arc::ptr_eq(&sheet(), &sheet())
-    };
-
-    assert!(kept("{}"));
-    assert!(!kept(r#"{ "cacheMaxBytes": 0 }"#));
-    assert!(!kept(
-      r#"{ "cacheMaxBytes": 0, "cache": { "stylesheets": 1048576 } }"#
+  fn a_budget_of_zero_keeps_none_of_its_kind() {
+    assert!(!keeps_stylesheets(
+      r#"{ "cache": { "budgets": { "stylesheets": 0 } } }"#
     ));
+    assert!(keeps_stylesheets(
+      r#"{ "cache": { "budgets": { "images": 0 } } }"#
+    ));
+  }
+
+  #[test]
+  fn the_old_cache_size_sets_max_bytes() {
+    assert_eq!(options(r#"{ "cacheMaxBytes": 1024 }"#).max_bytes(), 1024);
+    assert_eq!(
+      options(r#"{ "cacheMaxBytes": 1024, "cache": { "maxBytes": 2048 } }"#).max_bytes(),
+      2048
+    );
+    assert!(!keeps_stylesheets(r#"{ "cacheMaxBytes": 0 }"#));
+  }
+
+  #[test]
+  fn the_fonts_budget_wins_over_the_old_name() {
+    assert_eq!(
+      options(r#"{ "fontCacheMaxBytes": 2 }"#).font_cache_bytes(),
+      Some(2)
+    );
+    assert_eq!(
+      options(r#"{ "cache": { "budgets": { "fonts": 1 } }, "fontCacheMaxBytes": 2 }"#)
+        .font_cache_bytes(),
+      Some(1)
+    );
   }
 }

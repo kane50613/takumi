@@ -42,7 +42,7 @@ describe("fontCacheMaxBytes", () => {
   });
 
   test("takes the budget from cache.fonts too", async () => {
-    const renderer = new Renderer({ cache: { fonts: 1 } });
+    const renderer = new Renderer({ cache: { budgets: { fonts: 1 } } });
     const mono = counted("Mono", monoData);
 
     await renderer.render(node("Mono"), { ...options, fonts: [mono] });
