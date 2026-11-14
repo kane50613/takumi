@@ -51,3 +51,16 @@ test("renderer construction can retry without reloading the backend", async () =
   expect(await provider.get()).toBeInstanceOf(RetryingRenderer);
   expect(load).toHaveBeenCalledTimes(1);
 });
+
+test("a renderer takes the cache options set before and after it was created", async () => {
+  const provider = new RendererProvider(async () => backend);
+
+  provider.setCacheOptions({ maxBytes: 1024 });
+  const renderer = await provider.get();
+
+  expect(renderer.cacheStats().memory.max).toBe(1024);
+
+  provider.setCacheOptions({ maxBytes: 2048 });
+
+  expect(renderer.cacheStats().memory.max).toBe(2048);
+});

@@ -7,7 +7,7 @@ use takumi_bindings_common::{
   default_fonts,
   font_cache::FontCache,
   input::{ListedFont, ListedFonts},
-  renderer::RendererOptions,
+  renderer::{CacheOptions, CacheStats, RendererOptions},
   source_cache::SourceCache,
 };
 use takumi_core::{Cache, Fonts};
@@ -301,6 +301,29 @@ impl Renderer {
         pinned,
       },
       signal,
+    ))
+  }
+
+  /// Applies `options` to what the renderer keeps now, as if it were created with them. A smaller
+  /// size or budget releases what no longer fits right away.
+  #[napi(js_name = "setCacheOptions", ts_args_type = "options: CacheOptions")]
+  pub fn set_cache_options(&self, options: Object) -> Result<()> {
+    let options: CacheOptions = deserialize_with_tracing(options)?;
+
+    self.state.cache.set_options(options.pool());
+    self.state.update_fonts(|fonts, cache| {
+      cache
+        .set_max_bytes(fonts, options.font_bytes())
+        .map_err(map_error)
+    })
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[napi(js_name = "cacheStats", ts_return_type = "CacheStats")]
+  pub fn cache_stats<'env>(&self, env: &'env Env) -> Result<Unknown<'env>> {
+    env.to_js_value(&CacheStats::new(
+      &self.state.cache,
+      self.state.font_state.load().cache.stats(),
     ))
   }
 

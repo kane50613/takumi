@@ -1,4 +1,6 @@
 import type {
+  CacheOptions,
+  CacheStats,
   MeasuredNode,
   Node,
   RegisteredFamily,
@@ -199,6 +201,19 @@ export class Renderer {
    */
   unregisterFont(family: RegisteredFamilyLike): boolean {
     return this.inner.unregisterFont(family.name);
+  }
+
+  /**
+   * Applies `options` to what the renderer keeps now, as if it were created with them. A smaller
+   * size or budget releases what no longer fits right away.
+   */
+  setCacheOptions(options: CacheOptions): void {
+    this.inner.setCacheOptions(options);
+  }
+
+  /** What the renderer's caches hold and how their lookups went since it was created. */
+  cacheStats(): CacheStats {
+    return this.inner.cacheStats();
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */

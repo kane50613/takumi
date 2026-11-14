@@ -29,9 +29,12 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
 use input::{Font, ListedFonts, register_font};
+#[cfg(feature = "wasm")]
+use renderer::CacheOptions;
+use renderer::CacheStats;
 use serde::Serialize;
 #[cfg(feature = "wasm")]
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use source_cache::{ParsedSource, SourceCache};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsCast, JsValue};
@@ -168,6 +171,51 @@ impl FontStore {
           .map_err(js_error)
       })
       .transpose()
+  }
+
+  /// Applies the cache options JavaScript describes to `cache` and to the fonts this store holds.
+  #[cfg(feature = "wasm")]
+  pub fn set_cache_options_value(
+    &self,
+    cache: &Cache,
+    options: JsValue,
+  ) -> Result<(), js_sys::Error> {
+    let options: CacheOptions = from_value(options).map_err(js_error)?;
+
+    cache.set_options(options.pool());
+    self
+      .set_cache_max_bytes(options.font_bytes())
+      .map_err(js_error)
+  }
+
+  /// [`Self::cache_stats`] as the binding's JavaScript type `T`.
+  #[cfg(feature = "wasm")]
+  pub fn cache_stats_value<T: JsCast>(&self, cache: &Cache) -> Result<T, js_sys::Error> {
+    let stats = self
+      .cache_stats(cache)
+      .serialize(&Serializer::new().serialize_missing_as_null(true))
+      .map_err(js_error)?;
+
+    Ok(stats.unchecked_into())
+  }
+
+  /// What `cache` holds, with the fonts this store holds.
+  pub fn cache_stats(&self, cache: &Cache) -> CacheStats {
+    CacheStats::new(cache, self.cache.borrow().stats())
+  }
+
+  /// Gives the font cache a budget of `max_bytes`, unbounded without one, and releases what it no
+  /// longer fits.
+  pub fn set_cache_max_bytes(&self, max_bytes: Option<u64>) -> Result<(), FontError> {
+    let mut fonts = Fonts::clone(&self.current());
+
+    self
+      .cache
+      .borrow_mut()
+      .set_max_bytes(&mut fonts, max_bytes)?;
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(())
   }
 
   fn current(&self) -> Rc<Fonts> {

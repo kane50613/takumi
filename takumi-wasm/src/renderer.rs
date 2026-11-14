@@ -124,6 +124,21 @@ impl Renderer {
     self.fonts.cache_font_file(url, data).map_err(map_error)
   }
 
+  /// Applies `options` to what the renderer keeps now, as if it were created with them. A smaller
+  /// size or budget releases what no longer fits right away.
+  #[wasm_bindgen(js_name = setCacheOptions)]
+  pub fn set_cache_options(&self, options: CacheOptionsType) -> Result<(), js_sys::Error> {
+    self
+      .fonts
+      .set_cache_options_value(&self.cache, options.into())
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[wasm_bindgen(js_name = cacheStats)]
+  pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
+    self.fonts.cache_stats_value(&self.cache)
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]
