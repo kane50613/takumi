@@ -27,7 +27,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 <sup>2</sup> A descriptor's fields override what the file reports.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the renderer [evicts it](/docs/caching#release-fonts) to make room. When several fonts in the list share a family and cover the same character, the one listed last wins, as a later `@font-face` rule does.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the renderer [evicts it](/docs/caching#release-fonts) to make room. Among equally matching faces of one family that cover the character, the one listed last wins, as a later `@font-face` rule does.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
