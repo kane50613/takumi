@@ -4,7 +4,10 @@
 
 use std::{
   collections::HashMap,
-  sync::atomic::{AtomicU64, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
 };
 
 use takumi_core::{
@@ -12,7 +15,7 @@ use takumi_core::{
   resources::font::{FontError, FontSource, RegisteredFamily},
 };
 
-use crate::register_embedded;
+use crate::{register_embedded, renderer::CacheKindStats};
 
 /// A family as the registry matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
@@ -59,6 +62,14 @@ struct CachedFile {
   last_used: LastUsed,
 }
 
+/// How lookups went and how many fonts were released, shared by every copy of a cache.
+#[derive(Default)]
+struct FontCounts {
+  hits: AtomicU64,
+  misses: AtomicU64,
+  evictions: AtomicU64,
+}
+
 /// What the least recently used entry past the budget is.
 enum Oldest {
   Family(String),
@@ -76,6 +87,7 @@ pub struct FontCache {
   families: HashMap<String, CachedFamily>,
   files: HashMap<String, CachedFile>,
   clock: AtomicU64,
+  counts: Arc<FontCounts>,
 }
 
 impl Clone for FontCache {
@@ -86,6 +98,7 @@ impl Clone for FontCache {
       families: self.families.clone(),
       files: self.files.clone(),
       clock: AtomicU64::new(self.clock.load(Ordering::Relaxed)),
+      counts: Arc::clone(&self.counts),
     }
   }
 }
@@ -99,11 +112,48 @@ impl FontCache {
       families: HashMap::new(),
       files: HashMap::new(),
       clock: AtomicU64::new(0),
+      counts: Arc::default(),
+    }
+  }
+
+  /// Gives the cache a budget of `max_bytes`, unbounded without one, and releases from `fonts` what
+  /// it no longer fits.
+  pub fn set_max_bytes(
+    &mut self,
+    fonts: &mut Fonts,
+    max_bytes: Option<u64>,
+  ) -> Result<(), FontError> {
+    self.max_bytes = max_bytes.unwrap_or(u64::MAX);
+
+    self.evict(fonts, &[], None)
+  }
+
+  /// The bytes of unpinned fonts the cache holds, its budget, and how its lookups went.
+  pub fn stats(&self) -> CacheKindStats {
+    CacheKindStats {
+      current: self.unpinned_bytes() as f64,
+      max: (self.max_bytes != u64::MAX).then_some(self.max_bytes as f64),
+      hits: self.counts.hits.load(Ordering::Relaxed) as f64,
+      misses: self.counts.misses.load(Ordering::Relaxed) as f64,
+      evictions: self.counts.evictions.load(Ordering::Relaxed) as f64,
     }
   }
 
   /// The families `key` registered, marked used; `None` once any of them was released.
   pub fn lookup(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
+    let registered = self.find(key);
+    let counter = if registered.is_some() {
+      &self.counts.hits
+    } else {
+      &self.counts.misses
+    };
+
+    counter.fetch_add(1, Ordering::Relaxed);
+
+    registered
+  }
+
+  fn find(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registered = self.by_key.get(key)?.clone();
     let now = self.tick();
 
@@ -262,6 +312,7 @@ impl FontCache {
         Oldest::File(url) => {
           fonts.forget_font_file(&url);
           self.files.remove(&url);
+          self.counts.evictions.fetch_add(1, Ordering::Relaxed);
 
           continue;
         }
@@ -280,6 +331,7 @@ impl FontCache {
         fonts.unregister_family(&family);
         register_embedded(fonts, |name| fold(name) == family)?;
         self.forget(&family);
+        self.counts.evictions.fetch_add(1, Ordering::Relaxed);
       }
     }
 
@@ -472,5 +524,42 @@ mod tests {
     cache.forget("alpha");
 
     assert!(cache.lookup("Alpha").is_none());
+  }
+
+  #[test]
+  fn a_smaller_budget_releases_at_once() {
+    let (mut fonts, mut cache) = fitting(2);
+
+    register(&mut fonts, &mut cache, "Pinned", true);
+    register(&mut fonts, &mut cache, "A", false);
+    register(&mut fonts, &mut cache, "B", false);
+    cache.set_max_bytes(&mut fonts, Some(0)).unwrap();
+
+    let stats = cache.stats();
+
+    assert!(cache.lookup("A").is_none());
+    assert!(cache.lookup("B").is_none());
+    assert!(cache.lookup("Pinned").is_some());
+    assert_eq!(stats.current, 0.0);
+    assert_eq!(stats.max, Some(0.0));
+    assert_eq!(stats.evictions, 2.0);
+  }
+
+  #[test]
+  fn stats_count_lookups_across_copies() {
+    let (mut fonts, mut cache) = fitting(2);
+
+    register(&mut fonts, &mut cache, "A", false);
+
+    let copy = cache.clone();
+
+    copy.lookup("A");
+    cache.lookup("missing");
+
+    let stats = cache.stats();
+
+    assert_eq!((stats.hits, stats.misses), (1.0, 1.0));
+    assert!(stats.current > 0.0);
+    assert_eq!(FontCache::new(None).stats().max, None);
   }
 }

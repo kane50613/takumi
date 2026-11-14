@@ -161,6 +161,41 @@ export interface CacheBudgets {
   fonts?: number;
 }
 
+/**
+ * What a renderer's caches hold and how their lookups went since the renderer was created, under
+ * the keys `CacheOptions` uses. Sizes are the same estimates the budgets count, not process memory.
+ */
+export interface CacheStats {
+  /** The pool that every kind of data except fonts shares. */
+  memory: CacheMemoryStats;
+  /** Each kind of data, whether it has a budget or shares the pool. */
+  budgets: Record<keyof CacheBudgets, CacheKindStats>;
+}
+
+/** The bytes the pool holds, every kind of data except fonts together. */
+export interface CacheMemoryStats {
+  /** The bytes held now, budgets included. */
+  current: number;
+  /** The most bytes held at once since the renderer was created. */
+  high: number;
+  /** The pool's `maxBytes`. */
+  max: number;
+}
+
+/** What one kind of data holds and how lookups for it went. */
+export interface CacheKindStats {
+  /** The bytes held now. For `fonts`, the fonts that renders' `fonts` lists loaded. */
+  current: number;
+  /** The kind's budget, or `null` when it has none. */
+  max: number | null;
+  /** Lookups that found what they looked for. */
+  hits: number;
+  /** Lookups that found nothing and did the work again. */
+  misses: number;
+  /** Entries released to stay within `maxBytes` or the budget. */
+  evictions: number;
+}
+
 /** Options for constructing a renderer. */
 export interface RendererOptions {
   /** The memory the renderer keeps across renders. */

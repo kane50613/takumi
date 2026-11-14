@@ -1,8 +1,9 @@
-//! The options a renderer is constructed with, which every binding takes.
+//! The options a renderer is constructed with, which every binding takes, and the cache statistics
+//! every binding reports.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use takumi_core::resources::{
-  cache::{Cache, CacheOptions as PoolOptions},
+  cache::{Cache, CacheKindStats as PoolKindStats, CacheOptions as PoolOptions},
   glyph_cache,
 };
 
@@ -52,48 +53,142 @@ pub struct CacheBudgets {
   pub fonts: Option<f64>,
 }
 
+impl CacheOptions {
+  /// The options of the cache that holds every kind but fonts. A glyph budget they leave out is the
+  /// one the last [`set_glyph_cache_max_bytes`] set.
+  pub fn pool(&self) -> PoolOptions {
+    let budgets = self.budgets.unwrap_or_default();
+    let mut options = PoolOptions::default();
+
+    options.max_bytes = self.max_bytes.map_or(PoolOptions::DEFAULT_MAX_BYTES, bytes);
+    options.images = budgets.images.map(bytes);
+    #[cfg(feature = "svg")]
+    {
+      options.pictures = budgets.pictures.map(bytes);
+    }
+    options.stylesheets = budgets.stylesheets.map(bytes);
+    options.tailwind = budgets.tailwind.map(bytes);
+    options.glyphs = budgets.glyphs.map(bytes);
+    options.intercepts = budgets.intercepts.map(bytes);
+    options.font_faces = budgets.font_faces.map(bytes);
+
+    options
+  }
+
+  /// The font budget, unbounded without one.
+  pub fn font_bytes(&self) -> Option<u64> {
+    self.budgets.and_then(|budgets| budgets.fonts).map(bytes)
+  }
+}
+
 impl RendererOptions {
-  fn budgets(&self) -> CacheBudgets {
-    self
-      .cache
-      .and_then(|cache| cache.budgets)
-      .unwrap_or_default()
+  /// The cache options, with the old names filling what `cache` leaves out.
+  fn cache_options(&self) -> CacheOptions {
+    let cache = self.cache.unwrap_or_default();
+    let budgets = cache.budgets.unwrap_or_default();
+
+    CacheOptions {
+      max_bytes: cache.max_bytes.or(self.cache_max_bytes),
+      budgets: Some(CacheBudgets {
+        fonts: budgets.fonts.or(self.font_cache_max_bytes),
+        ..budgets
+      }),
+    }
   }
 
   /// The font budget, unbounded when neither name sets one.
   pub fn font_cache_bytes(&self) -> Option<u64> {
-    self
-      .budgets()
-      .fonts
-      .or(self.font_cache_max_bytes)
-      .map(bytes)
+    self.cache_options().font_bytes()
   }
 
-  /// The bytes the cache keeps, from `cache.maxBytes` or the old `cacheMaxBytes`.
-  fn max_bytes(&self) -> u64 {
-    self
-      .cache
-      .and_then(|cache| cache.max_bytes)
-      .or(self.cache_max_bytes)
-      .map_or(PoolOptions::DEFAULT_MAX_BYTES, bytes)
-  }
-
-  /// The cache a renderer built with these options keeps. A glyph budget it leaves out is the one
-  /// the last [`set_glyph_cache_max_bytes`] set.
+  /// The cache a renderer built with these options keeps.
   pub fn cache(&self) -> Cache {
-    let budgets = self.budgets();
-    let builder = Cache::builder()
-      .max_bytes(self.max_bytes())
-      .images_opt(budgets.images.map(bytes))
-      .stylesheets_opt(budgets.stylesheets.map(bytes))
-      .tailwind_opt(budgets.tailwind.map(bytes))
-      .glyphs_opt(budgets.glyphs.map(bytes))
-      .intercepts_opt(budgets.intercepts.map(bytes))
-      .font_faces_opt(budgets.font_faces.map(bytes));
-    #[cfg(feature = "svg")]
-    let builder = builder.pictures_opt(budgets.pictures.map(bytes));
+    Cache::from(self.cache_options().pool())
+  }
+}
 
-    builder.build()
+/// What a renderer's caches hold and how their lookups went, under the keys [`CacheOptions`] uses.
+/// Sizes are estimates, not process memory.
+#[derive(Serialize)]
+pub struct CacheStats {
+  memory: CacheMemoryStats,
+  budgets: CacheBudgetStats,
+}
+
+/// The bytes the pool holds of every kind but fonts.
+#[derive(Serialize)]
+struct CacheMemoryStats {
+  current: f64,
+  high: f64,
+  max: f64,
+}
+
+/// What each kind of data holds, by its [`CacheBudgets`] key.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CacheBudgetStats {
+  images: CacheKindStats,
+  pictures: CacheKindStats,
+  stylesheets: CacheKindStats,
+  tailwind: CacheKindStats,
+  glyphs: CacheKindStats,
+  intercepts: CacheKindStats,
+  font_faces: CacheKindStats,
+  fonts: CacheKindStats,
+}
+
+/// What one kind of data holds and how its lookups went, in JavaScript numbers.
+#[derive(Serialize, Default)]
+pub struct CacheKindStats {
+  /// The bytes held now.
+  pub current: f64,
+  /// The kind's budget, none when it has no bound of its own.
+  pub max: Option<f64>,
+  /// Lookups that found an entry.
+  pub hits: f64,
+  /// Lookups that found none.
+  pub misses: f64,
+  /// Entries released for space.
+  pub evictions: f64,
+}
+
+impl From<PoolKindStats> for CacheKindStats {
+  fn from(stats: PoolKindStats) -> Self {
+    Self {
+      current: stats.current as f64,
+      max: stats.max.map(|max| max as f64),
+      hits: stats.hits as f64,
+      misses: stats.misses as f64,
+      evictions: stats.evictions as f64,
+    }
+  }
+}
+
+impl CacheStats {
+  /// What `cache` holds, with `fonts` for the fonts it does not.
+  pub fn new(cache: &Cache, fonts: CacheKindStats) -> Self {
+    let stats = cache.stats();
+
+    Self {
+      memory: CacheMemoryStats {
+        current: stats.memory.current as f64,
+        high: stats.memory.high as f64,
+        max: stats.memory.max as f64,
+      },
+      budgets: CacheBudgetStats {
+        images: stats.images.into(),
+        #[cfg(feature = "svg")]
+        pictures: stats.pictures.into(),
+        #[cfg(not(feature = "svg"))]
+        pictures: CacheKindStats::default(),
+        stylesheets: stats.stylesheets.into(),
+        tailwind: stats.tailwind.into(),
+        glyphs: stats.glyphs.into(),
+        intercepts: stats.intercepts.into(),
+        font_faces: stats.font_faces.into(),
+        fonts,
+      },
+    }
   }
 }
 
@@ -113,6 +208,7 @@ mod tests {
   use std::sync::Arc;
 
   use super::*;
+  use crate::font_cache::FontCache;
 
   fn options(json: &str) -> RendererOptions {
     serde_json::from_str(json).unwrap()
@@ -132,7 +228,10 @@ mod tests {
     let options = options(r#"{ "cache": null }"#);
 
     assert!(options.cache.is_none());
-    assert_eq!(options.max_bytes(), PoolOptions::DEFAULT_MAX_BYTES);
+    assert_eq!(
+      options.cache_options().pool().max_bytes,
+      PoolOptions::DEFAULT_MAX_BYTES
+    );
     assert_eq!(options.font_cache_bytes(), None);
     assert!(keeps_stylesheets(r#"{ "cache": null }"#));
     assert!(keeps_stylesheets(r#"{ "cache": { "budgets": null } }"#));
@@ -141,7 +240,10 @@ mod tests {
   #[test]
   fn max_bytes_sets_the_pool() {
     assert_eq!(
-      options(r#"{ "cache": { "maxBytes": 1024 } }"#).max_bytes(),
+      options(r#"{ "cache": { "maxBytes": 1024 } }"#)
+        .cache_options()
+        .pool()
+        .max_bytes,
       1024
     );
     assert!(!keeps_stylesheets(r#"{ "cache": { "maxBytes": 0 } }"#));
@@ -159,9 +261,11 @@ mod tests {
 
   #[test]
   fn the_old_cache_size_sets_max_bytes() {
-    assert_eq!(options(r#"{ "cacheMaxBytes": 1024 }"#).max_bytes(), 1024);
+    let max_bytes = |json| options(json).cache_options().pool().max_bytes;
+
+    assert_eq!(max_bytes(r#"{ "cacheMaxBytes": 1024 }"#), 1024);
     assert_eq!(
-      options(r#"{ "cacheMaxBytes": 1024, "cache": { "maxBytes": 2048 } }"#).max_bytes(),
+      max_bytes(r#"{ "cacheMaxBytes": 1024, "cache": { "maxBytes": 2048 } }"#),
       2048
     );
     assert!(!keeps_stylesheets(r#"{ "cacheMaxBytes": 0 }"#));
@@ -178,5 +282,36 @@ mod tests {
         .font_cache_bytes(),
       Some(1)
     );
+  }
+
+  #[test]
+  fn new_options_apply_to_a_built_cache() {
+    let cache = options("{}").cache();
+    let sheet = || cache.parse_stylesheet(vec!["p { color: red }".to_owned()]);
+
+    assert!(Arc::ptr_eq(&sheet(), &sheet()));
+
+    let shrunk: CacheOptions = serde_json::from_str(r#"{ "maxBytes": 0 }"#).unwrap();
+
+    cache.set_options(shrunk.pool());
+
+    assert_eq!(cache.stats().memory.current, 0);
+    assert!(!Arc::ptr_eq(&sheet(), &sheet()));
+  }
+
+  #[test]
+  fn stats_report_under_the_option_keys() {
+    let options = options(r#"{ "cache": { "budgets": { "images": 1024, "fonts": 2048 } } }"#);
+    let fonts = FontCache::new(options.font_cache_bytes());
+    let stats = serde_json::to_value(CacheStats::new(&options.cache(), fonts.stats())).unwrap();
+
+    assert_eq!(
+      stats["memory"]["max"],
+      PoolOptions::DEFAULT_MAX_BYTES as f64
+    );
+    assert_eq!(stats["budgets"]["images"]["max"], 1024.0);
+    assert_eq!(stats["budgets"]["fonts"]["max"], 2048.0);
+    assert!(stats["budgets"]["fontFaces"]["max"].is_null());
+    assert_eq!(stats["budgets"]["glyphs"]["hits"], 0.0);
   }
 }

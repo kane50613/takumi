@@ -60,6 +60,14 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RendererOptions")]
   pub type RendererOptionsType;
 
+  /// JavaScript object holding the options of a renderer's cache.
+  #[wasm_bindgen(typescript_type = "CacheOptions")]
+  pub type CacheOptionsType;
+
+  /// JavaScript object reporting what a renderer's caches hold.
+  #[wasm_bindgen(typescript_type = "CacheStats")]
+  pub type CacheStatsType;
+
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
@@ -255,6 +263,21 @@ impl PdfRenderer {
   #[wasm_bindgen(js_name = cacheFontFile)]
   pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
     self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// Applies `options` to what the renderer keeps now, as if it were created with them. A smaller
+  /// size or budget releases what no longer fits right away.
+  #[wasm_bindgen(js_name = setCacheOptions)]
+  pub fn set_cache_options(&self, options: CacheOptionsType) -> Result<(), js_sys::Error> {
+    self
+      .fonts
+      .set_cache_options_value(&self.cache, options.into())
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[wasm_bindgen(js_name = cacheStats)]
+  pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
+    self.fonts.cache_stats_value(&self.cache)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

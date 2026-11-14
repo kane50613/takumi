@@ -1,5 +1,5 @@
+import type { CacheOptions } from "@takumi-rs/core";
 import { loadBackend } from "#backend";
-import { managedCacheOptions } from "../cache";
 import { initWasm } from "./wasm-init";
 import type { Backend, BackendModule, LoadBackend } from "./types";
 
@@ -9,9 +9,21 @@ export class RendererProvider {
   private readonly load: LoadBackend;
   private backend: Promise<Backend> | undefined;
   private renderer: Renderer | undefined;
+  private options: CacheOptions | undefined;
 
   constructor(load: LoadBackend) {
     this.load = load;
+  }
+
+  /** The cache options the renderer was last given, or is created with. */
+  get cacheOptions(): CacheOptions | undefined {
+    return this.options;
+  }
+
+  /** Applies `options` to the renderer when it exists, and keeps them for one created later. */
+  setCacheOptions(options: CacheOptions): void {
+    this.options = options;
+    this.renderer?.setCacheOptions(options);
   }
 
   async get(module?: BackendModule): Promise<Renderer> {
@@ -20,7 +32,7 @@ export class RendererProvider {
       throw error;
     });
     const backend = await this.backend;
-    return (this.renderer ??= new backend.Renderer({ cache: managedCacheOptions() }));
+    return (this.renderer ??= new backend.Renderer({ cache: this.options }));
   }
 }
 
