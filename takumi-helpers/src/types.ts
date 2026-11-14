@@ -115,51 +115,47 @@ export type ImageNode = NodeMetadata & {
   height?: number;
 };
 
-/** The byte budget of each kind of data a renderer keeps across renders, where `0` keeps none of
- * that kind, except as `fonts` says. */
+/** The memory a renderer keeps across renders, one pool of bytes every kind of data shares. */
 export interface CacheOptions {
   /**
-   * Decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
-   * @default 64 MiB
+   * The bytes the renderer keeps for later renders, shared by every kind of data except fonts.
+   * When it is full, the entries used least recently go first, whatever their kind. `0` keeps
+   * nothing. Sizes are estimates, and the process uses memory this does not count.
+   * @default 128 MiB
    */
+  maxBytes?: number;
+  /** The most bytes one kind of data may hold, for a kind that needs a bound of its own. */
+  budgets?: CacheBudgets;
+}
+
+/**
+ * The most bytes each kind of data may hold. A kind with a budget keeps its entries apart, and the
+ * bytes it holds come out of `maxBytes`. `0` keeps none of that kind, except as `fonts` says.
+ */
+export interface CacheBudgets {
+  /** Decoded images, and the SVG rasters and downscaled bitmaps drawn from them. */
   images?: number;
-  /**
-   * SVG images laid out to drawing ops, which rasters and PDF and SVG output draw from.
-   * @default 16 MiB
-   */
+  /** SVG images laid out to drawing ops, which rasters and PDF and SVG output draw from. */
   pictures?: number;
-  /**
-   * Parsed stylesheets.
-   * @default 4 MiB
-   */
+  /** Parsed stylesheets. */
   stylesheets?: number;
-  /**
-   * The rules `tw` classes compile to.
-   * @default 1 MiB
-   */
+  /** The rules `tw` classes compile to. */
   tailwind?: number;
   /**
-   * Resolved glyphs, and the masks rasterized from glyphs and shapes. Raise it for CJK text,
-   * whose glyphs outgrow the default.
-   * @default 8 MiB, or the budget the last `setGlyphCacheMaxBytes` call set where the package
+   * Resolved glyphs, and the masks rasterized from glyphs and shapes.
+   * @default none, or the budget the last `setGlyphCacheMaxBytes` call set where the package
    * exports it
    */
   glyphs?: number;
-  /**
-   * Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`.
-   * @default 1 MiB
-   */
+  /** Where glyph outlines cross a decoration line, for `text-decoration-skip-ink`. */
   intercepts?: number;
-  /**
-   * The faces `@font-face` rules add, weighed by the font files they hold.
-   * @default 16 MiB
-   */
+  /** The faces `@font-face` rules add, weighed by the font files they hold. */
   fontFaces?: number;
   /**
-   * Decoded fonts that renders' `fonts` lists may keep registered. Past it, the least recently
-   * used families are released and load again when a render lists them. Fonts from `registerFont`
-   * stay, and so does the font loaded last, even past the budget alone. A running render keeps the
-   * fonts it started with.
+   * Decoded fonts that renders' `fonts` lists may keep registered, counted apart from `maxBytes`.
+   * Past it, the least recently used families are released and load again when a render lists
+   * them. Fonts from `registerFont` stay, and so does the font loaded last, even past the budget
+   * alone. A running render keeps the fonts it started with.
    * @default unbounded
    */
   fonts?: number;
@@ -167,10 +163,10 @@ export interface CacheOptions {
 
 /** Options for constructing a renderer. */
 export interface RendererOptions {
-  /** The byte budget of each kind of data the renderer keeps across renders. */
+  /** The memory the renderer keeps across renders. */
   cache?: CacheOptions;
-  /** @deprecated Use `cache`. Sets the `images` and `stylesheets` budgets, and caps `pictures`. */
+  /** @deprecated Use `cache.maxBytes`. */
   cacheMaxBytes?: number;
-  /** @deprecated Use `cache.fonts`. */
+  /** @deprecated Use `cache.budgets.fonts`. */
   fontCacheMaxBytes?: number;
 }

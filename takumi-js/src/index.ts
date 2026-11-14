@@ -11,6 +11,7 @@ export type {
 } from "@takumi-rs/helpers";
 export type {
   AnimationOutputFormat,
+  CacheBudgets,
   CacheOptions,
   DitheringAlgorithm,
   Font,

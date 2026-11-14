@@ -25,7 +25,12 @@ import {
 } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
-export type { CacheOptions, FontCacheOptions, RendererOptions } from "../pkg/takumi_pdf_wasm";
+export type {
+  CacheBudgets,
+  CacheOptions,
+  FontCacheOptions,
+  RendererOptions,
+} from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";

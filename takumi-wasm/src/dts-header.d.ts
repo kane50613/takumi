@@ -1,6 +1,12 @@
-import type { CacheOptions, CssInput, Node, RendererOptions } from "@takumi-rs/helpers";
+import type {
+  CacheBudgets,
+  CacheOptions,
+  CssInput,
+  Node,
+  RendererOptions,
+} from "@takumi-rs/helpers";
 
-export type { CacheOptions, RendererOptions };
+export type { CacheBudgets, CacheOptions, RendererOptions };
 import type { Properties } from "csstype";
 
 export {

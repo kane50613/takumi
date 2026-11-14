@@ -30,6 +30,7 @@ export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bin
 export { Prepared } from "@takumi-rs/bindings-js";
 export type {
   BlendMode,
+  CacheBudgets,
   CacheOptions,
   ColorStop,
   CornerRadii,

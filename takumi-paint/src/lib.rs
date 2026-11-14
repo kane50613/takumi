@@ -44,7 +44,7 @@ extern "C" {
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
-  /// JavaScript object holding the font cache budget.
+  /// JavaScript object holding the renderer options.
   #[wasm_bindgen(typescript_type = "RendererOptions")]
   pub type RendererOptionsType;
   /// JavaScript type for the families produced by `registerFont`.

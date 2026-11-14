@@ -56,7 +56,7 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "Font")]
   pub type FontType;
 
-  /// JavaScript object holding the font cache budget.
+  /// JavaScript object holding the renderer options.
   #[wasm_bindgen(typescript_type = "RendererOptions")]
   pub type RendererOptionsType;
 
