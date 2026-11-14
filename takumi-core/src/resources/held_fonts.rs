@@ -74,38 +74,47 @@ impl HeldFonts {
   /// Holds the font file whose decoded bytes `id` names, `bytes` long, leased. A file the cache
   /// already holds, under any key, counts once.
   pub fn keep(&self, id: u64, bytes: u64) -> FontLease {
-    let mut kept = None;
-    let font = self
-      .store
-      .get_or_insert_with(id, || {
-        // Leased before it is kept, so a cache too small for it still keeps it.
-        let font = Arc::new(HeldFont {
-          bytes: bytes.max(1),
-          leases: AtomicUsize::new(1),
-          pinned: AtomicBool::new(false),
-        });
+    loop {
+      let mut kept = None;
+      let font = self
+        .store
+        .get_or_insert_with(id, || {
+          // Leased before it is kept, so a cache too small for it still keeps it.
+          let font = Arc::new(HeldFont {
+            bytes: bytes.max(1),
+            leases: AtomicUsize::new(1),
+            pinned: AtomicBool::new(false),
+          });
 
-        kept = Some(Arc::clone(&font));
+          kept = Some(Arc::clone(&font));
 
-        Ok::<_, Infallible>(font)
-      })
-      .unwrap_or_else(|never| match never {});
+          Ok::<_, Infallible>(font)
+        })
+        .unwrap_or_else(|never| match never {});
 
-    match kept {
-      Some(font) => FontLease {
-        font,
-        store: self.store.clone(),
-      },
-      None => FontLease::new(font, &self.store),
+      if let Some(font) = kept {
+        return FontLease {
+          font,
+          store: self.store.clone(),
+        };
+      }
+
+      if let Some(lease) = self.lease_found(font, id) {
+        return lease;
+      }
     }
   }
 
   /// A lease on the font `id` names, none once it was evicted.
   pub fn lease(&self, id: u64) -> Option<FontLease> {
-    self
-      .store
-      .get(id)
-      .map(|font| FontLease::new(font, &self.store))
+    self.lease_found(self.store.get(id)?, id)
+  }
+
+  /// A lease on `font`, found under `id`, none once it was evicted.
+  fn lease_found(&self, font: Arc<HeldFont>, id: u64) -> Option<FontLease> {
+    let lease = FontLease::new(font, &self.store);
+
+    self.still_holds(&lease.font, id).then_some(lease)
   }
 
   /// Whether the cache holds the font `id` names, which counts as no lookup.
@@ -113,17 +122,33 @@ impl HeldFonts {
     self.store.peek(id).is_some()
   }
 
-  /// Keeps the font `id` names from eviction, or lets it go, until [`Self::forget`].
-  pub fn pin(&self, id: u64, pinned: bool) {
-    let Some(font) = self.store.peek(id) else {
-      return;
-    };
+  /// Keeps the font `id` names from eviction, or lets it go, until [`Self::forget`]; false once it
+  /// was evicted.
+  pub fn pin(&self, id: u64, pinned: bool) -> bool {
+    self
+      .store
+      .peek(id)
+      .is_some_and(|font| self.pin_found(&font, id, pinned))
+  }
 
+  /// Pins or unpins `font`, found under `id`; false once it was evicted.
+  fn pin_found(&self, font: &Arc<HeldFont>, id: u64, pinned: bool) -> bool {
     font.pinned.store(pinned, Ordering::Release);
 
     if !pinned {
       self.store.trim();
     }
+
+    self.still_holds(font, id)
+  }
+
+  /// Whether the cache still holds `font` under `id` once a lease or pin protects it, as an
+  /// eviction between finding it and protecting it takes it.
+  fn still_holds(&self, font: &Arc<HeldFont>, id: u64) -> bool {
+    self
+      .store
+      .peek(id)
+      .is_some_and(|held| Arc::ptr_eq(&held, font))
   }
 
   /// Drops the font `id` names, which counts as no eviction, as a host does when it unregisters it.
@@ -217,6 +242,30 @@ mod tests {
     cache.fonts().pin(2, false);
 
     assert!(!cache.fonts().holds(2));
+  }
+
+  #[test]
+  fn a_font_evicted_before_its_lease_counts_gets_none() {
+    let cache = cache(Some(0));
+    let lease = cache.fonts().keep(1, FONT);
+    let found = cache.fonts().store.peek(1).unwrap();
+
+    drop(lease);
+
+    assert!(cache.fonts().lease_found(found, 1).is_none());
+    assert_eq!(cache.fonts().take_evicted(), [1]);
+  }
+
+  #[test]
+  fn a_font_evicted_before_its_pin_counts_is_not_pinned() {
+    let cache = cache(Some(0));
+    let lease = cache.fonts().keep(1, FONT);
+    let found = cache.fonts().store.peek(1).unwrap();
+
+    drop(lease);
+
+    assert!(!cache.fonts().pin_found(&found, 1, true));
+    assert!(!cache.fonts().holds(1));
   }
 
   #[test]
