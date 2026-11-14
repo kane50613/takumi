@@ -256,7 +256,10 @@ export async function fetchStored(
     return fetchFollowed(url, { ...options, signal, timeout: 0 }).then(async (followed) => {
       const bytes = await readBodyLimited(followed.response, maxBytes);
 
-      offer(store, url, { bytes, url: followed.url });
+      // A download nobody waits on any more may finish after a newer one replaced it in the store.
+      if (!signal.aborted) {
+        offer(store, url, { bytes, url: followed.url });
+      }
 
       return bytes;
     });
