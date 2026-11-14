@@ -21,15 +21,15 @@ use crate::{Frame, ImageKey, SvgDocument, render::DocumentDevice, svg_image::is_
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
-/// Emits an image node's content into the content box of the box `painter` paints at `frame`,
-/// clipped to the content box's curve or edge where it has to be.
+/// Emits an image node's content, drawn in `context`, into the content box of the box `painter`
+/// paints at `frame`, clipped to the content box's curve or edge where it has to be.
 pub(crate) fn emit_image(
   image: &ImageData,
+  context: &RenderContext,
   painter: &BoxPainter,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let context = painter.context();
   let content = Frame::content_box(frame);
 
   if content.w <= 0.0 || content.h <= 0.0 {
@@ -137,11 +137,11 @@ impl Drawing {
     viewport: Size<f32>,
     doc: &mut SvgDocument,
   ) -> Option<Self> {
+    let svg = matches!(source, ImageSource::Svg(_));
     let key = ImageKey::Src {
       src: Arc::clone(src),
-      current_color: context.current_color.0,
-      viewport: matches!(source, ImageSource::Svg(_))
-        .then(|| [viewport.width.to_bits(), viewport.height.to_bits()]),
+      current_color: (svg && context.is_svg_element()).then_some(context.current_color.0),
+      viewport: svg.then(|| [viewport.width.to_bits(), viewport.height.to_bits()]),
     };
     let href = doc.image_href(&key, || loaded_data_url(source, context, viewport))?;
     // An SVG is defined at the size it is drawn, which its media queries and the color probe read.

@@ -118,6 +118,8 @@ pub(super) struct SvgLayout<'a> {
   /// How many more element instances may be laid out.
   budget: Budget,
   fonts: Option<&'a FontsSnapshot>,
+  /// Whether the root inherits the host's `color`.
+  inherits_color: bool,
   /// What the layout has read from the host so far.
   reads: Cell<HostReads>,
 }
@@ -157,6 +159,13 @@ impl<'a> SvgLayout<'a> {
       image_depth,
       budget: Budget::default(),
       fonts: host.fonts(),
+      inherits_color: !matches!(
+        host,
+        SvgHost::Image {
+          current_color: None,
+          ..
+        }
+      ),
       reads: Cell::default(),
     }
   }
@@ -183,7 +192,8 @@ impl<'a> SvgLayout<'a> {
   /// `color` in the context of `styled`. Approximate: a `color: currentColor` under an ancestor's
   /// own color counts as a read of the host's.
   fn resolve_color(&self, styled: &Styled, color: ColorInput) -> Color {
-    if color == ColorInput::CurrentColor
+    if self.inherits_color
+      && color == ColorInput::CurrentColor
       && styled.style().inherited_data.color == ColorInput::CurrentColor
     {
       self.read(HostReads {

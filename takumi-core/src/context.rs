@@ -108,6 +108,8 @@ impl From<RenderContextInit> for RenderContext {
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
+      #[cfg(feature = "svg")]
+      svg_element: false,
       identity: BoxIdentity::new(),
     }
   }
@@ -157,6 +159,10 @@ pub struct RenderContext {
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
+  /// Whether an SVG drawn in this context is an `svg` element's content, which inherits the box's
+  /// `color` as an inline `svg` does.
+  #[cfg(feature = "svg")]
+  pub(crate) svg_element: bool,
   identity: BoxIdentity,
 }
 
@@ -168,6 +174,23 @@ impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
   pub fn builder() -> UnsetRenderContextBuilder {
     RenderContextInit::builder()
+  }
+
+  /// This context for drawing the content of an `svg` element, whose SVG inherits the box's `color`
+  /// where an image's is isolated from it.
+  #[cfg(feature = "svg")]
+  pub fn for_svg_element(&self) -> Self {
+    Self {
+      svg_element: true,
+      ..self.clone()
+    }
+  }
+
+  /// Whether an SVG drawn in this context is an `svg` element's content, which takes the box's
+  /// `color`.
+  #[cfg(feature = "svg")]
+  pub fn is_svg_element(&self) -> bool {
+    self.svg_element
   }
 
   /// The box this context belongs to.
@@ -271,6 +294,8 @@ impl RenderContext {
       style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
+      #[cfg(feature = "svg")]
+      svg_element: false,
       identity: BoxIdentity::new(),
     }
   }
@@ -298,6 +323,8 @@ impl RenderContext {
       current_color,
       style,
       collapsed_borders: false,
+      #[cfg(feature = "svg")]
+      svg_element: false,
       identity: BoxIdentity::new(),
     }
   }
