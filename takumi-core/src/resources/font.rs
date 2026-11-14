@@ -338,9 +338,9 @@ pub struct FontsSnapshot(Fonts);
 #[cfg(feature = "font-face")]
 mod font_face_set;
 #[cfg(feature = "font-face")]
-pub(crate) use font_face_set::DocumentRegistries;
-#[cfg(feature = "font-face")]
 use font_face_set::FontFile;
+#[cfg(feature = "font-face")]
+pub(crate) use font_face_set::{CachedRegistry, DocumentKey, DocumentRegistries};
 
 impl Deref for FontsSnapshot {
   type Target = Fonts;

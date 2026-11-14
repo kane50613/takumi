@@ -6,7 +6,6 @@
 use crate::sort_key::sort_by_key;
 use std::sync::Arc;
 
-use quick_cache::sync::Cache as Store;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -16,7 +15,7 @@ use crate::{
     font_custom_platform_data::FontCustomPlatformData,
     font_face::{FontFace, PendingSource},
   },
-  resources::cache::{ByBytes, Weighed, store},
+  resources::cache::{KindStore, Weighed},
   style::{
     StyleSheet,
     font_face_rule::{FontFaceRule, FontFaceSrc},
@@ -35,11 +34,11 @@ pub(super) enum FontFile {
 /// keeps so the same rules over the same fonts reuse their decoded faces. A file
 /// [`Fonts::forget_font_file`] releases stays held until the registries holding it are evicted.
 pub(crate) struct DocumentRegistries {
-  store: Store<DocumentKey, CachedRegistry, ByBytes>,
+  store: KindStore<CachedRegistry>,
 }
 
 #[derive(Clone)]
-struct CachedRegistry {
+pub(crate) struct CachedRegistry {
   registry: Arc<FontRegistry>,
   /// The bytes of the font files the rules' faces hold.
   bytes: usize,
@@ -52,19 +51,15 @@ impl Weighed for CachedRegistry {
 }
 
 impl DocumentRegistries {
-  /// A cache holding registries whose font files total at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    Self {
-      // ~256 KiB of font files per document ⇒ an item-count hint for the budget.
-      store: store(max_bytes, 256 << 10),
-    }
+  pub(crate) fn new(store: KindStore<CachedRegistry>) -> Self {
+    Self { store }
   }
 }
 
 /// What a document's faces are made of: the registry they extend, and each face's descriptors
 /// and the source it reaches, as written.
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct DocumentKey {
+pub(crate) struct DocumentKey {
   base: u64,
   faces: Vec<(String, String)>,
 }
@@ -173,7 +168,7 @@ impl FontsSnapshot {
     let bytes = sources.iter().map(RuleSource::file_bytes).sum();
     let registry = registries
       .store
-      .get_or_insert_with(&key, || {
+      .get_or_insert_with(key, || {
         let mut registry = (**base).clone();
 
         for source in sources {

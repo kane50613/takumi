@@ -6181,7 +6181,7 @@ fn encoded_bitmaps_embed_their_own_bytes() {
   const JPEG: &[u8] = include_bytes!("images/checker.jpg");
   const WEBP: &[u8] = include_bytes!("images/checker.webp");
 
-  let cache = Cache::builder().images(1 << 20).build();
+  let cache = Cache::builder().max_bytes(1 << 20).build();
   let images: HashMap<Arc<str>, ImageSource> = [("jpeg", JPEG), ("webp", WEBP)]
     .into_iter()
     .map(|(name, bytes)| {
@@ -6230,7 +6230,7 @@ fn opaque_pngs_embed_their_own_streams() {
   const RGB: &[u8] = include_bytes!("images/checker.png");
   const INDEXED: &[u8] = include_bytes!("images/checker-indexed.png");
 
-  let cache = Cache::builder().images(1 << 20).build();
+  let cache = Cache::builder().max_bytes(1 << 20).build();
   let images: HashMap<Arc<str>, ImageSource> = [("rgb", RGB), ("indexed", INDEXED)]
     .into_iter()
     .map(|(name, bytes)| {
@@ -6341,7 +6341,7 @@ fn an_undecodable_image_stops_the_render() {
 
   bytes[idat..].fill(0);
 
-  let cache = Cache::builder().images(1 << 20).build();
+  let cache = Cache::builder().max_bytes(1 << 20).build();
   let source = cache
     .decode_image(&bytes, ImageCacheMode::Auto)
     .expect("the png header still parses");
