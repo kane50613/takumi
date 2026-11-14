@@ -3,7 +3,7 @@ title: Performance
 description: Reuse renderers, measure before you size the caches, and keep memory and render time down on a server.
 ---
 
-Reuse the renderer, size the caches, and measure before you change a budget. Each section below covers one of these steps and the limits that go with it.
+Reuse the renderer, size its cache, and measure before you change the size. Each section below covers one of these steps and the limits that go with it.
 
 ## Reuse the renderer
 
@@ -16,11 +16,11 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders. [Caching](/docs/caching) lists what a renderer keeps and how to size each budget.
+`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders. [Caching](/docs/caching) lists what a renderer keeps and how to size its cache.
 
 ## Measure cold and repeated renders
 
-Measure the first render separately from repeated renders, because font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer. Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a [cache budget](/docs/caching#set-a-renderers-budgets). A larger cache helps only when later renders reuse what it keeps.
+Measure the first render separately from repeated renders, because font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer. Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change the [cache size](/docs/caching#set-a-renderers-cache-size). A larger cache helps only when later renders reuse what it keeps.
 
 ## Keep memory flat on Linux servers
 
