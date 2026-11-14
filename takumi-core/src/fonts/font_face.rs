@@ -145,6 +145,13 @@ impl FontFace {
     }
   }
 
+  /// Whether it draws from the data `id` names.
+  pub(crate) fn is_source(&self, id: u64) -> bool {
+    self
+      .custom_platform_data()
+      .is_some_and(|typeface| typeface.id == id)
+  }
+
   /// The capabilities of an `auto` descriptor: the face's own, or Blink's `normal` while pending.
   fn auto_font_selection_capabilities(&self) -> FontSelectionCapabilities {
     match &self.source {
