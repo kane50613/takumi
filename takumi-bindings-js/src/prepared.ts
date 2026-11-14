@@ -26,7 +26,7 @@ export type PrepareImagesInput =
   | (Omit<FetchOptions, "signal"> & {
       /** Entries to use as they are; their URLs are not fetched. */
       sources?: ImageLoader[];
-      /** @deprecated Use the renderer's `cache.store`. When set, it keeps this render's downloads instead. */
+      /** @deprecated Use the renderer's `cache.store`. When set, it keeps the images and `@font-face` files this render downloads instead, and fonts listed as URLs still use the store. */
       fetchCache?: ImageFetchCache;
       /** Decode-cache default for every image; a source's own `cache` wins. */
       cache?: NonNullable<ImageLoader["cache"]>;
