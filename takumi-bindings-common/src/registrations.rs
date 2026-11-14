@@ -14,7 +14,7 @@ use std::{
 use takumi_core::{
   Cache, Fonts,
   resources::{
-    font::{FontError, FontSource, RegisteredFamily},
+    font::{FontError, FontSource, RegisteredFamily, RegisteredSource},
     held_fonts::FontLease,
   },
 };
@@ -26,16 +26,21 @@ fn fold(family: &str) -> String {
   family.chars().flat_map(char::to_lowercase).collect()
 }
 
-/// What one registration added, from the font file `id` names.
+/// What one registration added from its source.
 #[derive(Clone)]
 struct Registration {
-  id: u64,
+  source: RegisteredSource,
   families: Vec<RegisteredFamily>,
   /// Made by `registerFont`, so its file is never evicted.
   pinned: bool,
 }
 
 impl Registration {
+  /// The id of the font file it holds.
+  fn id(&self) -> u64 {
+    self.source.id()
+  }
+
   fn has_family(&self, folded: &str) -> bool {
     self
       .families
@@ -43,10 +48,15 @@ impl Registration {
       .any(|family| fold(&family.name) == folded)
   }
 
+  /// Whether it added the faces `other` added to the folded `family`.
+  fn shares(&self, other: &Self, folded: &str) -> bool {
+    self.source == other.source && self.has_family(folded)
+  }
+
   /// Removes the faces it added from `fonts`.
   fn unregister(&self, fonts: &mut Fonts) {
     for family in &self.families {
-      fonts.unregister_source(&family.name, self.id);
+      fonts.unregister_source(&family.name, &self.source);
     }
   }
 }
@@ -57,7 +67,8 @@ impl Registration {
 #[derive(Clone, Default)]
 pub struct FontRegistrations {
   by_key: HashMap<String, Registration>,
-  /// Registrations made without a key, all of them by `registerFont`.
+  /// Registrations no key finds: the ones `registerFont` made without a key, and what a keyed one
+  /// keeps once `unregisterFont` removed another of its families.
   unkeyed: Vec<Registration>,
   files: HashMap<String, u64>,
 }
@@ -75,7 +86,7 @@ impl FontRegistrations {
   /// was evicted.
   pub fn lease(&self, cache: &Cache, key: &str) -> Option<(Vec<RegisteredFamily>, FontLease)> {
     let registration = self.by_key.get(key)?;
-    let lease = cache.fonts().lease(registration.id)?;
+    let lease = cache.fonts().lease(registration.id())?;
 
     Some((registration.families.clone(), lease))
   }
@@ -85,7 +96,7 @@ impl FontRegistrations {
   pub fn pin(&mut self, cache: &Cache, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registration = self.by_key.get_mut(key)?;
 
-    if !cache.fonts().pin(registration.id, true) {
+    if !cache.fonts().pin(registration.id(), true) {
       return None;
     }
 
@@ -95,8 +106,8 @@ impl FontRegistrations {
   }
 
   /// Records `font`, which `fonts` registered under `key`, returning its families with a lease on
-  /// its file. A `pinned` file is never evicted. A file `key` held before goes once nothing else
-  /// holds it.
+  /// its file. A `pinned` file is never evicted. The faces `key` added before go unless another
+  /// registration added them too, and their file goes once nothing holds it.
   pub fn admit(
     &mut self,
     fonts: &mut Fonts,
@@ -105,20 +116,21 @@ impl FontRegistrations {
     font: RegisteredFont,
     pinned: bool,
   ) -> (Vec<RegisteredFamily>, FontLease) {
-    let lease = cache.fonts().keep(font.id, font.bytes);
+    let id = font.source.id();
+    let lease = cache.fonts().keep(id, font.bytes);
     let pinned = pinned
       || key
         .and_then(|key| self.by_key.get(key))
-        .is_some_and(|held| held.id == font.id && held.pinned);
+        .is_some_and(|held| held.id() == id && held.pinned);
     let families = font.families.clone();
     let registration = Registration {
-      id: font.id,
+      source: font.source,
       families: font.families,
       pinned,
     };
 
     if pinned {
-      cache.fonts().pin(font.id, true);
+      cache.fonts().pin(id, true);
     }
 
     match key {
@@ -133,11 +145,21 @@ impl FontRegistrations {
     (families, lease)
   }
 
-  /// Unregisters what `replaced` added once nothing else holds its file.
+  /// Unregisters the faces `replaced` added that no other registration added, and drops its file
+  /// once nothing holds it.
   fn release_replaced(&self, fonts: &mut Fonts, cache: &Cache, replaced: &Registration) {
-    if self.drop_unheld(cache, replaced.id) {
-      replaced.unregister(fonts);
+    for family in &replaced.families {
+      let folded = fold(&family.name);
+
+      if !self
+        .registrations()
+        .any(|registration| registration.shares(replaced, &folded))
+      {
+        fonts.unregister_source(&family.name, &replaced.source);
+      }
     }
+
+    self.drop_unheld(cache, replaced.id());
   }
 
   /// Loads the `@font-face` file `url`, `bytes` of font data, into `fonts`, and holds it leased.
@@ -170,15 +192,18 @@ impl FontRegistrations {
   /// Unregisters from `fonts` what the files `evicted` names held, each registration's own faces
   /// alone, and forgets the registrations and files.
   pub fn release(&mut self, fonts: &mut Fonts, evicted: &[u64]) {
-    let is_evicted = |registration: &Registration| evicted.contains(&registration.id);
+    let is_evicted = |registration: &Registration| evicted.contains(&registration.id());
 
-    for registration in self.by_key.values().filter(|each| is_evicted(each)) {
+    for registration in self.registrations().filter(|each| is_evicted(each)) {
       registration.unregister(fonts);
     }
 
     self
       .by_key
       .retain(|_, registration| !is_evicted(registration));
+    self
+      .unkeyed
+      .retain(|registration| !is_evicted(registration));
     self.files.retain(|url, id| {
       let kept = !evicted.contains(id);
 
@@ -193,42 +218,49 @@ impl FontRegistrations {
   /// Gives the faces the registrations under `keys` added precedence in their families, a later key
   /// over an earlier one, as a render's `fonts` list orders them; false when they already have it.
   pub fn prefer(&self, fonts: &mut Fonts, keys: &[String]) -> bool {
-    let sources: Vec<(&str, u64)> = keys
+    let sources: Vec<(&str, &RegisteredSource)> = keys
       .iter()
       .filter_map(|key| self.by_key.get(key))
       .flat_map(|registration| {
         registration
           .families
           .iter()
-          .map(|family| (family.name.as_str(), registration.id))
+          .map(|family| (family.name.as_str(), &registration.source))
       })
       .collect();
 
     fonts.prefer_sources(&sources)
   }
 
-  /// Forgets the registrations that added to `family`, as `unregisterFont` removes it, so
-  /// registering one of them again reaches the registry, and drops the files no registration holds.
+  /// Forgets `family` in the registrations that added to it, as `unregisterFont` removes it, so
+  /// registering one of them again reaches the registry. What one keeps of other families stays
+  /// held under no key, and the files no registration holds drop.
   pub fn forget_family(&mut self, cache: &Cache, family: &str) {
     let folded = fold(family);
-    let mut forgotten: Vec<u64> = self
+    let keys: Vec<String> = self
       .by_key
-      .values()
-      .chain(&self.unkeyed)
-      .filter(|registration| registration.has_family(&folded))
-      .map(|registration| registration.id)
+      .iter()
+      .filter(|(_, registration)| registration.has_family(&folded))
+      .map(|(key, _)| key.clone())
       .collect();
+    let (mut forgotten, unkeyed): (Vec<_>, Vec<_>) = take(&mut self.unkeyed)
+      .into_iter()
+      .partition(|registration| registration.has_family(&folded));
 
-    self
-      .by_key
-      .retain(|_, registration| !registration.has_family(&folded));
-    self
-      .unkeyed
-      .retain(|registration| !registration.has_family(&folded));
-    forgotten.sort_unstable();
-    forgotten.dedup();
+    self.unkeyed = unkeyed;
+    forgotten.extend(keys.iter().filter_map(|key| self.by_key.remove(key)));
 
-    for id in forgotten {
+    for mut registration in forgotten {
+      let id = registration.id();
+
+      registration
+        .families
+        .retain(|each| fold(&each.name) != folded);
+
+      if !registration.families.is_empty() {
+        self.unkeyed.push(registration);
+      }
+
       self.drop_unheld(cache, id);
     }
   }
@@ -240,34 +272,32 @@ impl FontRegistrations {
       .chain(take(&mut self.unkeyed));
 
     for id in registrations
-      .map(|registration| registration.id)
+      .map(|registration| registration.id())
       .chain(take(&mut self.files).into_values())
     {
       cache.fonts().forget(id);
     }
   }
 
-  /// Drops the file `id` names from `cache` once no registration or file holds it, returning true,
-  /// or else pins it while a registration from `registerFont` holds it.
-  fn drop_unheld(&self, cache: &Cache, id: u64) -> bool {
+  /// Drops the file `id` names from `cache` once no registration or file holds it, or else pins it
+  /// while a registration from `registerFont` holds it.
+  fn drop_unheld(&self, cache: &Cache, id: u64) {
     let held = self
       .registrations()
-      .any(|registration| registration.id == id)
+      .any(|registration| registration.id() == id)
       || self.files.values().any(|&file| file == id);
 
     if !held {
       cache.fonts().forget(id);
 
-      return true;
+      return;
     }
 
     let pinned = self
       .registrations()
-      .any(|registration| registration.id == id && registration.pinned);
+      .any(|registration| registration.id() == id && registration.pinned);
 
     cache.fonts().pin(id, pinned);
-
-    false
   }
 
   fn registrations(&self) -> impl Iterator<Item = &Registration> {
@@ -321,7 +351,11 @@ impl RenderLeases {
 mod tests {
   use std::fs;
 
-  use takumi_core::resources::font::{FontOverride, FontResource};
+  use takumi_core::resources::{
+    cache::CacheOptions,
+    font::{FontOverride, FontResource},
+    unicode_range::{UnicodeRange, UnicodeRangeSet},
+  };
 
   use super::*;
   use crate::input::register_resource;
@@ -339,23 +373,42 @@ mod tests {
     bytes
   }
 
-  /// `bytes` registered as `family` under `key`, its lease dropped at once.
+  /// `bytes` as a font of `family`.
+  fn named(family: &str, bytes: Vec<u8>) -> FontResource<'static> {
+    FontResource::new(bytes).override_info(FontOverride {
+      family_name: Some(family.into()),
+      ..Default::default()
+    })
+  }
+
+  /// `resource` registered under `key`, its lease dropped at once.
   fn register(
     fonts: &mut Fonts,
     registrations: &mut FontRegistrations,
     cache: &Cache,
     key: &str,
-    family: &str,
-    bytes: Vec<u8>,
+    resource: FontResource<'static>,
   ) {
-    let resource = FontResource::new(bytes).override_info(FontOverride {
-      family_name: Some(family.into()),
-      ..Default::default()
-    });
     let registered = register_resource(fonts, resource).unwrap();
 
     drop(registrations.admit(fonts, cache, Some(key), registered, false));
     registrations.release(fonts, &cache.fonts().take_evicted());
+  }
+
+  fn duo() -> Vec<u8> {
+    fs::read(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/../assets/fonts/geist/GeistDuo.ttc"
+    ))
+    .unwrap()
+  }
+
+  fn source(resource: FontResource<'static>) -> RegisteredSource {
+    resource
+      .into_resolved()
+      .unwrap()
+      .registered_source()
+      .unwrap()
   }
 
   fn id(bytes: Vec<u8>) -> u64 {
@@ -379,14 +432,17 @@ mod tests {
         &mut registrations,
         &cache,
         &format!("key {tail}"),
-        "Inter",
-        geist(tail),
+        named("Inter", geist(tail)),
       );
     }
 
     let held = registrations.by_key.len();
     let registered = (0..64)
-      .filter(|&tail| fonts.clone().unregister_source("Inter", id(geist(tail))))
+      .filter(|&tail| {
+        fonts
+          .clone()
+          .unregister_source("Inter", &source(named("Inter", geist(tail))))
+      })
       .count();
 
     assert!(cache.stats().fonts.current <= 4 * file);
@@ -401,8 +457,20 @@ mod tests {
     let mut fonts = Fonts::default();
     let mut registrations = FontRegistrations::default();
 
-    register(&mut fonts, &mut registrations, &cache, "a", "A", geist(0));
-    register(&mut fonts, &mut registrations, &cache, "b", "B", geist(0));
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "a",
+      named("A", geist(0)),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "b",
+      named("B", geist(0)),
+    );
 
     assert_eq!(cache.stats().fonts.current, geist(0).len() as u64);
   }
@@ -413,8 +481,20 @@ mod tests {
     let mut fonts = Fonts::default();
     let mut registrations = FontRegistrations::default();
 
-    register(&mut fonts, &mut registrations, &cache, "k", "A", geist(0));
-    register(&mut fonts, &mut registrations, &cache, "k", "B", geist(1));
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "k",
+      named("A", geist(0)),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "k",
+      named("B", geist(1)),
+    );
 
     assert_eq!(cache.stats().fonts.current, geist(1).len() as u64);
     assert!(!fonts.unregister_family("A"));
@@ -449,7 +529,13 @@ mod tests {
     let mut fonts = Fonts::default();
     let mut registrations = FontRegistrations::default();
 
-    register(&mut fonts, &mut registrations, &cache, "k", "A", geist(0));
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "k",
+      named("A", geist(0)),
+    );
 
     let registered = register_resource(&mut fonts, FontResource::new(geist(1))).unwrap();
 
@@ -462,5 +548,126 @@ mod tests {
     registrations.forget_family(&cache, "geist");
 
     assert!(!cache.fonts().holds(id(geist(1))));
+  }
+
+  #[test]
+  fn a_replaced_key_removes_its_faces_while_another_key_holds_the_file() {
+    let cache = Cache::default();
+    let mut fonts = Fonts::default();
+    let mut registrations = FontRegistrations::default();
+
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "a",
+      named("A", geist(0)),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "b",
+      named("B", geist(0)),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "a",
+      named("C", geist(1)),
+    );
+
+    assert!(!fonts.clone().unregister_family("A"));
+    assert!(fonts.clone().unregister_family("B"));
+    assert!(cache.fonts().holds(id(geist(0))));
+  }
+
+  /// `[X latin, Y, X cyrillic]`, each subset of X from one file, already in the order they were
+  /// registered.
+  #[test]
+  fn each_registration_of_one_file_keeps_its_own_place() {
+    let cache = Cache::default();
+    let mut fonts = Fonts::default();
+    let mut registrations = FontRegistrations::default();
+    let subset = |from, to| {
+      named("X", geist(0)).unicode_range(UnicodeRangeSet::from_iter([UnicodeRange::new(from, to)]))
+    };
+
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "x latin",
+      subset(0, 0x24f),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "y",
+      named("X", geist(1)),
+    );
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "x cyrillic",
+      subset(0x400, 0x4ff),
+    );
+
+    let keys = ["x latin", "y", "x cyrillic"].map(String::from);
+
+    assert!(!registrations.prefer(&mut fonts, &keys));
+  }
+
+  #[test]
+  fn unregistering_one_family_of_a_collection_keeps_the_other_held() {
+    let cache = Cache::default();
+    let mut fonts = Fonts::default();
+    let mut registrations = FontRegistrations::default();
+
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "duo",
+      FontResource::new(duo()),
+    );
+
+    let families: Vec<String> = registrations
+      .families("duo")
+      .unwrap()
+      .iter()
+      .map(|family| family.name.clone())
+      .collect();
+    let [removed, kept] = families.as_slice() else {
+      panic!("{families:?}");
+    };
+
+    registrations.forget_family(&cache, removed);
+    fonts.unregister_family(removed);
+
+    assert!(registrations.families("duo").is_none());
+    assert!(cache.fonts().holds(id(duo())));
+
+    let mut options = CacheOptions::default();
+
+    options.fonts = Some(0);
+    cache.set_options(options);
+    registrations.release(&mut fonts, &cache.fonts().take_evicted());
+
+    assert!(!fonts.clone().unregister_family(kept));
+
+    cache.set_options(CacheOptions::default());
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "duo",
+      FontResource::new(duo()),
+    );
+
+    assert!(fonts.clone().unregister_family(removed));
   }
 }

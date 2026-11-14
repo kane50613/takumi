@@ -15,7 +15,10 @@ use takumi_core::{
   Cache, Fonts,
   layout::node::Node,
   resources::{
-    font::{FontError, FontOverride, FontResource, FontSource, PendingFontFace, RegisteredFamily},
+    font::{
+      FontError, FontOverride, FontResource, FontSource, PendingFontFace, RegisteredFamily,
+      RegisteredSource,
+    },
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, is_svg_bytes},
     unicode_range::UnicodeRange,
   },
@@ -283,8 +286,8 @@ pub fn retain_svg(images: &mut Option<Vec<ImageSource>>) {
 pub struct RegisteredFont {
   /// The families it produced.
   pub families: Vec<RegisteredFamily>,
-  /// The id of its decoded bytes, [`FontResource::id`].
-  pub id: u64,
+  /// The font file and descriptors it drew its faces from.
+  pub source: RegisteredSource,
   /// The bytes of its decoded font data.
   pub bytes: u64,
 }
@@ -315,12 +318,14 @@ pub fn register_resource(
 impl RegisteredFont {
   /// Registers `resource`, which [`FontResource::into_resolved`] or [`Fonts::resolved`] gave.
   pub fn register(fonts: &mut Fonts, resource: FontResource<'_>) -> Result<Self, FontError> {
-    let id = resource.id().ok_or(FontError::UnsupportedFormat)?;
+    let source = resource
+      .registered_source()
+      .ok_or(FontError::UnsupportedFormat)?;
     let bytes = resource.byte_len() as u64;
 
     Ok(Self {
       families: fonts.register(resource)?,
-      id,
+      source,
       bytes,
     })
   }
