@@ -293,7 +293,7 @@ export default defineConfig({
 });
 ```
 
-Vite applies `ssr.resolve.conditions` only to the packages it bundles. A server build for Node.js leaves packages in `node_modules` external by default, and Node.js resolves them when the server runs. Add `@takumi-rs/wasm` and `@takumi-rs/helpers` to `ssr.noExternal`, or run Node.js with `--conditions=takumi-no-fallback-font` in development and production.
+Vite applies `ssr.resolve.conditions` only to the packages it bundles. A server build for Node.js leaves packages in `node_modules` external by default, and Node.js resolves them when the server runs. Add `@takumi-rs/helpers` and every Takumi package between it and your code, such as `@takumi-rs/wasm`, `takumi-paint`, or `takumi-pdf`, to `ssr.noExternal`, or run Node.js with `--conditions=takumi-no-fallback-font` in development and production.
 
 Without Geist, a renderer starts with no fonts, and `clearFonts()` leaves none. Text uses only the fonts you load. The Node.js package `@takumi-rs/core` builds Geist into its binary and ignores the condition.
 
