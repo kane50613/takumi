@@ -129,7 +129,9 @@ export interface CacheOptions {
   budgets?: CacheBudgets;
   /**
    * Where the renderer keeps the bytes it downloads, by URL: images, `@font-face` files, and fonts
-   * listed as URLs. The store decides what to keep and when to drop it. `null` keeps none.
+   * listed as URLs. The store decides what to keep and when to drop it. `null` keeps none. A render
+   * with its own `fetch` skips the default store but uses one passed here, which then serves its
+   * downloads to any render whose `allowUrl` accepts them.
    * @default a `MemoryStore` of 32 MiB for each renderer
    */
   store?: DownloadStore | null;

@@ -181,8 +181,9 @@ describe("download store", () => {
     expect(requests).toHaveLength(1);
   });
 
-  test("shares a download only between requests with the same allowUrl and maxBytes", async () => {
+  test("shares a download only between requests with the same fetch, allowUrl, and maxBytes", async () => {
     const { fetch, requests } = pendingFetch();
+    const other = pendingFetch();
     const store = new MemoryStore();
     const allowUrl = () => true;
     const loads = [
@@ -190,15 +191,17 @@ describe("download store", () => {
       prepareImages({ node, fetch, store, allowUrl }),
       prepareImages({ node, fetch, store, allowUrl: () => true }),
       prepareImages({ node, fetch, store, allowUrl, maxBytes: 1024 }),
+      prepareImages({ node, fetch: other.fetch, store, allowUrl }),
     ];
 
     expect(requests).toHaveLength(3);
+    expect(other.requests).toHaveLength(1);
 
-    for (const request of requests) {
+    for (const request of [...requests, ...other.requests]) {
       request.response.resolve(ok("bytes"));
     }
 
-    expect(await Promise.all(loads)).toHaveLength(4);
+    expect(await Promise.all(loads)).toHaveLength(5);
   });
 
   test("a stored redirect serves only callers whose allowUrl accepts where it ended", async () => {
