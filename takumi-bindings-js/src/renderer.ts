@@ -1,6 +1,7 @@
-import { fontFromUrl, type GenericFontFamily } from "@takumi-rs/helpers";
+import { type FontCacheMode, fontFromUrl, type GenericFontFamily } from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
 import type { ListedFont, PrepareExtras } from "./prepared";
+import { RendererStore } from "./store";
 import { unicodeRangeOf } from "./unicode-range";
 
 /**
@@ -75,6 +76,16 @@ export type ImageSource = {
  */
 export type RegisteredFamilyLike = { name: string };
 
+/** Whether a renderer keeps a font a render's `fonts` list loaded once the render settles. */
+type FontCachePolicy = {
+  /**
+   * `"none"` lets the font go once the render that loaded it settles, though a render still uses
+   * one the renderer already holds. `registerFont` keeps a font whatever this says.
+   * @default "auto"
+   */
+  cache?: FontCacheMode;
+};
+
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
  * file), raw bytes, or a descriptor with a lazy `data()` loader.
@@ -82,12 +93,14 @@ export type RegisteredFamilyLike = { name: string };
  */
 export type FontLoader =
   | string
-  | Font
-  | (Omit<FontDetails, "data"> & {
-      data: () => Promise<FontDetails["data"]> | FontDetails["data"];
-      /** @deprecated Use `unicodeRange`. */
-      ranges?: [number, number][];
-    } & ({ key: string } | { name: string }));
+  | ByteBuf
+  | (FontDetails & FontCachePolicy)
+  | (Omit<FontDetails, "data"> &
+      FontCachePolicy & {
+        data: () => Promise<FontDetails["data"]> | FontDetails["data"];
+        /** @deprecated Use `unicodeRange`. */
+        ranges?: [number, number][];
+      } & ({ key: string } | { name: string }));
 
 /** @internal */
 export type ImageLoader = Omit<ImageSource, "data"> & {
@@ -212,8 +225,6 @@ function extractFontBuffer(font: Exclude<FontLoader, string>) {
   return font.data();
 }
 
-const toLoader = (font: FontLoader) => (typeof font === "string" ? fontFromUrl(font) : font);
-
 function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
   if (isBuffer(font)) {
     return font;
@@ -289,6 +300,8 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   releaseFonts(lease: number): void;
   /** Gives the faces registered under `keys` precedence in their families, a later key over an earlier one. */
   orderFonts(keys: string[]): void;
+  /** Forgets the fonts registered under `keys` that no render leases, returning those keys and the ones nothing is under. */
+  dropFonts(keys: string[]): string[];
 };
 
 /**
@@ -344,20 +357,35 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly loading = new Map<string, Promise<TFamily[]>>();
   /** A key for each buffer passed as a font, by its bytes, since the backend only takes string keys. */
   private readonly bufferKeys = new WeakMap<ByteBuf, string>();
+  /** The keys of fonts loaded with `cache: "none"` that no render has asked to keep since. */
+  private readonly transient = new Set<string>();
+  /** The keys of `transient` whose renders settled, forgotten once no render leases their files. */
+  private readonly unkept = new Set<string>();
+  /** The leases `leased` holds open. */
+  private readonly open = new Set<number>();
 
-  constructor(private readonly backend: FontBackend<TFamily>) {}
+  constructor(
+    private readonly backend: FontBackend<TFamily>,
+    /** The store the renderer keeps the bytes it downloads in. */
+    readonly store: RendererStore = new RendererStore(),
+  ) {}
 
   /**
    * Registers one font unless the backend still holds it, its file leased to the render that
    * `lease` names. Without a lease, as `registerFont` registers, it is never evicted.
    */
   async register(font: FontLoader, lease?: number): Promise<TFamily[]> {
-    const loader = toLoader(font);
+    const loader = this.toLoader(font);
     const key = this.keyOf(loader);
     const pinned = lease === undefined;
+    const keeps = pinned || isBuffer(loader) || loader.cache !== "none";
     const held = this.backend.cachedFonts(key, pinned, lease);
 
     if (held) {
+      if (keeps) {
+        this.keep(key);
+      }
+
       return held;
     }
 
@@ -365,9 +393,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     if (pending) {
       // The render loading it leases its file until that render settles, after this continues.
-      return pending.then(
-        () => this.backend.cachedFonts(key, pinned, lease) ?? this.register(loader, lease),
-      );
+      return pending.then(() => this.register(loader, lease));
     }
 
     const load = Promise.resolve(extractFontBuffer(loader))
@@ -378,6 +404,21 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
         return lease === undefined
           ? this.backend.registerFont(input, key)
           : this.backend.cacheFont(input, key, lease);
+      })
+      .then((families) => {
+        if (keeps) {
+          this.keep(key);
+        } else {
+          this.transient.add(key);
+
+          // The render that loaded it failed before the load finished, and dropped its fonts already.
+          if (lease !== undefined && !this.open.has(lease)) {
+            this.unkept.add(key);
+            this.dropSettled();
+          }
+        }
+
+        return families;
       })
       .finally(() => this.loading.delete(key));
 
@@ -394,7 +435,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   /** Loads each of `fonts` the backend does not hold, leased to `lease`, and returns whether any was loaded. */
   async cache(fonts: FontLoader[], lease: number): Promise<boolean> {
     const loaders = fonts
-      .map(toLoader)
+      .map((font) => this.toLoader(font))
       .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
 
     await Promise.all(loaders.map((loader) => this.register(loader, lease)));
@@ -406,16 +447,64 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   async leased<T>(use: (lease: number) => Awaitable<T>): Promise<T> {
     const lease = this.backend.leaseFonts();
 
+    this.open.add(lease);
+
     try {
       return await use(lease);
     } finally {
+      this.open.delete(lease);
       this.backend.releaseFonts(lease);
     }
   }
 
+  /** Calls `use`, and forgets the fonts of `fonts` loaded with `cache: "none"` when it fails. */
+  async dropOnFailure<T>(fonts: FontLoader[] | undefined, use: () => Promise<T>): Promise<T> {
+    try {
+      return await use();
+    } catch (error) {
+      this.dropUnkept(fonts);
+      throw error;
+    }
+  }
+
+  /**
+   * Forgets the fonts of `fonts` loaded with `cache: "none"` that no render asked to keep, once no
+   * render leases their files. A render calls it after it settles, which also forgets the ones an
+   * earlier render left because another render leased them then.
+   */
+  dropUnkept(fonts: FontLoader[] | undefined): void {
+    for (const font of fonts ?? []) {
+      const key = this.keyOf(this.toLoader(font));
+
+      if (this.transient.has(key)) {
+        this.unkept.add(key);
+      }
+    }
+
+    this.dropSettled();
+  }
+
+  /** Forgets the fonts under `unkept` that no render leases, leaving the others for a later call. */
+  private dropSettled() {
+    if (this.unkept.size === 0) {
+      return;
+    }
+
+    for (const key of this.backend.dropFonts([...this.unkept])) {
+      this.transient.delete(key);
+      this.unkept.delete(key);
+    }
+  }
+
+  /** Marks the font under `key` as one a render asked to keep. */
+  private keep(key: string) {
+    this.transient.delete(key);
+    this.unkept.delete(key);
+  }
+
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
   listed(fonts: FontLoader[]): ListedFont[] | undefined {
-    const loaders = fonts.map(toLoader);
+    const loaders = fonts.map((font) => this.toLoader(font));
 
     if (!loaders.some((loader) => unicodeRangeOf(loader).length > 0)) {
       return undefined;
@@ -432,6 +521,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
       return { key, name, weight, style, unicodeRange: unicodeRangeOf(loader) };
     });
+  }
+
+  /** `font` with a URL string turned into a loader that downloads through the renderer's store. */
+  private toLoader(font: FontLoader): Exclude<FontLoader, string> {
+    return typeof font === "string" ? fontFromUrl(font, { store: this.store.current }) : font;
   }
 
   private keyOf(loader: Exclude<FontLoader, string>) {
@@ -486,7 +580,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     files?: HeldFontFiles,
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
-    const loaders = fonts?.map(toLoader) ?? [];
+    const loaders = fonts?.map((font) => this.toLoader(font)) ?? [];
 
     return this.leased(async (lease) => {
       const families = await Promise.all(loaders.map((loader) => this.register(loader, lease)));

@@ -17,7 +17,7 @@ An image under `display: none` is not fetched. A relative URL such as `/logo.png
 
 When user input can reach the markup, set `allowUrl`, as [URLs from user input](#urls-from-user-input) describes.
 
-To reuse downloaded bytes across renders, pass a [`fetchCache`](/docs/caching#downloaded-image-bytes).
+A renderer keeps the bytes it downloads in its [download store](/docs/caching#downloaded-bytes), so a later render skips the download.
 
 ## Pre-fetched images
 
@@ -150,12 +150,10 @@ import { Renderer } from "takumi-js/node";
 declare const html: string;
 // ---cut---
 const renderer = new Renderer();
-const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
 const prepared = await renderer.prepare(html, {
   width: 1200,
   height: 630,
-  images: { fetchCache },
 });
 
 const image = await renderer.render(prepared, { format: "webp" });
@@ -234,7 +232,7 @@ const image = await render(element, {
 </Callout>
 
 - `allowUrl` checks each redirect destination, up to five hops. Each hop shares the same deadline and gets its own attempts.
-- A `fetchCache` hit checks only the requested URL, because cached bytes keep no redirect history. Do not share one [`fetchCache`](/docs/caching#downloaded-image-bytes) across different URL policies.
+- A [stored download](/docs/caching#downloaded-bytes) serves a render only when its `allowUrl` accepts the URL a redirect led to, so routes with different policies can share a renderer.
 - `allowUrl` sees URLs, not IP addresses. To filter by resolved address, pass a custom `fetch`.
 
 ## Decode limits

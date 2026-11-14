@@ -1,11 +1,14 @@
 import { type Mock, mock } from "bun:test";
 import { FontRegistry } from "../src/renderer";
 import type { Font } from "../src/renderer";
+import { RendererStore } from "../src/store";
 
 /** A backend that holds each font under its key until a test drops it, as a renderer past its budget would. */
 type HeldFamily = { name: string };
 
-export const fontBackend = (): {
+export const fontBackend = (
+  store: RendererStore = new RendererStore(),
+): {
   held: Map<string, HeldFamily[]>;
   files: Set<string>;
   /** The leases open now. */
@@ -19,6 +22,7 @@ export const fontBackend = (): {
     leaseFonts: Mock<() => number>;
     releaseFonts: Mock<(lease: number) => void>;
     orderFonts: Mock<(keys: string[]) => void>;
+    dropFonts: Mock<(keys: string[]) => string[]>;
   };
   fonts: FontRegistry<HeldFamily>;
 } => {
@@ -50,7 +54,17 @@ export const fontBackend = (): {
       leases.delete(lease);
     }),
     orderFonts: mock((_keys: string[]) => {}),
+    // A held key leased by an open render stays, as the backend keeps a file a render leases.
+    dropFonts: mock((keys: string[]) => {
+      const dropped = leases.size > 0 ? [] : keys;
+
+      for (const key of dropped) {
+        held.delete(key);
+      }
+
+      return dropped;
+    }),
   };
 
-  return { held, files, leases, backend, fonts: new FontRegistry(backend) };
+  return { held, files, leases, backend, fonts: new FontRegistry(backend, store) };
 };

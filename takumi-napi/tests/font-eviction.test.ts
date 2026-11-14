@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
+import { container, MemoryStore, text } from "@takumi-rs/helpers";
 import { FontRegistry } from "@takumi-rs/bindings-js";
 import { Renderer as RendererInternal } from "../index";
 import { Renderer } from "../src/export";
@@ -184,12 +184,13 @@ describe("@font-face files", () => {
       await unbounded.prepare(page, { ...pageOptions, images: { fetch } }),
       pageOptions,
     );
-    const tight = new Renderer({ cache: { budgets: { fonts: 0 } } });
+    const tight = new Renderer({ cache: { budgets: { fonts: 0 }, store: new MemoryStore() } });
     const prepared = await tight.prepare(page, { ...pageOptions, images: { fetch } });
 
     expect(tight.cacheStats().budgets.fonts.current).toBe(0);
     expect(Buffer.compare(await tight.render(prepared, pageOptions), expected)).toBe(0);
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(tight.cacheStats().store?.hits).toBe(1);
   });
 
   test("a prepare made while the renderer held a file loads it again once evicted", async () => {

@@ -3,7 +3,7 @@ title: Caching
 description: What Takumi keeps between renders, which renderer keeps it, and how to size, inspect, skip, or share it.
 ---
 
-Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and you can give Takumi a store for the bytes it downloads. This page covers both layers, how to size or skip each one, and how to see what a renderer holds.
+Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and a store keeps the bytes it downloads. This page covers both layers, how to size or skip each one, and how to see what a renderer holds.
 
 ## What a renderer keeps
 
@@ -26,11 +26,7 @@ The pool counts the estimated size of each entry, not the memory of the whole pr
 
 See [Performance](/docs/performance) for measuring memory and render time.
 
-Three more caches sit outside the renderer:
-
-- Downloaded image bytes, in a [`fetchCache`](#downloaded-image-bytes) you pass in.
-- Emoji images, up to 8 MiB for each `fetch` function.
-- Google Fonts CSS responses, up to 1 MiB and 64 responses for each `fetch` function.
+The bytes a renderer downloads sit outside the pool, in its [download store](#downloaded-bytes).
 
 ## Which renderer owns a cache
 
@@ -52,7 +48,7 @@ const renderer = new Renderer({
 
 Raise `maxBytes` when renders keep redoing work that earlier renders did, such as decoding the same images. A larger pool helps only when later renders reuse what it keeps, so benchmark your own content first. A `maxBytes` of `0` keeps nothing in the pool between renders, except the fonts from `registerFont`, as [Release fonts](#release-fonts) describes.
 
-`PdfRenderer` and `Painter` take the same `cache` option.
+`PdfRenderer` and `Painter` take the same `cache` option. Its `store` key sets the [download store](#downloaded-bytes), which `maxBytes` does not cover.
 
 ### Give one kind a budget
 
@@ -85,7 +81,7 @@ const renderer = new Renderer();
 renderer.setCacheOptions({ maxBytes: 32 * 1024 * 1024 }); // [!code highlight]
 ```
 
-It takes the same options as `cache` in the constructor, and replaces all of them. A key you leave out returns to its default, so the call above also removes any budget the renderer had. A smaller size or budget evicts what no longer fits right away. Changing only a size keeps what still fits. A kind that gains or loses a budget starts empty, and renders that are running when you call it finish with the entries they started with. `PdfRenderer` and `Painter` have the same method.
+It takes the same options as `cache` in the constructor, and replaces all of them. A key you leave out returns to its default, so the call above also removes any budget the renderer had, and puts back the renderer's own download store if you had replaced it. That store comes back with what it held. A smaller size or budget evicts what no longer fits right away. Changing only a size keeps what still fits. A kind that gains or loses a budget starts empty, and renders that are running when you call it finish with the entries they started with. `PdfRenderer` and `Painter` have the same method.
 
 ### The shared renderer
 
@@ -108,10 +104,11 @@ import { Renderer } from "takumi-js/node";
 
 const renderer = new Renderer();
 
-const { memory, budgets } = renderer.cacheStats(); // [!code highlight]
+const { memory, budgets, store } = renderer.cacheStats(); // [!code highlight]
 
 console.log(memory.current, memory.high, memory.max);
 console.log(budgets.images.hits, budgets.images.misses, budgets.images.evictions);
+console.log(store?.current, store?.hits, store?.misses);
 ```
 
 `memory` covers the pool that every kind shares. `current` is the bytes it holds now, budgets included. `high` is the most it held at once since the renderer was created, and `max` is its `maxBytes`.
@@ -124,6 +121,8 @@ console.log(budgets.images.hits, budgets.images.misses, budgets.images.evictions
 - `evictions` counts entries released to stay within `maxBytes` or the budget.
 
 The `fonts` entry counts the decoded font files the renderer holds, fonts from `registerFont` included. All sizes are the same estimates the budgets count, not the memory of the process, and the counts start when the renderer is created.
+
+`store` reports the [download store](#downloaded-bytes) with the same fields. `hits` and `misses` count the lookups this renderer made, and a lookup that found bytes its `allowUrl` refused counts as a miss. A store that does not report its size, as yours may not, has `null` for `current`, `max`, and `evictions`. `store` is `null` when the renderer keeps no downloads.
 
 For the renderer that `render` and the other functions share, call `cacheStats` from `takumi-js`. It returns `undefined` until the first render creates that renderer:
 
@@ -198,34 +197,104 @@ Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo'
 
 The decoded-image cache is keyed by a hash of the image's bytes, so the same image under two URLs decodes once. A `data:` URI in an `<img>` or a CSS `url()` always caches in `auto` mode, because the `cache` mode applies only to `sources` and to URLs Takumi fetches. A template that inlines its logo as a `data:` URI decodes it once.
 
-## Downloaded image bytes
+## Downloaded bytes
 
-The renderer keeps decoded pixels, not the bytes Takumi downloads. To reuse downloaded bytes and pending requests across renders, pass a `fetchCache`:
+Each renderer keeps the bytes it downloads in a store, keyed by the URL it requested. That covers the images it fetches, the files `@font-face` rules load, and the fonts you list as URLs. A later render that needs one of them reads it from the store and skips the download, even after the pool evicted the decoded copy.
 
-```tsx twoslash title="Share downloaded image bytes"
-import { render } from "takumi-js";
+By default, every renderer has a store of its own that holds up to 32 MiB. When it is full, it drops the downloads that renders used least recently. A failed download never enters it. Renders on the same renderer share the store, and the renderer that `render` and the other functions share keeps its store for the life of the process.
 
-const element = <img src="https://example.com/image.png" />;
+The store keeps downloads that resources with [`cache: "none"`](#skip-caching-an-image) use too, since that mode only skips the decoded copy. The store's size does not count toward `maxBytes`, and its sizes are estimates that count the bytes and the URLs. The decoded copy of the same image or font counts in the pool as usual.
 
-const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+Renders that ask for the same URL at the same time share one download only when they pass the same `fetch` function, the same `allowUrl` function, and the same `maxBytes`. Each render's `signal` and `timeout` end only its own wait, and the download stops once no render waits on it.
 
-const image = await render(element, {
-  images: {
-    fetchCache, // [!code highlight]
-  },
-});
-```
+A stored download remembers the URL it came from after redirects. A render uses it only when its own `allowUrl` accepts that URL. Otherwise, the render downloads it again under its own policy and leaves the stored copy for other renders. Routes with different URL policies can share a renderer.
 
-`fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. It is keyed by URL, and its values are promises, not raw buffers. The renderer's `maxBytes` does not cover it.
+A render that passes its own `fetch` in `images` skips the default store, since that `fetch` may send credentials or answer a relative URL differently for each user. Its downloads go through a store only when you passed one as `cache.store`. That store then serves them to every render on the renderer whose `allowUrl` accepts them, without calling that render's `fetch`.
 
 <Callout type="warn">
-  A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
-  as an LRU, or leave `fetchCache` out.
+  A store keys downloads by URL alone. If you pass a store and your `fetch` sends credentials, give
+  each user's route a renderer with a store of its own, or none.
 </Callout>
 
-A `fetchCache` hit checks only the requested URL, because the cache does not record where a redirect led. If two routes check URLs differently, such as one with an [`allowUrl`](/docs/images#urls-from-user-input) for user input and one that loads only your own files, give each route its own `fetchCache`. Otherwise one route can serve bytes the other fetched through a redirect its own check would have refused.
+### Size or replace the store
 
-Emoji images from the [`emoji`](/docs/reference/image-response) option are cached without a `fetchCache`, up to 8 MiB for each `fetch` function.
+Pass a `MemoryStore` with its own `maxBytes` as `cache.store`, or `null` to keep no downloads:
+
+```ts twoslash title="Size the download store"
+import { Renderer } from "takumi-js/node";
+import { MemoryStore } from "takumi-js/helpers";
+
+const renderer = new Renderer({
+  cache: { store: new MemoryStore({ maxBytes: 128 * 1024 * 1024 }) }, // [!code highlight]
+});
+
+const uncached = new Renderer({ cache: { store: null } });
+```
+
+Pass the same store to two renderers to share their downloads. `setCacheOptions` replaces the store of a running renderer, as it does the other keys.
+
+A store is any object with `get` and `set` methods. `get(url)` returns the stored `{ bytes, url }` or `undefined`, and `set(url, download)` offers a download to keep. Either may return a promise. The store decides what to keep and when to drop it, and Takumi treats a store that throws as one that holds nothing. To report its size in `cacheStats`, add a `usage()` method that returns `{ current, max, evictions }`.
+
+On Cloudflare Workers, the Cache API keeps downloads across isolates in one data center:
+
+```ts title="A store on the Workers Cache API"
+import type { DownloadStore } from "takumi-js/helpers";
+
+const cache = await caches.open("takumi-downloads");
+
+export const store: DownloadStore = {
+  async get(url) {
+    const response = await cache.match(url);
+
+    return (
+      response && { bytes: await response.arrayBuffer(), url: response.headers.get("x-url") ?? url }
+    );
+  },
+  async set(url, download) {
+    const headers = { "x-url": download.url, "cache-control": "max-age=86400" };
+
+    await cache.put(url, new Response(download.bytes, { headers }));
+  },
+};
+```
+
+On Node.js, a directory keeps downloads across restarts. Each file holds the URL a download came from on its first line, then the bytes. The store writes a download to a temporary file and renames it into place, so a reader never pairs bytes with the URL of another download. It never drops a file, so clear the directory on your own schedule:
+
+```ts title="A store on disk"
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { DownloadStore } from "takumi-js/helpers";
+
+const directory = "/var/cache/takumi";
+const pathOf = (url: string) => `${directory}/${createHash("sha256").update(url).digest("hex")}`;
+
+export const store: DownloadStore = {
+  async get(url) {
+    try {
+      const record = await readFile(pathOf(url));
+      const newline = record.indexOf("\n");
+
+      return {
+        url: record.subarray(0, newline).toString(),
+        bytes: new Uint8Array(record.subarray(newline + 1)).buffer,
+      };
+    } catch {
+      return undefined;
+    }
+  },
+  async set(url, download) {
+    const temporary = `${pathOf(url)}.${randomUUID()}`;
+
+    await mkdir(directory, { recursive: true });
+    await writeFile(temporary, [`${download.url}\n`, new Uint8Array(download.bytes)]);
+    await rename(temporary, pathOf(url));
+  },
+};
+```
+
+### `fetchCache`
+
+`images.fetchCache` is deprecated. It still works, and a render that passes one keeps the images and `@font-face` files it downloads there instead of in the renderer's store. Fonts listed as URLs still go through the renderer's store. Downloads Takumi writes to it now remember where a redirect led, so a hit passes the same `allowUrl` check as the store's.
 
 ## Release fonts
 
@@ -241,11 +310,13 @@ const renderer = new Renderer({ cache: { budgets: { fonts: 64 * 1024 * 1024 } } 
 
 A render holds every font file it uses until it finishes, whether it succeeds or fails, so another render cannot evict them. While renders hold more than the budget, the renderer keeps them all, and it evicts what no longer fits once they finish. With a budget or `maxBytes` of `0`, no font a render loaded stays after that render.
 
+A font with [`cache: "none"`](/docs/fonts#fonts-used-once) leaves once the render that loaded it settles.
+
 Fonts from `registerFont` always stay. They count toward `maxBytes` and the `fonts` budget, so they leave that much less room for the rest. A prepared render loads any `@font-face` file it draws with that the renderer evicted after `prepare`, and tries a rule's next `src` when that file fails to load again. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
 
-## Google Fonts CSS
+## Google Fonts downloads
 
-`googleFonts` keeps the CSS responses it fetches, up to 1 MiB and 64 responses for each `fetch` function, and concurrent requests for the same URL share one fetch. Its `cache` option replaces that cache with your own `Map`. A request with `signal` or `allowUrl` skips the cache, so cancellation and URL checks stay with the caller. `maxBytes` applies to cache hits too.
+`googleFonts` keeps its CSS responses and the font files its subsets download in a store of its own, since it runs before any renderer sees the fonts. By default, that is one store of up to 32 MiB for each `fetch` function, shared by every call in the process. Its `store` option takes a `MemoryStore`, your own store, or `null`, as `cache.store` does. A request with `signal` or `allowUrl` uses the store too, under the same rules as a renderer's. `maxBytes` applies to stored responses as well.
 
 ## In Rust
 

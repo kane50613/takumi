@@ -42,7 +42,7 @@ These figures come from one test setup, described in [PR #1862](https://github.c
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/caching#downloaded-image-bytes), since the renderer's decode cache does not replace a download cache.
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, reuse one renderer, whose [download store](/docs/caching#downloaded-bytes) keeps the bytes between renders.
 
 ## Reduce painting work
 

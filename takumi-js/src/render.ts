@@ -16,7 +16,7 @@ export type ImagesInput =
   | (FetchOptions & {
       /** Pre-fetched entries, same as the array form. */
       sources?: ImageLoader[];
-      /** Single-flight byte cache shared across renders. */
+      /** @deprecated Use `setCacheOptions({ store })` or the renderer's `cache.store`. When set, it keeps the images and `@font-face` files this render downloads instead, and fonts listed as URLs still use the store. */
       fetchCache?: ImageFetchCache;
       /** Decode-cache default for every image this render; a source's own `cache` wins. */
       cache?: NonNullable<ImageLoader["cache"]>;

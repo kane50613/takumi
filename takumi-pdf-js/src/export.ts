@@ -463,7 +463,7 @@ async function resolveLayout(
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
 export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInternal> {
   constructor(options?: RendererOptions) {
-    super(new PdfRendererInternal(options));
+    super((native) => new PdfRendererInternal(native), options);
   }
 
   /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */

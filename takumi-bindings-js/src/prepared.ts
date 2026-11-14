@@ -26,7 +26,7 @@ export type PrepareImagesInput =
   | (Omit<FetchOptions, "signal"> & {
       /** Entries to use as they are; their URLs are not fetched. */
       sources?: ImageLoader[];
-      /** Single-flight byte cache shared across renders. */
+      /** @deprecated Use the renderer's `cache.store`. When set, it keeps the images and `@font-face` files this render downloads instead, and fonts listed as URLs still use the store. */
       fetchCache?: ImageFetchCache;
       /** Decode-cache default for every image; a source's own `cache` wins. */
       cache?: NonNullable<ImageLoader["cache"]>;
@@ -175,8 +175,10 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
 ): Promise<Prepared<TSource, TLayout>> {
   const state = await collect(registry, source, layout, extras, needs, true);
 
-  await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
-  extras.signal?.throwIfAborted();
+  await registry.dropOnFailure(state.fonts, async () => {
+    await registry.resolveResources(state.fonts, undefined, state.fontFamilies, () => undefined);
+    extras.signal?.throwIfAborted();
+  });
 
   return createPrepared(state);
 }
@@ -215,10 +217,14 @@ async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
   lease: number,
 ): Promise<string[]> {
   const fetched = new Map(
-    (await prepareImages({ ...options, urls, throwOnError: false })).map(({ src, data }) => [
-      src,
-      data,
-    ]),
+    (
+      await prepareImages({
+        ...options,
+        urls,
+        store: registry.store.for(options.fetch),
+        throwOnError: false,
+      })
+    ).map(({ src, data }) => [src, data]),
   );
 
   const loaded = await Promise.all(
@@ -323,6 +329,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         ...fetchOptions,
         urls: (await read()).images,
         sources: provided,
+        store: registry.store.for(fetchOptions.fetch),
         fetchCache,
         throwOnError,
         signal,
@@ -342,22 +349,24 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const reread = (failed: string[]) =>
     needs({ ...request, images: entries, failedFontFiles: failed });
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
-  const reached = await registry.leased((lease) =>
-    loadReached(
-      registry,
-      firstReached,
-      reread,
-      {
-        tried,
-        failedFontFiles,
-        fetch: fetchMissing ? { ...fontFileFetch, signal } : undefined,
-        uncachedOf: (needs) =>
-          listed && resolvedFonts
-            ? unseen(needs?.fonts ?? [], cached).flatMap((id) => resolvedFonts[id] ?? [])
-            : [],
-        signal,
-      },
-      lease,
+  const reached = await registry.dropOnFailure(resolvedFonts, () =>
+    registry.leased((lease) =>
+      loadReached(
+        registry,
+        firstReached,
+        reread,
+        {
+          tried,
+          failedFontFiles,
+          fetch: fetchMissing ? { ...fontFileFetch, signal } : undefined,
+          uncachedOf: (needs) =>
+            listed && resolvedFonts
+              ? unseen(needs?.fonts ?? [], cached).flatMap((id) => resolvedFonts[id] ?? [])
+              : [],
+          signal,
+        },
+        lease,
+      ),
     ),
   );
 
@@ -438,18 +447,20 @@ export function renderPrepared<
         }
       : undefined;
 
-  return registry.resolveResources(
-    state.fonts,
-    state.images,
-    state.fontFamilies,
-    ({ failedFontFiles: failedAgain = [], ...resolved }) => {
-      signal?.throwIfAborted();
+  return registry
+    .resolveResources(
+      state.fonts,
+      state.images,
+      state.fontFamilies,
+      ({ failedFontFiles: failedAgain = [], ...resolved }) => {
+        signal?.throwIfAborted();
 
-      const failedFontFiles = [...state.failedFontFiles, ...failedAgain];
-      const failed = failedFontFiles.length > 0 ? { failedFontFiles } : {};
+        const failedFontFiles = [...state.failedFontFiles, ...failedAgain];
+        const failed = failedFontFiles.length > 0 ? { failedFontFiles } : {};
 
-      return call(state.source, { ...encoding, ...state.layout, ...resolved, ...failed }, signal);
-    },
-    files,
-  );
+        return call(state.source, { ...encoding, ...state.layout, ...resolved, ...failed }, signal);
+      },
+      files,
+    )
+    .finally(() => registry.dropUnkept(state.fonts));
 }

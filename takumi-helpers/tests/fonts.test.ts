@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { MemoryStore } from "../src/fetch/store";
 import { fontFromUrl, googleFonts, subsetFonts } from "../src/fonts";
 import type { Node } from "../src/types";
 
@@ -292,39 +293,55 @@ describe("googleFonts", () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
-  test("evicts old default CSS entries while keeping recent hits", async () => {
+  test("keeps CSS in the store it is given, which drops the least recently used", async () => {
     const fetchMock = mockInter();
-    const load = (weight: number) =>
-      googleFonts({ families: [{ name: "Inter", weight }], fetch: fetchMock });
+    const probe = new MemoryStore();
+    const load = (weight: number, store: MemoryStore) =>
+      googleFonts({ families: [{ name: "Inter", weight }], fetch: fetchMock, store });
 
-    for (let weight = 100; weight < 164; weight++) {
-      await load(weight);
+    await load(100, probe);
+
+    // Each weight's URL is as long, so every entry weighs the same.
+    const store = new MemoryStore({ maxBytes: 2 * probe.usage().current });
+
+    for (const weight of [100, 200, 300, 200]) {
+      await load(weight, store);
     }
-    await load(100);
-    expect(fetchMock).toHaveBeenCalledTimes(64);
-    await load(164);
-    await load(100);
-    expect(fetchMock).toHaveBeenCalledTimes(65);
-    await load(101);
-    expect(fetchMock).toHaveBeenCalledTimes(66);
-  });
 
-  test("does not retain CSS larger than the default cache budget", async () => {
-    const css = `/*${"x".repeat(600_000)}*/${interCss}`;
-    const fetchMock = mock(() => Promise.resolve(new Response(css)));
-
-    await googleFonts({ families: ["Inter"], fetch: fetchMock });
-    await googleFonts({ families: ["Inter"], fetch: fetchMock });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("bounds the combined size of retained CSS", async () => {
-    const css = `/*${"x".repeat(200_000)}*/${interCss}`;
-    const fetchMock = mock(() => Promise.resolve(new Response(css)));
-    for (const weight of [100, 101, 102, 100]) {
-      await googleFonts({ families: [{ name: "Inter", weight }], fetch: fetchMock });
-    }
     expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(store.usage().evictions).toBe(1);
+
+    await load(100, store);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("keeps no CSS larger than the store", async () => {
+    const css = `/*${"x".repeat(2048)}*/${interCss}`;
+    const fetchMock = mock(() => Promise.resolve(new Response(css)));
+    const store = new MemoryStore({ maxBytes: 2048 });
+
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, store });
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, store });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(store.usage().current).toBe(0);
+  });
+
+  test("keeps subset files in the store with the CSS", async () => {
+    const fetchMock = mockInter();
+    const store = new MemoryStore();
+    const [first] = await googleFonts({ families: ["Inter"], fetch: fetchMock, store });
+
+    await first?.data();
+    await first?.data();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const disabled = mockInter();
+    const [uncached] = await googleFonts({ families: ["Inter"], fetch: disabled, store: null });
+
+    await uncached?.data();
+    await uncached?.data();
+    await googleFonts({ families: ["Inter"], fetch: disabled, store: null });
+    expect(disabled).toHaveBeenCalledTimes(4);
   });
 
   test("shares concurrent default requests and retries failures", async () => {
@@ -376,6 +393,114 @@ describe("googleFonts", () => {
 
     await expect(pending).rejects.toThrow("Request failed");
     expect(cache.get(url)).toBe(replacement);
+  });
+
+  // Google's answers to `text=組選` and `text=ぁ` for Noto Sans JP: one variable face each, its
+  // `unicode-range` naming the requested characters.
+  const textCss = {
+    組選: `@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url(https://fonts.gstatic.com/l/font?kit=-F62fjtqLzI2JPCgQBnw7HFowxoMNeLhbmut&skey=72472b0eb8793570&v=v57) format('woff2');
+  unicode-range: U+7d44, U+9078;
+}`,
+    ぁ: `@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url(https://fonts.gstatic.com/l/font?kit=-F62fjtqLzI2JPCgQBnw7HFowxoJMdbk&skey=72472b0eb8793570&v=v57) format('woff2');
+  unicode-range: U+3041;
+}`,
+  };
+  const textFetch = () =>
+    mock((url: string, _init?: RequestInit) => {
+      const requested = new URL(url).searchParams.get("text") ?? "";
+
+      return Promise.resolve(
+        new Response(
+          requested === "組選" ? textCss.組選 : requested === "ぁ" ? textCss.ぁ : interCss,
+        ),
+      );
+    });
+
+  test("requests text as each character once, sorted", async () => {
+    const fetchMock = textFetch();
+
+    await googleFonts({
+      families: [{ name: "Noto Sans JP", weight: "100..900" }],
+      text: "選組選",
+      fetch: fetchMock,
+      store: null,
+    });
+
+    const { url } = cssRequest(fetchMock);
+
+    expect(url.searchParams.get("text")).toBe("組選");
+    expect(url.searchParams.get("family")).toBe("Noto Sans JP:wght@100..900");
+  });
+
+  test("keys the subsets of different text apart", async () => {
+    const fetchMock = textFetch();
+    const load = (text: string) =>
+      googleFonts({
+        families: [{ name: "Noto Sans JP", weight: "100..900" }],
+        text,
+        fetch: fetchMock,
+      });
+    const [kanji] = await load("組選");
+    const [kana] = await load("ぁ");
+
+    expect(kanji?.unicodeRange).toEqual([
+      [0x7d44, 0x7d44],
+      [0x9078, 0x9078],
+    ]);
+    expect(kana?.unicodeRange).toEqual([[0x3041, 0x3041]]);
+    expect(kanji?.key).not.toBe(kana?.key);
+    expect(new Set([kanji?.key, kana?.key]).size).toBe(2);
+  });
+
+  test("keys the subsets of different text apart when the stylesheet names no unicode-range", async () => {
+    const rangeless = textCss.ぁ.replace(/\s*unicode-range:[^;]*;/, "");
+    const fetchMock = mock((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response(rangeless)),
+    );
+    const load = (text: string) =>
+      googleFonts({
+        families: [{ name: "Noto Sans JP", weight: "100..900" }],
+        text,
+        fetch: fetchMock,
+        store: null,
+      });
+    const [kanji] = await load("組選");
+    const [kana] = await load("ぁ");
+
+    expect(kanji?.unicodeRange).toEqual([]);
+    expect(kanji?.key).not.toBe(kana?.key);
+  });
+
+  test("loads range subsets when the encoded text runs past 6000 characters", async () => {
+    const fetchMock = textFetch();
+    // Each kanji encodes to 9 characters, so 666 of them fit and 667 do not.
+    const kanji = (count: number) =>
+      Array.from({ length: count }, (_, index) => String.fromCodePoint(0x4e00 + index)).join("");
+    const textOf = async (text: string) => {
+      await googleFonts({ families: ["Noto Sans JP"], text, fetch: fetchMock, store: null });
+
+      return cssRequest(fetchMock).url.searchParams.get("text");
+    };
+
+    expect(await textOf(kanji(666))).toHaveLength(666);
+    expect(await textOf(kanji(667))).toBeNull();
+  });
+
+  test("gives every subset the cache policy", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter(), cache: "none" });
+
+    expect(fonts.map((font) => font.cache)).toEqual(["none", "none", "none"]);
+    expect((await googleFonts({ families: ["Inter"], fetch: mockInter() }))[0]?.cache).toBe(
+      undefined,
+    );
   });
 
   test("returns nothing for an empty families list without a request", async () => {

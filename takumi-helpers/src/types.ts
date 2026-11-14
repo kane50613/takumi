@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { DownloadStore } from "./fetch/store";
 
 /**
  * Value of the `text-fit` longhand: `[ none | grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?`.
@@ -126,6 +127,14 @@ export interface CacheOptions {
   maxBytes?: number;
   /** The most bytes one kind of data may hold, for a kind that needs a bound of its own. */
   budgets?: CacheBudgets;
+  /**
+   * Where the renderer keeps the bytes it downloads, by URL: images, `@font-face` files, and fonts
+   * listed as URLs. The store decides what to keep and when to drop it. `null` keeps none. A render
+   * with its own `fetch` skips the default store but uses one passed here, which then serves its
+   * downloads to any render whose `allowUrl` accepts them.
+   * @default a `MemoryStore` of 32 MiB for each renderer
+   */
+  store?: DownloadStore | null;
 }
 
 /**
@@ -170,6 +179,8 @@ export interface CacheStats {
   memory: CacheMemoryStats;
   /** Each kind of data, whether it has a budget or shares the pool. */
   budgets: Record<keyof CacheBudgets, CacheKindStats>;
+  /** The store that keeps downloaded bytes, or `null` when `store` is `null`. */
+  store: CacheStoreStats | null;
 }
 
 /** The bytes the pool holds, every kind of data together. */
@@ -194,6 +205,24 @@ export interface CacheKindStats {
   misses: number;
   /** Entries released to stay within `maxBytes` or the budget. */
   evictions: number;
+}
+
+/**
+ * What the download store holds and how the lookups the renderer made in it went. A store that
+ * does not report its size, as a custom one may not, has `null` for `current`, `max`, and
+ * `evictions`.
+ */
+export interface CacheStoreStats {
+  /** The bytes held now. */
+  current: number | null;
+  /** The most bytes the store holds. */
+  max: number | null;
+  /** Lookups that found a download the request could use. */
+  hits: number;
+  /** Lookups that found none, or one the request's `allowUrl` refused, and downloaded it. */
+  misses: number;
+  /** Downloads the store dropped to stay within `max`. */
+  evictions: number | null;
 }
 
 /** Options for constructing a renderer. */

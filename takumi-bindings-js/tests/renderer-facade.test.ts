@@ -1,11 +1,21 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
 import type { Node } from "@takumi-rs/helpers";
+import { RendererStore } from "../src/store";
 import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);
+
+afterEach(() => mock.restore());
+
+/** Answers the global `fetch` with `fetch`, which goes through the renderer's default store as a caller's own `fetch` would not. */
+const answerFetch = (fetch: (input: string | URL | Request) => Promise<Response>) => {
+  spyOn(globalThis, "fetch").mockImplementation(
+    Object.assign(fetch, { preconnect: globalThis.fetch.preconnect }),
+  );
+};
 const textNode = (text: string): Node => ({ type: "text", text });
 
 const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
@@ -236,12 +246,15 @@ describe("@font-face files a prepared render loaded", () => {
   const prepare = async (
     fonts: ReturnType<typeof fontBackend>["fonts"],
     fetch: (input: string | URL | Request) => Promise<Response>,
-  ) =>
-    prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
+  ) => {
+    answerFetch(fetch);
+
+    return prepareSource(fonts, textNode("a"), {}, {}, () => ({
       images: [],
       fonts: [],
       fontFiles: [url],
     }));
+  };
 
   test("stay leased while the render runs", async () => {
     const { fonts, backend, leases } = fontBackend();
@@ -257,7 +270,7 @@ describe("@font-face files a prepared render loaded", () => {
     expect(backend.cachedFontFile).toHaveBeenCalledWith(url, leased[0]);
   });
 
-  test("load again when the renderer evicted them since prepare", async () => {
+  test("load again from the store when the renderer evicted them since prepare", async () => {
     const { fonts, files, backend } = fontBackend();
     const fetch = mock(async () => new Response(bytes()));
     const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
@@ -266,14 +279,14 @@ describe("@font-face files a prepared render loaded", () => {
     files.clear();
     await renderPrepared(fonts, prepared, {}, call);
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(backend.cacheFontFile).toHaveBeenCalledTimes(2);
     expect(files.has(url)).toBe(true);
     expect(call.mock.calls[0]?.[1].failedFontFiles).toBeUndefined();
   });
 
   test("move their rule on when loading them again fails", async () => {
-    const { fonts, files } = fontBackend();
+    const { fonts, files } = fontBackend(new RendererStore({ store: null }));
     const fetch = mock(async () => new Response(bytes()));
     const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
     const prepared = await prepare(fonts, fetch);
@@ -345,4 +358,197 @@ test("a render loads listed subsets but leaves @font-face files to prepare", asy
   expect(reads).toHaveBeenCalledTimes(2);
   expect(fetch).not.toHaveBeenCalled();
   fetch.mockRestore();
+});
+
+describe("fonts with cache none", () => {
+  const latin: [number, number][] = [[0x20, 0x7e]];
+  const font = (name: string, cache?: "auto" | "none") => ({
+    name,
+    unicodeRange: latin,
+    data: () => bytes(),
+    cache,
+  });
+
+  test("are dropped once the render that loaded them settles", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const once = font("Noto", "none");
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.dropFonts).toHaveBeenCalledTimes(1);
+    expect(held.size).toBe(0);
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(2);
+  });
+
+  test("use a font the renderer holds without dropping it", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const kept = font("Inter");
+
+    await render(fonts, { fonts: [kept] }, textNode("a"));
+    await render(fonts, { fonts: [font("Inter", "none")] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(1);
+    expect(backend.dropFonts).not.toHaveBeenCalled();
+    expect(held.size).toBe(1);
+  });
+
+  test("stay while another render leases them, and go with the last one", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const once = font("Noto", "none");
+    const lease = backend.leaseFonts();
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+
+    backend.releaseFonts(lease);
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(1);
+    expect(held.size).toBe(0);
+  });
+
+  test("are kept once a render without the policy uses them", async () => {
+    const { held, fonts } = fontBackend();
+    const kept = font("Inter");
+    const lease = fonts.leased(() =>
+      render(fonts, { fonts: [font("Inter", "none")] }, textNode("a")),
+    );
+
+    await render(fonts, { fonts: [kept] }, textNode("a"));
+    await lease;
+    await render(fonts, { fonts: [font("Inter", "none")] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+  });
+
+  test("go with the last render to settle, though it lists other fonts", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const later = render(
+      fonts,
+      { fonts: [{ ...font("Inter", "none"), data: () => loading.promise.then(bytes) }] },
+      textNode("a"),
+    );
+
+    await render(fonts, { fonts: [font("Noto", "none")] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+
+    loading.resolve();
+    await later;
+
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when prepare is aborted after loading them", async () => {
+    const { held, fonts } = fontBackend();
+    const controller = new AbortController();
+    const aborting = {
+      ...font("Noto", "none"),
+      data: () => {
+        controller.abort(new Error("cancelled"));
+
+        return bytes();
+      },
+    };
+    const prepared = prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { fonts: [aborting], signal: controller.signal },
+      ({ fonts: listed }) => ({ images: [], fonts: fontsFor("a", listed) }),
+    );
+
+    await expect(prepared).rejects.toThrow("cancelled");
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when they finish loading after their render failed", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const failed = render(
+      fonts,
+      {
+        fonts: [
+          { ...font("Noto", "none"), data: () => Promise.reject(new Error("unreachable")) },
+          { ...font("Inter", "none"), data: () => loading.promise.then(bytes) },
+        ],
+      },
+      textNode("a"),
+    );
+
+    await expect(failed).rejects.toThrow("unreachable");
+    loading.resolve();
+    await Bun.sleep(0);
+
+    expect(held.size).toBe(0);
+  });
+});
+
+describe("the renderer's download store", () => {
+  const url = "https://images.test/a.png";
+  const prepare = (
+    fonts: ReturnType<typeof fontBackend>["fonts"],
+    fetch: (input: string | URL | Request) => Promise<Response>,
+  ) => {
+    answerFetch(fetch);
+
+    return prepareSource(fonts, textNode("a"), {}, {}, () => ({
+      images: [url],
+      fonts: [],
+    }));
+  };
+
+  test("serves an image a later render asks for again", async () => {
+    const fetch = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+
+    await prepare(fonts, fetch);
+    await prepare(fonts, fetch);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fonts.store.stats()).toMatchObject({ hits: 1, misses: 1, max: 32 * 1024 * 1024 });
+  });
+
+  test("keeps nothing when cache.store is null", async () => {
+    const fetch = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend(new RendererStore({ store: null }));
+
+    await prepare(fonts, fetch);
+    await prepare(fonts, fetch);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fonts.store.stats()).toBeNull();
+  });
+
+  test("uses a store set later, and finds the default store again", async () => {
+    const fetch = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+    const setMemory = mock((_memory: object) => {});
+
+    await prepare(fonts, fetch);
+    fonts.store.apply({ store: null, maxBytes: 1 }, setMemory);
+    await prepare(fonts, fetch);
+    fonts.store.apply({}, setMemory);
+    await prepare(fonts, fetch);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(setMemory.mock.calls).toEqual([[{ maxBytes: 1 }], [{}]]);
+  });
+
+  test("keeps the store when the binding rejects the options", () => {
+    const store = new RendererStore();
+    const before = store.current;
+
+    expect(() =>
+      store.apply({ store: null }, () => {
+        throw new Error("invalid");
+      }),
+    ).toThrow("invalid");
+    expect(store.current).toBe(before);
+  });
 });

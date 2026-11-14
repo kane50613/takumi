@@ -4,7 +4,8 @@ import {
   FontRegistry,
   type RegisteredFamilyLike,
 } from "./renderer";
-import type { CacheOptions, CacheStats, CssInput } from "@takumi-rs/helpers";
+import type { CacheOptions, CacheStats, CssInput, RendererOptions } from "@takumi-rs/helpers";
+import { RendererStore, withoutStore } from "./store";
 
 /**
  * A wasm binding renderer whose fonts a {@link FontRegistry} loads.
@@ -14,8 +15,8 @@ import type { CacheOptions, CacheStats, CssInput } from "@takumi-rs/helpers";
 export type WasmBinding<TFamily extends RegisteredFamilyLike> = FontBackend<TFamily> & {
   unregisterFont(family: string): boolean;
   clearFonts(): void;
-  setCacheOptions(options: CacheOptions): void;
-  cacheStats(): CacheStats;
+  setCacheOptions(options: Omit<CacheOptions, "store">): void;
+  cacheStats(): Omit<CacheStats, "store">;
   free(): void;
 };
 
@@ -31,9 +32,10 @@ export class WasmRenderer<
   protected readonly inner: TInner;
   protected readonly fonts: FontRegistry<TFamily>;
 
-  constructor(inner: TInner) {
-    this.inner = inner;
-    this.fonts = new FontRegistry(inner);
+  /** Wraps the binding `create` builds from `options`, whose download store stays here. */
+  constructor(create: (options?: RendererOptions) => TInner, options?: RendererOptions) {
+    this.inner = create(withoutStore(options));
+    this.fonts = new FontRegistry(this.inner, new RendererStore(options?.cache));
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
@@ -51,12 +53,12 @@ export class WasmRenderer<
    * size or budget releases what no longer fits right away.
    */
   setCacheOptions(options: CacheOptions): void {
-    this.inner.setCacheOptions(options);
+    this.fonts.store.apply(options, (memory) => this.inner.setCacheOptions(memory));
   }
 
   /** What the renderer's caches hold and how their lookups went since it was created. */
   cacheStats(): CacheStats {
-    return this.inner.cacheStats();
+    return { ...this.inner.cacheStats(), store: this.fonts.store.stats() };
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */

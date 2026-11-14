@@ -2,7 +2,8 @@ import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-c
 import type { Node } from "./types";
 import type { FetchOptions } from "./fetch";
 import { fetchBytes } from "./fetch/bytes";
-import { loadFontStylesheet } from "./fonts/cache";
+import { defaultStore, type DownloadStore } from "./fetch/store";
+import { loadFontStylesheet, type StylesheetCache } from "./fonts/cache";
 import { decodeHtmlEntities } from "./html/entities";
 import { unicodeRangeOf } from "./unicode-range";
 
@@ -60,18 +61,64 @@ export type GoogleFontFamily =
       generic?: GenericFontFamily;
     };
 
-export type GoogleFontsOptions = FetchOptions & {
-  /** The families to load, each as a name or a name plus its weight/style axis. */
-  families: GoogleFontFamily[];
-  /** `font-display` strategy passed through to the CSS request. */
-  display?: "auto" | "block" | "swap" | "fallback" | "optional";
-  /** CSS promise cache; defaults to a bounded cache per fetch implementation. Signals and URL policies bypass caching. */
-  cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
-  /** The css2 endpoint, Google Fonts by default, or a mirror such as `https://fonts.bunny.net/css2`. */
-  baseUrl?: string;
+/**
+ * Whether a renderer keeps a font it loaded once the render settles. `"none"` lets the font go
+ * then, though a render still uses one the renderer already holds.
+ */
+export type FontCacheMode = "auto" | "none";
+
+/** Where the downloads a font loader makes are kept. */
+type StoreOptions = {
+  /**
+   * The store that keeps the downloaded bytes. `null` keeps none.
+   * @default a store for each `fetch` function, 32 MiB at most
+   */
+  store?: DownloadStore | null;
 };
 
+export type GoogleFontsOptions = FetchOptions &
+  StoreOptions & {
+    /** The families to load, each as a name or a name plus its weight/style axis. */
+    families: GoogleFontFamily[];
+    /** `font-display` strategy passed through to the CSS request. */
+    display?: "auto" | "block" | "swap" | "fallback" | "optional";
+    /**
+     * The only characters to load. Google then answers with one file for each face, holding these
+     * characters and the ones shaping them needs. Past 6000 characters once URL-encoded, the request
+     * leaves `text` out and loads the `unicode-range` subsets instead.
+     */
+    text?: string;
+    /**
+     * The cache policy of every subset. A cache of CSS text by URL is deprecated, so pass `store`.
+     * @default "auto"
+     */
+    cache?: FontCacheMode | StylesheetCache;
+    /** The css2 endpoint, Google Fonts by default, or a mirror such as `https://fonts.bunny.net/css2`. */
+    baseUrl?: string;
+  };
+
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
+
+/**
+ * The longest URL-encoded `text` a css2 request carries. Google answered a 7244-character `text`
+ * with one file and a 7694-character one with every `unicode-range` subset.
+ */
+const MAX_TEXT_LENGTH = 6000;
+
+/** The css2 `text` parameter for `text`, each character once and sorted so equal sets share a URL. */
+function textParameter(text: string): string | undefined {
+  const characters = [...new Set(text)].sort().join("");
+  const encoded = new URLSearchParams({ text: characters }).toString().length - "text=".length;
+
+  return characters && encoded <= MAX_TEXT_LENGTH ? characters : undefined;
+}
+
+/** The store `options` name, or the default store of their `fetch`. */
+function storeOf(options: FetchOptions & StoreOptions): DownloadStore | null {
+  return options.store === undefined
+    ? defaultStore(options.fetch ?? globalThis.fetch)
+    : options.store;
+}
 
 // Plain parameters, since relating the ~2000-member GoogleFontFamily union overflows tsc (TS2590).
 function familyValue(
@@ -104,7 +151,7 @@ function familyValue(
   return `${family}:${tags.join(",")}@${tuples.join(";")}`;
 }
 
-function buildUrl(options: GoogleFontsOptions) {
+function buildUrl(options: GoogleFontsOptions, text: string | undefined) {
   const url = new URL(options.baseUrl ?? GOOGLE_FONTS_CSS);
   for (const family of options.families) {
     if (typeof family === "string") {
@@ -127,6 +174,9 @@ function buildUrl(options: GoogleFontsOptions) {
   if (options.display) {
     url.searchParams.set("display", options.display);
   }
+  if (text) {
+    url.searchParams.set("text", text);
+  }
   return url.toString();
 }
 
@@ -146,7 +196,7 @@ type SubsetFace = {
 export type FontSubset = {
   /** The family authors reference in `font-family`, shared by every subset of it. */
   name: string;
-  /** Stable dedup key (`"{name} {subset}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
+  /** Stable dedup key (`"{name} {subset}:{weight}:{style}:{range}:{generic}"`, then `:{text}` with `text`), independent of the rotating woff2 URL. */
   key: string;
   weight?: number;
   style?: string;
@@ -154,26 +204,31 @@ export type FontSubset = {
   unicodeRange: [number, number][];
   /** CSS generic family the subset claims, from the family's `generic` option. */
   generic?: GenericFontFamily;
+  /** Whether a renderer keeps the subset after the render that loads it settles. */
+  cache?: FontCacheMode;
   /** Fetches the subset bytes. The renderer skips files it has already loaded. */
   data: () => Promise<ArrayBuffer>;
 };
 
 function toSubset(
   face: SubsetFace,
-  options: FetchOptions,
-  generic?: GenericFontFamily,
+  options: FetchOptions & { store: DownloadStore | null; cache?: FontCacheMode },
+  generic: GenericFontFamily | undefined,
+  text: string | undefined,
 ): FontSubset {
   const range = face.ranges.map(([lo, hi]) => `${lo}-${hi}`).join(",");
+  const coverage = `${face.family} ${face.subset}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`;
 
   return {
     name: face.family,
     // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
-    // across calls yet never merges two subsets that cover different ranges.
-    key: `${face.family} ${face.subset}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
+    // across calls yet never merges two subsets that cover different ranges or characters.
+    key: text ? `${coverage}:${text}` : coverage,
     weight: face.weight,
     style: face.style,
     unicodeRange: face.ranges,
     generic,
+    ...(options.cache ? { cache: options.cache } : {}),
     data: () => fetchBytes(face.url, options),
   };
 }
@@ -352,17 +407,17 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
 /** A loader that fetches the font at `url` on demand, its name, weight, and style read from the file. */
 export function fontFromUrl(
   url: string,
-  options: FetchOptions = {},
+  options: FetchOptions & StoreOptions = {},
 ): { key: string; data: () => Promise<ArrayBuffer> } {
   return {
     key: url,
-    data: () => fetchBytes(url, options),
+    data: () => fetchBytes(url, { ...options, store: storeOf(options) }),
   };
 }
 
 /**
  * Loads Google Fonts families in one request, as `unicode-range` subsets a render downloads only
- * when its text uses them.
+ * when its text uses them, or with `text`, as one file for each face holding those characters.
  *
  * @example
  * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);
@@ -379,7 +434,15 @@ export async function googleFonts(
     return [];
   }
 
-  const css = await loadFontStylesheet(buildUrl(options), options);
+  const store = storeOf(options);
+  const { cache, ...fetchOptions } = options;
+  const policy = typeof cache === "string" ? cache : undefined;
+  const text = options.text === undefined ? undefined : textParameter(options.text);
+  const css = await loadFontStylesheet(buildUrl(options, text), {
+    ...fetchOptions,
+    cache: typeof cache === "string" ? undefined : cache,
+    store,
+  });
 
   // css2 orders faces its own way. Restore the requested family order, which a render without
   // `fontFamilies` falls back through.
@@ -397,5 +460,7 @@ export async function googleFonts(
 
   return mergeVariableFaces(parseSubsetFaces(css))
     .sort((a, b) => (familyOrder.get(a.family) ?? 0) - (familyOrder.get(b.family) ?? 0))
-    .map((face) => toSubset(face, options, generics.get(face.family)));
+    .map((face) =>
+      toSubset(face, { ...fetchOptions, store, cache: policy }, generics.get(face.family), text),
+    );
 }
