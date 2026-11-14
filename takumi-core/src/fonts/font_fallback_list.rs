@@ -225,6 +225,33 @@ impl FontFallbackList {
       .or_else(|| self.font_cache.last_resort_fallback_font())
   }
 
+  /// The font file of the face whose metrics lay text out.
+  pub(crate) fn primary_face(&self) -> Option<u64> {
+    self
+      .primary_simple_font_data()
+      .map(|font_data| font_data.face.typeface.id)
+  }
+
+  /// Every loaded face the list reaches for `character`, a superset of the one shaping picks when a
+  /// variation selector follows it, since a later face may hold the sequence.
+  pub(crate) fn loaded_faces_for_sequence(
+    &self,
+    character: char,
+    font_fallback_priority: FontFallbackPriority,
+  ) -> Vec<u64> {
+    let mut iterator = FontFallbackIterator::new(self, font_fallback_priority);
+    let hint_list = [character];
+    let mut faces = Vec::new();
+
+    while iterator.has_next() {
+      if let Some(font_data) = iterator.next(&hint_list).font_data() {
+        faces.push(font_data.face.typeface.id);
+      }
+    }
+
+    faces
+  }
+
   /// The face shaping reaches for `character`; approximate, hinting with `character` alone.
   pub(crate) fn face_for_character(
     &self,

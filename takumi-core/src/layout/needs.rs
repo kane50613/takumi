@@ -21,7 +21,6 @@ use crate::{
   resources::image::{ImageSource, is_svg_like},
   style::{BackgroundImage, Display, Float, find_keyframes},
 };
-#[cfg(feature = "svg")]
 use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
 
 /// The images a render tree looks up by URL and the pending fonts its text loads.
@@ -103,6 +102,7 @@ impl RenderNode {
     // `walked`: an ancestor's inline walk already read this node's text.
     while let Some((node, walked)) = stack.pop() {
       needs.add_style(&node.context);
+      needs.add_primary_face(&node.context);
       needs.add_keyframes(&node.context);
 
       if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind) {
@@ -159,6 +159,23 @@ impl NeedsCollector {
 
         self.add_svg_text(|| svg_url(url, context), context);
       }
+    }
+  }
+
+  /// Adds the loaded `@font-face` file whose metrics size the box's font-relative lengths and lines,
+  /// whether or not the box has text.
+  fn add_primary_face(&mut self, context: &RenderContext) {
+    if self.loaded_font_files.is_empty() {
+      return;
+    }
+
+    let font = context.font(FontDescription::new(&SizedFontStyle::from_style(
+      &context.style,
+      context,
+    )));
+
+    if let Some(id) = font.fallback_list.primary_face() {
+      insert_loaded(&mut self.needs, &self.loaded_font_files, id);
     }
   }
 
@@ -238,8 +255,24 @@ impl NeedsCollector {
     let mut symbols = SymbolsIterator::new(text);
     let mut start = 0;
 
+    if let Some(id) = list.primary_face() {
+      insert_loaded(&mut self.needs, &self.loaded_font_files, id);
+    }
+
     while let Some((end, priority)) = symbols.consume() {
-      for character in text[start..end].chars() {
+      let mut characters = text[start..end].chars().peekable();
+
+      while let Some(character) = characters.next() {
+        if characters
+          .peek()
+          .copied()
+          .is_some_and(is_variation_selector)
+        {
+          for id in list.loaded_faces_for_sequence(character, priority) {
+            insert_loaded(&mut self.needs, &self.loaded_font_files, id);
+          }
+        }
+
         if !walked.insert((character, priority)) {
           continue;
         }
@@ -253,9 +286,7 @@ impl NeedsCollector {
             self.needs.font_files.insert(url.to_string());
           }
           Some(ReachedFace::Loaded(id)) => {
-            for url in self.loaded_font_files.get(&id).into_iter().flatten() {
-              self.needs.loaded_font_files.insert(url.to_string());
-            }
+            insert_loaded(&mut self.needs, &self.loaded_font_files, id);
           }
           None => {}
         }
@@ -264,6 +295,18 @@ impl NeedsCollector {
       start = end;
     }
   }
+}
+
+/// Adds the loaded `@font-face` files whose data `id` names to what `needs` keeps loaded.
+fn insert_loaded(needs: &mut RenderNeeds, files: &FxHashMap<u64, Vec<Arc<str>>>, id: u64) {
+  for url in files.get(&id).into_iter().flatten() {
+    needs.loaded_font_files.insert(url.to_string());
+  }
+}
+
+/// Whether `character` picks a glyph variant of the one before it.
+fn is_variation_selector(character: char) -> bool {
+  matches!(character, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}')
 }
 
 /// The SVG `src` names when the render can read it without fetching.

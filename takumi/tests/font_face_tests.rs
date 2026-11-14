@@ -73,6 +73,67 @@ fn needs_reports_the_loaded_files_the_text_draws_with() {
   );
 }
 
+/// `fonts` with the `@font-face` files at `urls` loaded.
+fn loaded_fonts<const N: usize>(urls: [&str; N]) -> Fonts {
+  let mut fonts = CONTEXT.clone();
+
+  for url in urls {
+    fonts
+      .load_font_file(
+        url,
+        FontSource::from(fs::read(repo_base_path(url)).unwrap()),
+      )
+      .unwrap();
+  }
+
+  fonts
+}
+
+#[test]
+fn needs_reports_the_loaded_file_that_sizes_a_box() {
+  let css = format!(
+    "@font-face {{ font-family: Digits; src: url({CODE}); unicode-range: U+30-39; }}
+     @font-face {{ font-family: Latin; src: url({MANROPE}); }}"
+  );
+  let fonts = loaded_fonts([MANROPE, CODE]);
+  let empty = Node::container([]).with_style(Style::default().with(StyleDeclaration::font_family(
+    FontFamily::from_css_str("Latin").unwrap(),
+  )));
+  let empty_needs = needs(
+    RenderOptions::builder()
+      .viewport(Viewport::new((400, 100)))
+      .node(empty)
+      .fonts(&fonts)
+      .stylesheet(StyleSheet::parse(&css).unwrap().into())
+      .build(),
+  );
+
+  // Digits draws every glyph, and Latin, the primary font, sets the metrics.
+  assert_eq!(
+    read(&fonts, &css, "Digits, Latin", "123").loaded_font_files,
+    urls([MANROPE, CODE])
+  );
+  assert_eq!(empty_needs.loaded_font_files, urls([MANROPE]));
+}
+
+#[test]
+fn needs_reports_every_loaded_file_a_variation_sequence_can_reach() {
+  let css = format!(
+    "@font-face {{ font-family: Digits; src: url({CODE}); unicode-range: U+20-39; }}
+     @font-face {{ font-family: Latin; src: url({MANROPE}); }}"
+  );
+  let fonts = loaded_fonts([MANROPE, CODE]);
+
+  assert_eq!(
+    read(&fonts, &css, "Digits, Latin", "1").loaded_font_files,
+    urls([CODE])
+  );
+  assert_eq!(
+    read(&fonts, &css, "Digits, Latin", "1\u{FE00}").loaded_font_files,
+    urls([MANROPE, CODE])
+  );
+}
+
 #[test]
 fn a_failed_source_moves_the_rule_on_to_its_next() {
   let css = format!("@font-face {{ font-family: Face; src: url(missing.woff2), url({MANROPE}); }}");
