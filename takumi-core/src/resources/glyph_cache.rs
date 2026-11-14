@@ -1,43 +1,50 @@
-//! Resolved glyphs and the masks rasterized from them and from shapes, sharing one byte budget so
-//! the split follows the workload.
+//! Resolved glyphs and the masks rasterized from them and from shapes, as one kind of data in a
+//! [`Cache`](crate::Cache)'s pool.
 
 use std::sync::{
   Arc,
   atomic::{AtomicU64, Ordering},
 };
 
-use quick_cache::{
-  Weighter,
-  sync::{Cache as Store, DefaultLifecycle},
-};
-use rustc_hash::FxBuildHasher;
-
 use crate::{
   geometry::Placement,
-  resources::{cache::CacheOptions, glyph::ResolvedGlyph},
+  resources::{
+    cache::{KindStore, Weighed},
+    glyph::ResolvedGlyph,
+  },
 };
 
-/// The glyph budget of caches built without one of their own.
-static DEFAULT_MAX_BYTES: AtomicU64 = AtomicU64::new(CacheOptions::DEFAULT_GLYPHS);
+/// What [`DEFAULT_BUDGET`] holds when no call set it.
+const NO_BUDGET: u64 = u64::MAX;
 
-/// Sets the glyph budget of the caches built after this call without one of their own, which
-/// includes [`Cache::shared`](crate::Cache::shared) when nothing used it yet. `0` stops caching.
+/// The glyph budget of caches built without one of their own.
+static DEFAULT_BUDGET: AtomicU64 = AtomicU64::new(NO_BUDGET);
+
+/// Gives the caches built after this call without a glyph budget of their own a glyph budget of
+/// `bytes`, which includes [`Cache::shared`](crate::Cache::shared) when nothing used it yet. `0`
+/// stops caching glyphs.
 #[deprecated(note = "use `Cache::builder().glyphs(bytes)`")]
 pub fn set_glyph_cache_max_bytes(bytes: usize) {
-  DEFAULT_MAX_BYTES.store(bytes as u64, Ordering::Relaxed);
+  DEFAULT_BUDGET.store(bytes as u64, Ordering::Relaxed);
 }
 
-/// The glyph budget of a cache built without one of its own.
-pub fn default_max_bytes() -> u64 {
-  DEFAULT_MAX_BYTES.load(Ordering::Relaxed)
+/// The glyph budget of a cache built without one of its own, none until a call set one.
+pub(crate) fn default_budget() -> Option<u64> {
+  let budget = DEFAULT_BUDGET.load(Ordering::Relaxed);
+
+  (budget != NO_BUDGET).then_some(budget)
 }
 
 /// Bytes charged for an entry's own bookkeeping on top of its payload.
 pub(crate) const ENTRY_OVERHEAD: usize = 64;
 
-/// The share of the budget one entry may take: a 32nd, what one shard of the cache holds on an
-/// eight-core machine, so a single raster cannot crowd out the glyphs.
+/// The share of the glyph bytes one entry may take: a 32nd, what one shard of the cache holds on
+/// an eight-core machine, so a single raster cannot crowd out the glyphs.
 const ENTRY_SHARE: u64 = 32;
+
+/// The glyph bytes an entry's share is taken from when glyphs share the pool, the old default
+/// glyph budget.
+const POOLED_GLYPH_BYTES: u64 = 8 << 20;
 
 #[derive(Clone)]
 enum CachedGlyph {
@@ -46,62 +53,47 @@ enum CachedGlyph {
 }
 
 #[derive(Clone)]
-struct Entry {
+pub(crate) struct GlyphEntry {
   value: CachedGlyph,
   bytes: u32,
+}
+
+impl Weighed for GlyphEntry {
+  fn bytes(&self) -> usize {
+    self.bytes as usize
+  }
 }
 
 /// Which stage a slot holds. Part of the key rather than a bit folded into it,
 /// so a caller keeps its full 64 bits and the two stages cannot alias.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum GlyphKind {
+pub(crate) enum GlyphKind {
   Resolved,
   Mask,
 }
 
-type Key = (u64, GlyphKind);
-
-#[derive(Clone)]
-struct ByBytes;
-
-impl Weighter<Key, Entry> for ByBytes {
-  fn weight(&self, _key: &Key, entry: &Entry) -> u64 {
-    u64::from(entry.bytes).max(1)
-  }
-}
+pub(crate) type GlyphKey = (u64, GlyphKind);
 
 /// The glyphs and masks a [`Cache`](crate::Cache) keeps.
 pub struct GlyphCache {
-  store: Store<Key, Entry, ByBytes, FxBuildHasher>,
+  store: KindStore<GlyphEntry>,
 }
 
 impl GlyphCache {
-  /// A cache holding at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    // ~4 KiB average entry ⇒ item-count hint for the budget.
-    let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
-
-    Self {
-      store: Store::with(
-        estimated_items,
-        max_bytes,
-        ByBytes,
-        FxBuildHasher,
-        DefaultLifecycle::default(),
-      ),
-    }
+  pub(crate) fn new(store: KindStore<GlyphEntry>) -> Self {
+    Self { store }
   }
 
   fn get_or_insert(
     &self,
-    key: Key,
+    key: GlyphKey,
     f: impl FnOnce() -> Option<(CachedGlyph, usize)>,
   ) -> Option<CachedGlyph> {
     self
       .store
-      .get_or_insert_with(&key, || {
+      .get_or_insert_with(key, || {
         f()
-          .map(|(value, bytes)| Entry {
+          .map(|(value, bytes)| GlyphEntry {
             value,
             bytes: bytes.min(u32::MAX as usize) as u32,
           })
@@ -131,9 +123,14 @@ impl GlyphCache {
     }
   }
 
-  /// The most bytes one cached mask should take, a fixed share of the budget.
+  /// The most bytes one cached mask should take, a fixed share of the glyph budget, or of the
+  /// pool up to [`POOLED_GLYPH_BYTES`] when glyphs have none.
   pub fn max_entry_bytes(&self) -> u64 {
-    self.store.capacity() / ENTRY_SHARE
+    self
+      .store
+      .budget()
+      .unwrap_or_else(|| self.store.max_bytes().min(POOLED_GLYPH_BYTES))
+      / ENTRY_SHARE
   }
 
   /// The rasterized mask for `key`, rendered once across concurrent misses.
@@ -164,7 +161,7 @@ impl GlyphCache {
 #[allow(clippy::unwrap_used)]
 mod tests {
   use super::*;
-  use crate::resources::glyph::ResolvedOutlineGlyph;
+  use crate::{Cache, resources::glyph::ResolvedOutlineGlyph};
 
   fn outline(cache_signature: u64) -> ResolvedGlyph {
     ResolvedGlyph::Outline(ResolvedOutlineGlyph::Plain {
@@ -191,13 +188,14 @@ mod tests {
     }
   }
 
-  fn cache() -> GlyphCache {
-    GlyphCache::new(8 << 20)
+  fn cache() -> Cache {
+    Cache::default()
   }
 
   #[test]
   fn the_two_kinds_do_not_alias_on_the_same_key() {
     let cache = cache();
+    let cache = cache.glyphs();
     let key = 0x5eed_1234_5678_9abc;
 
     let mask = cache.glyph_mask(key, || (vec![7; 4], placement()));
@@ -216,6 +214,7 @@ mod tests {
   #[test]
   fn the_whole_key_is_kept() {
     let cache = cache();
+    let cache = cache.glyphs();
     // Two keys that differ only in the top bit, which a key packed into a shifted
     // u64 would have dropped.
     let low = cache.resolved_glyph(0, || Some(outline(1))).unwrap();
@@ -228,6 +227,7 @@ mod tests {
   #[test]
   fn a_failed_resolve_caches_nothing_and_retries() {
     let cache = cache();
+    let cache = cache.glyphs();
     let key = 0xfa11_0000_0000_0001;
 
     assert!(cache.resolved_glyph(key, || None).is_none());
