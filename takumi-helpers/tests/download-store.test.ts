@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { runInNewContext } from "node:vm";
 import {
   type DownloadStore,
   MemoryStore,
@@ -239,6 +240,25 @@ describe("download store", () => {
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(stored && text(stored.bytes)).toBe("newer");
+  });
+
+  test("reads a store that answers with a promise from another realm", async () => {
+    const kept = new Map<string, StoredDownload>();
+    const store: DownloadStore = {
+      get: (key) => runInNewContext("Promise.resolve(download)", { download: kept.get(key) }),
+      set: (key, download) => {
+        kept.set(key, download);
+
+        return runInNewContext("Promise.reject(new Error('store down'))");
+      },
+    };
+    const fetch = mock((requested: string) => Promise.resolve(ok(requested)));
+
+    await prepareImages({ node, fetch, store });
+    const [image] = await prepareImages({ node, fetch, store });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(image && text(image.data)).toBe(url);
   });
 
   test("a stored redirect serves only callers whose allowUrl accepts where it ended", async () => {
