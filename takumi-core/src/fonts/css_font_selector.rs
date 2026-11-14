@@ -93,7 +93,9 @@ impl CssFontSelector {
         continue;
       }
 
-      if let Some(font_face) = self.promote(&family, id, platform_data.index, descriptors) {
+      if let Some(font_face) =
+        self.promote(&family, id, platform_data.index, descriptors, last_resort)
+      {
         faces.push(font_face);
 
         continue;
@@ -283,14 +285,15 @@ impl CssFontSelector {
       .map(Arc::clone)
   }
 
-  /// Moves the face `family` already lists at `index` of the data `id` names, under
-  /// `descriptors`, after every other face, as registering it anew would place it.
+  /// Moves the face `family` already lists at `index` of the data `id` names, under `descriptors`
+  /// and `last_resort`, after every other face, as registering it anew would place it.
   fn promote(
     &mut self,
     family: &str,
     id: u64,
     index: u32,
     descriptors: &FontFaceDescriptors,
+    last_resort: bool,
   ) -> Option<Arc<FontFace>> {
     let family = fold_family_name(family);
     let position = self.font_faces.iter().position(|registered| {
@@ -303,6 +306,7 @@ impl CssFontSelector {
         })
         && fold_family_name(&font_face.family) == family
         && font_face.descriptors == *descriptors
+        && registered.last_resort == last_resort
     })?;
     let registered = self.font_faces.remove(position);
     let font_face = Arc::clone(&registered.font_face);
@@ -679,6 +683,28 @@ mod tests {
         .get_font_data(&description, "Geist", false)
         .is_none()
     );
+  }
+
+  #[test]
+  fn a_last_resort_face_registered_again_as_a_normal_face_takes_precedence() {
+    let mut selector = CssFontSelector::default();
+    let (data, id) = FontCustomPlatformData::read_asset(GEIST);
+
+    selector.register(Arc::clone(&data), id, &named("Family"), None, true);
+    register(&mut selector, GEIST_MONO, &named("Family"));
+    selector.register(data, id, &named("Family"), None, false);
+
+    let faces = selector
+      .get_font_data(&request(400.0, NORMAL_SLOPE_VALUE), "Family", false)
+      .unwrap();
+    let ids: Vec<u64> = faces
+      .iter()
+      .filter_map(FaceData::loaded)
+      .map(|face| face.font_platform_data.typeface.id)
+      .collect();
+
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.first(), Some(&id));
   }
 
   #[test]
