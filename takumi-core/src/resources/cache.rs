@@ -539,6 +539,7 @@ impl Pool {
       .is_some_and(|current| ptr::eq(current, budget))
     {
       self.fit(&mut charged, budget);
+      self.resize(*charged);
     }
   }
 
@@ -559,7 +560,16 @@ impl Pool {
 
     budget.charged.store(held, Ordering::Relaxed);
     *charged = others + held;
-    self.store.set_capacity(max_bytes.saturating_sub(*charged));
+  }
+
+  /// Gives the shared store what the budgets leave of `max_bytes`.
+  fn resize(&self, charged: u64) {
+    self.store.set_capacity(
+      self
+        .max_bytes
+        .load(Ordering::Relaxed)
+        .saturating_sub(charged),
+    );
   }
 
   /// Resizes the stores to `options` in place. A render that started before keeps its entries
@@ -600,9 +610,7 @@ impl Pool {
       }
     }
 
-    self
-      .store
-      .set_capacity(options.max_bytes.saturating_sub(*charged));
+    self.resize(*charged);
   }
 
   fn stats(&self) -> CacheStats {
@@ -1286,6 +1294,44 @@ mod tests {
     keep_buffer(&cache, 0, 512);
 
     assert!(images_held() >= 1 << 20, "{}", images_held());
+  }
+
+  /// The shared store resizes once every budget fits the new options, so it never evicts entries
+  /// that fit them on the way there.
+  #[test]
+  fn new_options_shrink_the_shared_store_only_to_their_final_size() {
+    let mib = 1 << 20;
+    let cache = Cache::builder()
+      .max_bytes(16 * mib)
+      .images(4 * mib)
+      .stylesheets(4 * mib)
+      .build();
+
+    for source in 0..4 {
+      keep_buffer(&cache, source, 512);
+    }
+    for seed in 0..64 {
+      keep_sheet(&cache, seed, 64 << 10);
+    }
+    for seed in 0..32 {
+      cache
+        .tailwind()
+        .compile(&format!("w-{seed} {}", " ".repeat(64 << 10)));
+    }
+
+    let shared = cache.stats().tailwind.current;
+
+    assert!(shared >= 2 * mib, "{shared}");
+
+    cache.set_options(CacheOptions {
+      max_bytes: 6 * mib,
+      images: Some(mib),
+      stylesheets: Some(mib),
+      ..CacheOptions::default()
+    });
+
+    assert_eq!(cache.stats().tailwind.evictions, 0);
+    assert_eq!(cache.stats().tailwind.current, shared);
   }
 
   #[test]
