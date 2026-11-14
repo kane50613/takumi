@@ -294,7 +294,7 @@ export const store: DownloadStore = {
 
 ### `fetchCache`
 
-`images.fetchCache` is deprecated. It still works, and a render that passes one keeps its downloads there instead of in the renderer's store. Downloads Takumi writes to it now remember where a redirect led, so a hit passes the same `allowUrl` check as the store's.
+`images.fetchCache` is deprecated. It still works, and a render that passes one keeps the images and `@font-face` files it downloads there instead of in the renderer's store. Fonts listed as URLs still go through the renderer's store. Downloads Takumi writes to it now remember where a redirect led, so a hit passes the same `allowUrl` check as the store's.
 
 ## Release fonts
 
