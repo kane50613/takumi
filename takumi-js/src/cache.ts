@@ -1,4 +1,4 @@
-import type { CacheOptions } from "@takumi-rs/core";
+import type { CacheOptions, CacheStats } from "@takumi-rs/core";
 import { defaultRenderer } from "./backend/renderer";
 
 /**
@@ -8,6 +8,14 @@ import { defaultRenderer } from "./backend/renderer";
  */
 export function setCacheOptions(options: CacheOptions): void {
   defaultRenderer.setCacheOptions(options);
+}
+
+/**
+ * What the renderer behind `render` and the other functions keeps, under the keys
+ * `setCacheOptions` takes. Returns `undefined` until the first render creates that renderer.
+ */
+export function cacheStats(): CacheStats | undefined {
+  return defaultRenderer.cacheStats();
 }
 
 /** @deprecated Use `setCacheOptions({ budgets: { glyphs } })`. */

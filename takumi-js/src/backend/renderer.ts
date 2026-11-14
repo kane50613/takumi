@@ -1,4 +1,4 @@
-import type { CacheOptions } from "@takumi-rs/core";
+import type { CacheOptions, CacheStats } from "@takumi-rs/core";
 import { loadBackend } from "#backend";
 import { initWasm } from "./wasm-init";
 import type { Backend, BackendModule, LoadBackend } from "./types";
@@ -24,6 +24,11 @@ export class RendererProvider {
   setCacheOptions(options: CacheOptions): void {
     this.options = options;
     this.renderer?.setCacheOptions(options);
+  }
+
+  /** What the renderer's cache holds, none before the renderer exists. */
+  cacheStats(): CacheStats | undefined {
+    return this.renderer?.cacheStats();
   }
 
   async get(module?: BackendModule): Promise<Renderer> {

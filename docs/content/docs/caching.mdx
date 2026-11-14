@@ -128,6 +128,16 @@ console.log(budgets.images.hits, budgets.images.misses, budgets.images.evictions
 
 The `fonts` entry counts the fonts that renders' `fonts` lists loaded. It leaves out fonts from `registerFont`, since the budget never releases them. All sizes are the same estimates the budgets count, not the memory of the process, and the counts start when the renderer is created.
 
+For the renderer that `render` and the other functions share, call `cacheStats` from `takumi-js`. It returns `undefined` until the first render creates that renderer:
+
+```ts twoslash title="Read the shared renderer's cache stats"
+import { cacheStats } from "takumi-js";
+
+const stats = cacheStats(); // [!code highlight]
+
+console.log(stats?.memory.current);
+```
+
 A high miss count with many evictions means renders keep redoing work the cache dropped, so a larger `maxBytes` may help. A kind that holds most of `memory.current` while its hits stay low is a candidate for a budget.
 
 ## Skip caching an image

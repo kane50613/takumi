@@ -25,7 +25,7 @@ export type {
   MeasuredTextRun,
   OutputFormat,
 } from "@takumi-rs/core";
-export { setCacheOptions, setGlyphCacheMaxBytes } from "./cache";
+export { cacheStats, setCacheOptions, setGlyphCacheMaxBytes } from "./cache";
 export { measure, render, renderAnimation, renderSvg } from "./render";
 
 export type {
