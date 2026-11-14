@@ -6,6 +6,7 @@
 use crate::sort_key::sort_by_key;
 use std::sync::Arc;
 
+use rustc_hash::FxHashMap;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -103,6 +104,19 @@ impl Fonts {
     registry.font_files.remove(url);
 
     true
+  }
+
+  /// The URLs of the loaded `@font-face` files, by the id of their data.
+  pub(crate) fn loaded_font_files(&self) -> FxHashMap<u64, Vec<Arc<str>>> {
+    let mut files: FxHashMap<u64, Vec<Arc<str>>> = FxHashMap::default();
+
+    for (url, file) in &self.registry.font_files {
+      if let FontFile::Loaded { id, .. } = file {
+        files.entry(*id).or_default().push(Arc::clone(url));
+      }
+    }
+
+    files
   }
 
   /// These fonts with each of `urls` failed to load, as one document's downloads did. The revision

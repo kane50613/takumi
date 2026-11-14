@@ -9,6 +9,11 @@ const CODE: &str = "assets/fonts/google-sans-code/GoogleSansCode-VariableFont_wg
 
 /// The `@font-face` files a render of `text` in `family` reaches under `css`, with `fonts`.
 fn reached(fonts: &Fonts, css: &str, family: &str, text: &str) -> BTreeSet<String> {
+  read(fonts, css, family, text).font_files
+}
+
+/// What a render of `text` in `family` needs under `css`, with `fonts`.
+fn read(fonts: &Fonts, css: &str, family: &str, text: &str) -> RenderNeeds {
   let node = Node::text(text.to_string()).with_style(Style::default().with(
     StyleDeclaration::font_family(FontFamily::from_css_str(family).unwrap()),
   ));
@@ -21,7 +26,6 @@ fn reached(fonts: &Fonts, css: &str, family: &str, text: &str) -> BTreeSet<Strin
       .stylesheet(StyleSheet::parse(css).unwrap().into())
       .build(),
   )
-  .font_files
 }
 
 fn urls<const N: usize>(urls: [&str; N]) -> BTreeSet<String> {
@@ -39,6 +43,34 @@ fn needs_reports_the_files_the_text_reaches() {
   assert_eq!(reached(&CONTEXT, &css, "Face", "abc"), urls([MANROPE]));
   assert_eq!(reached(&CONTEXT, &css, "Face", "a1"), urls([MANROPE, CODE]));
   assert_eq!(reached(&CONTEXT, &css, "Geist", "abc"), urls([]));
+}
+
+#[test]
+fn needs_reports_the_loaded_files_the_text_draws_with() {
+  let css = format!(
+    "@font-face {{ font-family: Face; src: url({MANROPE}); }}
+     @font-face {{ font-family: Face; src: url({CODE}); unicode-range: U+30-39; }}"
+  );
+  let mut fonts = CONTEXT.clone();
+
+  for url in [MANROPE, CODE] {
+    fonts
+      .load_font_file(
+        url,
+        FontSource::from(fs::read(repo_base_path(url)).unwrap()),
+      )
+      .unwrap();
+  }
+
+  let loaded = |text| read(&fonts, &css, "Face", text);
+
+  assert_eq!(loaded("abc").font_files, urls([]));
+  assert_eq!(loaded("abc").loaded_font_files, urls([MANROPE]));
+  assert_eq!(loaded("a1").loaded_font_files, urls([MANROPE, CODE]));
+  assert_eq!(
+    read(&fonts, &css, "Geist", "abc").loaded_font_files,
+    urls([])
+  );
 }
 
 #[test]

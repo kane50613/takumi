@@ -52,6 +52,14 @@ impl FontData {
   }
 }
 
+/// The face font fallback reaches for a character.
+pub(crate) enum ReachedFace {
+  /// A face still loading from its source.
+  Pending(PendingSource),
+  /// A loaded face, by the id of the font file it draws from.
+  Loaded(u64),
+}
+
 /// Blink's `FontFallbackList`.
 #[derive(Debug)]
 pub(crate) struct FontFallbackList {
@@ -217,12 +225,12 @@ impl FontFallbackList {
       .or_else(|| self.font_cache.last_resort_fallback_font())
   }
 
-  /// The pending face shaping would load for `character`; approximate, hinting with `character` alone.
-  pub(crate) fn pending_face_for_character(
+  /// The face shaping reaches for `character`; approximate, hinting with `character` alone.
+  pub(crate) fn face_for_character(
     &self,
     character: char,
     font_fallback_priority: FontFallbackPriority,
-  ) -> Option<PendingSource> {
+  ) -> Option<ReachedFace> {
     let mut iterator = FontFallbackIterator::new(self, font_fallback_priority);
     let hint_list = [character];
 
@@ -230,14 +238,14 @@ impl FontFallbackList {
       let font_data = iterator.next(&hint_list);
 
       if let Some(face) = iterator.tracked_loading_faces().next() {
-        return Some(face.source.clone());
+        return Some(ReachedFace::Pending(face.source.clone()));
       }
 
-      if font_data
+      if let Some(font_data) = font_data
         .font_data()
-        .is_some_and(|font_data| font_data.has_glyph(character))
+        .filter(|font_data| font_data.has_glyph(character))
       {
-        return None;
+        return Some(ReachedFace::Loaded(font_data.face.typeface.id));
       }
     }
 

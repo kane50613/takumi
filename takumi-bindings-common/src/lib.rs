@@ -452,6 +452,7 @@ pub struct NeedsOutput {
   images: Vec<String>,
   fonts: Vec<usize>,
   font_files: Vec<String>,
+  loaded_font_files: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -461,6 +462,7 @@ impl NeedsOutput {
       fonts: listed.map_or_else(Vec::new, |listed| listed.to_load(&needs.faces)),
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
+      loaded_font_files: needs.loaded_font_files.into_iter().collect(),
     }
   }
 }
