@@ -992,4 +992,33 @@ mod tests {
 
     assert!(svg.contains(&to_data_url("image/svg+xml", embedded.as_bytes())));
   }
+
+  /// An SVG reached by URL and embedded as markup is defined at the size it is drawn, so a viewer
+  /// evaluates its media queries where the color probe did.
+  #[test]
+  fn an_svg_url_embedded_as_markup_is_defined_at_the_size_it_is_drawn() {
+    let markup = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter><rect width="16" height="16" fill="red" filter="url(#f)"/></svg>"#;
+    let url = to_data_url("image/svg+xml", markup.as_bytes());
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Url(url.as_str().into()),
+      width: Some(4.0),
+      height: Some(4.0),
+    });
+    let fonts = Fonts::default();
+    let svg = render(
+      SvgOptions::builder()
+        .node(Node::container([image]))
+        .viewport(Viewport::new((8, 8)))
+        .fonts(&fonts)
+        .build(),
+    )
+    .unwrap();
+    let definition = svg
+      .split("<image")
+      .find(|element| element.contains(&url))
+      .unwrap_or_default();
+
+    assert!(definition.contains(r#"width="4""#), "{definition}");
+    assert!(!definition.contains(r#"width="16""#), "{definition}");
+  }
 }
