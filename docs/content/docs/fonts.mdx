@@ -21,7 +21,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 | ---------- | ---------------------------------------------------------------- |
 | URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                |
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly. |
-| Descriptor | `{ name, data, weight, style, generic }`. <sup>2</sup>           |
+| Descriptor | `{ name, data, weight, style, generic, cache }`. <sup>2</sup>    |
 
 <sup>1</sup> Name, weight, and style come from the file.
 
@@ -142,16 +142,49 @@ const fonts = await googleFonts({
 });
 ```
 
-| Option     | Accepts                | Effect                                                    |
-| ---------- | ---------------------- | --------------------------------------------------------- |
-| `families` | the list above         | The families to load, in fallback priority order.         |
-| `display`  | a `font-display` value | Sent as `display` in the CSS request.                     |
-| `cache`    | a `Map`                | Replaces the default cache of CSS responses.              |
-| `baseUrl`  | a css2 endpoint        | Point at a mirror such as `https://fonts.bunny.net/css2`. |
+| Option     | Accepts                     | Effect                                                                         |
+| ---------- | --------------------------- | ------------------------------------------------------------------------------ |
+| `families` | the list above              | The families to load, in fallback priority order.                              |
+| `display`  | a `font-display` value      | Sent as `display` in the CSS request.                                          |
+| `text`     | a string                    | Loads one file for each face, holding just these characters. <sup>1</sup>      |
+| `cache`    | `"auto"` or `"none"`        | Whether a renderer keeps the subsets. See [Fonts used once](#fonts-used-once). |
+| `store`    | a download store, or `null` | Keeps the CSS and font files. <sup>2</sup>                                     |
+| `baseUrl`  | a css2 endpoint             | Point at a mirror such as `https://fonts.bunny.net/css2`.                      |
+
+<sup>1</sup> See [Fonts for known text](#fonts-for-known-text).
+
+<sup>2</sup> By default, one store of up to 32 MiB for each `fetch` function. A `Map` passed as
+`cache` still caches CSS, but is deprecated.
 
 `googleFonts` also takes the [fetch options](/docs/images#fetch-limits): `timeout`, `signal`, `maxBytes`, `allowUrl`, and `fetch`. The timeout covers each request on its own, first the CSS request and then each font file. It does not cover the whole render.
 
-[Caching](/docs/caching#google-fonts-css) covers how the default CSS cache bounds its responses and when a request skips it.
+[Caching](/docs/caching#google-fonts-downloads) covers the store that keeps the CSS and font files.
+
+#### Fonts for known text
+
+When you know the text before you load the fonts, pass it as `text`. Google then answers with one file for each face that holds those characters, plus the ones shaping them needs:
+
+```tsx twoslash title="Load only the title's characters"
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
+
+const title = "東京の夜景";
+
+const image = await render(<div style={{ fontFamily: "Noto Sans JP" }}>{title}</div>, {
+  width: 1200,
+  height: 630,
+  fonts: googleFonts({ families: ["Noto Sans JP"], text: title }), // [!code highlight]
+});
+```
+
+Different text loads a different file, and the same characters in any order load the same one. Past 6000 characters once URL-encoded, Google stops honoring `text`, so `googleFonts` leaves it out and loads the `unicode-range` subsets instead.
+
+`text` costs a download for every new set of characters, while the subsets stop downloading once a renderer holds the ones your text uses. Choose by where the renderer runs:
+
+- On Workers and other short-lived isolates, or for a few titles that repeat, use `text`. A cold start downloads one small file, about 16 KB for a Japanese title, instead of every subset the text touches.
+- On a long-running server that renders varied text, leave `text` out. After the first renders, the subsets the renderer holds cover most new text.
+
+Put all the text a render shows in one `text`. Splitting a run of Arabic, Devanagari, or another script that shapes its letters across two requests puts the letters in different files, and shaping breaks between them.
 
 ### From `@font-face` rules
 
@@ -173,7 +206,7 @@ const image = await render(<div style={{ fontFamily: "Brand" }}>Hello</div>, {
 });
 ```
 
-The rule's descriptors, such as `font-weight`, `unicode-range`, and `size-adjust`, apply as they do in Chrome. When a `src` fails to download, the rule moves on to its next source for that render, and the next `prepare()` tries the file again. A `local()` source names a font you loaded through `fonts`, by its full name or PostScript name. Takumi downloads the files with the `fetch`, `timeout`, `maxBytes`, `allowUrl`, and `fetchCache` you pass in `images`, so a relative URL needs your own `fetch`.
+The rule's descriptors, such as `font-weight`, `unicode-range`, and `size-adjust`, apply as they do in Chrome. When a `src` fails to download, the rule moves on to its next source for that render, and the next `prepare()` tries the file again. A `local()` source names a font you loaded through `fonts`, by its full name or PostScript name. Takumi downloads the files with the `fetch`, `timeout`, `maxBytes`, and `allowUrl` you pass in `images`, so a relative URL needs your own `fetch`. The renderer keeps the files in its [download store](/docs/caching#downloaded-bytes).
 
 A renderer's `render()` called without `prepare()` downloads nothing. It draws with the `@font-face` files the renderer already holds, and falls back past the rest.
 
@@ -242,6 +275,25 @@ renderer.clearFonts(); // back to the built-in Geist
 ```
 
 A later render that lists a released font loads it again. The renderer also evicts the fonts that renders' lists load when it needs room, one file at a time. Cap them with the [`fonts` budget](/docs/caching#release-fonts).
+
+### Fonts used once
+
+A font in the `fonts` list takes a `cache` mode, as an image does. `"none"` lets the renderer drop a font it loaded for a render once that render settles, so a font that one render needs does not push out fonts that many renders share. A render still uses a font the renderer already holds, and leaves it there:
+
+```tsx twoslash title="Drop a font after its render"
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
+
+declare const title: string;
+// ---cut---
+const image = await render(<div style={{ fontFamily: "Noto Sans JP" }}>{title}</div>, {
+  width: 1200,
+  height: 630,
+  fonts: googleFonts({ families: ["Noto Sans JP"], text: title, cache: "none" }), // [!code highlight]
+});
+```
+
+A font another render is using stays until the last of them settles. A render without `"none"` that uses the font keeps it. The downloaded file still goes to the [download store](/docs/caching#downloaded-bytes), so the next render that needs it skips the download. Set the store to `null` to keep neither.
 
 ## Choosing a font
 
