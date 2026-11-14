@@ -246,15 +246,27 @@ impl SvgSource {
   /// presentation attribute when the document's layout there reads it and the root sets none. An
   /// attribute it does not read would still change what a `[color]` selector matches.
   pub fn embedded_source(&self, host: &RenderContext, viewport: Size<f32>) -> Cow<'_, str> {
-    let reads_color = self
-      .document
-      .ops(self.host(host), viewport)
-      .is_some_and(|(_, reads)| reads.color);
-
-    if !reads_color {
+    if !self.reads_color(host, viewport) {
       return Cow::Borrowed(&self.source);
     }
     self.with_color_attribute(host.current_color)
+  }
+
+  /// Whether the layout at `viewport` in `host` reads the host's color, from the reads a cached
+  /// picture recorded when the source has one, so a repeated image is not laid out again.
+  fn reads_color(&self, host: &RenderContext, viewport: Size<f32>) -> bool {
+    if self.key.is_some() && !self.inline {
+      self.picture(host, viewport);
+
+      if let Some(reads) = self.known_reads(viewport) {
+        return reads.color;
+      }
+    }
+
+    self
+      .document
+      .ops(self.host(host), viewport)
+      .is_some_and(|(_, reads)| reads.color)
   }
 
   /// Markup for embedding in a vector backend, with `current_color` as a root presentation
@@ -345,9 +357,19 @@ impl SvgSource {
   /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
   fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
     let source = self.key.filter(|_| !self.inline)?;
-    let reads = *self.reads.lock().ok()?.get(&viewport_bits(viewport))?;
+    let reads = self.known_reads(viewport)?;
 
     Some(SvgPicture::key_of(source, viewport, reads, host))
+  }
+
+  /// What a layout at `viewport` read from its host, once one has said.
+  fn known_reads(&self, viewport: Size<f32>) -> Option<HostReads> {
+    self
+      .reads
+      .lock()
+      .ok()?
+      .get(&viewport_bits(viewport))
+      .copied()
   }
 
   /// The box the document draws in when the box `host` styles shows it.
