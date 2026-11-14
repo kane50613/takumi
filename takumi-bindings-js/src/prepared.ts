@@ -216,7 +216,12 @@ async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
 ): Promise<string[]> {
   const fetched = new Map(
     (
-      await prepareImages({ ...options, urls, store: registry.store.current, throwOnError: false })
+      await prepareImages({
+        ...options,
+        urls,
+        store: registry.store.for(options.fetch),
+        throwOnError: false,
+      })
     ).map(({ src, data }) => [src, data]),
   );
 
@@ -322,7 +327,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         ...fetchOptions,
         urls: (await read()).images,
         sources: provided,
-        store: registry.store.current,
+        store: registry.store.for(fetchOptions.fetch),
         fetchCache,
         throwOnError,
         signal,

@@ -209,9 +209,11 @@ Renders that ask for the same URL at the same time share one download when their
 
 A stored download remembers the URL it came from after redirects. A render uses it only when its own `allowUrl` accepts that URL. Otherwise, the render downloads it again under its own policy and leaves the stored copy for other renders. Routes with different URL policies can share a renderer.
 
+A render that passes its own `fetch` in `images` skips the default store, since that `fetch` may send credentials or answer a relative URL differently for each user. Its downloads go through a store only when you passed one as `cache.store`.
+
 <Callout type="warn">
-  The store keys downloads by URL alone. If your `fetch` sends credentials, or answers a relative
-  URL differently for each user, give that route a renderer with a store of its own, or none.
+  A store keys downloads by URL alone. If you pass a store and your `fetch` sends credentials, give
+  each user's route a renderer with a store of its own, or none.
 </Callout>
 
 ### Size or replace the store

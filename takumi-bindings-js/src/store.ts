@@ -37,6 +37,15 @@ export class RendererStore {
     this.#current = this.#resolve(store);
   }
 
+  /**
+   * The store a download made with `fetch` goes through. A caller's own `fetch` may send its
+   * credentials, so its downloads skip the default store and go through only a store the renderer
+   * was given.
+   */
+  for(fetch: unknown): DownloadStore | null {
+    return fetch !== undefined && this.#current === this.#default ? null : this.#current;
+  }
+
   /** What the store holds and how lookups in it went, or `null` without one. */
   stats(): CacheStoreStats | null {
     return this.#current && storeStats(this.#current);

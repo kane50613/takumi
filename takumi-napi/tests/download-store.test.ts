@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { container, image, MemoryStore, text } from "@takumi-rs/helpers";
+import { container, type FetchLike, image, MemoryStore, text } from "@takumi-rs/helpers";
 import { Renderer } from "../src/export";
 
 const imageData = await Bun.file("../assets/images/yeecord.png").arrayBuffer();
@@ -26,10 +26,15 @@ const drawing = (path: string) =>
     children: [image({ src: `${server.url}${path.slice(1)}`, width: 32, height: 32 })],
   });
 
-/** Prepares and renders `path`'s tree twice on `renderer`, returning how often the server served it. */
-const renderTwice = async (renderer: Renderer, path: string) => {
+/**
+ * Prepares and renders `path`'s tree twice on `renderer`, fetching with `fetch` when given,
+ * returning how often the server served it.
+ */
+const renderTwice = async (renderer: Renderer, path: string, fetch?: FetchLike) => {
   for (let render = 0; render < 2; render++) {
-    await renderer.render(await renderer.prepare(drawing(path), { width: 64, height: 64 }));
+    const images = fetch ? { fetch } : undefined;
+
+    await renderer.render(await renderer.prepare(drawing(path), { width: 64, height: 64, images }));
   }
 
   return requests.get(path);
@@ -54,6 +59,18 @@ describe("a renderer's download store", () => {
 
     expect(await renderTwice(renderer, "/disabled.png")).toBe(2);
     expect(renderer.cacheStats().store).toBeNull();
+  });
+
+  test("skips the default store for a caller's own fetch, which may send its credentials", async () => {
+    const own: FetchLike = (input, init) => fetch(input, init);
+
+    expect(await renderTwice(new Renderer(), "/own-fetch.png", own)).toBe(2);
+
+    const store = new MemoryStore();
+
+    expect(await renderTwice(new Renderer({ cache: { store } }), "/own-fetch-store.png", own)).toBe(
+      1,
+    );
   });
 
   test("takes a store from setCacheOptions", async () => {

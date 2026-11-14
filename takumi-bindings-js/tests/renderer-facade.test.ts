@@ -1,4 +1,4 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
@@ -7,6 +7,15 @@ import { RendererStore } from "../src/store";
 import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);
+
+afterEach(() => mock.restore());
+
+/** Answers the global `fetch` with `fetch`, which goes through the renderer's default store as a caller's own `fetch` would not. */
+const answerFetch = (fetch: (input: string | URL | Request) => Promise<Response>) => {
+  spyOn(globalThis, "fetch").mockImplementation(
+    Object.assign(fetch, { preconnect: globalThis.fetch.preconnect }),
+  );
+};
 const textNode = (text: string): Node => ({ type: "text", text });
 
 const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
@@ -237,12 +246,15 @@ describe("@font-face files a prepared render loaded", () => {
   const prepare = async (
     fonts: ReturnType<typeof fontBackend>["fonts"],
     fetch: (input: string | URL | Request) => Promise<Response>,
-  ) =>
-    prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
+  ) => {
+    answerFetch(fetch);
+
+    return prepareSource(fonts, textNode("a"), {}, {}, () => ({
       images: [],
       fonts: [],
       fontFiles: [url],
     }));
+  };
 
   test("stay leased while the render runs", async () => {
     const { fonts, backend, leases } = fontBackend();
@@ -419,11 +431,14 @@ describe("the renderer's download store", () => {
   const prepare = (
     fonts: ReturnType<typeof fontBackend>["fonts"],
     fetch: (input: string | URL | Request) => Promise<Response>,
-  ) =>
-    prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
+  ) => {
+    answerFetch(fetch);
+
+    return prepareSource(fonts, textNode("a"), {}, {}, () => ({
       images: [url],
       fonts: [],
     }));
+  };
 
   test("serves an image a later render asks for again", async () => {
     const fetch = mock(async () => new Response(bytes()));
