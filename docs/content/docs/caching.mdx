@@ -205,11 +205,11 @@ By default, every renderer has a store of its own that holds up to 32 MiB. When 
 
 The store keeps downloads that resources with [`cache: "none"`](#skip-caching-an-image) use too, since that mode only skips the decoded copy. The store's size does not count toward `maxBytes`, and its sizes are estimates that count the bytes and the URLs. The decoded copy of the same image or font counts in the pool as usual.
 
-Renders that ask for the same URL at the same time share one download when their `allowUrl` is the same function and their `maxBytes` match. Each render's `signal` and `timeout` end only its own wait, and the download stops once no render waits on it.
+Renders that ask for the same URL at the same time share one download only when they pass the same `fetch` function, the same `allowUrl` function, and the same `maxBytes`. Each render's `signal` and `timeout` end only its own wait, and the download stops once no render waits on it.
 
 A stored download remembers the URL it came from after redirects. A render uses it only when its own `allowUrl` accepts that URL. Otherwise, the render downloads it again under its own policy and leaves the stored copy for other renders. Routes with different URL policies can share a renderer.
 
-A render that passes its own `fetch` in `images` skips the default store, since that `fetch` may send credentials or answer a relative URL differently for each user. Its downloads go through a store only when you passed one as `cache.store`.
+A render that passes its own `fetch` in `images` skips the default store, since that `fetch` may send credentials or answer a relative URL differently for each user. Its downloads go through a store only when you passed one as `cache.store`. That store then serves them to every render on the renderer whose `allowUrl` accepts them, without calling that render's `fetch`.
 
 <Callout type="warn">
   A store keys downloads by URL alone. If you pass a store and your `fetch` sends credentials, give

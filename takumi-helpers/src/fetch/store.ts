@@ -121,8 +121,8 @@ export function perObject<K extends object, T>(create: (key: K) => T): (key: K) 
 export const defaultStore: (fetch: FetchLike) => MemoryStore = perObject(() => new MemoryStore());
 
 /**
- * One download that requests with the same `allowUrl` and `maxBytes` share. Each request stops
- * waiting on its own `signal` and `timeout`, and the download stops once no request waits on it.
+ * One download that requests with the same `fetch`, `allowUrl`, and `maxBytes` share. Each request
+ * stops waiting on its own `signal` and `timeout`, and the download stops once no request waits on it.
  */
 class Flight {
   readonly done: Promise<ArrayBuffer>;
@@ -131,8 +131,8 @@ class Flight {
   private settled = false;
 
   constructor(
-    readonly allowUrl: FetchOptions["allowUrl"],
-    readonly maxBytes: number,
+    private readonly policy: Pick<FetchOptions, "fetch" | "allowUrl">,
+    private readonly maxBytes: number,
     run: (signal: AbortSignal) => Promise<ArrayBuffer>,
     private readonly abandon: () => void,
   ) {
@@ -142,6 +142,15 @@ class Flight {
     };
 
     this.done.then(settle, settle);
+  }
+
+  /** Whether a request with `options` and `maxBytes` may wait on this download instead of starting its own. */
+  serves(options: FetchOptions, maxBytes: number): boolean {
+    return (
+      options.fetch === this.policy.fetch &&
+      options.allowUrl === this.policy.allowUrl &&
+      maxBytes === this.maxBytes
+    );
   }
 
   wait(options: FetchOptions): Promise<ArrayBuffer> {
@@ -220,9 +229,7 @@ export async function fetchStored(
 
   const state = stateOf(store);
   const flights = state.flights.get(url) ?? [];
-  const shared = flights.find(
-    (flight) => flight.allowUrl === options.allowUrl && flight.maxBytes === maxBytes,
-  );
+  const shared = flights.find((flight) => flight.serves(options, maxBytes));
 
   if (shared) {
     return shared.wait(options);
@@ -255,7 +262,7 @@ export async function fetchStored(
     });
   };
   const flight = new Flight(
-    options.allowUrl,
+    { fetch: options.fetch, allowUrl: options.allowUrl },
     maxBytes,
     (signal) => {
       const found = lookup(store, url);
