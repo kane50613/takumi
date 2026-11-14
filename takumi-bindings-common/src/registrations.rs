@@ -580,7 +580,13 @@ mod tests {
     );
 
     let registered = register_resource(&mut fonts, FontResource::new(geist(1))).unwrap();
-    let (_, lease) = registrations.admit(&mut fonts, &cache, Some("leased"), registered, false);
+    let (_, lease) = registrations.admit(
+      &mut fonts,
+      &cache,
+      Some("leased"),
+      registered,
+      Retention::Evictable,
+    );
     let keys = ["free", "leased", "absent"].map(String::from);
 
     assert_eq!(
