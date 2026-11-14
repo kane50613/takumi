@@ -236,7 +236,7 @@ impl FontRegistrations {
 
     for key in keys {
       if let Some(registration) = self.by_key.get(key) {
-        if registration.pinned || cache.fonts().is_held(registration.id) {
+        if registration.pinned || cache.fonts().is_held(registration.id()) {
           continue;
         }
 
@@ -576,8 +576,7 @@ mod tests {
       &mut registrations,
       &cache,
       "free",
-      "A",
-      geist(0),
+      named("A", geist(0)),
     );
 
     let registered = register_resource(&mut fonts, FontResource::new(geist(1))).unwrap();
