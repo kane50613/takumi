@@ -1,14 +1,17 @@
 //! What a render tree needs from outside before it renders, read from the styled tree.
 
-use std::{collections::BTreeSet, rc::Rc};
+use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
   context::RenderContext,
   fonts::{
-    font::Font, font_face::PendingSource, font_fallback_list::FontFallbackList,
-    font_fallback_priority::FontFallbackPriority, symbols_iterator::SymbolsIterator,
+    font::Font,
+    font_face::PendingSource,
+    font_fallback_list::{FontFallbackList, ReachedFace},
+    font_fallback_priority::FontFallbackPriority,
+    symbols_iterator::SymbolsIterator,
   },
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
@@ -31,6 +34,9 @@ pub struct RenderNeeds {
   /// The `@font-face` `src` URLs font fallback would load, to hand to
   /// [`Fonts::load_font_file`](crate::Fonts::load_font_file).
   pub font_files: BTreeSet<String>,
+  /// The URLs of the loaded `@font-face` files font fallback draws from, which a host keeps loaded
+  /// until the render runs.
+  pub loaded_font_files: BTreeSet<String>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -39,6 +45,7 @@ impl Extend<RenderNeeds> for RenderNeeds {
       self.images.extend(read.images);
       self.faces.extend(read.faces);
       self.font_files.extend(read.font_files);
+      self.loaded_font_files.extend(read.loaded_font_files);
     }
   }
 }
@@ -59,6 +66,8 @@ struct NeedsCollector {
   needs: RenderNeeds,
   /// Each fallback list by address, held so the address stays unique, with what it has looked up.
   walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
+  /// The URLs of the loaded `@font-face` files, by the id of their data.
+  loaded_font_files: FxHashMap<u64, Vec<Arc<str>>>,
 }
 
 /// A fallback list and the characters it has walked, each at a fallback priority.
@@ -78,7 +87,11 @@ impl RenderNode {
 
   /// What this render tree needs before it renders.
   pub fn needs(&self) -> RenderNeeds {
-    let mut needs = NeedsCollector::default();
+    let mut needs = NeedsCollector {
+      #[cfg(feature = "font-face")]
+      loaded_font_files: self.context.fonts().loaded_font_files(),
+      ..NeedsCollector::default()
+    };
 
     // The tree builder drops hidden children but keeps a hidden root.
     if self.context.style.base_data.display == Display::None {
@@ -173,7 +186,7 @@ impl NeedsCollector {
   /// Adds the pending faces an SVG image's `text` elements would load.
   fn add_svg_text(&mut self, image: impl FnOnce() -> Option<ImageSource>, context: &RenderContext) {
     #[cfg(feature = "svg")]
-    if context.fonts().has_pending_faces()
+    if (context.fonts().has_pending_faces() || !self.loaded_font_files.is_empty())
       && let Some(ImageSource::Svg(svg)) = image()
     {
       for (context, text) in svg.text_runs(context) {
@@ -209,11 +222,12 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the pending faces `font` would load to draw `text`, at Blink's `SymbolsIterator` priorities.
+  /// Adds the pending faces `font` would load to draw `text`, and the loaded `@font-face` files it
+  /// draws with, at Blink's `SymbolsIterator` priorities.
   fn add_text(&mut self, font: &Font, text: &str) {
     let list = &font.fallback_list;
 
-    if !list.has_pending_faces() {
+    if !list.has_pending_faces() && self.loaded_font_files.is_empty() {
       return;
     }
 
@@ -230,13 +244,18 @@ impl NeedsCollector {
           continue;
         }
 
-        match list.pending_face_for_character(character, priority) {
-          Some(PendingSource::Listed(id)) => {
+        match list.face_for_character(character, priority) {
+          Some(ReachedFace::Pending(PendingSource::Listed(id))) => {
             self.needs.faces.insert(id);
           }
           #[cfg(feature = "font-face")]
-          Some(PendingSource::Url(url)) => {
+          Some(ReachedFace::Pending(PendingSource::Url(url))) => {
             self.needs.font_files.insert(url.to_string());
+          }
+          Some(ReachedFace::Loaded(id)) => {
+            for url in self.loaded_font_files.get(&id).into_iter().flatten() {
+              self.needs.loaded_font_files.insert(url.to_string());
+            }
           }
           None => {}
         }

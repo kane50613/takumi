@@ -90,6 +90,8 @@ pub struct RenderNeeds {
   pub fonts: Vec<u32>,
   /// The `@font-face` file URLs the render loads, sorted.
   pub font_files: Vec<String>,
+  /// The URLs of the loaded `@font-face` files the render draws with, sorted.
+  pub loaded_font_files: Vec<String>,
 }
 
 impl RenderNeeds {
@@ -105,6 +107,7 @@ impl RenderNeeds {
       }),
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
+      loaded_font_files: needs.loaded_font_files.into_iter().collect(),
     }
   }
 }

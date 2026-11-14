@@ -192,6 +192,53 @@ describe("@font-face files", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
+  test("a prepare made while the renderer held a file loads it again once evicted", async () => {
+    const manrope = await font("manrope/manrope-latin-wght-normal.woff2");
+    const fetch = mock(async (_url: string) => new Response(manrope));
+    const renderer = new Renderer();
+    const expected = await renderer.render(
+      await renderer.prepare(page, { ...pageOptions, images: { fetch } }),
+      pageOptions,
+    );
+    const warm = await renderer.prepare(page, { ...pageOptions, images: { fetch } });
+
+    renderer.setCacheOptions({ budgets: { fonts: 0 } });
+
+    expect(renderer.cacheStats().budgets.fonts.current).toBe(0);
+    expect(Buffer.compare(await renderer.render(warm, pageOptions), expected)).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("a file that fails to load again moves its rule on to its next src", async () => {
+    const next = "https://fonts.test/next.ttf";
+    const twoSources = page.replace(`url(${url})`, `url(${url}), url(${next})`);
+    const [manrope, mono] = await Promise.all([
+      font("manrope/manrope-latin-wght-normal.woff2"),
+      font("geist/GeistMono[wght].woff2"),
+    ]);
+    let firstFails = true;
+    const fetch = mock(async (requested: string) =>
+      requested === url && firstFails
+        ? new Response(null, { status: 404 })
+        : new Response(requested === url ? manrope : mono),
+    );
+    const fallback = new Renderer();
+    const expected = await fallback.render(
+      await fallback.prepare(twoSources, { ...pageOptions, images: { fetch } }),
+      pageOptions,
+    );
+
+    firstFails = false;
+
+    const renderer = new Renderer();
+    const prepared = await renderer.prepare(twoSources, { ...pageOptions, images: { fetch } });
+
+    firstFails = true;
+    renderer.setCacheOptions({ budgets: { fonts: 0 } });
+
+    expect(Buffer.compare(await renderer.render(prepared, pageOptions), expected)).toBe(0);
+  });
+
   test("a file a render uses stays over fonts no render uses again", async () => {
     const fetch = mock(async (_url: string) => new Response(geist(7)));
     const renderer = new Renderer({

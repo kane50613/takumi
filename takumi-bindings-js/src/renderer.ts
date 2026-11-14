@@ -298,7 +298,7 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  */
 export type HeldFontFiles = {
   urls: string[];
-  /** Loads `urls` leased to `lease`, returning the ones that failed. */
+  /** Loads `urls` leased to `lease`, and the next sources their rules reach when one fails, returning the ones that failed. */
   load(urls: string[], lease: number): Promise<string[]>;
 };
 
@@ -460,9 +460,14 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return assigned;
   }
 
+  /** Leases each of the `@font-face` files `urls` the backend still holds to `lease`, returning the others. */
+  leaseFontFiles(urls: string[], lease: number): string[] {
+    return urls.filter((url) => !this.backend.cachedFontFile(url, lease));
+  }
+
   /** Leases each held file the backend still holds, and loads the others again, returning the ones that failed. */
   private async holdFiles({ urls, load }: HeldFontFiles, lease: number): Promise<string[]> {
-    const evicted = urls.filter((url) => !this.backend.cachedFontFile(url, lease));
+    const evicted = this.leaseFontFiles(urls, lease);
 
     return evicted.length > 0 ? load(evicted, lease) : [];
   }
