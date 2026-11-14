@@ -9,6 +9,7 @@ fn read_font(path: &str) -> Vec<u8> {
 }
 
 const LATIN: UnicodeRange = UnicodeRange::new(0x0000, 0x00FF);
+const CYRILLIC: UnicodeRange = UnicodeRange::new(0x0400, 0x04FF);
 const DEVANAGARI: UnicodeRange = UnicodeRange::new(0x0900, 0x097F);
 
 /// Registers `path` under `family`, serving only `range`, as one `@font-face` subset would.
@@ -392,4 +393,37 @@ fn uncovered_characters_names_each_character_no_font_draws_once() {
     uncovered("Hi \u{0F40}\u{0F41}\u{0F40}"),
     ['\u{0F40}', '\u{0F41}']
   );
+}
+
+/// A family registered under the name of a last-resort font draws before it, and the last-resort
+/// font still draws what the family lacks.
+#[test]
+fn a_registered_family_draws_before_a_last_resort_font_of_its_name() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(
+      FontResource::new(read_font("geist/geist-latin-wght-300-800.ttf"))
+        .override_info(FontOverride {
+          family_name: Some("Geist".into()),
+          ..Default::default()
+        })
+        .last_resort(),
+    )
+    .unwrap();
+  register_subset(&mut fonts, "geist/Geist[wght].woff2", "Geist", CYRILLIC);
+
+  let node = Node::text("Hi Файли".to_string()).with_style(Style::default().with(
+    StyleDeclaration::font_family(FontFamily::from_css_str("Geist").unwrap()),
+  ));
+  let uncovered = takumi::uncovered_characters(
+    RenderOptions::builder()
+      .viewport(Viewport::new((400, 100)))
+      .node(node)
+      .fonts(&fonts)
+      .build(),
+  )
+  .unwrap();
+
+  assert!(uncovered.is_empty(), "{uncovered:?}");
 }
