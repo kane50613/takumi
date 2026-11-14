@@ -94,10 +94,6 @@ pub struct SvgSource {
   /// Canvas size and CSS intrinsic sizing read from the root element.
   #[cfg(not(feature = "svg"))]
   sizing: SvgSize,
-  /// Whether a vector backend embedding the markup adds the host `color` to it: the markup names
-  /// `currentColor` and the root element sets no `color` of its own.
-  #[cfg(feature = "svg")]
-  uses_current_color: bool,
   /// The document, drawn through the CSS cascade.
   #[cfg(feature = "svg")]
   document: Arc<SvgDocument>,
@@ -246,10 +242,44 @@ impl SvgSource {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
-  /// Markup for embedding in a vector backend, with the host `color` injected
-  /// as a root presentation attribute when `currentColor` depends on it.
+  /// Markup for embedding in a vector backend, drawn at `viewport`, with `host`'s color as a root
+  /// presentation attribute when the document's layout there reads it and the root sets none. An
+  /// attribute it does not read would still change what a `[color]` selector matches.
+  pub fn embedded_source(&self, host: &RenderContext, viewport: Size<f32>) -> Cow<'_, str> {
+    if !self.reads_color(host, viewport) {
+      return Cow::Borrowed(&self.source);
+    }
+    self.with_color_attribute(host.current_color)
+  }
+
+  /// Whether the layout at `viewport` in `host` reads the host's color, from the reads a cached
+  /// picture recorded when the source has one, so a repeated image is not laid out again.
+  fn reads_color(&self, host: &RenderContext, viewport: Size<f32>) -> bool {
+    if self.key.is_some() && !self.inline {
+      self.picture(host, viewport);
+
+      if let Some(reads) = self.known_reads(viewport) {
+        return reads.color;
+      }
+    }
+
+    self
+      .document
+      .ops(self.host(host), viewport)
+      .is_some_and(|(_, reads)| reads.color)
+  }
+
+  /// Markup for embedding in a vector backend, with `current_color` as a root presentation
+  /// attribute unless the root sets one.
+  #[deprecated(note = "use `embedded_source`, which adds the color only when the SVG reads it")]
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
-    if !self.uses_current_color {
+    self.with_color_attribute(current_color)
+  }
+
+  /// The markup with `color` as a root presentation attribute, unless the root sets one, which a
+  /// second would make malformed.
+  fn with_color_attribute(&self, color: Color) -> Cow<'_, str> {
+    if self.document.has_color() {
       return Cow::Borrowed(&self.source);
     }
 
@@ -266,7 +296,7 @@ impl SvgSource {
       return Cow::Borrowed(&self.source);
     }
 
-    let [red, green, blue, alpha] = current_color.0;
+    let [red, green, blue, alpha] = color.0;
     let mut markup = String::with_capacity(self.source.len() + 32);
 
     markup.push_str(&self.source[..insert_at]);
@@ -327,9 +357,19 @@ impl SvgSource {
   /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
   fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
     let source = self.key.filter(|_| !self.inline)?;
-    let reads = *self.reads.lock().ok()?.get(&viewport_bits(viewport))?;
+    let reads = self.known_reads(viewport)?;
 
     Some(SvgPicture::key_of(source, viewport, reads, host))
+  }
+
+  /// What a layout at `viewport` read from its host, once one has said.
+  fn known_reads(&self, viewport: Size<f32>) -> Option<HostReads> {
+    self
+      .reads
+      .lock()
+      .ok()?
+      .get(&viewport_bits(viewport))
+      .copied()
   }
 
   /// The box the document draws in when the box `host` styles shows it.
@@ -372,7 +412,6 @@ impl SvgSource {
   /// The source of `document`, parsed from `src`, as an image that no cache holds.
   fn from_document(document: SvgDocument, src: &str) -> Self {
     Self {
-      uses_current_color: document.uses_current_color(),
       document: Arc::new(document),
       inline: false,
       source: Box::from(src),
@@ -2164,20 +2203,55 @@ mod tests {
   // presentation attribute, so a standalone viewer resolves it identically.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_source_with_current_color_injects_root_attribute() -> Result<(), ImageError> {
+  fn svg_embedded_source_injects_the_host_color_it_reads() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#;
     let source: SvgSource = svg.parse()?;
+    let red = RenderContext::with_current_color(Color([255, 0, 0, 255]));
+    let small = Size::new(4.0, 4.0);
 
-    let injected = source.source_with_current_color(Color([255, 0, 0, 255]));
+    let injected = source.embedded_source(&red, small);
     assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
 
-    let plain = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
-    let source: SvgSource = plain.parse()?;
+    // A stylesheet that escapes the keyword still takes the host color.
+    let escaped = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>rect { fill: currentcol\6f r }</style><rect width="4" height="4"/></svg>"#;
+    let source: SvgSource = escaped.parse()?;
+
+    assert!(
+      source
+        .embedded_source(&red, small)
+        .starts_with(r##"<svg color="#ff0000ff""##)
+    );
+
+    let own = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect width="4" height="4" fill="currentColor"/></svg>"##;
+    let source: SvgSource = own.parse()?;
 
     assert!(matches!(
-      source.source_with_current_color(Color([255, 0, 0, 255])),
+      source.embedded_source(&red, small),
       Cow::Borrowed(_)
     ));
+
+    // A document that reads no color keeps its markup, so `svg[color]` still does not match.
+    let selected = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg[color] rect { fill: blue }</style><rect width="4" height="4" fill="red"/></svg>"#;
+    let source: SvgSource = selected.parse()?;
+
+    assert!(matches!(
+      source.embedded_source(&red, small),
+      Cow::Borrowed(_)
+    ));
+
+    // A media query reads the viewport the image is drawn at, not its own canvas.
+    let wide = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>rect { fill: red } @media (min-width: 8px) { rect { fill: currentColor } }</style><rect width="4" height="4"/></svg>"#;
+    let source: SvgSource = wide.parse()?;
+
+    assert!(matches!(
+      source.embedded_source(&red, small),
+      Cow::Borrowed(_)
+    ));
+    assert!(
+      source
+        .embedded_source(&red, Size::new(16.0, 16.0))
+        .starts_with(r##"<svg color="#ff0000ff""##)
+    );
     Ok(())
   }
 
