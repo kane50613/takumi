@@ -27,7 +27,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 <sup>2</sup> A descriptor's fields override what the file reports.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the [`fonts` budget](/docs/caching#release-fonts) evicts it.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the renderer [evicts it](/docs/caching#release-fonts) to make room. When several fonts in the list share a family and cover the same character, the one listed last wins, as a later `@font-face` rule does.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -241,7 +241,7 @@ renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
 renderer.clearFonts(); // back to the built-in Geist
 ```
 
-A later render that lists a released font loads it again. To release fonts automatically, cap them with the [`fonts` budget](/docs/caching#release-fonts).
+A later render that lists a released font loads it again. The renderer also evicts the fonts that renders' lists load when it needs room, one file at a time. Cap them with the [`fonts` budget](/docs/caching#release-fonts).
 
 ## Choosing a font
 
