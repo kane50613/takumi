@@ -25,9 +25,9 @@ export type DownloadStoreUsage = {
  */
 export interface DownloadStore {
   /** The download kept for `url`, or `undefined` when there is none. */
-  get(url: string): StoredDownload | undefined | Promise<StoredDownload | undefined>;
+  get(url: string): StoredDownload | undefined | PromiseLike<StoredDownload | undefined>;
   /** Offers `download`, requested at `url`, for the store to keep. */
-  set(url: string, download: StoredDownload): void | Promise<void>;
+  set(url: string, download: StoredDownload): void | PromiseLike<void>;
   /** What the store holds now. Without it, `cacheStats().store` reports its size as `null`. */
   usage?(): DownloadStoreUsage;
 }
@@ -176,6 +176,16 @@ const stateOf = perObject((_store: DownloadStore): StoreState => ({
   misses: 0,
 }));
 
+/** Whether `value` is a promise, from this realm or another, or another thenable. */
+function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
+}
+
 /** What `store` holds for `url`, a store that throws counting as holding nothing. */
 function lookup(
   store: DownloadStore,
@@ -184,7 +194,7 @@ function lookup(
   try {
     const found = store.get(url);
 
-    return found instanceof Promise ? found.catch(() => undefined) : found;
+    return isPromiseLike(found) ? Promise.resolve(found).catch(() => undefined) : found;
   } catch {
     return undefined;
   }
@@ -195,8 +205,8 @@ function offer(store: DownloadStore, url: string, download: StoredDownload) {
   try {
     const kept = store.set(url, download);
 
-    if (kept instanceof Promise) {
-      kept.catch(() => {});
+    if (isPromiseLike(kept)) {
+      Promise.resolve(kept).catch(() => {});
     }
   } catch {
     // The download still serves the requests that made it.
