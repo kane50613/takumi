@@ -630,10 +630,10 @@ export function renderPrepared<
       ({ images, fontFamilies, failedFontFiles: failedAgain = [], failedFonts = [] }) => {
         signal?.throwIfAborted();
 
-        // An optional font that fails now, as after the renderer evicted it, stays out of later renders.
+        // An optional font that fails now, as after the renderer evicted it, stays out of later
+        // renders. The report stays what prepare found.
         if (failedFonts.length > 0) {
           state.fonts = state.fonts && registry.without(state.fonts, failedFonts);
-          state.failedFonts.push(...failedFonts);
         }
 
         const failedFontFiles = [...state.failedFontFiles, ...failedAgain];
