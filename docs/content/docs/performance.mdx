@@ -28,7 +28,7 @@ A few calls change what overlapping calls see:
 - With `fontCacheMaxBytes`, a call can release a font another call loaded. The other call loads it again before it draws. A call that lists more fonts than the budget holds can still draw without some of them.
 - `free()` ends the renderer, and calls still in progress on WebAssembly reject with `null pointer passed to rust`. Free a renderer only after its calls settle.
 
-An aborted `signal` rejects its call with an `AbortError`. The call stops downloading and does not start its next step, so a call waiting for fonts or images ends early. On the native renderer, so does a call still waiting for a worker thread. A draw that has already started runs to the end, and the other calls on the renderer are unaffected.
+An aborted `signal` rejects its call with the signal's reason, which is an `AbortError` unless you pass `abort()` one of your own. The call checks the signal between its steps. It stops fetching images and `@font-face` files and does not start its next step. A font loader that is already running, such as a descriptor's `data()` function, runs to the end, and the call rejects once it settles. On the native renderer, a call still waiting for a worker thread ends early too. A draw that has already started runs to the end, and the other calls on the renderer are unaffected.
 
 ### A panic ends the process
 
