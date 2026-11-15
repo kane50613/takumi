@@ -680,7 +680,7 @@ describe("optional fonts", () => {
 
   test("that fail during a render are not loaded again", async () => {
     const { fonts, held } = fontBackend();
-    const data = mock(bytes);
+    const data = mock(async () => bytes());
     const flaky = { name: "Flaky", optional: true, data };
     const prepared = await prepareSource(fonts, textNode("a"), {}, { fonts: [flaky] }, reads);
 
