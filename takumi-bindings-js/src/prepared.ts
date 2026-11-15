@@ -487,7 +487,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       }
 
       // An earlier failure under a key the hook returns again does not keep its font out.
-      registry.clearFailures(failedFonts, added);
+      registry.clearFailures(added, failedFonts);
 
       return registry.dropOnFailure(added, async () => {
         // Without `fonts` or `fontFamilies`, the hook's fonts join the registered fallback chain.

@@ -496,7 +496,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       const families = await this.register(loader, load);
 
       // Another loader under the same key failed, but this one holds the font.
-      this.clearFailures(load.failed, [loader]);
+      this.clearFailures([loader], load.failed);
 
       return families;
     } catch (error) {
@@ -544,7 +544,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    */
   dropUnkept(fonts: readonly FontLoader[] | undefined): void {
     for (const font of fonts ?? []) {
-      const key = this.key(font);
+      const key = this.keyOf(font);
 
       if (this.transient.has(key)) {
         this.unkept.add(key);
@@ -609,12 +609,12 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   without(fonts: readonly FontLoader[], failed: FailedFont[]): readonly FontLoader[] {
     const sources = new Set(failed.map((font) => font.source));
 
-    return sources.size > 0 ? fonts.filter((font) => !sources.has(this.key(font))) : fonts;
+    return sources.size > 0 ? fonts.filter((font) => !sources.has(this.keyOf(font))) : fonts;
   }
 
   /** Removes from `failed` the failures under the keys of `fonts`, which load again or loaded. */
-  clearFailures(failed: FailedFont[], fonts: readonly FontLoader[]): void {
-    const keys = new Set(fonts.map((font) => this.key(font)));
+  clearFailures(fonts: readonly FontLoader[], failed: FailedFont[]): void {
+    const keys = new Set(fonts.map((font) => this.keyOf(font)));
 
     for (let index = failed.length - 1; index >= 0; index--) {
       if (keys.has(failed[index]?.source ?? "")) {
@@ -624,11 +624,8 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 
   /** The key the backend keeps `font` under, which a {@link FailedFont} names as its `source`. */
-  private key(font: FontLoader): string {
-    return this.keyOf(this.toLoader(font));
-  }
-
-  private keyOf(loader: Exclude<FontLoader, string>) {
+  private keyOf(font: FontLoader): string {
+    const loader = this.toLoader(font);
     const key = createFontKey(loader);
 
     if (typeof key === "string") {
