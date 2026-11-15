@@ -291,6 +291,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       );
     }
 
+    signal?.throwIfAborted();
+
     const loadedListed = await registry.cache(uncached);
 
     signal?.throwIfAborted();

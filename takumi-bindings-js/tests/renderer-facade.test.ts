@@ -128,6 +128,33 @@ describe("readSource and renderPrepared abort policy", () => {
   });
 });
 
+test("a signal aborted while images load starts no listed font", async () => {
+  const { fonts } = fontBackend();
+  const controller = new AbortController();
+  const data = mock(bytes);
+  const latin: [number, number][] = [[0x41, 0x5a]];
+  const font = { name: "Fam", unicodeRange: latin, data };
+  const image = {
+    src: "logo",
+    data: () => {
+      controller.abort();
+
+      return bytes();
+    },
+  };
+
+  await expect(
+    prepareSource(
+      fonts,
+      textNode("A"),
+      {},
+      { fonts: [font], images: [image], signal: controller.signal },
+      () => ({ images: [], fonts: [0] }),
+    ),
+  ).rejects.toThrow();
+  expect(data).not.toHaveBeenCalled();
+});
+
 test("a signal aborted while the fonts list resolves starts no image loader", async () => {
   const { fonts } = fontBackend();
   const controller = new AbortController();
