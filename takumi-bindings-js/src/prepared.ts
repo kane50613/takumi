@@ -433,6 +433,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
 
         return needs({ images: entries, fontFamilies: resolved, failedFontFiles });
       },
+      undefined,
+      signal,
     );
 
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
@@ -552,6 +554,8 @@ function familiesOf<TFamily extends RegisteredFamilyLike>(
 
       return fontFamilies;
     },
+    undefined,
+    fetch.signal,
   );
 }
 
