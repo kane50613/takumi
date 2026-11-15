@@ -129,6 +129,8 @@ type PreparedState<TSource, TLayout> = {
   source: TSource;
   layout: TLayout;
   fonts: FontLoader[] | undefined;
+  /** `fonts` and every listed font a read loaded, which the render forgets once it settles if they use `cache: "none"`. */
+  loadedFonts: FontLoader[] | undefined;
   fontFamilies: string[] | undefined;
   images: ImageSource[];
   /** The `@font-face` files the source draws with, which a render loads again once the renderer evicted them. */
@@ -377,6 +379,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
     source,
     layout,
     fonts: subset,
+    loadedFonts: listed ? resolvedFonts?.filter((_, id) => cached.has(id)) : resolvedFonts,
     fontFamilies,
     images: entries,
     fontFiles: [...tried].filter((url) => !failedFontFiles.includes(url)),
@@ -462,5 +465,5 @@ export function renderPrepared<
       },
       files,
     )
-    .finally(() => registry.dropUnkept(state.fonts));
+    .finally(() => registry.dropUnkept(state.loadedFonts));
 }

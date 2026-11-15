@@ -383,6 +383,31 @@ describe("fonts with cache none", () => {
     expect(backend.cacheFont).toHaveBeenCalledTimes(2);
   });
 
+  test("a subset a read loaded but the render left out goes too", async () => {
+    const { held, fonts } = fontBackend();
+    // The first read reaches Sans, which lacks the glyph its range claims, so later reads reach Serif.
+    const reads = mock(({ fonts: listed = [] }: { fonts?: ListedFont[] }) => ({
+      images: [],
+      fonts: listed[0] && held.has(listed[0].key) ? [1] : [0],
+    }));
+
+    await renderPrepared(
+      fonts,
+      await readSource(
+        fonts,
+        textNode("a"),
+        {},
+        { fonts: [font("Sans", "none"), font("Serif", "none")] },
+        reads,
+      ),
+      {},
+      () => undefined,
+    );
+
+    expect(reads).toHaveBeenCalledTimes(3);
+    expect(held.size).toBe(0);
+  });
+
   test("use a font the renderer holds without dropping it", async () => {
     const { held, backend, fonts } = fontBackend();
     const kept = font("Inter");
