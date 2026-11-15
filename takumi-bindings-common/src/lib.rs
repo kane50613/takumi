@@ -207,19 +207,24 @@ impl FontStore {
   /// Gives the font cache a budget of `max_bytes`, unbounded without one, and releases what it no
   /// longer fits.
   pub fn set_cache_max_bytes(&self, max_bytes: Option<u64>) -> Result<(), FontError> {
-    let mut fonts = Fonts::clone(&self.current());
-
-    self
-      .cache
-      .borrow_mut()
-      .set_max_bytes(&mut fonts, max_bytes)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
-
-    Ok(())
+    self.update_fonts(|fonts| self.cache.borrow_mut().set_max_bytes(fonts, max_bytes))
   }
 
   fn current(&self) -> Rc<Fonts> {
     self.fonts.borrow().clone()
+  }
+
+  /// Publishes the registry `change` makes of a copy of the current one, unless it fails.
+  fn update_fonts<T>(
+    &self,
+    change: impl FnOnce(&mut Fonts) -> Result<T, FontError>,
+  ) -> Result<T, FontError> {
+    let mut fonts = Fonts::clone(&self.current());
+    let changed = change(&mut fonts)?;
+
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(changed)
   }
 
   /// The families a registration under `key` added, marked used and pinned when `pin` is set; see
@@ -239,16 +244,16 @@ impl FontStore {
     key: Option<&str>,
     pinned: bool,
   ) -> Result<Vec<RegisteredFamily>, FontError> {
-    let mut fonts = Fonts::clone(&self.current());
-    let (registered, bytes) = register_font(&mut fonts, font)?;
+    self.update_fonts(|fonts| {
+      let (registered, bytes) = register_font(fonts, font)?;
 
-    self
-      .cache
-      .borrow_mut()
-      .admit(&mut fonts, key, &registered, bytes, pinned)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
+      self
+        .cache
+        .borrow_mut()
+        .admit(fonts, key, &registered, bytes, pinned)?;
 
-    Ok(registered)
+      Ok(registered)
+    })
   }
 
   /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
@@ -269,15 +274,13 @@ impl FontStore {
   /// space.
   pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), FontError> {
     let (source, bytes) = FontSource::from(data).into_decoded()?;
-    let mut fonts = Fonts::clone(&self.current());
 
-    self
-      .cache
-      .borrow_mut()
-      .admit_file(&mut fonts, url, source, bytes as u64)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
-
-    Ok(())
+    self.update_fonts(|fonts| {
+      self
+        .cache
+        .borrow_mut()
+        .admit_file(fonts, url, source, bytes as u64)
+    })
   }
 
   /// Goes back to the embedded last-resort fonts alone.
