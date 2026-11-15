@@ -1,6 +1,7 @@
 //! An inline `<svg>` in HTML styled by the page, as Blink styles the SVG elements of an HTML
 //! document.
 
+use serde_json::json;
 use takumi::{
   prelude::{FromHtml, FromHtmlOptions, Node, RenderOptions, StyleSheet, Viewport},
   render,
@@ -76,6 +77,74 @@ fn inked_columns(html: &str) -> Vec<usize> {
   (0..120)
     .filter(|x| (0..40).any(|y| pixels[(y * 120 + x) * 4 + 3] > 0))
     .collect()
+}
+
+/// The inked pixels of a 20×10 render of `node`.
+fn inked_pixels(node: Node) -> usize {
+  let bitmap = render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((20, 10)))
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  bitmap
+    .as_raw()
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .filter(|pixel| pixel[3] > 0)
+    .count()
+}
+
+/// An `<svg>` with `width` and `height` attributes filling a 20×10 flex box with ink as its
+/// markup does and as `fromJsx` hands it over: the markup as an image's source, a number of
+/// pixels as the image's size, and the attributes beside it.
+fn sized_svgs(width: &str, height: &str) -> (Node, Node) {
+  let markup = format!(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 20 10" preserveAspectRatio="none"><rect width="20" height="10"/></svg>"#
+  );
+  let html = Node::from_html(
+    &format!(r#"<div style="display:flex; width:20px; height:10px">{markup}</div>"#),
+    FromHtmlOptions::default(),
+  )
+  .unwrap();
+  let pixels = |value: &str| value.parse::<f32>().ok();
+  let jsx = serde_json::from_value(json!({
+    "type": "container",
+    "style": { "display": "flex", "width": "20px", "height": "10px" },
+    "children": [{
+      "type": "image",
+      "tagName": "svg",
+      "src": markup,
+      "width": pixels(width),
+      "height": pixels(height),
+      "attributes": { "width": width, "height": height },
+    }],
+  }))
+  .unwrap();
+
+  (html, jsx)
+}
+
+/// An outermost `<svg>`'s `width` and `height` style it as CSS lengths, a percentage resolving
+/// against its containing block, as Blink's `SVGSVGElement::CollectStyleForPresentationAttribute`.
+#[test]
+fn an_svg_size_attribute_in_other_units_than_pixels_styles_its_box() {
+  for (width, height, inked) in [
+    ("20", "10", 200),
+    ("50%", "10", 100),
+    ("20", "50%", 100),
+    ("50%", "50%", 50),
+    ("0.5em", "10", 80),
+  ] {
+    let (html, jsx) = sized_svgs(width, height);
+
+    assert_eq!(inked_pixels(html), inked, "HTML {width} × {height}");
+    assert_eq!(inked_pixels(jsx), inked, "JSX {width} × {height}");
+  }
 }
 
 /// A `tspan` opens the bidi controls its `unicode-bidi` and `direction` call for, as an inline

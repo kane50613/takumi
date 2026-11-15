@@ -4,14 +4,14 @@ use crate::{
   context::RenderContext,
   layout::{
     length_utils::NaturalSize,
-    node::{ImageData, ImageSourceInput},
+    node::{ImageData, ImageSourceInput, Node, NodeKind},
   },
   layout_unit::LayoutUnit,
   resources::image::{
     ImageCacheMode, ImageError, ImageResult, ImageSource, ResourceCache, decode_data_uri,
     is_svg_like,
   },
-  style::{Length, Style, StyleDeclaration},
+  style::{FromCssStr, Length, Style, StyleDeclaration},
 };
 
 /// Whether `src` names an image the render looks up in its `images`.
@@ -25,22 +25,6 @@ impl ImageData {
     match &self.src {
       ImageSourceInput::Url(src) if is_image_reference(src) => Some(src.as_ref()),
       _ => None,
-    }
-  }
-
-  /// Pushes the element's `width` and `height` attributes into its preset style.
-  pub(super) fn push_size_preset(&self, preset: &mut Option<Arc<Style>>) {
-    if self.width.is_none() && self.height.is_none() {
-      return;
-    }
-
-    let preset = Arc::make_mut(preset.get_or_insert_default());
-
-    if let Some(width) = self.width {
-      preset.push(StyleDeclaration::width(Length::Px(width)), false);
-    }
-    if let Some(height) = self.height {
-      preset.push(StyleDeclaration::height(Length::Px(height)), false);
     }
   }
 
@@ -70,6 +54,85 @@ impl ImageData {
       ..NaturalSize::default()
     }
   }
+}
+
+impl Node {
+  /// Pushes the image's `width` and `height` into its preset, its pixels before its attributes.
+  pub(super) fn push_image_size_preset(&self, preset: &mut Option<Arc<Style>>) {
+    let NodeKind::Image(image) = &self.kind else {
+      return;
+    };
+
+    for (name, pixels, declaration) in [
+      (
+        "width",
+        image.width,
+        StyleDeclaration::width as fn(Length) -> StyleDeclaration,
+      ),
+      ("height", image.height, StyleDeclaration::height),
+    ] {
+      let length = pixels.map(Length::Px).or_else(|| {
+        self
+          .tag_name()
+          .zip(self.attribute(name))
+          .and_then(|(tag, value)| size_attribute(tag, value))
+      });
+
+      if let Some(length) = length {
+        Arc::make_mut(preset.get_or_insert_default()).push(declaration(length), false);
+      }
+    }
+  }
+}
+
+/// The `width` or `height` attribute of an `<img>` or `<svg>` as Blink maps it to style: an
+/// `<img>` takes HTML's rules for parsing dimension values, a number of pixels or a percentage,
+/// and an outermost `<svg>` a CSS length, a number counting as pixels. Blink's
+/// `HTMLImageElement::CollectStyleForPresentationAttribute` and
+/// `SVGSVGElement::CollectStyleForPresentationAttribute`.
+/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-dimension-values>
+pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
+  let value = value.trim();
+
+  match tag {
+    "svg" => {
+      return Length::from_css_str(value)
+        .ok()
+        .or_else(|| value.parse().ok().map(Length::Px));
+    }
+    "img" => {}
+    _ => return None,
+  }
+
+  let digits_len = |text: &str| {
+    text
+      .find(|character: char| !character.is_ascii_digit())
+      .unwrap_or(text.len())
+  };
+  let integer_end = digits_len(value);
+
+  if integer_end == 0 {
+    return None;
+  }
+  // A fraction needs a digit after its point; anything past the number is ignored.
+  let number_end = match value
+    .get(integer_end..)
+    .unwrap_or_default()
+    .strip_prefix('.')
+  {
+    Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
+      integer_end + 1 + digits_len(fraction)
+    }
+    _ => integer_end,
+  };
+  let (number, unit) = value.split_at_checked(number_end)?;
+  let number: f32 = number.parse().ok()?;
+
+  Some(if unit.starts_with('%') {
+    Length::Percentage(number)
+  } else {
+    Length::Px(number)
+  })
 }
 
 const DATA_URI_PREFIX: &str = "data:";

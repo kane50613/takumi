@@ -16,6 +16,7 @@ import {
   isReactFragment,
   isReactMemo,
   isValidElement,
+  pixelDimensions,
 } from "./utils";
 
 export * from "./style-presets";
@@ -158,13 +159,13 @@ class NodeBuilder implements RenderEnv {
       }
 
       return nodeResult(
-        image({ src: element.props.src, ...dimensions(element.props), ...metadata }),
+        image({ src: element.props.src, ...pixelDimensions(element.props), ...metadata }),
       );
     }
 
     if (isHtmlElement(element, "svg")) {
       return nodeResult(
-        image({ src: serializeSvg(element), ...dimensions(element.props), ...metadata }),
+        image({ src: serializeSvg(element), ...pixelDimensions(element.props), ...metadata }),
       );
     }
 
@@ -297,17 +298,6 @@ class NodeBuilder implements RenderEnv {
       typeof style === "object" && style !== null ? style : undefined,
     );
   }
-}
-
-/** Width and height props as numbers; non-numeric strings become `NaN`. */
-function dimensions({ width, height }: { width?: number | string; height?: number | string }): {
-  width?: number;
-  height?: number;
-} {
-  return {
-    width: width !== undefined ? Number(width) : undefined,
-    height: height !== undefined ? Number(height) : undefined,
-  };
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {

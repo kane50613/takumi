@@ -13,6 +13,8 @@ use serde::Deserialize;
 
 pub(crate) use self::image::is_image_reference;
 pub use self::image::resolve_image;
+#[cfg(feature = "html")]
+pub(crate) use self::image::size_attribute;
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
@@ -656,9 +658,7 @@ impl Node {
   pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {
     let mut preset = self.metadata.preset.take();
 
-    if let NodeKind::Image(image) = &self.kind {
-      image.push_size_preset(&mut preset);
-    }
+    self.push_image_size_preset(&mut preset);
 
     NodeStyleLayers {
       preset,

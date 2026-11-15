@@ -415,6 +415,37 @@ describe("fromJsx", () => {
     } satisfies ImageNode);
   });
 
+  test("leaves a width or height in other units than pixels to the attributes", async () => {
+    const { node } = await fromJsx(
+      <div>
+        <svg width="100%" height="2em" viewBox="0 0 2 1" />
+        <svg width="24px" height={12} />
+        <img src="https://example.com/image.jpg" width="50%" height="" />
+      </div>,
+    );
+
+    expect((node as ContainerNode).children).toMatchObject([
+      {
+        type: "image",
+        width: undefined,
+        height: undefined,
+        attributes: { width: "100%", height: "2em" },
+      },
+      {
+        type: "image",
+        width: undefined,
+        height: 12,
+        attributes: { width: "24px", height: "12" },
+      },
+      {
+        type: "image",
+        width: undefined,
+        height: undefined,
+        attributes: { width: "50%", height: "" },
+      },
+    ]);
+  });
+
   test("maps default tw property to node tw", async () => {
     const { node } = await fromJsx(<p tw="text-red-500">Hello</p>);
 
