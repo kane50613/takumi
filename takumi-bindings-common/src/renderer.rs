@@ -3,7 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 use takumi_core::resources::{
-  cache::{Cache, CacheKindStats as PoolKindStats, CacheOptions as PoolOptions},
+  cache::{
+    Cache, CacheKindStats as PoolKindStats, CacheMemoryStats as PoolMemoryStats,
+    CacheOptions as PoolOptions,
+  },
   glyph_cache,
 };
 
@@ -152,6 +155,16 @@ pub struct CacheKindStats {
   pub evictions: f64,
 }
 
+impl From<PoolMemoryStats> for CacheMemoryStats {
+  fn from(stats: PoolMemoryStats) -> Self {
+    Self {
+      current: stats.current as f64,
+      high: stats.high as f64,
+      max: stats.max as f64,
+    }
+  }
+}
+
 impl From<PoolKindStats> for CacheKindStats {
   fn from(stats: PoolKindStats) -> Self {
     Self {
@@ -170,11 +183,7 @@ impl CacheStats {
     let stats = cache.stats();
 
     Self {
-      memory: CacheMemoryStats {
-        current: stats.memory.current as f64,
-        high: stats.memory.high as f64,
-        max: stats.memory.max as f64,
-      },
+      memory: stats.memory.into(),
       budgets: CacheBudgetStats {
         images: stats.images.into(),
         #[cfg(feature = "svg")]
