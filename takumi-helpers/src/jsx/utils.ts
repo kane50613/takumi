@@ -34,7 +34,6 @@ export function isFunctionComponent(value: unknown): value is (props: unknown) =
 
 const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
 const REACT_MEMO_TYPE = Symbol.for("react.memo");
-const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
 type ForwardRefComponent = { render: (props: unknown, ref: unknown) => ReactNode };
 type MemoComponent = { type: ReactElementLike["type"] };
@@ -57,6 +56,7 @@ export function isReactMemo(type: unknown): type is MemoComponent {
   return hasReactMarker(type, REACT_MEMO_TYPE) && "type" in type;
 }
 
-export function isReactFragment(element: ReactElementLike): boolean {
-  return element.type === REACT_FRAGMENT_TYPE;
+/** Whether `element` only renders its children, as `<>`, `StrictMode`, `Suspense`, and other runtimes' symbol types do. */
+export function isFragmentLike(element: ReactElementLike): boolean {
+  return typeof element.type === "symbol";
 }

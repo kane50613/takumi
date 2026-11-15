@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { h } from "preact";
 import { createElement as createCompatElement } from "preact/compat";
-import { createElement, type ReactElement } from "react";
+import { createElement, Profiler, StrictMode, Suspense, type ReactElement } from "react";
 import { fromJsx } from "../../src/jsx";
 import type { ReactElementLike } from "../../src/types";
 
@@ -28,6 +28,19 @@ describe("element types", () => {
   test("every runtime's element renders", async () => {
     for (const element of Object.values(guards)) {
       const { node } = await fromJsx(element);
+
+      expect(node).toMatchObject({ type: "text", text: "text" });
+    }
+  });
+
+  test("a symbol element type renders its children", async () => {
+    const wrappers = [StrictMode, Suspense, Profiler, Symbol.for("custom.fragment")];
+
+    for (const type of wrappers) {
+      const { node } = await fromJsx({
+        type,
+        props: { id: "wrapper", onRender() {}, children: <div>text</div> },
+      });
 
       expect(node).toMatchObject({ type: "text", text: "text" });
     }

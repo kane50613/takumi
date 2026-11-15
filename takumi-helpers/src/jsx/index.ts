@@ -13,7 +13,7 @@ import {
   isHtmlElement,
   isUnrenderedElement,
   isReactForwardRef,
-  isReactFragment,
+  isFragmentLike,
   isReactMemo,
   isValidElement,
 } from "./utils";
@@ -121,8 +121,7 @@ class NodeBuilder implements RenderEnv {
     const wrapperResult = this.tryWrapper(element);
     if (wrapperResult !== undefined) return wrapperResult;
 
-    // Handle React fragments <></>
-    if (isReactFragment(element)) {
+    if (isFragmentLike(element)) {
       return this.children(element);
     }
 
@@ -332,7 +331,7 @@ function collectText(element: ReactElementLike): string | undefined {
     return collectTextFromIterable(children as Iterable<ReactNode>);
   }
 
-  if (isValidElement(children) && isReactFragment(children)) {
+  if (isValidElement(children) && isFragmentLike(children)) {
     return collectText(children);
   }
 }
