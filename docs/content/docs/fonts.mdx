@@ -17,15 +17,17 @@ Load a font for every script your text uses.
 
 Pass the fonts a render needs through `fonts`. Each entry takes one of three forms:
 
-| Entry      | Resolves to                                                      |
-| ---------- | ---------------------------------------------------------------- |
-| URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                |
-| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly. |
-| Descriptor | `{ name, data, weight, style, generic }`. <sup>2</sup>           |
+| Entry      | Resolves to                                                          |
+| ---------- | -------------------------------------------------------------------- |
+| URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                    |
+| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.     |
+| Descriptor | `{ name, data, weight, style, generic, unicodeRange }`. <sup>2</sup> |
 
 <sup>1</sup> Name, weight, and style come from the file.
 
 <sup>2</sup> A descriptor's fields override what the file reports.
+
+The native `@takumi-rs/core` reads WOFF2, WOFF, TTF, OTF, and TTC files. The WebAssembly packages read all of them except WOFF, so convert a WOFF font to WOFF2 for an edge runtime.
 
 `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
@@ -56,6 +58,10 @@ export function GET() {
   });
 }
 ```
+
+Leave `weight` out for a variable font. The font then serves every weight along its `wght` axis, as an `@font-face` rule without `font-weight` does. A `weight` pins the font to that one weight, so registering one variable file once per weight only adds copies.
+
+`unicodeRange` limits the font to inclusive `[start, end]` codepoint ranges, as `@font-face` `unicode-range` does. Register each subset of a family under the same `name` with its own ranges, and each character uses the subset that covers it.
 
 `generic` assigns the font to a CSS generic family keyword. A stack that ends in `monospace` or `serif` then reaches the font without naming it. This is how Tailwind's `font-mono` finds it:
 
@@ -253,7 +259,7 @@ Past the cap, the least recently used families go first. Fonts from `registerFon
 
 ### Fallback chain
 
-`fontFamilies` is the ordered list of families to try when a glyph is missing. Set it to choose which family wins and what backs it up.
+An element's own `font-family` comes first. When none of its families covers a character, Takumi tries `fontFamilies` in order, where a browser would try the system's fonts. So you don't need to append these families to every element's `font-family`.
 
 ```tsx twoslash title="Choose font fallback order"
 import { render } from "takumi-js";

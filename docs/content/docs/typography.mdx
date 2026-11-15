@@ -110,6 +110,34 @@ The target decides which lines share a scale:
 
 The percentage caps how far the scale can go. With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the cap holds back. The `line-clamp` count still applies.
 
+`text-fit` scales one line box at a time, so it cannot find the largest size that fits in a number of lines. Find that size with [`measure`](/docs/reference/measure), which lays out without painting:
+
+```tsx title="Largest font size that fits in two lines"
+import { measure } from "takumi-js";
+
+async function fitLines(title: string, width: number, maxLines: number) {
+  let low = 24;
+  let high = 96;
+
+  while (high - low > 1) {
+    const size = Math.floor((low + high) / 2);
+    const { height } = await measure(
+      <div style={{ width, fontSize: size, lineHeight: 1.2 }}>{title}</div>,
+    );
+
+    if (height <= maxLines * size * 1.2) {
+      low = size;
+    } else {
+      high = size;
+    }
+  }
+
+  return low;
+}
+```
+
+Each step is one layout on the default renderer, and the fonts load once, so the search costs about seven layouts for this range.
+
 ### RTL & bidirectional text
 
 Takumi runs the Unicode Bidirectional Algorithm, so Arabic and Hebrew text, mixed with left-to-right text, orders correctly. Set the base direction with the `dir` attribute or `direction: rtl`. `unicode-bidi` controls embedding, isolation, and overrides, as in a browser.
