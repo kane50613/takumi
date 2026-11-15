@@ -116,16 +116,25 @@ The percentage caps how far the scale can go. With `text-overflow: ellipsis`, Ta
 import { measure } from "takumi-js";
 
 async function fitLines(title: string, width: number, maxLines: number) {
-  let low = 24;
-  let high = 96;
-
-  while (high - low > 1) {
-    const size = Math.floor((low + high) / 2);
+  const fits = async (size: number) => {
     const { height } = await measure(
       <div style={{ width, fontSize: size, lineHeight: 1.2 }}>{title}</div>,
     );
 
-    if (height <= maxLines * size * 1.2) {
+    return height <= maxLines * size * 1.2;
+  };
+  let low = 24;
+  let high = 96;
+
+  // Even the smallest size overflows, so clamp the text with `line-clamp` at this size.
+  if (!(await fits(low))) {
+    return low;
+  }
+
+  while (high - low > 1) {
+    const size = Math.floor((low + high) / 2);
+
+    if (await fits(size)) {
       low = size;
     } else {
       high = size;
@@ -136,7 +145,7 @@ async function fitLines(title: string, width: number, maxLines: number) {
 }
 ```
 
-Each step is one layout on the default renderer, and the fonts load once, so the search costs about seven layouts for this range.
+Each step is one layout on the default renderer, and the fonts load once, so the search costs about eight layouts for this range.
 
 ### RTL & bidirectional text
 

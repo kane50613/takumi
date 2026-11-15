@@ -259,7 +259,7 @@ Past the cap, the least recently used families go first. Fonts from `registerFon
 
 ### Fallback chain
 
-An element's own `font-family` comes first. When none of its families covers a character, Takumi tries `fontFamilies` in order, where a browser would try the system's fonts. So you don't need to append these families to every element's `font-family`.
+An element's own `font-family` comes first. When none of its families covers a character, Takumi tries `fontFamilies` in order, where a browser would try the system's fonts. So you don't need to append these families to every element's `font-family`. For an emoji, a color font anywhere in `fontFamilies` wins over an earlier font without color glyphs, as in Chromium.
 
 ```tsx twoslash title="Choose font fallback order"
 import { render } from "takumi-js";
