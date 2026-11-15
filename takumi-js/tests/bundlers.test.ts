@@ -90,6 +90,13 @@ describe("#backend resolution by import condition", () => {
     expect(code).not.toContain("@takumi-rs/core");
   });
 
+  test.each(["node", "bun"])("takumi-wasm wins over %s → WASM, never native core", (target) => {
+    const code = bundle({ target, conditions: ["takumi-wasm"] });
+
+    expect(code).toContain("@takumi-rs/wasm/auto");
+    expect(code).not.toContain("@takumi-rs/core");
+  });
+
   // workerd, worker, deno, and edge-light all resolve to this same backend.
   test("browser → WASM auto, never native core", () => {
     const code = bundle({ target: "browser" });

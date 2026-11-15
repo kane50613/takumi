@@ -9,12 +9,13 @@ Search this page for the error message from your build or server logs. If the fa
 
 Check that your import matches the runtime and bundler. The table lists the import for each target.
 
-| Target                                 | Import                                             |
-| -------------------------------------- | -------------------------------------------------- |
-| Node.js, Bun, Deno, Cloudflare Workers | `takumi-js` / `takumi-pdf`                         |
-| A Next.js route, either runtime        | `takumi-js` / `takumi-pdf/next`                    |
-| A browser bundle, image output         | `takumi-js/wasm/no-init` plus `takumi-js/wasm-url` |
-| A browser or web worker bundle, PDF    | `takumi-pdf/no-init` plus `takumi-pdf/wasm-url`    |
+| Target                                  | Import                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------- |
+| Node.js, Bun, Deno, Cloudflare Workers  | `takumi-js` / `takumi-pdf`                                                       |
+| Node.js or Bun without the native addon | `takumi-js` under the [`takumi-wasm` condition](/docs#use-webassembly-in-nodejs) |
+| A Next.js route, either runtime         | `takumi-js` / `takumi-pdf/next`                                                  |
+| A browser bundle, image output          | `takumi-js/wasm/no-init` plus `takumi-js/wasm-url`                               |
+| A browser or web worker bundle, PDF     | `takumi-pdf/no-init` plus `takumi-pdf/wasm-url`                                  |
 
 The default entry follows the export conditions your bundler sets. If it picks the wrong build, use the runtime-specific entry.
 
