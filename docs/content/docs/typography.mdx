@@ -118,7 +118,9 @@ import { measure } from "takumi-js";
 async function fitLines(title: string, width: number, maxLines: number) {
   const fits = async (size: number) => {
     const { height } = await measure(
-      <div style={{ width, fontSize: size, lineHeight: 1.2 }}>{title}</div>,
+      <div style={{ width, fontSize: size, lineHeight: 1.2, overflowWrap: "anywhere" }}>
+        {title}
+      </div>,
     );
 
     return height <= maxLines * size * 1.2;
@@ -145,7 +147,7 @@ async function fitLines(title: string, width: number, maxLines: number) {
 }
 ```
 
-Each step is one layout on the default renderer, and the fonts load once, so the search costs about eight layouts for this range.
+`overflowWrap: "anywhere"` breaks a word too long for the width, so the height alone tells whether the text fits. Each step is one layout on the default renderer, and the fonts load once, so the search costs about eight layouts for this range.
 
 ### RTL & bidirectional text
 
