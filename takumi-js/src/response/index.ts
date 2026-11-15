@@ -1,7 +1,8 @@
-import { render, type RenderInput, type RenderOptions } from "../render";
+import type { RenderReport } from "@takumi-rs/core";
+import { type RenderInput, type RenderOptions, renderWithReport } from "../render";
 
 export type ImageResponseResult = Response & {
-  readonly ready: Promise<void>;
+  readonly ready: Promise<RenderReport>;
 };
 
 export type ImageResponseOptions = RenderOptions &
@@ -22,11 +23,11 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
-/** Streams the rendered image; `ready` settles once the render finishes or fails. */
+/** Streams the rendered image; `ready` resolves to the render's report once it finishes, or rejects when it fails. */
 function renderStream(element: RenderInput, options?: ImageResponseOptions) {
-  let resolveReady: (value: void | PromiseLike<void>) => void;
+  let resolveReady: (report: RenderReport) => void;
   let rejectReady: (reason?: unknown) => void;
-  const ready = new Promise<void>((resolve, reject) => {
+  const ready = new Promise<RenderReport>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
   });
@@ -38,10 +39,10 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const image = await render(element, options);
+        const { image, report } = await renderWithReport(element, options);
         controller.enqueue(image);
         controller.close();
-        resolveReady();
+        resolveReady(report);
       } catch (error) {
         controller.error(error);
 
@@ -74,7 +75,8 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
  * ```
  */
 export class ImageResponse extends Response {
-  readonly ready: Promise<void>;
+  /** Resolves to the report of what the render could not satisfy once it finishes, and rejects when it fails. */
+  readonly ready: Promise<RenderReport>;
 
   constructor(component: RenderInput, options?: ImageResponseOptions) {
     const { stream, ready } = renderStream(component, options);

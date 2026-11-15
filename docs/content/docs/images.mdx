@@ -224,6 +224,8 @@ const image = await render(element, {
 });
 ```
 
+The [render report](/docs/fonts#what-a-render-could-not-draw) lists each image left out under `failedImages`, with its `src` and the error. Read it from `prepared.report` after a renderer's `prepare()`, or from `await response.ready` on an `ImageResponse`.
+
 ### URLs from user input
 
 <Callout type="warn">

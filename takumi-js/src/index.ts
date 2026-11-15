@@ -1,5 +1,6 @@
 export type {
   ContainerNode,
+  FailedImage,
   FetchOptions,
   ImageNode,
   Node,
@@ -14,6 +15,7 @@ export type {
   CacheBudgets,
   CacheOptions,
   DitheringAlgorithm,
+  FailedFont,
   Font,
   FontDetails,
   FontLoader,
@@ -23,7 +25,9 @@ export type {
   KeyframesRuleList,
   MeasuredNode,
   MeasuredTextRun,
+  MissingGlyphsHandler,
   OutputFormat,
+  RenderReport,
 } from "@takumi-rs/core";
 export { cacheStats, setCacheOptions, setGlyphCacheMaxBytes } from "./cache";
 export { measure, render, renderAnimation, renderSvg } from "./render";

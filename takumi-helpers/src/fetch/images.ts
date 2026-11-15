@@ -56,8 +56,49 @@ function storeFor(
   return isEmojiImageUrl(url) ? defaultStore(fetch ?? globalThis.fetch) : null;
 }
 
+/** An image URL a fetch left out, and why. */
+export type FailedImage = { src: string; error: unknown };
+
 /** Fetches each of `urls` not already in `sources`, returning the entries with `sources` first. */
 export async function fetchImages<T extends { src: string } = FetchedImage>({
+  throwOnError = true,
+  ...options
+}: Omit<PrepareImagesOptions<T>, "node">): Promise<(T | FetchedImage)[]> {
+  if (!throwOnError) {
+    return (await fetchImagesSettled(options)).images;
+  }
+
+  const { provided, tasks } = startFetches(options);
+
+  return [...provided, ...(await Promise.all(tasks.map(({ fetched }) => fetched)))];
+}
+
+/**
+ * Fetches as {@link fetchImages} does with `throwOnError: false`, returning the URLs it left out too.
+ *
+ * @internal
+ */
+export async function fetchImagesSettled<T extends { src: string } = FetchedImage>(
+  options: Omit<PrepareImagesOptions<T>, "node" | "throwOnError">,
+): Promise<{ images: (T | FetchedImage)[]; failed: FailedImage[] }> {
+  const { provided, tasks } = startFetches(options);
+  const settled = await Promise.all(
+    tasks.map(({ src, fetched }) =>
+      fetched.then(
+        (image) => ({ image }),
+        (error: unknown) => ({ failure: { src, error } }),
+      ),
+    ),
+  );
+
+  return {
+    images: [...provided, ...settled.flatMap((result) => ("image" in result ? result.image : []))],
+    failed: settled.flatMap((result) => ("failure" in result ? result.failure : [])),
+  };
+}
+
+/** Starts fetching each of `urls` not already in `sources`, with the `sources` to put first. */
+function startFetches<T extends { src: string }>({
   urls = [],
   sources = [],
   fetchCache,
@@ -67,26 +108,24 @@ export async function fetchImages<T extends { src: string } = FetchedImage>({
   signal,
   maxBytes,
   allowUrl,
-  throwOnError = true,
-}: Omit<PrepareImagesOptions<T>, "node">): Promise<(T | FetchedImage)[]> {
+}: Omit<PrepareImagesOptions<T>, "node" | "throwOnError">): {
+  provided: T[];
+  tasks: { src: string; fetched: Promise<FetchedImage> }[];
+} {
   const provided = new Map(sources.map((image) => [image.src, image]));
   const missing = [...new Set(urls)].filter(
     (url) => !provided.has(url) && (fetch !== undefined || isRemoteUrl(url)),
   );
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
-  const tasks = missing.map(async (src): Promise<FetchedImage> => ({
-    src,
-    data: await fetchBytes(src, {
-      ...fetchOptions,
-      store: storeFor(src, { fetchCache, store, fetch }),
-    }),
-  }));
-  const fetched = throwOnError
-    ? await Promise.all(tasks)
-    : (await Promise.allSettled(tasks))
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => result.value);
-
-  return [...provided.values(), ...fetched];
+  return {
+    provided: [...provided.values()],
+    tasks: missing.map((src) => ({
+      src,
+      fetched: fetchBytes(src, {
+        ...fetchOptions,
+        store: storeFor(src, { fetchCache, store, fetch }),
+      }).then((data) => ({ src, data })),
+    })),
+  };
 }

@@ -320,6 +320,50 @@ A descriptor takes the field directly, such as `{ name: "Brand", data: loadBrand
 
 A prepared source picks its `unicodeRange` subsets once, in `prepare`. When an optional font it picked loads there but fails when a later render loads it again, as after the renderer released it, that render draws without it and does not reach the next family for those characters. Prepare the source again to pick its subsets anew.
 
+### What a render could not draw
+
+A render reports what it could not satisfy. A renderer's `prepare()` returns it as `prepared.report`, and `ImageResponse` resolves `ready` to it. The report has four lists:
+
+| Field                | Lists                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `missingCharacters`  | Characters no font in their fallback chain draws, the built-in Geist included, each once in document order.  |
+| `unresolvedFamilies` | Families that `font-family` or `fontFamilies` names and no registered or listed font provides.               |
+| `failedFonts`        | Optional fonts and `@font-face` files that failed to load, each with its `source` and `error`.               |
+| `failedImages`       | Images left out under [`throwOnError: false`](/docs/images#failed-fetches), each with its `src` and `error`. |
+
+Generic keywords such as `sans-serif` never count as unresolved, since they resolve to the fonts you load. Emoji that `takumi-js` draws as images never count as missing characters. Spaces and invisible characters, such as a zero-width joiner, do not count either.
+
+```tsx twoslash title="Find the characters no font draws"
+import { Renderer } from "takumi-js/node";
+
+const renderer = new Renderer();
+const prepared = await renderer.prepare("<div>Hello 世界</div>", { width: 1200, height: 630 });
+
+console.log(prepared.report.missingCharacters); // ["世", "界"]
+```
+
+Takumi reads the report before layout, with the same font matching that draws the text. It checks one character at a time, so a character that shaping draws from a decomposed form, such as an accented letter built from a base letter and a combining mark, can still show up as missing.
+
+### Load fonts for missing characters
+
+`onMissingGlyphs` loads fonts only for text that needs them. When the render finds characters no font draws, it calls the function once with those characters in document order. The fonts it returns load as part of the render's `fonts`, and the render reads the text again with them. Characters that stay uncovered go to `missingCharacters`.
+
+```tsx twoslash title="Load a CJK font only when the text needs it"
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
+
+declare const title: string;
+// ---cut---
+const image = await render(<div>{title}</div>, {
+  width: 1200,
+  height: 630,
+  onMissingGlyphs: (characters) =>
+    googleFonts({ families: ["Noto Sans JP"], text: characters.join("") }), // [!code highlight]
+});
+```
+
+Return `undefined` or an empty list to render without more fonts. The fonts the function returns follow the rules of the `fonts` list, so `cache` and `optional` apply to them too. When you pass `fontFamilies`, their families join the end of it, so the render falls back to them.
+
 ## Choosing a font
 
 ### Fallback chain

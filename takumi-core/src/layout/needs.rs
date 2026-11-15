@@ -9,6 +9,7 @@ use crate::{
   fonts::{
     font::Font,
     font_face::PendingSource,
+    font_face_cache::fold_family_name,
     font_fallback_list::{FontFallbackList, ReachedFace},
     font_fallback_priority::FontFallbackPriority,
     symbols_iterator::SymbolsIterator,
@@ -18,13 +19,18 @@ use crate::{
     node::{ImageSourceInput, NodeKind, is_image_reference, resolve_image},
     tree::RenderNode,
   },
-  resources::image::{ImageSource, is_svg_like},
+  resources::{
+    font::Fonts,
+    image::{ImageSource, is_svg_like},
+  },
   style::{BackgroundImage, Display, Float, FontVariantCaps, find_keyframes},
+  text::character::{treat_as_space, treat_as_zero_width_space},
 };
 use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
 
 /// The images a render tree looks up by URL and the pending fonts its text loads.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RenderNeeds {
   /// The image URLs the tree looks up, except `data:` URIs and inline SVG.
   pub images: BTreeSet<String>,
@@ -36,6 +42,10 @@ pub struct RenderNeeds {
   /// The URLs of the loaded `@font-face` files font fallback draws from, which a host keeps loaded
   /// until the render runs.
   pub loaded_font_files: BTreeSet<String>,
+  /// The characters no face font fallback reaches draws, the last resort included, each once in document order.
+  pub missing_characters: Vec<char>,
+  /// The families the text's `font-family` stacks or the render's fallback name that no face provides.
+  pub unresolved_families: Vec<String>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -45,6 +55,24 @@ impl Extend<RenderNeeds> for RenderNeeds {
       self.faces.extend(read.faces);
       self.font_files.extend(read.font_files);
       self.loaded_font_files.extend(read.loaded_font_files);
+
+      for character in read.missing_characters {
+        if !self.missing_characters.contains(&character) {
+          self.missing_characters.push(character);
+        }
+      }
+
+      for family in read.unresolved_families {
+        let folded = fold_family_name(&family);
+
+        if !self
+          .unresolved_families
+          .iter()
+          .any(|known| fold_family_name(known) == folded)
+        {
+          self.unresolved_families.push(family);
+        }
+      }
     }
   }
 }
@@ -67,6 +95,10 @@ struct NeedsCollector {
   walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
   /// The URLs of the loaded `@font-face` files, by the id of their data.
   loaded_font_files: FxHashMap<u64, Vec<Arc<str>>>,
+  /// The characters `needs.missing_characters` holds.
+  missing: FxHashSet<char>,
+  /// The families `needs.unresolved_families` holds, folded as family matching folds them.
+  unresolved: FxHashSet<String>,
 }
 
 /// A fallback list and the characters it has walked, each at a fallback priority.
@@ -122,11 +154,13 @@ impl RenderNode {
 
       let walks_children = walked || creates_inline_context;
 
+      // Reversed, so the stack pops the children in document order.
       stack.extend(
         node
           .children
           .iter()
           .flat_map(|children| children.iter())
+          .rev()
           .map(|child| (child, walks_children && !child.lays_out_apart())),
       );
     }
@@ -200,19 +234,17 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the pending faces an SVG image's `text` elements would load.
+  /// Adds the text an SVG image's `text` elements draw.
   fn add_svg_text(&mut self, image: impl FnOnce() -> Option<ImageSource>, context: &RenderContext) {
     #[cfg(feature = "svg")]
-    if (context.fonts().has_pending_faces() || !self.loaded_font_files.is_empty())
-      && let Some(ImageSource::Svg(svg)) = image()
-    {
+    if let Some(ImageSource::Svg(svg)) = image() {
       for (context, text) in svg.text_runs(context) {
         let font = context.font(FontDescription::new(&SizedFontStyle::from_style(
           &context.style,
           &context,
         )));
 
-        self.add_text(&font, text);
+        self.add_text(context.fonts(), &font, text);
       }
     }
     #[cfg(not(feature = "svg"))]
@@ -233,19 +265,29 @@ impl NeedsCollector {
       };
 
       self.add_text(
+        root.context.fonts(),
         &data.fonts.get(object.context()),
         &data.text_content[item.start_offset()..item.end_offset()],
       );
     }
   }
 
-  /// Adds the pending faces `font` would load to draw `text`, and the loaded `@font-face` files it
-  /// draws with, at Blink's `SymbolsIterator` priorities.
-  fn add_text(&mut self, font: &Font, text: &str) {
+  /// Adds the pending faces `font` would load to draw `text`, the loaded `@font-face` files it draws
+  /// with, and the characters it has no face for, at Blink's `SymbolsIterator` priorities.
+  fn add_text(&mut self, fonts: &Fonts, font: &Font, text: &str) {
     let list = &font.fallback_list;
 
-    if !list.has_pending_faces() && self.loaded_font_files.is_empty() {
-      return;
+    if !self.walked.contains_key(&Rc::as_ptr(list)) {
+      let key = &font.description.fallback;
+
+      for family in fonts
+        .missing_families(key)
+        .chain(fonts.missing_fallback_families(&key.selection))
+      {
+        if self.unresolved.insert(fold_family_name(family)) {
+          self.needs.unresolved_families.push(family.to_owned());
+        }
+      }
     }
 
     let (_, walked) = self
@@ -264,10 +306,11 @@ impl NeedsCollector {
       let mut characters = text[start..end].chars().peekable();
 
       while let Some(character) = characters.next() {
-        if characters
-          .peek()
-          .copied()
-          .is_some_and(is_variation_selector)
+        if !self.loaded_font_files.is_empty()
+          && characters
+            .peek()
+            .copied()
+            .is_some_and(is_variation_selector)
         {
           for id in list.loaded_faces_for_sequence(character, priority) {
             insert_loaded(&mut self.needs, &self.loaded_font_files, id);
@@ -277,6 +320,7 @@ impl NeedsCollector {
         reach(
           &mut self.needs,
           &self.loaded_font_files,
+          &mut self.missing,
           walked,
           list,
           character,
@@ -289,6 +333,7 @@ impl NeedsCollector {
             reach(
               &mut self.needs,
               &self.loaded_font_files,
+              &mut self.missing,
               walked,
               list,
               mapped,
@@ -303,10 +348,12 @@ impl NeedsCollector {
   }
 }
 
-/// Adds the face `list` reaches for `character` at `priority` to `needs`, once per `walked` pair.
+/// Adds the face `list` reaches for `character` at `priority` to `needs`, or the character to
+/// `needs.missing_characters` and `missing` when it reaches none, once per `walked` pair.
 fn reach(
   needs: &mut RenderNeeds,
   loaded_font_files: &FxHashMap<u64, Vec<Arc<str>>>,
+  missing: &mut FxHashSet<char>,
   walked: &mut FxHashSet<(char, FontFallbackPriority)>,
   list: &FontFallbackList,
   character: char,
@@ -327,6 +374,9 @@ fn reach(
     Some(ReachedFace::Loaded(id)) => {
       insert_loaded(needs, loaded_font_files, id);
     }
+    None if !is_invisible(character) && missing.insert(character) => {
+      needs.missing_characters.push(character);
+    }
     None => {}
   }
 }
@@ -336,6 +386,12 @@ fn insert_loaded(needs: &mut RenderNeeds, files: &FxHashMap<u64, Vec<Arc<str>>>,
   for url in files.get(&id).into_iter().flatten() {
     needs.loaded_font_files.insert(url.to_string());
   }
+}
+
+/// Whether shaping draws `character` as a space or as nothing, whatever font it reaches.
+/// Approximate: shaping also falls back to a decomposition the font covers, which this does not try.
+fn is_invisible(character: char) -> bool {
+  character.is_whitespace() || treat_as_space(character) || treat_as_zero_width_space(character)
 }
 
 /// Whether `character` picks a glyph variant of the one before it.
@@ -573,6 +629,49 @@ mod tests {
     );
 
     assert_eq!(faces, [1]);
+  }
+
+  #[test]
+  fn reports_each_character_no_face_draws_once_in_document_order() {
+    let needs = render_tree(
+      [
+        Node::container([Node::text("a 中\u{200B}b")]).with_class_name("block"),
+        Node::container([Node::text("日中\tz")]).with_class_name("block"),
+      ],
+      ".block { display: block }",
+    )
+    .needs();
+
+    assert_eq!(needs.missing_characters, ['中', '日']);
+  }
+
+  #[test]
+  fn reports_no_character_a_pending_face_covers() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST_MONO, "Geist Mono");
+    fonts.register_pending(pending(0, "Later", 400.0, CJK));
+
+    let needs = render_with_fonts(
+      &fonts,
+      Node::container([Node::text("a中")]).with_class_name("container"),
+      ".container { font-family: 'Geist Mono', Later }",
+    )
+    .needs();
+
+    assert!(needs.missing_characters.is_empty());
+    assert!(needs.unresolved_families.is_empty());
+  }
+
+  #[test]
+  fn reports_each_family_no_face_provides_but_no_generic_keyword() {
+    let needs = render_tree(
+      [Node::text("a")],
+      ".container { font-family: Missing, 'Geist Mono', missing, sans-serif, Absent }",
+    )
+    .needs();
+
+    assert_eq!(needs.unresolved_families, ["Missing", "Absent"]);
   }
 
   #[test]

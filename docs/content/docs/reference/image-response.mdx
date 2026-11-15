@@ -134,6 +134,23 @@ export async function GET() {
 }
 ```
 
+`ready` resolves to the [render report](/docs/fonts#what-a-render-could-not-draw), which lists the characters no font drew, the font families nothing provided, and the fonts and images that failed to load. Check it to log a render that succeeded with gaps:
+
+```tsx twoslash title="Log characters no font drew"
+import { ImageResponse } from "takumi-js/response";
+
+export async function GET() {
+  const response = new ImageResponse(<div>Hello Takumi</div>, { width: 1200, height: 630 });
+  const report = await response.ready; // [!code highlight]
+
+  if (report.missingCharacters.length > 0) {
+    console.warn("No font draws", report.missingCharacters.join(""));
+  }
+
+  return response;
+}
+```
+
 `onError` is for side effects such as logging. Takumi ignores its return value, and the response stream still errors. Use `ready` to send a fallback.
 
 ```tsx twoslash title="Log a render failure"

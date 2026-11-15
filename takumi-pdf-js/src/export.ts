@@ -31,7 +31,13 @@ export type {
   FontCacheOptions,
   RendererOptions,
 } from "../pkg/takumi_pdf_wasm";
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export type {
+  FailedFont,
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+  RenderReport,
+} from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";

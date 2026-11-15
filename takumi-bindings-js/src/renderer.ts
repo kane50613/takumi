@@ -5,7 +5,7 @@ import {
   type GenericFontFamily,
 } from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
-import type { ListedFont, PrepareExtras } from "./prepared";
+import type { ListedFont, MissingGlyphsHandler, PrepareExtras } from "./prepared";
 import { RendererStore } from "./store";
 import { unicodeRangeOf } from "./unicode-range";
 
@@ -162,6 +162,7 @@ type RenderExtras = {
   fonts?: readonly FontLoader[] | Promise<readonly FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
+  onMissingGlyphs?: MissingGlyphsHandler;
 };
 
 /**
@@ -336,10 +337,8 @@ type ResolvedResources = {
 };
 
 /**
- * An optional font of a render's `fonts` list that failed to load: the key the renderer keeps it
- * under, its URL for a URL, and why.
- *
- * @internal
+ * A font that failed to load, and why. `source` is the URL of an `@font-face` file or of a font
+ * listed by URL, and otherwise the key the renderer keeps the font under.
  */
 export type FailedFont = { source: string; error: unknown };
 

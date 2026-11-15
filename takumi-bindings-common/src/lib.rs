@@ -463,6 +463,8 @@ pub struct NeedsOutput {
   fonts: Vec<usize>,
   font_files: Vec<String>,
   loaded_font_files: Vec<String>,
+  missing_characters: Vec<char>,
+  unresolved_families: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -473,6 +475,8 @@ impl NeedsOutput {
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
       loaded_font_files: needs.loaded_font_files.into_iter().collect(),
+      missing_characters: needs.missing_characters,
+      unresolved_families: needs.unresolved_families,
     }
   }
 }

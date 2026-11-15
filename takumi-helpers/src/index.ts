@@ -16,3 +16,4 @@ export {
   storeStats,
 } from "./fetch/store";
 export * from "./images";
+export { type FailedImage, fetchImagesSettled } from "./fetch/images";

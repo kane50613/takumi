@@ -712,6 +712,86 @@ describe("optional fonts", () => {
   });
 });
 
+describe("a prepared render's report", () => {
+  const missing = (characters: string[]) => ({
+    images: [],
+    fonts: [],
+    missingCharacters: characters,
+    unresolvedFamilies: ["Absent"],
+  });
+
+  test("holds what the last read found no font for", async () => {
+    const { fonts } = fontBackend();
+    const prepared = await prepareSource(fonts, textNode("中"), {}, {}, () => missing(["中"]));
+
+    expect(prepared.report).toEqual({
+      missingCharacters: ["中"],
+      unresolvedFamilies: ["Absent"],
+      failedFonts: [],
+      failedImages: [],
+    });
+  });
+
+  test("reads again once the fonts the render lists are loaded", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock((_request: object) => missing(held.size > 0 ? [] : ["中"]));
+    const prepared = await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { fonts: [{ name: "CJK", data: bytes }] },
+      reads,
+    );
+
+    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(reads.mock.calls.at(-1)).toEqual([
+      { images: [], fontFamilies: ["CJK"], failedFontFiles: [] },
+    ]);
+  });
+
+  test("names the images left out under throwOnError: false and the @font-face files that failed", async () => {
+    const { fonts } = fontBackend();
+    const fetch = mock(async () => new Response(null, { status: 404 }));
+    const prepared = await prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { images: { fetch, throwOnError: false } },
+      () => ({ images: ["https://images.test/a.png"], fonts: [], fontFiles: ["face.woff2"] }),
+    );
+
+    expect(prepared.report.failedImages).toEqual([
+      { src: "https://images.test/a.png", error: expect.any(Error) },
+    ]);
+    expect(prepared.report.failedFonts).toEqual([
+      { source: "face.woff2", error: expect.any(Error) },
+    ]);
+  });
+
+  test("onMissingGlyphs adds its fonts to the render and reads once more", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
+    const onMissingGlyphs = mock((_characters: string[]) => [
+      { key: "cjk", name: "CJK", data: bytes },
+    ]);
+    const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
+    const prepared = await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { fonts: [{ name: "Latin", data: bytes }], fontFamilies: ["Latin"], onMissingGlyphs },
+      reads,
+    );
+
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(3);
+    expect(call.mock.calls[0]?.[1].fontFamilies).toEqual(["Latin", "CJK"]);
+  });
+});
+
 describe("fonts listed as URLs", () => {
   const url = "https://fonts.test/listed.woff2";
   const reads = () => ({ images: [], fonts: [] });

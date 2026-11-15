@@ -47,6 +47,39 @@ describe("ImageResponse", () => {
     expect(await response.arrayBuffer()).toBeDefined();
   });
 
+  test("resolves ready to the report of what the render could not draw", async () => {
+    const response = new ImageResponse(<div style={{ fontFamily: "Missing" }}>Hello 中</div>, {
+      width: 100,
+      height: 100,
+    });
+
+    await response.arrayBuffer();
+
+    expect(await response.ready).toEqual({
+      missingCharacters: ["中"],
+      unresolvedFamilies: ["Missing"],
+      failedFonts: [],
+      failedImages: [],
+    });
+  });
+
+  test("loads the fonts onMissingGlyphs returns", async () => {
+    const cjk = await Bun.file(
+      "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    ).arrayBuffer();
+    const onMissingGlyphs = mock((_characters: string[]) => [{ name: "Noto Sans TC", data: cjk }]);
+    const response = new ImageResponse(<div>Hello 中</div>, {
+      width: 100,
+      height: 100,
+      onMissingGlyphs,
+    });
+
+    await response.arrayBuffer();
+
+    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect((await response.ready).missingCharacters).toEqual([]);
+  });
+
   test("should set content-type", async () => {
     const response = new ImageResponse(<div>Hello</div>, {
       width: 100,

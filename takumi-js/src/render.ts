@@ -205,6 +205,7 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
 }
 
 type RenderedImage = Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>;
+type RenderReport = napi.RenderReport;
 type PreparedSource = napi.PreparedSource | wasm.PreparedSource;
 type PreparedAnimation = napi.PreparedAnimation | wasm.PreparedAnimation;
 type SceneOutput = ReturnType<typeof bindingOptions> & { signal?: AbortSignal };
@@ -236,7 +237,9 @@ async function prepareScene<T extends PipelineOptions>(
     signal: options?.signal,
   });
 
-  return { renderer, prepared, output: { ...layout, signal: options?.signal } };
+  const { onMissingGlyphs: _, ...output } = layout;
+
+  return { renderer, prepared, output: { ...output, signal: options?.signal } };
 }
 
 /**
@@ -257,9 +260,18 @@ export async function render(
   element: RenderInput,
   options?: RenderOptions,
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
-  const scene = await prepareScene(element, options);
+  return (await renderWithReport(element, options)).image;
+}
 
-  return scene.renderer.render(scene.prepared, scene.output);
+/** Renders as {@link render} does, with the report of what the render could not satisfy. */
+export async function renderWithReport(
+  element: RenderInput,
+  options?: RenderOptions,
+): Promise<{ image: RenderedImage; report: RenderReport }> {
+  const scene = await prepareScene(element, options);
+  const image = await scene.renderer.render(scene.prepared, scene.output);
+
+  return { image, report: scene.prepared.report };
 }
 
 /**

@@ -26,7 +26,13 @@ import initWasm, {
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
 
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export type {
+  FailedFont,
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+  RenderReport,
+} from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 export type {
   BlendMode,

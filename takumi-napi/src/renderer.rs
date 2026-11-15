@@ -92,6 +92,10 @@ pub struct RenderNeeds {
   pub font_files: Vec<String>,
   /// The URLs of the loaded `@font-face` files the render draws with, sorted.
   pub loaded_font_files: Vec<String>,
+  /// The characters no font in their fallback chain draws, each once in document order.
+  pub missing_characters: Vec<String>,
+  /// The families `font-family` or `fontFamilies` names that no font provides, each once.
+  pub unresolved_families: Vec<String>,
 }
 
 impl RenderNeeds {
@@ -108,6 +112,12 @@ impl RenderNeeds {
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
       loaded_font_files: needs.loaded_font_files.into_iter().collect(),
+      missing_characters: needs
+        .missing_characters
+        .into_iter()
+        .map(String::from)
+        .collect(),
+      unresolved_families: needs.unresolved_families,
     }
   }
 }

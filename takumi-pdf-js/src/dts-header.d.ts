@@ -241,6 +241,10 @@ export type RenderNeeds = {
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */
   fonts: number[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };
 
 /** @deprecated Use `RendererOptions`. */
