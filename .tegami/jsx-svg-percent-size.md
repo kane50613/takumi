@@ -6,6 +6,6 @@ packages:
   "@takumi-rs/helpers": patch
 ---
 
-# A JSX `<svg>` or `<img>` sized in percentages or other units draws at that size
+# A JSX `<svg>` sized in percentages or other units, or an `<img>` sized in percentages, draws at that size
 
-`fromJsx` turned a `width` or `height` such as `"100%"`, `"2em"`, or `"24px"` into `NaN`, so the image drew nothing. It now leaves such a value in the element's attributes, and the renderer reads an `<svg>`'s as a CSS length and an `<img>`'s as HTML does, the way it already read the same markup passed as HTML. A percentage resolves against the containing block, as in Chromium.
+`fromJsx` turned a `width` or `height` such as `"100%"`, `"2em"`, or `"24px"` into `NaN`, so the image drew nothing. It now leaves such a value in the element's attributes, as the same markup passed as HTML already did. The renderer reads an `<svg>`'s value as a CSS length, ignoring a negative one, and an `<img>`'s as HTML does, which takes pixels or a percentage and ignores a unit such as `em`. A percentage resolves against the containing block, as in Chromium.

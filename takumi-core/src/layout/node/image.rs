@@ -95,6 +95,8 @@ pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
   let value = value.trim();
 
   match tag {
+    // Blink maps no negative width or height to style.
+    "svg" if value.starts_with('-') => return None,
     "svg" => {
       return Length::from_css_str(value)
         .ok()
@@ -114,19 +116,22 @@ pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
   if integer_end == 0 {
     return None;
   }
-  // A fraction needs a digit after its point; anything past the number is ignored.
-  let number_end = match value
+  // A point is consumed even without a digit after it, and anything past the number is ignored.
+  let (number_end, unit_start) = match value
     .get(integer_end..)
     .unwrap_or_default()
     .strip_prefix('.')
   {
     Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
-      integer_end + 1 + digits_len(fraction)
+      let end = integer_end + 1 + digits_len(fraction);
+
+      (end, end)
     }
-    _ => integer_end,
+    Some(_) => (integer_end, integer_end + 1),
+    None => (integer_end, integer_end),
   };
-  let (number, unit) = value.split_at_checked(number_end)?;
-  let number: f32 = number.parse().ok()?;
+  let number: f32 = value.get(..number_end)?.parse().ok()?;
+  let unit = value.get(unit_start..).unwrap_or_default();
 
   Some(if unit.starts_with('%') {
     Length::Percentage(number)
@@ -187,6 +192,26 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 #[cfg(test)]
 mod tests {
   use std::assert_matches;
+
+  use super::size_attribute;
+  use crate::style::Length;
+
+  #[test]
+  fn size_attributes_map_as_blink_maps_them() {
+    assert_eq!(
+      size_attribute("img", "50.%"),
+      Some(Length::Percentage(50.0))
+    );
+    assert_eq!(
+      size_attribute("img", "50.5%"),
+      Some(Length::Percentage(50.5))
+    );
+    assert_eq!(size_attribute("img", "24px"), Some(Length::Px(24.0)));
+    assert_eq!(size_attribute("svg", "2em"), Some(Length::Em(2.0)));
+    assert_eq!(size_attribute("svg", "100"), Some(Length::Px(100.0)));
+    assert_eq!(size_attribute("svg", "-2em"), None);
+    assert_eq!(size_attribute("svg", "-20"), None);
+  }
 
   use serde_json::from_value;
 

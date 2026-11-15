@@ -424,26 +424,29 @@ describe("fromJsx", () => {
       </div>,
     );
 
-    expect((node as ContainerNode).children).toMatchObject([
-      {
-        type: "image",
-        width: undefined,
-        height: undefined,
-        attributes: { width: "100%", height: "2em" },
-      },
-      {
-        type: "image",
-        width: undefined,
-        height: 12,
-        attributes: { width: "24px", height: "12" },
-      },
-      {
-        type: "image",
-        width: undefined,
-        height: undefined,
-        attributes: { width: "50%", height: "" },
-      },
-    ]);
+    expect(node).toMatchObject({
+      type: "container",
+      children: [
+        {
+          type: "image",
+          width: undefined,
+          height: undefined,
+          attributes: { width: "100%", height: "2em" },
+        },
+        {
+          type: "image",
+          width: undefined,
+          height: 12,
+          attributes: { width: "24px", height: "12" },
+        },
+        {
+          type: "image",
+          width: undefined,
+          height: undefined,
+          attributes: { width: "50%", height: "" },
+        },
+      ],
+    });
   });
 
   test("maps default tw property to node tw", async () => {
