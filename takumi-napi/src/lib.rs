@@ -25,6 +25,7 @@ use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
   append_css,
   input::{FontOptions, node_from_json},
+  renderer::set_default_glyph_budget,
   source_cache::{ParsedSource, SourceCache, SourceKind},
   stylesheet,
 };
@@ -41,7 +42,7 @@ use takumi_core::{
 /// @deprecated Use `new Renderer({ cache: { budgets: { glyphs } } })`.
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::renderer::set_glyph_cache_max_bytes(bytes);
+  set_default_glyph_budget(bytes);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.

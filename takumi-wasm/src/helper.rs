@@ -2,6 +2,7 @@
 
 use std::fmt::Display;
 
+use takumi_bindings_common::renderer::set_default_glyph_budget;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// Maps any error to a JavaScript Error object.
@@ -15,5 +16,5 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 /// @deprecated Use `new Renderer({ cache: { budgets: { glyphs } } })`.
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::renderer::set_glyph_cache_max_bytes(bytes);
+  set_default_glyph_budget(bytes);
 }

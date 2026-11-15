@@ -30,7 +30,7 @@ pub struct CacheOptions {
 
 /// The most bytes each kind of data a renderer keeps may hold, in JavaScript byte counts. An
 /// absent budget leaves its kind in the shared pool, except `glyphs`, which takes the budget the
-/// last [`set_glyph_cache_max_bytes`] set, and `fonts`, which leaves the fonts unbounded.
+/// last [`set_default_glyph_budget`] set, and `fonts`, which leaves the fonts unbounded.
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheBudgets {
@@ -79,7 +79,7 @@ impl RendererOptions {
   }
 
   /// The cache a renderer built with these options keeps. A glyph budget it leaves out is the one
-  /// the last [`set_glyph_cache_max_bytes`] set.
+  /// the last [`set_default_glyph_budget`] set.
   pub fn cache(&self) -> Cache {
     let budgets = self.budgets();
     let builder = Cache::builder()
@@ -98,7 +98,7 @@ impl RendererOptions {
 }
 
 /// Sets the glyph budget of the renderers created after this call, from a JavaScript byte count.
-pub fn set_glyph_cache_max_bytes(value: f64) {
+pub fn set_default_glyph_budget(value: f64) {
   #[allow(deprecated)]
   glyph_cache::set_glyph_cache_max_bytes(bytes(value) as usize);
 }
