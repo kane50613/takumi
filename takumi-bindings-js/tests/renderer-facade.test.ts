@@ -128,6 +128,24 @@ describe("readSource and renderPrepared abort policy", () => {
   });
 });
 
+test("a signal aborted while the fonts list resolves starts no image loader", async () => {
+  const { fonts } = fontBackend();
+  const controller = new AbortController();
+  const list = Promise.withResolvers<FontLoader[]>();
+  const data = mock(bytes);
+  const rendering = render(
+    fonts,
+    { fonts: list.promise, images: [{ src: "logo", data }], signal: controller.signal },
+    textNode("A"),
+  );
+
+  controller.abort();
+  list.resolve([]);
+
+  await expect(rendering).rejects.toThrow();
+  expect(data).not.toHaveBeenCalled();
+});
+
 describe("readSource and renderPrepared resource forwarding", () => {
   test("fonts, images and fontFamilies reach resolveResources", async () => {
     const { fonts } = fontBackend();
