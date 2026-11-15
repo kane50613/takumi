@@ -411,6 +411,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       implicitFamilies,
     );
 
+  const fontFileFetch = fetchMissing ? fetch : undefined;
+
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
   const settled = await registry.dropOnFailure(resolvedFonts, () =>
     registry.leased(async (lease) => {
@@ -421,7 +423,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         {
           tried,
           failedFontFiles,
-          fetch: fetchMissing ? fetch : undefined,
+          fetch: fontFileFetch,
           uncachedOf: (needs) =>
             listed && resolvedFonts
               ? registry.loaders(
@@ -455,7 +457,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
             ? await readLoaded(kept, fontFamilies)
             : (reached ?? (await readWithImages()));
       const characters = coverage?.missingCharacters ?? [];
-      const added = characters.length > 0 ? ((await onMissingGlyphs?.(characters)) ?? []) : [];
+      const added = characters.length > 0 ? ((await onMissingGlyphs?.([...characters])) ?? []) : [];
 
       signal?.throwIfAborted();
 
@@ -476,11 +478,20 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
           ]),
         ];
         const all = registry.without([...(kept ?? []), ...added], failedFonts);
+        const read = () => readLoaded(all, families, implicitFamilies);
+        // The added families can reach `@font-face` files the earlier reads did not.
+        const coverage = await loadReached(
+          registry,
+          await read(),
+          read,
+          { tried, failedFontFiles, fetch: fontFileFetch },
+          { lease, failed: failedFonts, signal },
+        );
 
         return {
           fonts: all,
           fontFamilies: families,
-          coverage: await readLoaded(all, families, implicitFamilies),
+          coverage,
           added,
           implicitFamilies,
         };

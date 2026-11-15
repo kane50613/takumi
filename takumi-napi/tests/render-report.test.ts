@@ -7,9 +7,18 @@ const cjkData = await Bun.file(
   "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
 ).arrayBuffer();
 
+let hookRequests = 0;
 const server = Bun.serve({
   port: 0,
-  fetch: () => new Response(null, { status: 404 }),
+  fetch: (request) => {
+    if (new URL(request.url).pathname !== "/hook.woff2") {
+      return new Response(null, { status: 404 });
+    }
+
+    hookRequests++;
+
+    return new Response(cjkData);
+  },
 });
 
 afterAll(() => server.stop());
@@ -142,5 +151,37 @@ describe("onMissingGlyphs", () => {
     });
 
     expect(prepared.report.missingCharacters).toEqual(["中"]);
+  });
+
+  test("leaves the report's characters alone when it changes the list it receives", async () => {
+    const prepared = await new Renderer().prepare(line("a中"), {
+      ...options,
+      onMissingGlyphs: (characters) => {
+        characters.splice(0);
+
+        return undefined;
+      },
+    });
+
+    expect(prepared.report.missingCharacters).toEqual(["中"]);
+  });
+
+  test("loads the @font-face files a family it adds reaches", async () => {
+    const node = container({
+      style: { width: 128, height: 64, fontSize: 24, fontWeight: 700, backgroundColor: "#fff" },
+      children: [text("a中")],
+    });
+    const prepared = await new Renderer().prepare(node, {
+      ...options,
+      css: [
+        `@font-face { font-family: Hook; font-weight: 700; src: url(${server.url}hook.woff2) }`,
+      ],
+      fontFamilies: ["Mono"],
+      fonts: [{ name: "Mono", data: monoData }],
+      onMissingGlyphs: () => [{ name: "Hook", data: cjkData, weight: 400 }],
+    });
+
+    expect(hookRequests).toBe(1);
+    expect(prepared.report).toEqual(empty);
   });
 });
