@@ -1,159 +1,70 @@
 ---
 name: takumi-usage
-description: Guidelines, syntax, templates, API usage, and styling best practices for rendering static/animated images and vector SVG using Takumi.
+description: Write or review code that renders images, PDFs, or animations with Takumi. Use when code imports `takumi-js`, `@takumi-rs/*`, `takumi-pdf`, or the `takumi` crate, or when the user wants Open Graph images, social cards, or HTML/JSX screenshots without a browser.
 ---
 
-# Takumi Usage & Best Practices
+# Takumi
 
-All-in-one guide for rendering with Takumi. Built-in layout rules, advanced styles, and performance.
+Takumi lays out JSX, HTML, and CSS the way Chromium does and draws the result without a browser. It is **not Satori**: most Satori workarounds (a `display: flex` on every div, hand-drawn SVG instead of CSS, base64 data URLs, fonts read by hand) are dead weight here. Before writing a workaround, check the docs page for the feature. The docs are Markdown at `https://takumi.kane.tw/docs/<page>.md`, indexed at `https://takumi.kane.tw/llms.txt`.
 
-## JS / TS API Reference
+## Pick the entry
 
-### 1. Static Render (`render` & `renderSvg`)
+| Task                              | Use                                                          |
+| --------------------------------- | ------------------------------------------------------------ |
+| An image from a route handler     | `new ImageResponse(node, options)` from `takumi-js/response` |
+| Image bytes in a script or server | `render(node, options)` from `takumi-js`                     |
+| SVG output                        | `renderSvg` from `takumi-js`                                 |
+| Animated WebP, GIF, or APNG       | `renderAnimation` from `takumi-js`                           |
+| A box's size before drawing       | `measure` from `takumi-js`                                   |
+| A PDF                             | `takumi-pdf` ([docs](https://takumi.kane.tw/docs/pdf.md))    |
+| Rust                              | the `takumi` crate, see [Rust](#rust)                        |
 
-Renders JSX templates, HTML strings, or JSON node trees to raster buffers (PNG/JPEG/WebP) or vector SVG markup.
+`takumi-js` picks the native addon on Node.js and Bun and WebAssembly on edge runtimes, and loads it itself. Import from `takumi-js`, not from `@takumi-rs/core` or `@takumi-rs/wasm`, and leave out `initSync`, `?module` imports, and `readFile` of a `.wasm`. `render` and `ImageResponse` already reuse one renderer across calls, so a module-level `Renderer` singleton is unnecessary.
 
-```typescript
-import { render, renderSvg } from "takumi-js";
+## Rules
 
-// Renders dynamic JSX layout directly to PNG bytes
-const pngBuffer = await render(
-  <div tw="w-full h-full bg-zinc-950 flex items-center justify-center">
-    <h1 tw="text-white text-6xl">Takumi Engine</h1>
-  </div>,
-  {
-    width: 1200,
-    height: 630,
-    format: "png", // "png" | "jpeg" | "webp"
-    quality: 90    // (Optional) For JPEG/WebP formats
-  }
-);
+<!-- keep in sync with the rules in context7.json -->
 
-// Renders to responsive XML SVG string containing glyph path vector data
-const svgString = await renderSvg(
-  <div tw="w-full h-full bg-zinc-900">
-    <span tw="text-white">Scalable Vector</span>
-  </div>,
-  { width: 800, height: 400 }
-);
-```
+- `render`, `renderSvg`, `renderAnimation`, and `measure` are async. Await them.
+- `ImageResponse` streams its body, so a `try`/`catch` around `new ImageResponse(...)` never sees a render error. Await `response.ready` and return a fallback when it rejects.
+- The root element does not fill the canvas on its own. Give it `width: 100%` and `height: 100%`.
+- Takumi never reads system fonts. Its one built-in font is Geist, Latin only, weights 300 to 800. Pass every other font per call through `fonts`, and load Google Fonts with `googleFonts` from `takumi-js/helpers`, which fetches only the subsets the text needs.
+- A `fonts` entry is a URL string, raw bytes, or `{ name, data, weight, style, generic, unicodeRange }`, where `data` is bytes or a function returning them. Leave `weight` out for a variable font, which then serves its whole `wght` axis. Register it once, not once per weight.
+- Pass images through `images: [{ src: "logo", data }]` and use the key as `src` or in `url()`. Remote URLs are fetched for you. Do not inline them as base64.
+- Pass CSS, including compiled Tailwind, through `css`. `stylesheets` is deprecated.
+- The `tw` prop is a built-in Tailwind subset without Preflight, so elements keep their UA margins.
+- `emoji` is `"twemoji"` (default), `"blobmoji"`, `"noto"`, `"openmoji"`, `"fluent"`, `"fluentFlat"`, or `"from-font"`.
+- Docs code samples carry Fumadocs annotations such as `// [!code --]` and `// [!code highlight]`. Never copy them, and treat `[!code --]` lines as the removed API.
 
-### 2. Animated Render (`renderAnimation`)
+## What works that Satori lacks
 
-Compiles sequences of scenes into animated WebP, GIF, or APNG buffers.
+Use these directly instead of working around them:
 
-```typescript
-import { renderAnimation } from "takumi-js";
+- Block, inline, float, flex, grid, and table layout. A `div` is a block, as in a browser.
+- `<style>` rules, selectors, pseudo-elements, `@media`, `var()` and registered custom properties, `calc()` and other math functions.
+- Colors in `oklch()`, `lab()`, `color-mix()`, and the other CSS Color 4 forms.
+- `background-image` with gradients and `url()`, `mask`, `clip-path`, `filter`, `backdrop-filter`, blend modes, `box-shadow`, and transforms.
+- Variable fonts with `font-variation-settings`, OpenType features, and `unicode-range` subsets.
+- Inline `<svg>`, including text in the registered fonts.
+- `text-fit`, `text-wrap: balance`, `line-clamp`, and `offset-path`.
 
-const animatedBuffer = await renderAnimation({
-  width: 400,
-  height: 400,
-  fps: 30,
-  format: "webp", // "webp" | "gif" | "apng"
-  quality: 80,    // Compression quality (0-100)
-  scenes: [
-    {
-      durationMs: 1500,
-      node: (
-        <div tw="w-full h-full bg-black flex items-center justify-center">
-          <div tw="w-24 h-24 bg-rose-500 animate-bounce rounded-full" />
-        </div>
-      )
-    }
-  ]
-});
-```
+## Look it up
 
-### 3. Edge / Framework Integration (`ImageResponse`)
+| Question                                           | Page                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| Fonts, fallback order, Google Fonts, subsets       | [fonts](https://takumi.kane.tw/docs/fonts.md)                     |
+| Remote and pre-fetched images, emoji, fetch limits | [images](https://takumi.kane.tw/docs/images.md)                   |
+| Inline styles, CSS, Tailwind, design tokens        | [styles](https://takumi.kane.tw/docs/styles.md)                   |
+| Text wrapping, truncation, `text-fit`              | [typography](https://takumi.kane.tw/docs/typography.md)           |
+| Formats, quality, cancellation                     | [formats](https://takumi.kane.tw/docs/formats.md)                 |
+| Renderer reuse, caches, memory                     | [performance](https://takumi.kane.tw/docs/performance.md)         |
+| Next.js, Nuxt, SvelteKit, Astro, and other setups  | [frameworks](https://takumi.kane.tw/docs/frameworks.md)           |
+| Bundler and render errors                          | [troubleshooting](https://takumi.kane.tw/docs/troubleshooting.md) |
+| Every node type and CSS property                   | [reference](https://takumi.kane.tw/docs/reference.md)             |
 
-A next/og compatible handler designed for Edge runtimes, Cloudflare Workers, Next.js API endpoints, and standard HTTP server frameworks.
+## Rust
 
-```typescript
-import { ImageResponse } from "takumi-js/response";
-
-export function GET() {
-  return new ImageResponse(
-    <div tw="w-full h-full bg-slate-900 flex items-center justify-center">
-      <h1 tw="text-white text-5xl">Dynamic OG Card</h1>
-    </div>,
-    {
-      width: 1200,
-      height: 630
-    }
-  );
-}
-```
-
-### 4. Parsing Helpers (`takumi-js/helpers/*`)
-
-Low-level utilities for compiling layout elements without executing the full renderer.
-
-```typescript
-import { fromHtml } from "takumi-js/helpers/html";
-import { fromJsx } from "takumi-js/helpers/jsx";
-
-// Converts raw HTML template string into JSON layout node tree
-const htmlNodeTree = fromHtml(
-  "<div class='flex'><span>Hello</span></div>",
-  { max_depth: 512 }
-);
-
-// Compiles React ReactNode elements into JSON layout node tree
-const jsxNodeTree = fromJsx(
-  <div tw="flex"><span>Hello</span></div>
-);
-```
-
----
-
-## Options Configuration (`RenderOptions`)
-
-- `fonts`: An array of custom fonts `[{ name, url, weight, style }]`. Values can point to remote URLs (WOFF2/WOFF/TTF), local file paths, or binary Node.js `Buffer` arrays.
-- `emoji`: Configures the emoji fallback strategy: `"twemoji"` (default), `"blob-emoji"`, `"openmoji"`, `"noto-emoji"`, or `"from-font"` (uses custom loaded font glyphs).
-- `images`: Option to pass pre-fetched image arrays `[{ url, buffer }]` or supply a shared caching fetch-client configuration.
-- `stylesheets`: An array of raw global CSS string sheets to inject into the rendering layout context.
-
----
-
-## Hidden Layout Capabilities (Deep-Dive)
-
-### 1. Auto-scaling Text (`text-fit`)
-
-Automatically scales font-size to fit the containing inline line-box width, avoiding clipping or wrapping.
-
-- **Syntax**: `text-fit: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? [percentage]?`
-- **Example**: `tw="text-fit-grow-consistent"` or `style={{ textFit: "grow consistent 120%" }}`.
-
-### 2. CSS Motion Paths (`offset-path`)
-
-Enables complex placement and animation sequences of elements along custom vector paths or geometric rays.
-
-- **Properties**: `offset-path`, `offset-distance` (percentage), `offset-rotate` (angle / auto).
-- **Syntax**: `ray(<angle> <size> contain? at <position>?)` or `path("<svg path command>")` or basic shapes (`circle()`, `polygon()`, `inset()`).
-
-### 3. OpenType Typography Settings
-
-Provides fine-grained control over font rendering features and variable layout configurations.
-
-- `font-variation-settings`: Configures variable font axis settings (e.g. `"'wght' 750, 'wdth' 90"`).
-- `font-feature-settings`: Enables OpenType font ligatures, kerning, and variants (e.g. `"'ss01' 1, 'kern' 1"`).
-
-### 4. Custom Filters & Graphics
-
-- `filter`: Supports `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, `sepia()`.
-- `mix-blend-mode` & `background-blend-mode`: Layer blending modes (e.g. `multiply`, `screen`, `overlay`).
-- `backdrop-filter`: Applies filter effects to elements behind the container.
-- `clip-path`: Clips elements via shapes: `polygon(...)`, `circle(...)`, `inset(...)`.
-
-### 5. Layout Defaults
-
-- CSS Grid support: Supports `grid-cols-X`, `gap-X`, flex, and block layout.
-- Tag Presets: Custom HTML styles are pre-mapped for tags: `h1`–`h6`, `div`, `pre` (keeps space layout), `strong`, `em`, `blockquote`, and `hr`.
-- Line Breaks: `<br>` tags parse to `\n` in text elements automatically.
-
----
-
-## Rust Crate API (`takumi`)
+Import from `takumi::prelude` and build options with `RenderOptions::builder()`. Fonts live in a `Fonts` value you pass in.
 
 <!-- keep in sync with the doctest in takumi/src/lib.rs -->
 
@@ -179,25 +90,4 @@ let options = RenderOptions::builder()
 let image = render(options)?;
 ```
 
-To build the node tree from HTML instead, enable the `from-html` feature and use `from_html`:
-
-```rust
-use takumi::prelude::*;
-use takumi::{from_html, render};
-
-let mut fonts = Fonts::default();
-fonts.register(FontResource::new(include_bytes!(
-  "../../assets/fonts/geist/Geist[wght].woff2"
-)))?;
-
-let html = r#"<div style="background: red; width: 100%; height: 100%;"></div>"#;
-let node = from_html(html, FromHtmlOptions::default())?;
-
-let options = RenderOptions::builder()
-  .viewport(Viewport::new((1200, 630)))
-  .node(node)
-  .fonts(&fonts)
-  .build();
-
-let image = render(options)?;
-```
+With the `from-html` feature, `from_html(html, FromHtmlOptions::default())?` builds the node from HTML instead.

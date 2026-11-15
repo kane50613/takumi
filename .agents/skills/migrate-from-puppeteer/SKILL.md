@@ -1,71 +1,22 @@
 ---
 name: migrate-from-puppeteer
-description: Guides and automated instructions for migrating from Puppeteer, Playwright, or node-html-to-image to Takumi.
+description: Migrate screenshot code from Puppeteer, Playwright, or node-html-to-image to Takumi. Use when code launches a headless browser to turn HTML or a page into an image or PDF.
 ---
 
-# Migrate Puppeteer / Playwright to Takumi
+# Migrate headless browser screenshots to Takumi
 
-Replace resource-heavy headless browser screenshots with native Takumi rendering.
+Takumi lays out the HTML and CSS the page already uses, the way Chromium does, and draws it without starting a browser. Pair this skill with `takumi-usage` for the API rules.
 
-## Key Advantages
+## Steps
 
-- **Resources**: 300MB+ RAM vs single function call.
-- **Cold Starts**: Milliseconds vs seconds.
-- **Edge Support**: Runs in Cloudflare Workers/Edge (WASM). Puppeteer cannot.
-- **Packaging**: No Chromium binary size issues in serverless.
+1. **Find what the page needs at runtime.** Takumi runs no JavaScript, so a page that fetches data, renders on the client, or waits for a selector must get its data first. Done when each screenshot's template can be built as a JSX tree or HTML string from data you already hold.
 
-## Code Changes
+2. **Swap the render.** `page.setContent(html)` plus `page.screenshot()` becomes `render(html, { width, height })` from `takumi-js`, which also takes JSX. `page.pdf()` becomes `prepare(html)` then `render(prepared)` from `takumi-pdf`, where `prepare` downloads the remote images and `@font-face` files ([PDF migration](https://takumi.kane.tw/docs/pdf/migration/puppeteer.md)). A loop of screenshots encoded into a GIF or video becomes `renderAnimation` with CSS keyframes ([Animation](https://takumi.kane.tw/docs/animation.md)). Done when no `puppeteer`, `playwright`, or `node-html-to-image` import remains in the code that makes images.
 
-### Static Image Generation
+3. **Load the fonts the page used.** The browser read system fonts. Takumi reads none, and its one built-in font, Geist, covers only Latin. Pass each font through `fonts`, or `googleFonts` from `takumi-js/helpers`. Done when every `font-family` the template names is loaded.
 
-Before (Puppeteer):
+4. **Move stylesheets and images.** Pass `<link>`ed CSS through `css`, or keep it in a `<style>` element. Remote images and `url()` load during the render, or in `prepare` for a PDF. Pass local files as `images: [{ src, data }]`. Done when no stylesheet or image comes from the local file system by path.
 
-```typescript
-import puppeteer from "puppeteer";
-const browser = await puppeteer.launch();
-const page = await browser.newPage();
-await page.setViewport({ width: 1200, height: 630 });
-await page.setContent(`<html><body><h1>Hello</h1></body></html>`);
-const buffer = await page.screenshot({ type: "png" });
-await browser.close();
-```
+5. **Delete the browser plumbing.** Remove browser launch and pooling, Chromium binaries in the deploy, timeouts for page loads, and serverless Chromium packages. Done when the deploy no longer ships a browser.
 
-After (Takumi):
-
-```typescript
-import { render } from "takumi-js";
-const buffer = await render(
-  <div tw="w-full h-full flex items-center justify-center bg-black text-white">
-    <h1 tw="text-6xl font-bold">Hello</h1>
-  </div>,
-  { width: 1200, height: 630 }
-);
-```
-
-### Animation (GIF / WebP)
-
-Before:
-Capturing multiple page frames in a loop and encoding manually.
-After:
-
-```typescript
-import { renderAnimation } from "takumi-js";
-const buffer = await renderAnimation({
-  width: 400,
-  height: 400,
-  fps: 30,
-  format: "webp",
-  scenes: [
-    {
-      durationMs: 1000,
-      node: <div tw="animate-spin bg-blue-500 w-32 h-32" />,
-    },
-  ],
-});
-```
-
-## Migration Constraints
-
-- **No Client JS**: Takumi does not execute `<script>` blocks. Fetch data first, then render layout tree with static state.
-- **CSS Support**: Standard layout rules (Flexbox, Grid, absolute/relative, pseudo-elements) work. Complex browser features (iframe embed, canvas rendering, custom scrollbars) are unsupported.
-- **Fonts**: Declare fonts explicitly in `RenderOptions` instead of relying on default OS font lookups.
+6. **Compare the output.** Render each template with the old and new code and compare the images. Features Takumi does not draw, such as `<canvas>`, `<iframe>`, and video, need a static replacement. Done when each difference is fixed or replaced.

@@ -1,65 +1,29 @@
 ---
 name: migrate-from-satori
-description: Guides and automated instructions for migrating from Vercel's Satori, next/og, or @vercel/og to Takumi.
+description: Migrate code from satori, `next/og`, or `@vercel/og` to Takumi. Use when the user wants to replace satori or `next/og`, or code imports `satori`, `next/og`, `@vercel/og`, or `@resvg/resvg-js` to make an image.
 ---
 
-# Migrate Satori / next/og to Takumi
+# Migrate satori and `next/og` to Takumi
 
-Upgrade instructions. Replace Satori layout limitations with Takumi advanced features.
+Takumi takes the same JSX and returns the image in one call. The migration is a swap plus a cleanup: most of what satori code does around the render is a workaround Takumi does not need. The [migration guide](https://takumi.kane.tw/docs/migration/satori.md) holds the details. Pair this skill with `takumi-usage` for the API rules.
 
-## Feature Differences
+## Steps
 
-| Feature        | Satori                           | Takumi                                                                   |
-| -------------- | -------------------------------- | ------------------------------------------------------------------------ |
-| Primary Output | SVG only (needs `resvg` wrapper) | PNG, JPEG, WebP, SVG, GIF, APNG                                          |
-| CSS Layout     | Flexbox only                     | Flexbox, CSS Grid, block, inline, float                                  |
-| Advanced CSS   | ✗                                | Grid, pseudo-elements, backdrop-filter, clip-path, text-fit, offset-path |
-| Fonts          | Manual Buffer array              | System fonts, URLs, local paths, Buffers                                 |
-| Tailwind       | Limited / wrapper needed         | Native Tailwind v4 (`tw`/`class`, arbitrary values)                      |
+1. **Swap the entry.** `new ImageResponse(...)` from `next/og` or `@vercel/og` becomes the same call from `takumi-js/response`. `satori(...)` becomes `renderSvg(...)` from `takumi-js`, and `satori` followed by resvg or sharp becomes one `render(...)` call. Done when no import of `satori`, `next/og`, `@vercel/og`, or `@resvg/resvg-js` remains in the code that makes images.
 
-## Code Changes
+2. **Restore Flexbox where `next/og` implied it.** `next/og` makes every element a flex container. In Takumi a `<div>` is `display: block`, as in a browser. Add `display: flex` or `tw="flex"` to each container whose children sat in a row or used flex alignment. Done when every container that relied on implicit flex declares it, and no other container gained one.
 
-### Next.js ImageResponse
+3. **Move fonts to `fonts`.** Keep Geist, the built-in Latin font, or pass the brand font. Replace hand-written Google Fonts fetching with `googleFonts` from `takumi-js/helpers`. Keep `fonts` entries as URL strings, bytes, or `{ name, data, weight, style }`, and drop `weight` for a variable font. Done when every font the old code read, fetched, or embedded is a `fonts` entry or `googleFonts` call, and no code parses Google Fonts CSS.
 
-Before:
+4. **Delete the workarounds.** Remove each piece that existed only because satori lacked a feature:
+   - base64 data URLs for images, replaced by `images: [{ src, data }]` or the remote URL itself
+   - hand-drawn SVG standing in for gradients, masks, `background-image`, or `clip-path`
+   - colors converted from `oklch()` or `var()` tokens to hex
+   - static font instances chosen because variable fonts did not work
+   - `loadAdditionalAsset` callbacks for emoji, replaced by the `emoji` option
 
-```tsx
-import { ImageResponse } from "next/og";
-// ... returns new ImageResponse(...)
-```
+   Done when each remaining helper around the render does something Takumi cannot.
 
-After:
+5. **Handle errors on the response.** A `try`/`catch` around `new ImageResponse(...)` never sees a render error, because the body streams. Await `response.ready` and return a fallback when it rejects. Done when every route that had error handling awaits `ready`.
 
-```tsx
-import { ImageResponse } from "takumi-js/response";
-// ... returns new ImageResponse(...)
-```
-
-### Direct Rendering
-
-Before:
-
-```typescript
-import satori from "satori";
-import { Resvg } from "@resvg/resvg-js";
-const svg = await satori(element, { width, height, fonts: [{ name: "A", data: buf }] });
-const png = new Resvg(svg).render().asPng();
-```
-
-After:
-
-```typescript
-import { render } from "takumi-js";
-const png = await render(element, {
-  width,
-  height,
-  fonts: [{ name: "A", url: "https://url.woff2" }],
-});
-```
-
-## Upgrades to Apply
-
-- **CSS Grid**: Convert complex flex layouts to `tw="grid grid-cols-12 gap-4"`.
-- **CSS Variables & Custom Selectors**: Embedded `<style>` rules, `:is()`, `:where()`, `::before`, `::after` work natively.
-- **Auto Font Handling**: Drop manual loading scripts. Rely on system fonts or CDN URLs.
-- **Advanced Visuals**: Use `backdrop-filter`, `clip-path`, and blend modes directly in styling.
+6. **Compare the output.** Render each template with the old and new code and compare the images. Spacing can move where satori's layout differed from a browser. Done when each difference is either fixed or confirmed to match a browser.
