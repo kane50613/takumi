@@ -379,7 +379,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    * Registers one font unless the backend still holds it, its file leased to the render that
    * `lease` names. Without a lease, as `registerFont` registers, it is never evicted.
    */
-  async register(font: FontLoader, lease?: number): Promise<TFamily[]> {
+  async register(font: FontLoader, lease?: number, signal?: AbortSignal): Promise<TFamily[]> {
     const loader = this.toLoader(font);
     const key = this.keyOf(loader);
     const pinned = lease === undefined;
@@ -397,11 +397,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const pending = this.loading.get(key);
 
     if (pending) {
-      const retry = () => this.register(loader, lease);
+      const retry = () => this.register(loader, lease, signal);
 
       // The render loading it leases its file until that render settles, after this continues. A
       // failed load ran under that render's fetch options and signal, so this one loads with its own.
-      return pending.then(retry, retry);
+      return untilAborted(pending, signal).then(retry, (error: unknown) => {
+        if (signal?.aborted) {
+          throw error;
+        }
+
+        return retry();
+      });
     }
 
     const load = Promise.resolve(extractFontBuffer(loader))
@@ -441,12 +447,12 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 
   /** Loads each of `fonts` the backend does not hold, leased to `lease`, and returns whether any was loaded. */
-  async cache(fonts: FontLoader[], lease: number): Promise<boolean> {
+  async cache(fonts: FontLoader[], lease: number, signal?: AbortSignal): Promise<boolean> {
     const loaders = fonts
       .map((font) => this.toLoader(font))
       .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
 
-    await Promise.all(loaders.map((loader) => this.register(loader, lease)));
+    await Promise.all(loaders.map((loader) => this.register(loader, lease, signal)));
 
     return loaders.length > 0;
   }
@@ -593,12 +599,15 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     fontFamilies: string[] | undefined,
     use: (resources: ResolvedResources) => Awaitable<T>,
     files?: HeldFontFiles,
+    signal?: AbortSignal,
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
     const loaders = fonts?.map((font) => this.toLoader(font)) ?? [];
 
     return this.leased(async (lease) => {
-      const families = await Promise.all(loaders.map((loader) => this.register(loader, lease)));
+      const families = await Promise.all(
+        loaders.map((loader) => this.register(loader, lease, signal)),
+      );
       const failedFontFiles = files ? await this.holdFiles(files, lease) : [];
       const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
 
@@ -614,4 +623,24 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       });
     });
   }
+}
+
+/** `promise`, or a rejection with `signal`'s reason once it aborts, leaving `promise` to run. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+
+    if (signal.aborted) {
+      abort();
+
+      return;
+    }
+
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }

@@ -183,6 +183,8 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
       undefined,
       state.fontFamilies,
       () => undefined,
+      undefined,
+      extras.signal,
     );
     extras.signal?.throwIfAborted();
   });
@@ -294,7 +296,7 @@ async function loadReached<TFamily extends RegisteredFamilyLike>(
       failedFontFiles.push(...(await loadFontFiles(registry, evicted, fetch, lease)));
     }
 
-    const loadedListed = await registry.cache(uncachedOf?.(latest) ?? [], lease);
+    const loadedListed = await registry.cache(uncachedOf?.(latest) ?? [], lease, signal);
 
     signal?.throwIfAborted();
 
@@ -473,6 +475,7 @@ export function renderPrepared<
         return call(state.source, { ...encoding, ...state.layout, ...resolved, ...failed }, signal);
       },
       files,
+      signal,
     )
     .finally(() => registry.dropUnkept(state.loadedFonts));
 }

@@ -153,6 +153,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
       ["Explicit"],
       expect.any(Function),
       undefined,
+      undefined,
     );
   });
 
@@ -163,7 +164,14 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function), undefined);
+    expect(resolve).toHaveBeenCalledWith(
+      [font],
+      [],
+      undefined,
+      expect.any(Function),
+      undefined,
+      undefined,
+    );
   });
 
   test("the characters the backend reads drive font subsetting", async () => {
@@ -173,7 +181,14 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: [font] }, textNode("0"));
 
-    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function), undefined);
+    expect(resolve).toHaveBeenCalledWith(
+      [],
+      [],
+      undefined,
+      expect.any(Function),
+      undefined,
+      undefined,
+    );
   });
 });
 
@@ -609,6 +624,32 @@ describe("fonts listed as URLs", () => {
       `URL blocked by allowUrl policy: ${url}`,
     );
     expect(global).not.toHaveBeenCalled();
+  });
+
+  test("stop waiting on another render's download when their own signal aborts", async () => {
+    const started = Promise.withResolvers<void>();
+    const hanging = mock(async () => {
+      started.resolve();
+
+      return new Promise<Response>(() => {});
+    });
+    const { fonts } = fontBackend();
+    const controller = new AbortController();
+
+    void prepare(fonts, { fetch: hanging, timeout: 0 });
+    await started.promise;
+
+    const waiting = prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { fonts: [url], images: { fetch: hanging, timeout: 0 }, signal: controller.signal },
+      reads,
+    );
+
+    controller.abort(new Error("cancelled"));
+
+    await expect(waiting).rejects.toThrow("cancelled");
   });
 
   test("download again with their own fetch when another render's download fails", async () => {
