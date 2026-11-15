@@ -127,6 +127,7 @@ export function GET(request: Request) {
   return new ImageResponse(<OgImage avatar={avatar} />, {
     images: {
       cache: "none", // [!code ++]
+      allowUrl: (url) => new URL(url).hostname === "avatars.example.com",
       sources: [
         {
           src: "logo",
@@ -148,7 +149,7 @@ function OgImage({ avatar }: { avatar: string }) {
 }
 ```
 
-Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo's own `auto` keeps it cached.
+Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo's own `auto` keeps it cached. The avatar URL comes from the request, so `allowUrl` keeps those fetches on one host, as [URLs from user input](/docs/images#urls-from-user-input) explains.
 
 The decoded-image cache is keyed by a hash of the image's bytes, so the same image under two URLs decodes once. A `data:` URI in an `<img>` or a CSS `url()` always caches in `auto` mode, because the `cache` mode applies only to `sources` and to URLs Takumi fetches. A template that inlines its logo as a `data:` URI decodes it once.
 
@@ -191,7 +192,7 @@ import { Renderer } from "takumi-js/node";
 const renderer = new Renderer({ cache: { budgets: { fonts: 64 * 1024 * 1024 } } }); // [!code highlight]
 ```
 
-Past the cap, the least recently used families are released, and a later render that lists one loads it again. Fonts from `registerFont` always stay. The font loaded last also stays, even if it alone exceeds the cap, so with a cap of `0` the renderer keeps only its registered fonts and the last font a render loaded. Set the cap above what one render needs. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
+Past the cap, the least recently used families are released, and a later render that lists one loads it again. Fonts from `registerFont` always stay. The family loaded last also stays, with every file loaded into it, even if it alone exceeds the cap. So with a cap of `0`, the renderer keeps its registered fonts and the family a render loaded last. Set the cap above what one render needs. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
 
 ## Google Fonts CSS
 
