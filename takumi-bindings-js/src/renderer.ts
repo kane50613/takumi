@@ -354,6 +354,13 @@ type ResolvedResources = {
 export type FailedFont = { source: string; error: unknown };
 
 /**
+ * How a render fetches `@font-face` files and the fonts its `fonts` list names by URL.
+ *
+ * @internal
+ */
+export type FontFetch = FetchOptions & { fetchCache?: ImageFetchCache };
+
+/**
  * How a render loads the fonts of its `fonts` list: leased to `lease`, adding the optional ones that
  * fail to `failed`, and no longer waiting once `signal` aborts.
  *
@@ -654,11 +661,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 
   /** Fetches the `@font-face` files `urls` with `fetch` and loads each leased to `lease`, returning the ones that failed and why. */
-  async loadFontFiles(
-    urls: string[],
-    fetch: FetchOptions & { fetchCache?: ImageFetchCache },
-    lease: number,
-  ): Promise<FailedFont[]> {
+  async loadFontFiles(urls: string[], fetch: FontFetch, lease: number): Promise<FailedFont[]> {
     const { images, failed } = await fetchImagesSettled({
       ...fetch,
       urls,

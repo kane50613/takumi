@@ -8,6 +8,7 @@ import {
 import {
   type FailedFont,
   type FontDetails,
+  type FontFetch,
   type FontLoad,
   type FontLoader,
   type FontRegistry,
@@ -150,9 +151,6 @@ export function needsArgs<TLayout>(
   return [{ ...layout, images, fontFamilies, failedFontFiles }, fonts];
 }
 
-/** How a render fetches `@font-face` files and the fonts its `fonts` list names by URL. */
-type FontFetch = Omit<FetchOptions, "signal"> & { fetchCache?: ImageFetchCache };
-
 type PreparedState<TSource, TLayout> = {
   source: TSource;
   layout: TLayout;
@@ -166,7 +164,7 @@ type PreparedState<TSource, TLayout> = {
   /** The `@font-face` files the source draws with, which a render loads again once the renderer evicted them. */
   fontFiles: string[];
   failedFontFiles: string[];
-  fontFetch: FontFetch;
+  fontFetch: Omit<FontFetch, "signal">;
   report: RenderReport;
   /** Reads the source again with `failedFontFiles`, so their rules move on to their next `src`. */
   reread: (failedFontFiles: string[]) => Awaitable<SourceNeeds>;
@@ -265,7 +263,7 @@ type Reach = {
   /** The `@font-face` files that failed, which each read moves their rules on from. */
   failedFontFiles: string[];
   /** How to fetch `@font-face` files, which are left alone without it. */
-  fetch?: FontFetch & { signal?: AbortSignal };
+  fetch?: FontFetch;
   /** The listed fonts a read reaches that are not cached yet. */
   uncachedOf?: (needs: SourceNeeds | undefined) => FontLoader[];
 };
