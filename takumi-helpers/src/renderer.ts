@@ -167,7 +167,7 @@ export type AnimationOutputFormatOptions =
  * @deprecated Will be removed in v3.
  */
 export type RenderExtras = {
-  fonts?: FontLoader[] | Promise<FontLoader[]>;
+  fonts?: readonly FontLoader[] | Promise<readonly FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
 };
@@ -387,7 +387,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    * wins over the registered set.
    */
   async resolveResources<T>(
-    fonts: FontLoader[] | undefined,
+    fonts: readonly FontLoader[] | undefined,
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
     use: (resources: { images?: ImageSource[]; fontFamilies?: string[] }) => Awaitable<T>,

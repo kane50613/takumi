@@ -398,7 +398,13 @@ function lowerBound(values: Uint32Array, target: number): number {
 }
 
 /** @deprecated Pass the fonts to a render, which picks the subsets its text uses. */
-export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
+export function subsetFonts<T>({
+  fonts,
+  source,
+}: {
+  fonts: readonly T[];
+  source: CodepointSource;
+}): T[] {
   const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
 
   return fonts.filter((font) => rangesCover(unicodeRangeOf(font), codepoints));
@@ -407,10 +413,18 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
 /** A loader that fetches the font at `url` on demand, its name, weight, and style read from the file. */
 export function fontFromUrl(
   url: string,
-  options: FetchOptions & StoreOptions = {},
-): { key: string; data: () => Promise<ArrayBuffer> } {
+  {
+    optional,
+    ...options
+  }: FetchOptions &
+    StoreOptions & {
+      /** Lets a render go on without the font when it fails to download or decode. */
+      optional?: boolean;
+    } = {},
+): { key: string; optional?: boolean; data: () => Promise<ArrayBuffer> } {
   return {
     key: url,
+    ...(optional ? { optional } : {}),
     data: () => fetchBytes(url, { ...options, store: storeOf(options) }),
   };
 }
