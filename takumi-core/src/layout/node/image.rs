@@ -96,11 +96,11 @@ pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
 
   match tag {
     // Blink maps no negative width or height to style.
-    "svg" if value.starts_with('-') => return None,
     "svg" => {
       return Length::from_css_str(value)
         .ok()
-        .or_else(|| value.parse().ok().map(Length::Px));
+        .or_else(|| value.parse().ok().map(Length::Px))
+        .filter(|length| !length.is_negative());
     }
     "img" => {}
     _ => return None,
@@ -211,6 +211,7 @@ mod tests {
     assert_eq!(size_attribute("svg", "100"), Some(Length::Px(100.0)));
     assert_eq!(size_attribute("svg", "-2em"), None);
     assert_eq!(size_attribute("svg", "-20"), None);
+    assert_eq!(size_attribute("svg", "-0%"), Some(Length::Percentage(-0.0)));
   }
 
   use serde_json::from_value;

@@ -708,8 +708,6 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "image",
       src: renderToStaticMarkup(component),
-      width: 60,
-      height: 60,
       preset: defaultStylePresets.svg,
       attributes: {
         width: "60",
@@ -734,8 +732,6 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "image",
       src: renderToStaticMarkup(component),
-      width: 10,
-      height: 12,
       preset: defaultStylePresets.svg,
       attributes: {
         width: "10",

@@ -31,14 +31,9 @@ export function pixelDimensions({
   return { width: pixels(width), height: pixels(height) };
 }
 
+/** A JavaScript number of pixels; a string stays in the attributes for the renderer to parse as the element's tag reads it. */
 function pixels(value: number | string | undefined): number | undefined {
-  if (typeof value === "string" && value.trim() === "") {
-    return;
-  }
-
-  const number = Number(value);
-
-  return Number.isFinite(number) ? number : undefined;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 export function camelToKebab(camel: string): string {
