@@ -70,6 +70,24 @@ struct FontCounts {
   evictions: AtomicU64,
 }
 
+impl FontCounts {
+  fn looked_up(&self, found: bool) {
+    let counter = if found { &self.hits } else { &self.misses };
+
+    counter.fetch_add(1, Ordering::Relaxed);
+  }
+
+  fn stats(&self, current: f64, max: Option<f64>) -> CacheKindStats {
+    CacheKindStats {
+      current,
+      max,
+      hits: self.hits.load(Ordering::Relaxed) as f64,
+      misses: self.misses.load(Ordering::Relaxed) as f64,
+      evictions: self.evictions.load(Ordering::Relaxed) as f64,
+    }
+  }
+}
+
 /// What the least recently used entry past the budget is.
 enum Oldest {
   Family(String),
@@ -130,25 +148,17 @@ impl FontCache {
 
   /// The bytes of unpinned fonts the cache holds, its budget, and how its lookups went.
   pub fn stats(&self) -> CacheKindStats {
-    CacheKindStats {
-      current: self.unpinned_bytes() as f64,
-      max: (self.max_bytes != u64::MAX).then_some(self.max_bytes as f64),
-      hits: self.counts.hits.load(Ordering::Relaxed) as f64,
-      misses: self.counts.misses.load(Ordering::Relaxed) as f64,
-      evictions: self.counts.evictions.load(Ordering::Relaxed) as f64,
-    }
+    self.counts.stats(
+      self.unpinned_bytes() as f64,
+      (self.max_bytes != u64::MAX).then_some(self.max_bytes as f64),
+    )
   }
 
   /// The families `key` registered, marked used; `None` once any of them was released.
   pub fn lookup(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registered = self.find(key);
-    let counter = if registered.is_some() {
-      &self.counts.hits
-    } else {
-      &self.counts.misses
-    };
 
-    counter.fetch_add(1, Ordering::Relaxed);
+    self.counts.looked_up(registered.is_some());
 
     registered
   }
