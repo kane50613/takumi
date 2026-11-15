@@ -776,6 +776,21 @@ describe("a prepared render's report", () => {
     expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
   });
 
+  test("loads the @font-face files that text in a downloaded image names", async () => {
+    const { fonts } = fontBackend();
+    const face = "https://fonts.test/svg-face.woff2";
+    const fetch = mock(async (_input: string | URL | Request) => new Response(bytes()));
+    const reads = mock(({ images = [] }: { images?: unknown[] }) => ({
+      ...missing([]),
+      images: ["https://images.test/text.svg"],
+      fontFiles: images.length > 0 ? [face] : [],
+    }));
+
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+    expect(fetch.mock.calls.map(([input]) => String(input))).toContain(face);
+  });
+
   test("onMissingGlyphs loads a font under the key of one that failed", async () => {
     const { fonts, held } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));

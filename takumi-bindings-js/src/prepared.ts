@@ -404,11 +404,10 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   };
   const loaded = fetchMissing ? await fetchImages((await read()).images) : provided;
   const entries: ImageSource[] = loaded.map((image) => ({ cache, ...image }));
-  const firstReached = listed
-    ? await (entries.length > 0 ? needs({ ...request, images: entries }) : read())
-    : fetchMissing
-      ? await read()
-      : undefined;
+  // The images go into the read, so text and `@font-face` files inside a downloaded SVG count.
+  const readWithImages = () =>
+    entries.length > 0 ? needs({ ...request, images: entries }) : read();
+  const firstReached = listed || fetchMissing ? await readWithImages() : undefined;
 
   const tried = new Set<string>();
   const cached = new Set<number>();
@@ -485,9 +484,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
           ? reached
           : resolvedFonts
             ? await readLoaded(kept, fontFamilies)
-            : entries.length > 0
-              ? await reread(failedFontFiles)
-              : (reached ?? (await read()));
+            : (reached ?? (await readWithImages()));
       const characters = coverage?.missingCharacters ?? [];
       const added = characters.length > 0 ? ((await onMissingGlyphs?.(characters)) ?? []) : [];
 
