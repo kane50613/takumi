@@ -234,7 +234,7 @@ impl Font {
 
 /// The bytes of a `Uint8Array` or `ArrayBuffer`, copied out of JavaScript memory.
 #[cfg(feature = "wasm")]
-fn js_bytes(value: &JsValue) -> Option<Vec<u8>> {
+pub(crate) fn js_bytes(value: &JsValue) -> Option<Vec<u8>> {
   if let Some(array) = value.dyn_ref::<Uint8Array>() {
     return Some(array.to_vec());
   }

@@ -10,7 +10,10 @@ use takumi_core::{
   resources::font::{FontError, FontOverride, FontResource, FontSource},
 };
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
+use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+use crate::input::js_bytes;
 
 /// The family the fallback font registers as.
 const FAMILY: &str = "Geist";
@@ -28,13 +31,7 @@ fn bytes() -> Option<&'static [u8]> {
   static BYTES: OnceLock<Option<Box<[u8]>>> = OnceLock::new();
 
   BYTES
-    .get_or_init(|| {
-      FALLBACK_FONT.with(|font| {
-        font
-          .dyn_ref::<js_sys::Uint8Array>()
-          .map(|font| font.to_vec().into_boxed_slice())
-      })
-    })
+    .get_or_init(|| FALLBACK_FONT.with(|font| js_bytes(font).map(Vec::into_boxed_slice)))
     .as_deref()
 }
 

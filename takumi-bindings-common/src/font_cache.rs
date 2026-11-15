@@ -230,9 +230,8 @@ impl FontCache {
   }
 
   /// Releases the least recently used unpinned families but `keep` from `fonts` until the rest fit
-  /// the budget, with every family the same registrations added. An embedded last-resort font
-  /// that goes with a family is registered again. Renders in progress keep the fonts they started
-  /// with.
+  /// the budget, with every family the same registrations added. The fallback font, when it goes
+  /// with a family, is registered again. Renders in progress keep the fonts they started with.
   fn evict(
     &mut self,
     fonts: &mut Fonts,
