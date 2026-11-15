@@ -647,6 +647,8 @@ describe("fonts listed as URLs", () => {
       reads,
     );
 
+    // Let the waiting render reach the pending download before its signal aborts.
+    await Bun.sleep(10);
     controller.abort(new Error("cancelled"));
 
     await expect(waiting).rejects.toThrow("cancelled");
