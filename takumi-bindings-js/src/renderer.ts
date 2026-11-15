@@ -487,14 +487,25 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     failed: FailedFont[],
     signal?: AbortSignal,
   ): Promise<TFamily[]> {
+    const key = this.keyOf(loader);
+
     try {
-      return await this.register(loader, lease, signal);
+      const families = await this.register(loader, lease, signal);
+
+      // Another loader under the same key failed, but this one holds the font.
+      for (let index = failed.length - 1; index >= 0; index--) {
+        if (failed[index]?.source === key) {
+          failed.splice(index, 1);
+        }
+      }
+
+      return families;
     } catch (error) {
       if (signal?.aborted || isBuffer(loader) || !loader.optional) {
         throw error;
       }
 
-      failed.push({ source: this.keyOf(loader), error });
+      failed.push({ source: key, error });
 
       return [];
     }

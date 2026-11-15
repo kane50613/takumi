@@ -375,7 +375,12 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const fontFetch = { ...fetchOptions, fetchCache };
   const fetch = { ...fontFetch, signal };
   const reread = (failed: string[]) =>
-    needs({ ...request, images: entries, failedFontFiles: failed });
+    needs({
+      ...request,
+      fonts: listedWithout(listed, failedFonts),
+      images: entries,
+      failedFontFiles: failed,
+    });
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
   const reached = await registry.dropOnFailure(resolvedFonts, () =>
     registry.leased((lease) =>
@@ -418,6 +423,20 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
     fontFetch,
     reread,
   };
+}
+
+/** `listed` with each font in `failed` left as a bare key, so a read reaches the family after it. */
+function listedWithout(
+  listed: ListedFont[] | undefined,
+  failed: FailedFont[],
+): ListedFont[] | undefined {
+  if (!listed || failed.length === 0) {
+    return listed;
+  }
+
+  const sources = new Set(failed.map((font) => font.source));
+
+  return listed.map((font) => (sources.has(font.key) ? { key: font.key } : font));
 }
 
 /**
@@ -486,8 +505,14 @@ export function renderPrepared<
       state.fonts && registry.loaders(state.fonts, fetch),
       state.images,
       state.fontFamilies,
-      ({ images, fontFamilies, failedFontFiles: failedAgain = [] }) => {
+      ({ images, fontFamilies, failedFontFiles: failedAgain = [], failedFonts = [] }) => {
         signal?.throwIfAborted();
+
+        // An optional font that fails now, as after the renderer evicted it, stays out of later renders.
+        if (failedFonts.length > 0) {
+          state.fonts = state.fonts && registry.without(state.fonts, failedFonts);
+          state.failedFonts.push(...failedFonts);
+        }
 
         const failedFontFiles = [...state.failedFontFiles, ...failedAgain];
         const failed = failedFontFiles.length > 0 ? { failedFontFiles } : {};

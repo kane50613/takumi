@@ -619,7 +619,8 @@ describe("optional fonts", () => {
 
   test("that a needs pass reaches are not loaded again once they failed", async () => {
     const { fonts } = fontBackend();
-    const missing = { ...broken("Missing"), unicodeRange: [[0x20, 0x7e]] as [number, number][] };
+    const latin: [number, number][] = [[0x20, 0x7e]];
+    const missing = { ...broken("Missing"), unicodeRange: latin };
     const call = mock((_source: unknown, _options: object) => undefined);
     const listedReads = ({ fonts: listed }: { fonts?: ListedFont[] }) => ({
       images: [],
@@ -635,6 +636,60 @@ describe("optional fonts", () => {
 
     expect(missing.data).toHaveBeenCalledTimes(1);
     expect(call.mock.calls[0]?.[1]).toEqual({ fontFamilies: [], images: [] });
+  });
+
+  test("that fail leave their characters to the next listed family", async () => {
+    const { fonts } = fontBackend();
+    const latin: [number, number][] = [[0x20, 0x7e]];
+    const missing = { ...broken("Missing"), unicodeRange: latin };
+    const inter = { name: "Inter", unicodeRange: latin, data: mock(bytes) };
+    const call = mock((_source: unknown, _options: object) => undefined);
+    // As the needs pass does, the first named family that claims a character serves it.
+    const firstReads = ({ fonts: listed = [] }: { fonts?: ListedFont[] }) => ({
+      images: [],
+      fonts: fontsFor("a", listed)
+        .filter((id) => listed[id]?.name !== undefined)
+        .slice(0, 1),
+    });
+
+    await renderPrepared(
+      fonts,
+      await prepareSource(fonts, textNode("a"), {}, { fonts: [missing, inter] }, firstReads),
+      {},
+      call,
+    );
+
+    expect(inter.data).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0]?.[1]).toEqual({ fontFamilies: ["Inter"], images: [] });
+  });
+
+  test("that fail beside a font under the same key leave that font", async () => {
+    const { fonts } = fontBackend();
+    const required = { name: "Inter", data: mock(bytes) };
+    const call = mock((_source: unknown, _options: object) => undefined);
+
+    await renderPrepared(
+      fonts,
+      await prepareSource(fonts, textNode("a"), {}, { fonts: [broken("Inter"), required] }, reads),
+      {},
+      call,
+    );
+
+    expect(call.mock.calls[0]?.[1]).toEqual({ fontFamilies: ["Inter"], images: [] });
+  });
+
+  test("that fail during a render are not loaded again", async () => {
+    const { fonts, held } = fontBackend();
+    const data = mock(bytes);
+    const flaky = { name: "Flaky", optional: true, data };
+    const prepared = await prepareSource(fonts, textNode("a"), {}, { fonts: [flaky] }, reads);
+
+    data.mockImplementation(() => Promise.reject(new Error("gone")));
+    held.clear();
+    await renderPrepared(fonts, prepared, {}, () => undefined);
+    await renderPrepared(fonts, prepared, {}, () => undefined);
+
+    expect(data).toHaveBeenCalledTimes(2);
   });
 
   test("refused by allowUrl leave the render without them", async () => {
