@@ -676,7 +676,7 @@ pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg")
 }
 
-/// Whether `bytes` hold SVG markup, which [`ResourceCache::get_or_decode`] reads as an SVG.
+/// Whether `bytes` hold SVG markup, which [`Cache::decode_image`] reads as an SVG.
 pub fn is_svg_bytes(bytes: &[u8]) -> bool {
   from_utf8(bytes).is_ok_and(is_svg_like)
 }
