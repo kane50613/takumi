@@ -120,9 +120,12 @@ export function perObject<K extends object, T>(create: (key: K) => T): (key: K) 
 // One for each `fetch` function, since a custom `fetch` can answer the same URL differently.
 export const defaultStore: (fetch: FetchLike) => MemoryStore = perObject(() => new MemoryStore());
 
+/** What requests must share to share one download. */
+type FlightPolicy = Pick<FetchOptions, "fetch" | "allowUrl"> & { maxBytes: number };
+
 /**
- * One download that requests with the same `fetch`, `allowUrl`, and `maxBytes` share. Each request
- * stops waiting on its own `signal` and `timeout`, and the download stops once no request waits on it.
+ * One download that requests with the same {@link FlightPolicy} share. Each request stops waiting
+ * on its own `signal` and `timeout`, and the download stops once no request waits on it.
  */
 class Flight {
   readonly done: Promise<ArrayBuffer>;
@@ -131,8 +134,7 @@ class Flight {
   private settled = false;
 
   constructor(
-    private readonly policy: Pick<FetchOptions, "fetch" | "allowUrl">,
-    private readonly maxBytes: number,
+    private readonly policy: FlightPolicy,
     run: (signal: AbortSignal) => Promise<ArrayBuffer>,
     private readonly abandon: () => void,
   ) {
@@ -144,12 +146,12 @@ class Flight {
     this.done.then(settle, settle);
   }
 
-  /** Whether a request with `options` and `maxBytes` may wait on this download instead of starting its own. */
-  serves(options: FetchOptions, maxBytes: number): boolean {
+  /** Whether a request under `policy` may wait on this download instead of starting its own. */
+  serves(policy: FlightPolicy): boolean {
     return (
-      options.fetch === this.policy.fetch &&
-      options.allowUrl === this.policy.allowUrl &&
-      maxBytes === this.maxBytes
+      policy.fetch === this.policy.fetch &&
+      policy.allowUrl === this.policy.allowUrl &&
+      policy.maxBytes === this.policy.maxBytes
     );
   }
 
@@ -239,7 +241,8 @@ export async function fetchStored(
 
   const state = stateOf(store);
   const flights = state.flights.get(url) ?? [];
-  const shared = flights.find((flight) => flight.serves(options, maxBytes));
+  const policy = { fetch: options.fetch, allowUrl: options.allowUrl, maxBytes };
+  const shared = flights.find((flight) => flight.serves(policy));
 
   if (shared) {
     return shared.wait(options);
@@ -275,8 +278,7 @@ export async function fetchStored(
     });
   };
   const flight = new Flight(
-    { fetch: options.fetch, allowUrl: options.allowUrl },
-    maxBytes,
+    policy,
     (signal) => {
       const found = lookup(store, url);
 
