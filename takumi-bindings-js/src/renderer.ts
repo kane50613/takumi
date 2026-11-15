@@ -320,6 +320,12 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  *
  * @internal
  */
+export type HeldFontFiles = {
+  urls: string[];
+  /** Loads `urls` leased to `lease`, and the next sources their rules reach when one fails, returning the ones that failed. */
+  load(urls: string[], lease: number): Promise<string[]>;
+};
+
 /** How {@link FontRegistry.resolveResources} loads and hands over fonts. */
 type ResolveOptions = {
   /** The `@font-face` files a prepared render loaded, leased again or loaded again. */
@@ -327,12 +333,6 @@ type ResolveOptions = {
   signal?: AbortSignal;
   /** The fonts join the renderer's registered fallback chain instead of naming the render's families. */
   implicitFamilies?: boolean;
-};
-
-export type HeldFontFiles = {
-  urls: string[];
-  /** Loads `urls` leased to `lease`, and the next sources their rules reach when one fails, returning the ones that failed. */
-  load(urls: string[], lease: number): Promise<string[]>;
 };
 
 /** The resources a render uses, as the binding expects them. */
