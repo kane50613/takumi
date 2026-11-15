@@ -8,15 +8,6 @@ import type {
   Node,
   RendererOptions,
 } from "@takumi-rs/helpers";
-
-export type {
-  CacheBudgets,
-  CacheKindStats,
-  CacheMemoryStats,
-  CacheOptions,
-  CacheStats,
-  RendererOptions,
-};
 import type { Properties } from "csstype";
 
 export {
@@ -27,6 +18,15 @@ export {
   RgbaImage,
   TextNode,
 } from "@takumi-rs/helpers";
+
+export type {
+  CacheBudgets,
+  CacheKindStats,
+  CacheMemoryStats,
+  CacheOptions,
+  CacheStats,
+  RendererOptions,
+};
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
