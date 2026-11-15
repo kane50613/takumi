@@ -62,6 +62,9 @@ pub enum FontError {
   /// Unsupported Font Format
   #[error("Unsupported font format")]
   UnsupportedFormat,
+  /// A font format this build leaves out, such as WOFF in the WebAssembly bindings
+  #[error("This build cannot read {0} fonts. Convert the font to a format it reads, such as TTF")]
+  FormatLeftOut(&'static str),
   /// Font index is invalid
   #[error("Font index is invalid")]
   InvalidFontIndex,
@@ -96,8 +99,12 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   match &source[0..4] {
     #[cfg(feature = "woff2")]
     b"wOF2" => Ok(FontFormat::Woff2),
+    #[cfg(not(feature = "woff2"))]
+    b"wOF2" => Err(FontError::FormatLeftOut("WOFF2")),
     #[cfg(feature = "woff")]
     b"wOFF" => Ok(FontFormat::Woff),
+    #[cfg(not(feature = "woff"))]
+    b"wOFF" => Err(FontError::FormatLeftOut("WOFF")),
     [0x00, 0x01, 0x00, 0x00] => Ok(FontFormat::Ttf),
     b"OTTO" => Ok(FontFormat::Otf),
     b"ttcf" => Ok(FontFormat::Ttc),
@@ -1752,5 +1759,19 @@ mod tests {
 
     // Must not panic: an unresolved name simply yields an empty fallback bucket.
     let _snapshot = fonts.snapshot_with_fallbacks(Some(&unknown));
+  }
+
+  #[test]
+  #[cfg(not(feature = "woff"))]
+  fn a_build_without_woff_names_the_format_it_cannot_read() {
+    let mut fonts = Fonts::default();
+    let error = fonts
+      .register(FontResource::new(b"wOFF\0\0\0\0".to_vec()))
+      .unwrap_err();
+
+    assert_eq!(
+      error.to_string(),
+      "This build cannot read WOFF fonts. Convert the font to a format it reads, such as TTF"
+    );
   }
 }
