@@ -814,7 +814,7 @@ describe("a prepared render's report", () => {
   });
 
   test("onMissingGlyphs fonts join the registered chain when the render names no fonts", async () => {
-    const { fonts, held } = fontBackend();
+    const { fonts, held, backend } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
     const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
     const prepared = await prepareSource(
@@ -829,6 +829,7 @@ describe("a prepared render's report", () => {
 
     expect(held.has("cjk")).toBe(true);
     expect(call.mock.calls[0]?.[1].fontFamilies).toBeUndefined();
+    expect(backend.orderFonts).toHaveBeenLastCalledWith(["cjk"]);
   });
 
   test("onMissingGlyphs adds its fonts to the render and reads once more", async () => {

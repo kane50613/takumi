@@ -699,7 +699,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
           : undefined;
 
       // Nothing yields from here into `use`, so the order stands when the render takes its fonts.
-      if (loaders.length > 0 && !implicitFamilies) {
+      if (loaders.length > 0) {
         this.backend.orderFonts(loaders.map((loader) => this.keyOf(loader)));
       }
 

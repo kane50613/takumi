@@ -322,7 +322,7 @@ A prepared source picks its `unicodeRange` subsets once, in `prepare`. When an o
 
 ### What a render could not draw
 
-A render reports what it could not satisfy. A renderer's `prepare()` returns it as `prepared.report`, and `ImageResponse` resolves `ready` to it. The report has four lists:
+A render reports what it could not satisfy. A renderer's `prepare()` returns it as `prepared.report`, and `ImageResponse` resolves `ready` to it. The report is what `prepare` found: a font that fails when a later render of the same prepared source loads it again does not change it. The report has four lists:
 
 | Field                | Lists                                                                                                        |
 | -------------------- | ------------------------------------------------------------------------------------------------------------ |
