@@ -105,7 +105,7 @@ await ready();
 const renderer = new Renderer();
 ```
 
-`ready()` loads the binary the export conditions pick, on every runtime. Only the first call loads it, and later calls wait for that load. When instantiating the binary fails, the next call tries again. When reading it fails, as when the bundler did not emit it, the next call fails the same way, so fix the build.
+`ready()` loads the binary the export conditions pick, on every runtime. Only the first call loads it, and later calls wait for that load. If the load fails, `ready()` rejects with the error. Fix its cause, such as a binary the bundler did not emit, instead of calling `ready()` again.
 
 ## Render an image
 
