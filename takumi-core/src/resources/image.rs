@@ -250,13 +250,14 @@ impl SvgSource {
     if !self.reads_color(host, viewport) {
       return Cow::Borrowed(&self.source);
     }
+
     self.with_color_attribute(host.current_color)
   }
 
   /// Whether the layout at `viewport` in `host` reads the host's color, from the reads a cached
   /// picture recorded when the source has one, so a repeated image is not laid out again.
   fn reads_color(&self, host: &RenderContext, viewport: Size<f32>) -> bool {
-    if self.key.is_some() && !self.inline {
+    if self.key.is_some() {
       self.picture(host, viewport);
 
       if let Some(reads) = self.known_reads(viewport) {
