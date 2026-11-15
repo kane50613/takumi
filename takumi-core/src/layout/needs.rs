@@ -19,7 +19,7 @@ use crate::{
     tree::RenderNode,
   },
   resources::image::{ImageSource, is_svg_like},
-  style::{BackgroundImage, Display, Float, find_keyframes},
+  style::{BackgroundImage, Display, Float, FontVariantCaps, find_keyframes},
 };
 use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
 
@@ -254,6 +254,7 @@ impl NeedsCollector {
       .or_insert_with(|| (Rc::clone(list), FxHashSet::default()));
     let mut symbols = SymbolsIterator::new(text);
     let mut start = 0;
+    let synthesizes_caps = font.description.variant_caps != FontVariantCaps::Normal;
 
     if let Some(id) = list.primary_face() {
       insert_loaded(&mut self.needs, &self.loaded_font_files, id);
@@ -273,27 +274,60 @@ impl NeedsCollector {
           }
         }
 
-        if !walked.insert((character, priority)) {
-          continue;
-        }
+        reach(
+          &mut self.needs,
+          &self.loaded_font_files,
+          walked,
+          list,
+          character,
+          priority,
+        );
 
-        match list.face_for_character(character, priority) {
-          Some(ReachedFace::Pending(PendingSource::Listed(id))) => {
-            self.needs.faces.insert(id);
+        // Synthesized caps shape the other case, which can fall back to another face, so request both.
+        if synthesizes_caps {
+          for mapped in character.to_uppercase().chain(character.to_lowercase()) {
+            reach(
+              &mut self.needs,
+              &self.loaded_font_files,
+              walked,
+              list,
+              mapped,
+              priority,
+            );
           }
-          #[cfg(feature = "font-face")]
-          Some(ReachedFace::Pending(PendingSource::Url(url))) => {
-            self.needs.font_files.insert(url.to_string());
-          }
-          Some(ReachedFace::Loaded(id)) => {
-            insert_loaded(&mut self.needs, &self.loaded_font_files, id);
-          }
-          None => {}
         }
       }
 
       start = end;
     }
+  }
+}
+
+/// Adds the face `list` reaches for `character` at `priority` to `needs`, once per `walked` pair.
+fn reach(
+  needs: &mut RenderNeeds,
+  loaded_font_files: &FxHashMap<u64, Vec<Arc<str>>>,
+  walked: &mut FxHashSet<(char, FontFallbackPriority)>,
+  list: &FontFallbackList,
+  character: char,
+  priority: FontFallbackPriority,
+) {
+  if !walked.insert((character, priority)) {
+    return;
+  }
+
+  match list.face_for_character(character, priority) {
+    Some(ReachedFace::Pending(PendingSource::Listed(id))) => {
+      needs.faces.insert(id);
+    }
+    #[cfg(feature = "font-face")]
+    Some(ReachedFace::Pending(PendingSource::Url(url))) => {
+      needs.font_files.insert(url.to_string());
+    }
+    Some(ReachedFace::Loaded(id)) => {
+      insert_loaded(needs, loaded_font_files, id);
+    }
+    None => {}
   }
 }
 
@@ -415,6 +449,14 @@ mod tests {
 
     shaped.sort_unstable();
     shaped.into_iter().collect()
+  }
+
+  #[test]
+  fn synthesized_caps_request_the_faces_of_the_other_case() {
+    let css = ".container { font-variant-caps: small-caps }";
+
+    assert_eq!(shaped("aA", [Node::text("a")], css), "Aa");
+    assert_eq!(shaped("aA", [Node::text("a")], ""), "a");
   }
 
   #[test]
