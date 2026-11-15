@@ -318,6 +318,8 @@ const image = await render(<div style={{ fontFamily: "Brand, Inter" }}>Hello</di
 
 A descriptor takes the field directly, such as `{ name: "Brand", data: loadBrand, optional: true }`.
 
+A prepared source picks its `unicodeRange` subsets once, in `prepare`. When an optional font it picked loads there but fails when a later render loads it again, as after the renderer released it, that render draws without it and does not reach the next family for those characters. Prepare the source again to pick its subsets anew.
+
 ## Choosing a font
 
 ### Fallback chain
