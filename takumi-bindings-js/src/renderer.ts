@@ -320,6 +320,15 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
  *
  * @internal
  */
+/** How {@link FontRegistry.resolveResources} loads and hands over fonts. */
+type ResolveOptions = {
+  /** The `@font-face` files a prepared render loaded, leased again or loaded again. */
+  files?: HeldFontFiles;
+  signal?: AbortSignal;
+  /** The fonts join the renderer's registered fallback chain instead of naming the render's families. */
+  implicitFamilies?: boolean;
+};
+
 export type HeldFontFiles = {
   urls: string[];
   /** Loads `urls` leased to `lease`, and the next sources their rules reach when one fails, returning the ones that failed. */
@@ -492,11 +501,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       const families = await this.register(loader, lease, signal);
 
       // Another loader under the same key failed, but this one holds the font.
-      for (let index = failed.length - 1; index >= 0; index--) {
-        if (failed[index]?.source === key) {
-          failed.splice(index, 1);
-        }
-      }
+      this.clearFailures(failed, [loader]);
 
       return families;
     } catch (error) {
@@ -612,6 +617,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return sources.size > 0 ? fonts.filter((font) => !sources.has(this.key(font))) : fonts;
   }
 
+  /** Removes from `failed` the failures under the keys of `fonts`, which load again or loaded. */
+  clearFailures(failed: FailedFont[], fonts: readonly FontLoader[]): void {
+    const keys = new Set(fonts.map((font) => this.key(font)));
+
+    for (let index = failed.length - 1; index >= 0; index--) {
+      if (keys.has(failed[index]?.source ?? "")) {
+        failed.splice(index, 1);
+      }
+    }
+  }
+
   /** The key the backend keeps `font` under, which a {@link FailedFont} names as its `source`. */
   private key(font: FontLoader): string {
     return this.keyOf(this.toLoader(font));
@@ -666,8 +682,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
     use: (resources: ResolvedResources) => Awaitable<T>,
-    files?: HeldFontFiles,
-    signal?: AbortSignal,
+    { files, signal, implicitFamilies = false }: ResolveOptions = {},
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
     const loaders = fonts?.map((font) => this.toLoader(font)) ?? [];
@@ -678,10 +693,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
         loaders.map((loader) => this.admit(loader, lease, failedFonts, signal)),
       );
       const failedFontFiles = files ? await this.holdFiles(files, lease) : [];
-      const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
+      const registered =
+        fonts && !implicitFamilies
+          ? [...new Set(families.flat().map((family) => family.name))]
+          : undefined;
 
       // Nothing yields from here into `use`, so the order stands when the render takes its fonts.
-      if (loaders.length > 0) {
+      if (loaders.length > 0 && !implicitFamilies) {
         this.backend.orderFonts(loaders.map((loader) => this.keyOf(loader)));
       }
 

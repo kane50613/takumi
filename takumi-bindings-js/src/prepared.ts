@@ -156,6 +156,8 @@ type PreparedState<TSource, TLayout> = {
   source: TSource;
   layout: TLayout;
   fonts: readonly FontLoader[] | undefined;
+  /** `fonts` came from `onMissingGlyphs` alone, so they join the registered fallback chain. */
+  implicitFamilies: boolean;
   /** `fonts` and every listed font a read loaded, which the render forgets once it settles if they use `cache: "none"`. */
   loadedFonts: readonly FontLoader[] | undefined;
   fontFamilies: string[] | undefined;
@@ -214,8 +216,7 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
       undefined,
       state.fontFamilies,
       (resolved) => resolved.failedFonts ?? [],
-      undefined,
-      extras.signal,
+      { signal: extras.signal, implicitFamilies: state.implicitFamilies },
     );
 
     extras.signal?.throwIfAborted();
@@ -423,7 +424,11 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       failedFontFiles: failed,
     });
   /** Reads the source with every font of `fonts` loaded, falling back through `families` as the render does. */
-  const readLoaded = (fonts: readonly FontLoader[] | undefined, families: string[] | undefined) =>
+  const readLoaded = (
+    fonts: readonly FontLoader[] | undefined,
+    families: string[] | undefined,
+    implicitFamilies = false,
+  ) =>
     registry.resolveResources(
       fonts && registry.loaders(fonts, fetch),
       undefined,
@@ -433,8 +438,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
 
         return needs({ images: entries, fontFamilies: resolved, failedFontFiles });
       },
-      undefined,
-      signal,
+      { signal, implicitFamilies },
     );
 
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
@@ -465,7 +469,13 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       const kept = subset && registry.without(subset, failedFonts);
 
       if (!fetchMissing && !onMissingGlyphs) {
-        return { fonts: kept, fontFamilies, coverage: undefined, added: [] };
+        return {
+          fonts: kept,
+          fontFamilies,
+          coverage: undefined,
+          added: [],
+          implicitFamilies: false,
+        };
       }
 
       // A read saw each listed font as loading, which a listed font that failed makes wrong, and
@@ -475,17 +485,24 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
           ? reached
           : resolvedFonts
             ? await readLoaded(kept, fontFamilies)
-            : (reached ?? (await read()));
+            : entries.length > 0
+              ? await reread(failedFontFiles)
+              : (reached ?? (await read()));
       const characters = coverage?.missingCharacters ?? [];
       const added = characters.length > 0 ? ((await onMissingGlyphs?.(characters)) ?? []) : [];
 
       signal?.throwIfAborted();
 
       if (added.length === 0) {
-        return { fonts: kept, fontFamilies, coverage, added };
+        return { fonts: kept, fontFamilies, coverage, added, implicitFamilies: false };
       }
 
+      // An earlier failure under a key the hook returns again does not keep its font out.
+      registry.clearFailures(failedFonts, added);
+
       return registry.dropOnFailure(added, async () => {
+        // Without `fonts` or `fontFamilies`, the hook's fonts join the registered fallback chain.
+        const implicitFamilies = !resolvedFonts && !fontFamilies;
         const families = fontFamilies && [
           ...new Set([...fontFamilies, ...(await familiesOf(registry, added, fetch, failedFonts))]),
         ];
@@ -494,8 +511,9 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         return {
           fonts: all,
           fontFamilies: families,
-          coverage: await readLoaded(all, families),
+          coverage: await readLoaded(all, families, implicitFamilies),
           added,
+          implicitFamilies,
         };
       });
     }),
@@ -510,6 +528,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       ...settled.added,
     ],
     fontFamilies: settled.fontFamilies,
+    implicitFamilies: settled.implicitFamilies,
     images: entries,
     fontFiles: [...tried].filter((url) => !failedFontFiles.includes(url)),
     failedFontFiles,
@@ -554,8 +573,7 @@ function familiesOf<TFamily extends RegisteredFamilyLike>(
 
       return fontFamilies;
     },
-    undefined,
-    fetch.signal,
+    { signal: fetch.signal },
   );
 }
 
@@ -645,8 +663,7 @@ export function renderPrepared<
           signal,
         );
       },
-      files,
-      signal,
+      { files, signal, implicitFamilies: state.implicitFamilies },
     )
     .finally(() => registry.dropUnkept(state.loadedFonts));
 }
