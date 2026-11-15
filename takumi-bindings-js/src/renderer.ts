@@ -1,8 +1,10 @@
 import {
   type FetchOptions,
+  fetchImagesSettled,
   type FontCacheMode,
   fontFromUrl,
   type GenericFontFamily,
+  type ImageFetchCache,
 } from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
 import type { ListedFont, MissingGlyphsHandler, PrepareExtras } from "./prepared";
@@ -472,11 +474,6 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return loading;
   }
 
-  /** Loads the `@font-face` file `url` names, leased to `lease`. A wasm backend reads only a `Uint8Array`. */
-  async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array, lease: number): Promise<void> {
-    await this.backend.cacheFontFile(url, asView(data), lease);
-  }
-
   /** Loads each of `fonts` the backend does not hold under `load`, and returns whether any was loaded. */
   async cache(fonts: readonly FontLoader[], load: FontLoad): Promise<boolean> {
     const loaders = fonts
@@ -654,6 +651,48 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   /** Leases each of the `@font-face` files `urls` the backend still holds to `lease`, returning the others. */
   leaseFontFiles(urls: string[], lease: number): string[] {
     return urls.filter((url) => !this.backend.cachedFontFile(url, lease));
+  }
+
+  /** Fetches the `@font-face` files `urls` with `fetch` and loads each leased to `lease`, returning the ones that failed and why. */
+  async loadFontFiles(
+    urls: string[],
+    fetch: FetchOptions & { fetchCache?: ImageFetchCache },
+    lease: number,
+  ): Promise<FailedFont[]> {
+    const { images, failed } = await fetchImagesSettled({
+      ...fetch,
+      urls,
+      store: this.store.for(fetch.fetch),
+    });
+    const fetched = new Map(images.map(({ src, data }) => [src, data]));
+    const errors = new Map(failed.map(({ src, error }) => [src, error]));
+    const loaded = await Promise.all(
+      urls.map(async (url): Promise<FailedFont[]> => {
+        const data = fetched.get(url);
+
+        if (data === undefined) {
+          const error = errors.get(url) ?? new Error(`Fetching ${url} needs your own fetch`);
+
+          return [{ source: url, error }];
+        }
+
+        return this.cacheFontFile(url, data, lease).then(
+          () => [],
+          (error: unknown) => [{ source: url, error }],
+        );
+      }),
+    );
+
+    return loaded.flat();
+  }
+
+  /** Loads the `@font-face` file `url` names, leased to `lease`. A wasm backend reads only a `Uint8Array`. */
+  private async cacheFontFile(
+    url: string,
+    data: ArrayBuffer | Uint8Array,
+    lease: number,
+  ): Promise<void> {
+    await this.backend.cacheFontFile(url, asView(data), lease);
   }
 
   /** Leases each held file the backend still holds, and loads the others again, returning the ones that failed. */

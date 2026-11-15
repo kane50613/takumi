@@ -258,40 +258,6 @@ function unseen<T>(items: T[], seen: Set<T>): T[] {
   return fresh;
 }
 
-/** Fetches each of `urls` and hands it to the renderer leased to `lease`, returning the ones that failed and why. */
-async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
-  registry: FontRegistry<TFamily>,
-  urls: string[],
-  options: FontFetch & { signal?: AbortSignal },
-  lease: number,
-): Promise<FailedFont[]> {
-  const { images, failed } = await fetchImagesSettled({
-    ...options,
-    urls,
-    store: registry.store.for(options.fetch),
-  });
-  const fetched = new Map(images.map(({ src, data }) => [src, data]));
-  const errors = new Map(failed.map(({ src, error }) => [src, error]));
-  const loaded = await Promise.all(
-    urls.map(async (url): Promise<FailedFont[]> => {
-      const data = fetched.get(url);
-
-      if (data === undefined) {
-        const error = errors.get(url) ?? new Error(`Fetching ${url} needs your own fetch`);
-
-        return [{ source: url, error }];
-      }
-
-      return registry.cacheFontFile(url, data, lease).then(
-        () => [],
-        (error: unknown) => [{ source: url, error }],
-      );
-    }),
-  );
-
-  return loaded.flat();
-}
-
 /** How {@link loadReached} loads what each read reaches. */
 type Reach = {
   /** The `@font-face` files handled, each at most once. */
@@ -332,7 +298,7 @@ async function loadReached<TFamily extends RegisteredFamilyLike>(
     );
 
     if (fetch && evicted.length > 0) {
-      const failed = await loadFontFiles(registry, evicted, fetch, load.lease);
+      const failed = await registry.loadFontFiles(evicted, fetch, load.lease);
 
       failedFontFiles.push(...failed.map((font) => font.source));
       load.failed.push(...failed);
@@ -603,7 +569,7 @@ export function renderPrepared<
       ? {
           urls: state.fontFiles,
           load: async (urls, lease) => {
-            const failed = (await loadFontFiles(registry, urls, fetch, lease)).map(
+            const failed = (await registry.loadFontFiles(urls, fetch, lease)).map(
               (font) => font.source,
             );
 
