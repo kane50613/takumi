@@ -322,6 +322,9 @@ struct SheetEntry {
   bytes: usize,
 }
 
+/// Bytes charged for an entry's own bookkeeping on top of its payload.
+pub(crate) const ENTRY_OVERHEAD: usize = 64;
+
 /// An entry's approximate retained size in bytes.
 pub(crate) trait Weighed {
   fn bytes(&self) -> usize;

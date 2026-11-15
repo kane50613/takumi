@@ -14,7 +14,10 @@ use rustc_hash::FxBuildHasher;
 
 use crate::{
   geometry::Placement,
-  resources::{cache::CacheOptions, glyph::ResolvedGlyph},
+  resources::{
+    cache::{CacheOptions, ENTRY_OVERHEAD},
+    glyph::ResolvedGlyph,
+  },
 };
 
 /// The glyph budget of caches built without one of their own.
@@ -31,9 +34,6 @@ pub fn set_glyph_cache_max_bytes(bytes: usize) {
 pub(crate) fn default_max_bytes() -> u64 {
   DEFAULT_MAX_BYTES.load(Ordering::Relaxed)
 }
-
-/// Bytes charged for an entry's own bookkeeping on top of its payload.
-pub(crate) const ENTRY_OVERHEAD: usize = 64;
 
 /// The share of the budget one entry may take: a 32nd, what one shard of the cache holds on an
 /// eight-core machine, so a single raster cannot crowd out the glyphs.

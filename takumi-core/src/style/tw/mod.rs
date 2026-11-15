@@ -23,7 +23,7 @@ use serde::{Deserialize, Deserializer, de::Error as DeError};
 pub(crate) use variant::{Breakpoint, BreakpointOverrides};
 
 use crate::{
-  resources::cache::{ByBytes, Weighed, store},
+  resources::cache::{ByBytes, ENTRY_OVERHEAD, Weighed, store},
   style::*,
   viewport::Viewport,
 };
@@ -79,9 +79,6 @@ pub struct TailwindValues {
 
 /// The rules a class list compiles to, in the order they were written.
 type Rules = Arc<Vec<Arc<TwRule>>>;
-
-/// Bytes charged for an entry's own bookkeeping on top of its payload.
-const ENTRY_OVERHEAD: usize = 64;
 
 /// The rules a [`Cache`](crate::Cache) keeps, by the class list they compile from.
 pub(crate) struct TailwindCache {
