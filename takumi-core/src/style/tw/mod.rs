@@ -11,7 +11,6 @@ mod variant;
 use std::{
   borrow::Cow,
   convert::Infallible,
-  mem::size_of,
   str::FromStr,
   sync::{Arc, OnceLock},
 };

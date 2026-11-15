@@ -1194,6 +1194,7 @@ impl<'a> FontResource<'a> {
     }
   }
 }
+
 impl GlyphCache {
   #[cfg(feature = "svg")]
   pub(crate) fn resolve(

@@ -1,15 +1,17 @@
 //! Where a glyph outline crosses a decoration's band, which Chromium asks Skia's
 //! `SkFont::getIntercepts` for and this answers from the outline so every backend can.
 
-use std::{mem::size_of, ops::RangeInclusive};
+use std::ops::RangeInclusive;
 
 use quick_cache::sync::Cache as Store;
 use smallvec::SmallVec;
 
 use crate::{
   geometry::{PathCommand, Point},
-  resources::cache::{ByBytes, Weighed, store},
-  resources::glyph::ResolvedOutlineGlyph,
+  resources::{
+    cache::{ByBytes, Weighed, store},
+    glyph::ResolvedOutlineGlyph,
+  },
   sort_key::sort_by_key,
   text::character::is_cjk_ideograph_or_symbol,
 };

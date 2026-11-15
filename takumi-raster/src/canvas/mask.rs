@@ -585,7 +585,7 @@ pub(crate) fn render_mask(
 }
 
 /// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
-/// pixel, within [`max_entry_bytes`].
+/// pixel, within [`GlyphCache::max_entry_bytes`].
 fn fits_glyph_cache(glyphs: &GlyphCache, size: Size<f32>, transform: Affine) -> bool {
   transformed_placement(Point::ZERO, size, transform).is_some_and(|placement| {
     u64::from(placement.width) * u64::from(placement.height) <= glyphs.max_entry_bytes()

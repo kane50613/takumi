@@ -16,8 +16,9 @@ use crate::{
     image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::tw::TailwindCache,
-  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
+  style::{
+    Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule, tw::TailwindCache,
+  },
   viewport::Viewport,
 };
 
