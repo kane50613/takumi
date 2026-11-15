@@ -145,11 +145,10 @@ impl Drawing {
     };
     let href = doc.image_href(&key, || loaded_data_url(source, context, viewport))?;
     // An SVG is defined at the size it is drawn, which its media queries and the color probe read.
-    let size = match source {
-      ImageSource::Svg(_) => {
-        (viewport.width > 0.0 && viewport.height > 0.0).then_some((viewport.width, viewport.height))
-      }
-      _ => pixel_size(source),
+    let size = if svg {
+      (viewport.width > 0.0 && viewport.height > 0.0).then_some((viewport.width, viewport.height))
+    } else {
+      pixel_size(source)
     };
 
     Some(Self::Raster {
