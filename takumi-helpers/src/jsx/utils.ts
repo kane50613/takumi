@@ -20,22 +20,6 @@ export function isHtmlElement<T extends keyof JSX.IntrinsicElements>(
   return element.type === type && "props" in element;
 }
 
-/** `width` and `height` given in pixels; the renderer reads other lengths from the attributes. */
-export function pixelDimensions({
-  width,
-  height,
-}: {
-  width?: number | string;
-  height?: number | string;
-}): { width?: number; height?: number } {
-  return { width: pixels(width), height: pixels(height) };
-}
-
-/** A JavaScript number of pixels; a string stays in the attributes for the renderer to parse as the element's tag reads it. */
-function pixels(value: number | string | undefined): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
 export function camelToKebab(camel: string): string {
   return camel.replace(/([A-Z])/g, "-$1").toLowerCase();
 }

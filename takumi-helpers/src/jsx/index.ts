@@ -16,7 +16,6 @@ import {
   isReactFragment,
   isReactMemo,
   isValidElement,
-  pixelDimensions,
 } from "./utils";
 
 export * from "./style-presets";
@@ -298,6 +297,21 @@ class NodeBuilder implements RenderEnv {
       typeof style === "object" && style !== null ? style : undefined,
     );
   }
+}
+
+/** `width` and `height` given in pixels. The renderer reads every other length from the attributes. */
+function pixelDimensions({
+  width,
+  height,
+}: {
+  width?: number | string;
+  height?: number | string;
+}): { width?: number; height?: number } {
+  return { width: pixels(width), height: pixels(height) };
+}
+
+function pixels(value: number | string | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
