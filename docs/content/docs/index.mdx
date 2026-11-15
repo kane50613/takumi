@@ -95,6 +95,18 @@ await build({
 
 Custom conditions replace the `module` condition esbuild sets by default. Without `module`, the bundle keeps a loader that reads the binary from `node_modules` and fails with `ENOENT` once it runs from `dist`.
 
+`render` and `ImageResponse` load the binary on their first call. To create a `Renderer` from `takumi-js/wasm` yourself, await `ready()` first:
+
+```ts twoslash title="Create a WebAssembly renderer"
+import { ready, Renderer } from "takumi-js/wasm";
+
+await ready();
+
+const renderer = new Renderer();
+```
+
+`ready()` loads the binary the export conditions pick, on every runtime. Only the first call loads it, and later calls wait for that load. A failed load is retried on the next call.
+
 ## Render an image
 
 `render` takes JSX and returns encoded image bytes. Save this as `image.tsx` and run `bun image.tsx`. In Node.js, compile the JSX first.

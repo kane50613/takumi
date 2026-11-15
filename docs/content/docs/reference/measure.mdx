@@ -28,10 +28,10 @@ const { width, height } = await renderer.measure(node, { css }); // [!code highl
 ```
 
 ```tsx twoslash tab="takumi-js/wasm" title="Measure with WebAssembly"
-import wasm, { init, Renderer } from "takumi-js/wasm";
+import { ready, Renderer } from "takumi-js/wasm";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
-await init({ module_or_path: wasm });
+await ready();
 
 const renderer = new Renderer();
 const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
