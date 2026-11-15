@@ -179,7 +179,7 @@ impl RenderContext {
   /// This context for drawing the content of an `svg` element, whose SVG inherits the box's `color`
   /// where an image's is isolated from it.
   #[cfg(feature = "svg")]
-  pub fn for_svg_element(&self) -> Self {
+  pub(crate) fn for_svg_element(&self) -> Self {
     Self {
       svg_element: true,
       ..self.clone()
