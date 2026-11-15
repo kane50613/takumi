@@ -1,4 +1,9 @@
-import { type FontCacheMode, fontFromUrl, type GenericFontFamily } from "@takumi-rs/helpers";
+import {
+  type FetchOptions,
+  type FontCacheMode,
+  fontFromUrl,
+  type GenericFontFamily,
+} from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
 import type { ListedFont, PrepareExtras } from "./prepared";
 import { RendererStore } from "./store";
@@ -392,8 +397,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const pending = this.loading.get(key);
 
     if (pending) {
-      // The render loading it leases its file until that render settles, after this continues.
-      return pending.then(() => this.register(loader, lease));
+      const retry = () => this.register(loader, lease);
+
+      // The render loading it leases its file until that render settles, after this continues. A
+      // failed load ran under that render's fetch options and signal, so this one loads with its own.
+      return pending.then(retry, retry);
     }
 
     const load = Promise.resolve(extractFontBuffer(loader))
@@ -523,9 +531,16 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     });
   }
 
-  /** `font` with a URL string turned into a loader that downloads through the renderer's store. */
-  private toLoader(font: FontLoader): Exclude<FontLoader, string> {
-    return typeof font === "string" ? fontFromUrl(font, { store: this.store.current }) : font;
+  /** `fonts` as loaders, each URL string downloading with `fetch` as the render's other downloads do. */
+  loaders(fonts: FontLoader[], fetch: FetchOptions): Exclude<FontLoader, string>[] {
+    return fonts.map((font) => this.toLoader(font, fetch));
+  }
+
+  /** `font` with a URL string turned into a loader that downloads with `fetch` through the renderer's store. */
+  private toLoader(font: FontLoader, fetch: FetchOptions = {}): Exclude<FontLoader, string> {
+    return typeof font === "string"
+      ? fontFromUrl(font, { ...fetch, store: this.store.for(fetch.fetch) })
+      : font;
   }
 
   private keyOf(loader: Exclude<FontLoader, string>) {

@@ -183,7 +183,7 @@ const image = await render(element, {
 });
 ```
 
-`images`, `googleFonts`, and `fontFromUrl` take these options. A custom `data` loader makes its own requests, so they do not apply to it.
+`images`, `googleFonts`, and `fontFromUrl` take these options. The options in `images` also apply to the `@font-face` files a render loads and to the fonts its `fonts` list names by URL. A custom `data` loader makes its own requests, so they do not apply to it.
 
 | Option     | Default            | Effect                                                            |
 | :--------- | :----------------- | :---------------------------------------------------------------- |

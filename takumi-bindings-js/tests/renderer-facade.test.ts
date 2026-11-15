@@ -577,3 +577,63 @@ describe("the renderer's download store", () => {
     expect(store.current).toBe(before);
   });
 });
+
+describe("fonts listed as URLs", () => {
+  const url = "https://fonts.test/listed.woff2";
+  const reads = () => ({ images: [], fonts: [] });
+  const prepare = (
+    fonts: ReturnType<typeof fontBackend>["fonts"],
+    images: NonNullable<PrepareExtras["images"]>,
+  ) => prepareSource(fonts, textNode("a"), {}, { fonts: [url], images }, reads);
+
+  test("download with the render's fetch", async () => {
+    const global = mock(async () => new Response(bytes()));
+    const fetch = mock(async (_input: string | URL | Request) => new Response(bytes()));
+    const { fonts, held } = fontBackend();
+
+    answerFetch(global);
+    await prepare(fonts, { fetch });
+
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([url]);
+    expect(global).not.toHaveBeenCalled();
+    expect(held.has(url)).toBe(true);
+  });
+
+  test("are refused by the render's allowUrl", async () => {
+    const global = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+
+    answerFetch(global);
+
+    await expect(prepare(fonts, { allowUrl: () => false })).rejects.toThrow(
+      `URL blocked by allowUrl policy: ${url}`,
+    );
+    expect(global).not.toHaveBeenCalled();
+  });
+
+  test("download again with their own fetch when another render's download fails", async () => {
+    const started = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const failing = mock(async () => {
+      started.resolve();
+      await gate.promise;
+
+      return new Response(null, { status: 404 });
+    });
+    const working = mock(async () => new Response(bytes()));
+    const { fonts, held } = fontBackend();
+    const first = prepare(fonts, { fetch: failing });
+
+    await started.promise;
+
+    const second = prepare(fonts, { fetch: working });
+
+    await Bun.sleep(5);
+    gate.resolve();
+
+    await expect(first).rejects.toThrow("HTTP 404");
+    await second;
+    expect(working).toHaveBeenCalledTimes(1);
+    expect(held.has(url)).toBe(true);
+  });
+});
