@@ -147,7 +147,7 @@ async function fitLines(title: string, width: number, maxLines: number) {
 }
 ```
 
-`overflowWrap: "anywhere"` breaks a word too long for the width, so the height alone tells whether the text fits. Each step is one layout on the default renderer, and the fonts load once, so the search costs about eight layouts for this range.
+`overflowWrap: "anywhere"` breaks a word too long for the width, so the height alone tells whether the text fits. Render the title with the same `width`, `lineHeight`, and `overflowWrap` as the measure, so it wraps the way it was measured. Each step is one layout on the default renderer, and the fonts load once, so the search costs about eight layouts for this range.
 
 ### RTL & bidirectional text
 
