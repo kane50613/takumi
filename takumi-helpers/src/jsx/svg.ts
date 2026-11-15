@@ -41,10 +41,10 @@ const propertiesToKebabCase = new Set([
   "baselineShift",
   "capHeight",
   "clipPath",
-  "clipPathUnits",
   "colorInterpolation",
   "colorProfile",
   "colorRendering",
+  "dominantBaseline",
   "enableBackground",
   "fillOpacity",
   "fontFamily",
@@ -68,9 +68,11 @@ const propertiesToKebabCase = new Set([
   "overlinePosition",
   "overlineThickness",
   "paintOrder",
-  "preserveAspectRatio",
   "pointerEvents",
+  "renderingIntent",
   "shapeRendering",
+  "strikethroughPosition",
+  "strikethroughThickness",
   "strokeMiterlimit",
   "strokeOpacity",
   "textAnchor",
@@ -92,6 +94,7 @@ const propertiesToKebabCase = new Set([
   "vMathematical",
   "wordSpacing",
   "writingMode",
+  "xHeight",
 ]);
 
 export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
