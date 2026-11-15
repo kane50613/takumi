@@ -99,7 +99,13 @@ pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
     "svg" => {
       return Length::from_css_str(value)
         .ok()
-        .or_else(|| value.parse().ok().map(Length::Px))
+        .or_else(|| {
+          value
+            .parse::<f32>()
+            .ok()
+            .filter(|number| number.is_finite())
+            .map(Length::Px)
+        })
         .filter(|length| !length.is_negative());
     }
     "img" => {}
@@ -212,6 +218,8 @@ mod tests {
     assert_eq!(size_attribute("svg", "-2em"), None);
     assert_eq!(size_attribute("svg", "-20"), None);
     assert_eq!(size_attribute("svg", "-0%"), Some(Length::Percentage(-0.0)));
+    assert_eq!(size_attribute("svg", "NaN"), None);
+    assert_eq!(size_attribute("svg", "inf"), None);
   }
 
   use serde_json::from_value;
