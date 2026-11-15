@@ -83,6 +83,15 @@ impl Fonts {
     }
 
     let registry = Arc::make_mut(&mut self.registry);
+    // Files with the same bytes share one copy, so a host that charges a file by its id charges what it holds.
+    let data = registry
+      .font_files
+      .values()
+      .find_map(|file| match file {
+        FontFile::Loaded { data, id: held } if *held == id => Some(Arc::clone(data)),
+        _ => None,
+      })
+      .unwrap_or(data);
 
     registry.revise();
     registry
@@ -279,4 +288,35 @@ fn is_usable_font(data: &SharedBytes) -> bool {
   FontRef::from_index((**data).as_ref(), 0).is_ok_and(|font| {
     font.head().is_ok() && font.hhea().is_ok() && font.maxp().is_ok() && font.cmap().is_ok()
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{fs, path::Path, sync::Arc};
+
+  use super::*;
+
+  #[test]
+  fn files_with_the_same_bytes_share_one_copy() {
+    let bytes = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
+    )
+    .unwrap();
+    let mut fonts = Fonts::default();
+
+    fonts
+      .load_font_file("a.ttf", FontSource::from(bytes.clone()))
+      .unwrap();
+    fonts
+      .load_font_file("b.ttf", FontSource::from(bytes))
+      .unwrap();
+
+    let data = |url: &str| match &fonts.registry.font_files[url] {
+      FontFile::Loaded { data, .. } => Arc::clone(data),
+      FontFile::Failed => panic!("{url} failed"),
+    };
+
+    assert!(Arc::ptr_eq(&data("a.ttf"), &data("b.ttf")));
+  }
 }
