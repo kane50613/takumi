@@ -166,7 +166,13 @@ test("serializeSvg keeps camelCase attributes SVG itself spells in camelCase", (
       <clipPath id="c" clipPathUnits="objectBoundingBox">
         <rect width="1" height="1" />
       </clipPath>
-      <text dominantBaseline="middle" strikethroughPosition="1" xHeight="5">
+      <text
+        dominantBaseline="middle"
+        renderingIntent="auto"
+        strikethroughPosition="1"
+        strikethroughThickness="1"
+        xHeight="5"
+      >
         A
       </text>
     </svg>
