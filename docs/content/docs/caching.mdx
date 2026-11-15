@@ -127,7 +127,7 @@ export function GET(request: Request) {
   return new ImageResponse(<OgImage avatar={avatar} />, {
     images: {
       cache: "none", // [!code ++]
-      allowUrl: (url) => new URL(url).hostname === "avatars.example.com",
+      allowUrl: (url) => new URL(url).origin === "https://avatars.example.com",
       sources: [
         {
           src: "logo",
@@ -149,7 +149,7 @@ function OgImage({ avatar }: { avatar: string }) {
 }
 ```
 
-Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo's own `auto` keeps it cached. The avatar URL comes from the request, so `allowUrl` keeps those fetches on one host, as [URLs from user input](/docs/images#urls-from-user-input) explains.
+Takumi fetches the avatar URL itself, so it takes the render's `none`. The logo's own `auto` keeps it cached. The avatar URL comes from the request, so `allowUrl` keeps those fetches on one origin, as [URLs from user input](/docs/images#urls-from-user-input) explains.
 
 The decoded-image cache is keyed by a hash of the image's bytes, so the same image under two URLs decodes once. A `data:` URI in an `<img>` or a CSS `url()` always caches in `auto` mode, because the `cache` mode applies only to `sources` and to URLs Takumi fetches. A template that inlines its logo as a `data:` URI decodes it once.
 
