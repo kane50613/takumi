@@ -104,7 +104,8 @@ pub struct SvgSource {
   /// Whether the document is an inline `svg` element, which draws in the style of its box.
   #[cfg(feature = "svg")]
   inline: bool,
-  /// The key the cache keeps its pictures under, none for a source no cache holds.
+  /// The key the cache keeps its pictures under, none for a source no cache holds and for an
+  /// inline `svg`, which draws in the style of its box.
   #[cfg(feature = "svg")]
   key: Option<u64>,
   /// What a layout at each viewport, by the bits of its width and height, read from its host.
@@ -298,13 +299,13 @@ impl SvgSource {
         .unwrap_or_default()
     };
 
-    // An inline `svg` draws in the style of its box, which no key holds.
-    let Some(source) = self.key.filter(|_| !self.inline) else {
+    let Some(source) = self.key else {
       return Arc::new(SvgPicture {
         ops: lay_out().0,
         key: None,
       });
     };
+
     if let Some(picture) = self
       .known_key(host, viewport)
       .and_then(|key| host.cache().picture(key))
@@ -326,7 +327,7 @@ impl SvgSource {
 
   /// The key of the picture at `viewport` in `host`, once a layout there has said what it reads.
   fn known_key(&self, host: &RenderContext, viewport: Size<f32>) -> Option<u64> {
-    let source = self.key.filter(|_| !self.inline)?;
+    let source = self.key?;
     let reads = *self.reads.lock().ok()?.get(&viewport_bits(viewport))?;
 
     Some(SvgPicture::key_of(source, viewport, reads, host))
