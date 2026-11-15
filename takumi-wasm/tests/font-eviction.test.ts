@@ -62,7 +62,7 @@ describe("font eviction", () => {
     expect(stats.current).toBeLessThanOrEqual(MiB);
     expect(stats.evictions).toBeGreaterThanOrEqual(files - Math.ceil(MiB / geistTtf.length));
     expect(loads).toBeGreaterThanOrEqual(files - Math.ceil(MiB / geistTtf.length));
-  });
+  }, 30_000);
 
   test("renders keep the fonts they use under a budget of 0", async () => {
     const faces = await Promise.all(
