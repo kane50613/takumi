@@ -10,7 +10,7 @@ import {
 } from "../pkg/takumi_wasm";
 
 export * from "../pkg/takumi_wasm";
-export { default } from "../pkg/takumi_wasm";
+export { default, default as init } from "../pkg/takumi_wasm";
 
 import {
   FontRegistry,
