@@ -17,10 +17,10 @@ use self::{
   shape::{FontFaces, TextFont},
 };
 use super::{Container, Fill, Scope, Stroke, Styled, SvgLayout};
-use crate::svg::HostReads;
 use crate::{
   geometry::PathCommand,
   style::{AlignmentBaseline, BaselineShift, Direction, DominantBaseline, TextAnchor},
+  svg::HostReads,
 };
 
 /// The characters of a `text` element, ready to lay out.

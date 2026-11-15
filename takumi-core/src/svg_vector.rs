@@ -1,9 +1,6 @@
 //! The drawing ops every backend draws an SVG image from.
 
-use std::{
-  mem::{size_of, size_of_val},
-  sync::Arc,
-};
+use std::sync::Arc;
 
 #[cfg(feature = "svg-raster")]
 use crate::svg::filter::SvgFilter;
