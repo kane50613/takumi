@@ -167,4 +167,4 @@ export function GET() {
 }
 ```
 
-`takumi-js/node` exports the native renderer. On WebAssembly runtimes, use the `Renderer` from `takumi-js/wasm` and await its `ready()` first, as in [the `measure()` example](/docs/reference/measure).
+`takumi-js/node` exports the native renderer. On WebAssembly runtimes, use the `Renderer` from `takumi-js/wasm` and call its `init` first, as in [the `measure()` example](/docs/reference/measure).

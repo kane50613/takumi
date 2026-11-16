@@ -55,57 +55,21 @@ npm i takumi-js
 
 ### Use WebAssembly in Node.js
 
-Set the `takumi-wasm` export condition to render on WebAssembly in Node.js and Bun too. Use it when the native addon cannot ship with your server, such as a serverless function bundled into one file. Without a bundler, pass the condition to Node.js:
+Pass the WebAssembly binary as `module` to render on WebAssembly in Node.js and Bun too, such as when the native addon cannot ship with your server. Takumi then never loads the native addon.
 
-```bash
-node --conditions=takumi-wasm server.js
-```
+```ts twoslash title="Render on WebAssembly in Node.js"
+import { readFile } from "node:fs/promises";
+import { render } from "takumi-js";
+import wasmUrl from "takumi-js/wasm-url";
 
-When Vite bundles your server, add the condition to its server conditions and bundle Takumi into the server build:
-
-```ts title="vite.config.ts"
-import { defaultServerConditions, defineConfig } from "vite";
-
-export default defineConfig({
-  ssr: {
-    noExternal: ["takumi-js", "@takumi-rs/wasm", "@takumi-rs/helpers"],
-    resolve: { conditions: ["takumi-wasm", ...defaultServerConditions] },
-  },
-  build: { ssrEmitAssets: true },
+const image = await render("<div>Hello</div>", {
+  width: 1200,
+  height: 630,
+  module: readFile(wasmUrl),
 });
 ```
 
-`ssrEmitAssets` writes the WebAssembly binary next to the server bundle, where Takumi reads it at runtime. Without it, the binary goes only to the client build. Takumi then also looks in a `client` directory next to the server output, and fails with `Unable to locate Takumi WASM asset for SSR` if the binary is not there either.
-
-With esbuild, add `module` after `takumi-wasm`, and copy the binary with the `file` loader:
-
-```js title="build.mjs"
-import { build } from "esbuild";
-
-await build({
-  entryPoints: ["src/server.ts"],
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  outdir: "dist",
-  conditions: ["takumi-wasm", "module"],
-  loader: { ".wasm": "file" },
-});
-```
-
-Custom conditions replace the `module` condition esbuild sets by default. Without `module`, the bundle keeps a loader that reads the binary from `node_modules` and fails with `ENOENT` once it runs from `dist`.
-
-`render` and `ImageResponse` load the binary on their first call. To create a `Renderer` from `takumi-js/wasm` yourself, await `ready()` first:
-
-```ts twoslash title="Create a WebAssembly renderer"
-import { ready, Renderer } from "takumi-js/wasm";
-
-await ready();
-
-const renderer = new Renderer();
-```
-
-`ready()` loads the binary the export conditions pick, on every runtime. Only the first call loads it, and later calls wait for that load. If the load fails, `ready()` rejects with the error. Fix its cause, such as a binary the bundler did not emit, instead of calling `ready()` again.
+The first call loads the binary, and later calls in the process reuse it, with or without `module`.
 
 ## Render an image
 

@@ -5,20 +5,16 @@ const init = mock(async (_input?: { module_or_path: unknown }) => {});
 
 // Stands in for the bindings, so the test checks how often they initialize without compiling them.
 mock.module("@takumi-rs/wasm", () => ({ init, Renderer: class {}, setGlyphCacheMaxBytes() {} }));
-mock.module("@takumi-rs/wasm/auto", () => ({ default: Promise.resolve(binary) }));
 
-const { ready } = await import("../src/wasm");
 const { initWasm } = await import("../src/backend/wasm-init");
 
-test("ready initializes the bindings once from the binary the conditions pick", async () => {
+test("initWasm shares one load between overlapping calls, and loads again after a failure", async () => {
   init.mockRejectedValueOnce(new Error("compile failed"));
 
-  await expect(ready()).rejects.toThrow("compile failed");
+  await expect(initWasm(binary)).rejects.toThrow("compile failed");
 
-  const overlapping = [ready(), ready(), initWasm(new Uint8Array([1]))];
-
-  await Promise.all(overlapping);
-  await ready();
+  await Promise.all([initWasm(binary), initWasm(binary), initWasm(new Uint8Array([1]))]);
+  await initWasm(binary);
 
   expect(init).toHaveBeenCalledTimes(2);
   expect(init).toHaveBeenLastCalledWith({ module_or_path: binary });
