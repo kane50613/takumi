@@ -74,6 +74,10 @@ const config: UserConfig = defineConfig({
           throw new Error(`Generated loader still blames npm for a missing binding in: ${name}`);
         }
 
+        if (patched.includes("NAPI_RS_ENFORCE_VERSION_CHECK &&")) {
+          throw new Error(`Generated loader still skips its version check in: ${name}`);
+        }
+
         if (patched !== original) {
           writeFileSync(file, patched);
           patchedOutputs.add(name);
@@ -96,6 +100,10 @@ function patchGeneratedLoader(content: string) {
     .replaceAll(/^[^\n]*new URL\((["'])\.\1,\s*import\.meta\.url\)\.pathname;?[^\n]*\n?/gm, "")
     .replaceAll("process.env.NAPI_RS_NATIVE_LIBRARY_PATH", "process.env.TAKUMI_CORE_TARGET")
     .replace(npmBugMessage, () => missingBindingMessage)
+    .replaceAll(
+      /process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK && (process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK !== (["'])0\2)/g,
+      "$1",
+    )
     .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, "$1../core$2")
     .replaceAll(
       /(require(?:\$1)?)\((['"])@takumi-rs\/core-([^/"']+)\2\)/g,
