@@ -14,7 +14,7 @@ name = "takumi"
 path = "src/main.rs"
 
 [dependencies]
-cap-std = "3"
+cap-std = "4"
 encoding_rs = "0.8"
 clap = { version = "4.6", features = ["derive"] }
 clap_complete = "4.6"
