@@ -5,6 +5,15 @@ packages:
   takumi-cli: patch
 ---
 
-# A `<style media>` element's `@import` rules load
+# `takumi` loads the `@import` rules of a `<style media>` element
 
-`ParsedHtml::styles` lists each `<style>` element with its text and `media` apart, and `StyleElement::css` wraps the text in the `@media` rule that `ParsedHtml::css` holds. The `takumi` command now loads the `@import` rules of a `<style>` element with a `media` attribute and applies them under that media, as Chrome does. Before, it dropped them.
+The `takumi` command used to drop the `@import` rules of a `<style>` element with a `media` attribute. It now loads them and applies them under that media, as Chrome does.
+
+```html
+<style media="print">
+  @import "print.css";
+</style>
+```
+
+- `ParsedHtml::styles` lists each `<style>` element with its `text` and `media` apart.
+- `StyleElement::css` returns the text inside the `@media` rule that `ParsedHtml::css` holds.

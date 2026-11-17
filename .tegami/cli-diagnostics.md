@@ -7,4 +7,16 @@ packages:
 
 # `takumi image` warns of the characters no font draws
 
-`takumi image` now prints a warning that names each character no loaded font draws, where it drew an empty box without a word. `uncovered_characters` in `takumi` returns the same list for a node. The command line also lists a file that is not there as `missing` in `--list-resources`, refuses a `--margin` or `--page` number without a unit, and points to `--font`, `--root`, or `takumi pdf` in the errors those fix.
+`takumi image` used to draw an empty box for a character no loaded font draws, without a word. It now prints a warning that names each one.
+
+```sh
+$ takumi image hello.html -o hello.png
+warning: no font draws 你 (U+4F60), 好 (U+597D), so each shows as an empty box. Pass a font that does with `--font`, or check the `font-family` of that text.
+```
+
+The rest of the command line says more when something is off:
+
+- `--list-resources` lists a file that is not there as `missing`, where it said `blocked`.
+- `--margin` and `--page` refuse a number without a unit, such as `--margin 5`.
+- An error that `--font`, `--root`, or `takumi pdf` fixes now names that flag or command, such as "`takumi image` writes images, but the output ends in `.pdf`. Use `takumi pdf`."
+- In the `takumi` crate, `uncovered_characters` returns the characters no font draws for a render.

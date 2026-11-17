@@ -6,6 +6,20 @@ packages:
 
 # `display: contents` renders an element's children in its place
 
-An element with `display: contents` generates no box, so its children and its `::before` and `::after` lay out as children of its parent, and still inherit from it. A flex or grid container takes those children as its items. Replaced elements and form controls render nothing with it, and the root element computes to `block`, as in browsers. The Tailwind `contents` class sets it.
+`display: contents` used to be dropped as an unknown value. An element with it now generates no box, and its children, `::before`, and `::after` lay out as children of its parent while they still inherit from the element.
 
-Before, the value was not recognized and the declaration was dropped.
+```html
+<!-- The flex container lays out One, Two, and Three as three items -->
+<div style="display: flex">
+  <div style="display: contents">
+    <div>One</div>
+    <div>Two</div>
+  </div>
+  <div>Three</div>
+</div>
+```
+
+- A flex or grid container takes those children as its items.
+- Replaced elements and form controls render nothing with it, as in browsers.
+- The root element computes it to `block`, as in browsers.
+- The Tailwind `contents` class sets it.

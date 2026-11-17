@@ -6,4 +6,11 @@ packages:
 
 # A flex row whose item margin runs past the page moves to the next page whole
 
-A flex row whose item margin ran past the end of the page stayed on that page and spilled onto the next, because breaking measured only how far the items reached. Breaking now measures the box's own block size too, as Chromium does, so the row moves to the next page whole when it fits there.
+In a PDF, a flex row whose item margin ran past the end of the page stayed on that page and spilled onto the next. The row now reaches as far as that margin, as in Chromium, and moves to the next page whole when it fits there.
+
+```html
+<!-- The item fits on the page, and its margin ends past it -->
+<div style="display: flex">
+  <div style="height: 80px; margin-bottom: 30px">Item</div>
+</div>
+```

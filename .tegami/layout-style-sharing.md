@@ -6,6 +6,6 @@ packages:
     type: patch
 ---
 
-# Long documents share more of their layout styles
+# Long documents with repeated styles take less memory
 
-Boxes with equal layout styles now share one copy across a longer run of the document, so a table that repeats a row's styles keeps one copy of each. An 11,000-row PDF peaks at 939 MB of heap in place of 1,073 MB, with the same bytes.
+A document that repeats the same layout styles, such as a table whose rows share theirs, takes less memory to render, and the output stays the same. An 11,000-row PDF peaks at 939 MB of heap in place of 1,073 MB.

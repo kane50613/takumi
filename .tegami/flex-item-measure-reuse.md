@@ -4,6 +4,6 @@ packages:
   takumi-pdf: patch
 ---
 
-# A long table in a column flexbox renders with less time and memory
+# A long table in a column flexbox takes less memory to render
 
-A column flexbox that broke across pages laid each item out in full once more before laying it out page by page, and kept every layout inside the item until the flexbox ended. It now reuses the item's measure for that pass, as Chromium does, and frees what the item holds as its pages are drawn. An 11,000-row table in a column flexbox peaks at 1.35 GB in place of 1.46 GB, with the same PDF.
+A PDF in which a column flexbox breaks across many pages takes less memory to render, and the PDF stays the same. An 11,000-row table in a column flexbox peaks at 1.35 GB in place of 1.46 GB.
