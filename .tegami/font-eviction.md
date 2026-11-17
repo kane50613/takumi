@@ -18,4 +18,9 @@ packages:
 
 # Evict fonts one file at a time from the renderer's cache
 
-Font files that renders load now share the renderer's `maxBytes` pool and leave one file at a time, least recently used first, so a family that keeps gaining files, such as one Google Fonts `text=` subset per title, stays within the budget. A render keeps the fonts it uses until it finishes, the same bytes count once under any key, and `registerFont` fonts still stay. Among equally matching faces of one family, the one listed last wins every time.
+Font files that renders load now share the renderer's `maxBytes` pool, and leave it one file at a time, least recently used first. A family that keeps gaining files, such as one Google Fonts `text=` subset per title, now stays within the budget.
+
+- A render keeps the fonts it uses until it finishes.
+- The same bytes count once, whatever key loaded them.
+- Fonts from `registerFont` still stay.
+- Among equally matching faces of one family, the one listed last now wins every time.
