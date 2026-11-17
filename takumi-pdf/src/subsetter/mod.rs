@@ -272,7 +272,7 @@ fn parse(data: &[u8], index: u32) -> Result<Face<'_>> {
   }
 
   // `Face::table` binary-searches by tag, but fonts in the wild violate the spec's requirement that
-  // the directory be sorted. From upstream subsetter #29.
+  // the directory be sorted.
   records.sort_by_key(|record| record.tag);
 
   Ok(Face { data, records })

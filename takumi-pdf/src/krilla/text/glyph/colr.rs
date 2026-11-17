@@ -256,14 +256,17 @@ impl ColrBuilder {
       self.error = true;
       return;
     };
+
     self.bounds = match self.bounds {
       Some(bounds) => bounds.join(&path.bounds()),
       None => Some(path.bounds()),
     };
+
     if self.bounds.is_none() {
       self.error = true;
       return;
     }
+
     clips.push(path);
     self.clips.push(clips);
   }
@@ -576,9 +579,6 @@ impl ColorPainter for ColrBuilder {
       return;
     };
 
-    // See the skrifa code to see how it handles composite operations.
-    // https://github.com/googlefonts/fontations/blob/fd0178ce4ea48301a7f06b35a6fce9879c102292/skrifa/src/color/traversal.rs#L566-L593
-    // Everything is wrapped in a `SrcOver` base layer.
     *parent_bounded = match composite {
       CompositeMode::Clear => true,
       CompositeMode::Src | CompositeMode::SrcOut => bounded,
@@ -586,6 +586,10 @@ impl ColorPainter for ColrBuilder {
       CompositeMode::SrcIn | CompositeMode::DestIn => bounded || *parent_bounded,
       _ => bounded && *parent_bounded,
     };
+
+    // See the skrifa code to see how it handles composite operations.
+    // https://github.com/googlefonts/fontations/blob/fd0178ce4ea48301a7f06b35a6fce9879c102292/skrifa/src/color/traversal.rs#L566-L593
+    // Everything is wrapped in a `SrcOver` base layer.
     if composite == CompositeMode::SrcOver {
       if let Some(Instruction::Layer(mode, source)) =
         instructions.pop_if(|instruction| matches!(instruction, Instruction::Layer(..)))
