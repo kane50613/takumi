@@ -32,7 +32,7 @@ Renders reuse more of what they decode:
 
 #### Migration
 
-Code written for `ResourceCache` still builds. `ResourceCache` and its old method names are deprecated, and the `resource_cache` builder setters still work.
+`ResourceCache` and its `new`, `get_or_decode`, and `get_or_parse_stylesheet` methods are removed, and so is the `resource_cache` setter of the `takumi-pdf` options. The `resource_cache` setter of `RenderOptions` still works.
 
 ```diff
 - let cache = ResourceCache::new(64 << 20);

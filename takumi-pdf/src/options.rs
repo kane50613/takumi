@@ -394,11 +394,6 @@ pub struct PdfOptions<'g> {
       pub fn cache(&mut self, cache: Cache) {
         self.cache = cache;
       }
-
-      /// The old name of `cache`, kept so code written for it still builds.
-      pub fn resource_cache(&mut self, cache: Cache) {
-        self.cache = cache;
-      }
     )
   )]
   pub cache: Cache,
@@ -1102,11 +1097,6 @@ pub struct MeasureOptions<'g> {
     mutators(
       /// Keeps what the render reuses in `cache` instead of [`Cache::shared`].
       pub fn cache(&mut self, cache: Cache) {
-        self.cache = cache;
-      }
-
-      /// The old name of `cache`, kept so code written for it still builds.
-      pub fn resource_cache(&mut self, cache: Cache) {
         self.cache = cache;
       }
     )
