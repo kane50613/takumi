@@ -22,6 +22,7 @@ export default defineConfig({
 });
 ```
 
+- The example above covers server code. A Vite client build takes the condition in `resolve.conditions`, beside `defaultClientConditions`.
 - esbuild takes the condition in `conditions`, and webpack in `resolve.conditionNames` beside its default conditions.
 - Node.js and Bun take `--conditions=takumi-no-fallback-font`.
 - A Vite server build for Node.js reads the condition only in the packages it bundles, so add `@takumi-rs/helpers` and every Takumi package between it and your code to `ssr.noExternal`, or run Node.js with the flag.
