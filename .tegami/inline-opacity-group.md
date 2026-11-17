@@ -8,14 +8,14 @@ packages:
 
 # A positioned or stacking inline element paints as a layer of its own
 
-A `display: inline` element now paints as a layer of its own, as Chrome paints it, when it sets any of these:
+A `display: inline` element now paints as a layer of its own, as Chrome paints it, when any of these hold:
 
-- `position`
-- `opacity`
-- `filter`
-- `mix-blend-mode`
-- `clip-path`
-- `mask`
+- `position` is not `static`
+- `opacity` is below 1
+- `filter` or `backdrop-filter` is not `none`
+- `mix-blend-mode` is not `normal`
+- `isolation` is `isolate`
+- `clip-path` or `mask` is not `none`
 
 Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing.
 
@@ -35,6 +35,11 @@ Its backgrounds, its text, and the boxes inside it, floats and inline-blocks inc
 `InlineBrush` no longer has an `opacity` field, since an inline element's `opacity` no longer applies per text run. It applies once, to the layer of the `NodePaint` whose `inline_layer` is set. In the paint tree, that element's box holds the value in `effects.opacity`.
 
 ```diff
-- brush.opacity          // on each text run of the element
-+ box.effects.opacity    // once, on the element's box in the paint tree
+- let opacity = brush.opacity;
++ let opacity = match &node.kind {
++   NodeKind::Box { effects: Some(effects), .. } => effects.opacity,
++   _ => 1.0,
++ };
 ```
+
+Here `node` is the element's `PaintNode` in the paint tree.
