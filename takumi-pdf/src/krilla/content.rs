@@ -213,9 +213,11 @@ impl ContentBuilder {
       return;
     }
 
+    let bounds = path.bounds();
+
     // Zero-size geometry, don't draw.
-    if path.bounds().width() == 0.0
-      && path.bounds().height() == 0.0
+    if bounds.width() == 0.0
+      && bounds.height() == 0.0
       && stroke.is_none_or(|stroke| stroke.width == 0.0 || stroke.line_cap != LineCap::Round)
     {
       return;
@@ -225,7 +227,7 @@ impl ContentBuilder {
     let is_line = path.verbs().len() == 2
       && path.verbs()[0] == PathVerb::Move
       && path.verbs()[1] == PathVerb::Line;
-    let dont_fill = path.bounds().width() == 0.0 || path.bounds().height() == 0.0 || is_line;
+    let dont_fill = bounds.width() == 0.0 || bounds.height() == 0.0 || is_line;
 
     if dont_fill {
       match stroke.is_some() {
@@ -244,16 +246,16 @@ impl ContentBuilder {
 
     let stroke_bbox = |stroke: &Stroke| {
       if calculate_bbox(matches!(&stroke.paint.0, InnerPaint::Color(_))) {
-        calculate_stroke_bbox(stroke, path).unwrap_or(Rect::from_tsp(path.bounds()))
+        calculate_stroke_bbox(stroke, path).unwrap_or(Rect::from_tsp(bounds))
       } else {
-        Rect::from_tsp(path.bounds())
+        Rect::from_tsp(bounds)
       }
     };
 
     let fill_prep = |sb: &mut ContentBuilder, fill: &Fill| {
       let has_pattern = matches!(fill.paint.0, InnerPaint::Pattern(_));
       let fill_opacity = fill.opacity;
-      sb.expand_bbox(Rect::from_tsp(path.bounds()));
+      sb.expand_bbox(Rect::from_tsp(bounds));
 
       // PDF viewers don't show patterns with fill/stroke opacities consistently.
       // Because of this, the opacity is accounted for in the pattern itself.
@@ -278,7 +280,7 @@ impl ContentBuilder {
                    chunk_container: &mut ChunkContainer,
                    fill: &Fill| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_tsp(path.bounds()), fill, sc, chunk_container);
+      sb.content_set_fill_properties(Rect::from_tsp(bounds), fill, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
       match fill_rule {
@@ -304,7 +306,7 @@ impl ContentBuilder {
                           stroke: &Stroke,
                           stroke_bbox: Rect| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_tsp(path.bounds()), fill, sc, chunk_container);
+      sb.content_set_fill_properties(Rect::from_tsp(bounds), fill, sc, chunk_container);
       sb.content_set_stroke_properties(stroke_bbox, stroke, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
