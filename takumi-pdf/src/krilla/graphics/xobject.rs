@@ -6,7 +6,7 @@ use pdf_writer::{Finish, Name, Ref};
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::configure::ValidationError;
 use crate::krilla::geom::Rect;
-use crate::krilla::graphics::color::{DEVICE_RGB, rgb};
+use crate::krilla::graphics::color::{DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
 use crate::krilla::serialize::{Cacheable, MaybeDeviceColorSpace, SerializeContext};
@@ -129,9 +129,9 @@ impl Cacheable for XObject {
 
         match transparency_group_cs {
           MaybeDeviceColorSpace::DeviceRgb => pdf_cs.primitive(DEVICE_RGB.to_pdf_name()),
-          // Can only be SRGB
           MaybeDeviceColorSpace::ColorSpace(cs) => pdf_cs.primitive(cs.get_ref()),
-          _ => unreachable!(),
+          MaybeDeviceColorSpace::DeviceGray => pdf_cs.primitive(DEVICE_GRAY.to_pdf_name()),
+          MaybeDeviceColorSpace::DeviceCMYK => pdf_cs.primitive(DEVICE_CMYK.to_pdf_name()),
         }
       }
 

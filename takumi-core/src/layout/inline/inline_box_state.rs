@@ -1156,7 +1156,8 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
 
             continue;
           }
-          _ => unreachable!("a pending alignment of another value"),
+          // Only the alignments above wait for their box's size.
+          _ => continue,
         }
 
         child.metrics.move_by(baseline_shift);

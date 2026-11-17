@@ -353,7 +353,7 @@ impl ContentBuilder {
           chunk_container,
         );
       }
-      (None, None) => unreachable!(),
+      (None, None) => {}
     }
   }
 
@@ -517,7 +517,7 @@ impl ContentBuilder {
           font_size,
         );
       }
-      (None, None) => unreachable!(),
+      (None, None) => {}
     }
 
     self.graphics_states.restore_state();

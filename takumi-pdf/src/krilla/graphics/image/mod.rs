@@ -606,7 +606,7 @@ fn decode_png(data: &[u8]) -> Result<Repr, String> {
     ColorType::Rgba => ColorSpace::RGBA,
     ColorType::Grayscale => ColorSpace::Luma,
     ColorType::GrayscaleAlpha => ColorSpace::LumaA,
-    _ => unreachable!(),
+    other => return Err(format!("unsupported PNG color type {other:?}")),
   };
 
   let (color_channel, alpha_channel, bits_per_component) = match bit_depth {
@@ -803,8 +803,8 @@ fn handle_u8_image(data: &[u8], cs: ColorSpace) -> (Vec<u8>, Option<Vec<u8>>, Bi
       });
       deflate_encode(&buf)
     }
-    // PNG/WEBP/GIF only support those three, so should be enough?
-    _ => unimplemented!(),
+    // Every other color space carries no alpha channel to split off.
+    _ => deflate_encode(data),
   };
 
   let alpha_channel = if !alphas.is_empty() && alphas.iter().any(|v| *v != 255) {
@@ -842,8 +842,8 @@ fn handle_u16_image(data: &[u8], cs: ColorSpace) -> (Vec<u8>, Option<Vec<u8>>, B
       });
       deflate_encode(&buf)
     }
-    // PNG/WEBP/GIF only support those three, so should be enough?
-    _ => unimplemented!(),
+    // Every other color space carries no alpha channel to split off.
+    _ => deflate_encode(data),
   };
 
   let encoded_mask = if !alphas.is_empty() {
