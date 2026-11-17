@@ -271,13 +271,6 @@ impl SvgSource {
       .is_some_and(|(_, reads)| reads.color)
   }
 
-  /// Markup for embedding in a vector backend, with `current_color` as a root presentation
-  /// attribute unless the root sets one.
-  #[deprecated(note = "use `embedded_source`, which adds the color only when the SVG reads it")]
-  pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
-    self.with_color_attribute(current_color)
-  }
-
   /// The markup with `color` as a root presentation attribute, unless the root sets one, which a
   /// second would make malformed.
   fn with_color_attribute(&self, color: Color) -> Cow<'_, str> {

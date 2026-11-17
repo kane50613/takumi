@@ -1,7 +1,7 @@
 ---
 packages:
   takumi-core:
-    type: patch
+    type: minor
   takumi-svg:
     type: patch
 ---
@@ -12,7 +12,7 @@ In SVG output, an embedded SVG image that draws with `currentColor` now gets the
 
 #### Migration
 
-`SvgSource::source_with_current_color` still adds the color whenever the root sets none, and is deprecated. `SvgSource::embedded_source` adds it only when the image reads it.
+`SvgSource::source_with_current_color` is removed. `SvgSource::embedded_source` adds the color only when the image reads it.
 
 ```diff
 - let markup = source.source_with_current_color(color);
