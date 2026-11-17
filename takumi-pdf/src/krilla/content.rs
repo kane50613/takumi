@@ -214,7 +214,10 @@ impl ContentBuilder {
     }
 
     // Zero-size geometry, don't draw.
-    if path.bounds().width() == 0.0 && path.bounds().height() == 0.0 {
+    if path.bounds().width() == 0.0
+      && path.bounds().height() == 0.0
+      && stroke.is_none_or(|stroke| stroke.width == 0.0 || stroke.line_cap != LineCap::Round)
+    {
       return;
     }
 
