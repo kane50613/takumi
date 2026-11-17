@@ -183,6 +183,54 @@ Shrink the viewport. 8192 × 8192 is the largest square that fits. A zero-sized 
 
 Give the tree a height that resolves. A percentage height in a paged render has nothing to resolve against, so the content grows until the page limit stops it.
 
+## Handle warnings
+
+A log line that starts with `[takumi]` is a render warning. The render finished, but it went without a font, a family, or an image its source asks for. [What a render could not draw](/docs/fonts#what-a-render-could-not-draw) lists each kind. Takumi prints each distinct warning once per process.
+
+Pass `onWarning` to send the warnings to your error tracker instead of the console. Pass `strict` to make any warning fail the render, such as outside production:
+
+```tsx twoslash title="Send warnings to Sentry"
+import { render } from "takumi-js";
+
+declare const Sentry: {
+  captureMessage(
+    message: string,
+    context: { level: "warning"; fingerprint: string[]; extra: object },
+  ): void;
+};
+// ---cut---
+const image = await render(<div>Hello 世界</div>, {
+  width: 1200,
+  height: 630,
+  onWarning(warning) {
+    Sentry.captureMessage(warning.message, {
+      level: "warning",
+      fingerprint: ["takumi", warning.code],
+      extra: warning,
+    });
+  },
+  strict: process.env.NODE_ENV !== "production",
+});
+```
+
+A strict render calls `onWarning` with every warning first, then rejects with a `TakumiError` of code `ERR_TAKUMI_STRICT`. The error's `warnings` holds them, and its message is the first one's. `isTakumiError` tells it apart from other failures:
+
+```tsx twoslash title="Read the warnings of a strict failure"
+import { isTakumiError, render } from "takumi-js";
+
+try {
+  await render(<div>Hello 世界</div>, { strict: true });
+} catch (error) {
+  if (isTakumiError(error, "ERR_TAKUMI_STRICT")) {
+    console.error(error.warnings.map((warning) => warning.code)); // ["missing-glyphs"]
+  }
+
+  throw error;
+}
+```
+
+An exception that `onWarning` throws rejects the render with that exception.
+
 ## Node.js
 
 ### TypeError: fetch failed

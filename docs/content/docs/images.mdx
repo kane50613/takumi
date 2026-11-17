@@ -224,7 +224,7 @@ const image = await render(element, {
 });
 ```
 
-The [render report](/docs/fonts#what-a-render-could-not-draw) lists each image left out under `failedImages`, with its `src` and the error. Read it from `prepared.report` after a renderer's `prepare()`, or from `await response.ready` on an `ImageResponse`.
+Each image left out raises an `image-load-failed` [warning](/docs/fonts#what-a-render-could-not-draw) with its `url` and the error as `cause`. Set `strict: true` to reject the render instead.
 
 ### URLs from user input
 

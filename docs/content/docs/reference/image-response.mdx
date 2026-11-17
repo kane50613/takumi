@@ -134,20 +134,24 @@ export async function GET() {
 }
 ```
 
-`ready` resolves to the [render report](/docs/fonts#what-a-render-could-not-draw), which lists the characters no font drew, the font families nothing provided, and the fonts and images that failed to load. Check it to log a render that succeeded with gaps:
+`ready` resolves to the [render report](/docs/fonts#what-a-render-could-not-draw), whose `warnings` list what the render could not draw. Pass `strict: true` to turn any warning into a failure, so `ready` rejects and the fallback above goes out instead:
 
-```tsx twoslash title="Log characters no font drew"
+```tsx twoslash title="Send a fallback when a character has no font"
 import { ImageResponse } from "takumi-js/response";
 
 export async function GET() {
-  const response = new ImageResponse(<div>Hello Takumi</div>, { width: 1200, height: 630 });
-  const report = await response.ready; // [!code highlight]
+  const response = new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    strict: true, // [!code highlight]
+  });
 
-  if (report.missingCharacters.length > 0) {
-    console.warn("No font draws", report.missingCharacters.join(""));
+  try {
+    await response.ready;
+    return response;
+  } catch {
+    return new Response("Failed to generate image", { status: 500 });
   }
-
-  return response;
 }
 ```
 

@@ -18,27 +18,31 @@ packages:
     type: minor
 ---
 
-# Report what a render could not draw, and load fonts for missing characters
+# Renders warn about what they could not draw, and load fonts for missing characters
 
-A prepared render now has a `report` of what it could not draw, and `ImageResponse`'s `ready` resolves to that report. Renders and `prepare()` also take `onMissingGlyphs(characters)`, which runs once when characters have no font. The fonts it returns load as part of the render's `fonts`.
+A render that goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false` now raises a warning. Takumi prints each distinct warning once through `console.warn`. Pass `onWarning` to handle the warnings yourself, or `strict` to reject the render.
 
 ```tsx
-const prepared = await renderer.prepare("<div>Hello 中文</div>", { width: 1200, height: 630 });
-console.log(prepared.report.missingCharacters); // ["中", "文"] without a CJK font
+import { isTakumiError, render } from "takumi-js";
 
-const image = await render(<div>{title}</div>, {
-  width: 1200,
-  height: 630,
-  onMissingGlyphs: (characters) =>
-    googleFonts({ families: ["Noto Sans JP"], text: characters.join("") }),
-});
+try {
+  await render(<div>Hello 世界</div>, {
+    onWarning(warning) {
+      if (warning.code === "missing-glyphs") {
+        console.warn(warning.message, warning.characters);
+      }
+    },
+    strict: process.env.NODE_ENV !== "production",
+  });
+} catch (error) {
+  if (isTakumiError(error, "ERR_TAKUMI_STRICT")) {
+    console.error(error.warnings);
+  }
+}
 ```
 
-The report lists:
-
-- `missingCharacters`, the characters no font in their fallback chain draws
-- `unresolvedFamilies`, the families `font-family` or `fontFamilies` names that no font provides
-- `failedFonts`, the optional fonts and `@font-face` files that failed to load
-- `failedImages`, the images left out under `images.throwOnError: false`
-
-In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+- `RenderWarning` tells its kinds apart by `code`, which is `missing-glyphs`, `unresolved-family`, `font-load-failed`, or `image-load-failed`. Each has a `message` and the fields its code adds, such as `characters` or `url`.
+- A strict render rejects with a `TakumiError` of code `ERR_TAKUMI_STRICT`, whose `warnings` lists them. `isTakumiError(error, "ERR_TAKUMI_STRICT")` narrows to it.
+- `prepare()` keeps the warnings in `prepared.report.warnings`, and `ImageResponse`'s `ready` resolves to the same report.
+- Renders and `prepare()` take `onMissingGlyphs(characters)`, which runs once when characters have no font. The fonts it returns load as part of the render's `fonts`.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is `#[non_exhaustive]`.

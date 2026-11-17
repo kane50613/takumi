@@ -322,16 +322,20 @@ A prepared source picks its `unicodeRange` subsets once, in `prepare`. When an o
 
 ### What a render could not draw
 
-A render reports what it could not satisfy. A renderer's `prepare()` returns it as `prepared.report`, and `ImageResponse` resolves `ready` to it. The report is what `prepare` found: a font that fails when a later render of the same prepared source loads it again does not change it. The report has four lists:
+A render that cannot draw something as its source asks goes on without it and raises a warning. Each warning has a `code`, a `message` you can show as it is, and the fields its code adds:
 
-| Field                | Lists                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `missingCharacters`  | Characters no font in their fallback chain draws, the built-in Geist included, each once in document order.  |
-| `unresolvedFamilies` | Families that `font-family` or `fontFamilies` names and no registered or listed font provides.               |
-| `failedFonts`        | Optional fonts and `@font-face` files that failed to load, each with its `source` and `error`.               |
-| `failedImages`       | Images left out under [`throwOnError: false`](/docs/images#failed-fetches), each with its `src` and `error`. |
+| `code`              | Raised for                                                                                                | Fields               |
+| ------------------- | --------------------------------------------------------------------------------------------------------- | -------------------- |
+| `missing-glyphs`    | Characters no font in their fallback chain draws, the built-in Geist included, in one warning per render. | `characters`         |
+| `unresolved-family` | Each family that `font-family` or `fontFamilies` names and no registered or listed font provides.         | `family`             |
+| `font-load-failed`  | Each optional font or `@font-face` file that failed to load.                                              | `source` and `cause` |
+| `image-load-failed` | Each image left out under [`throwOnError: false`](/docs/images#failed-fetches).                           | `url` and `cause`    |
+
+Takumi prints each distinct warning once per process through `console.warn`, so a warning that repeats across renders prints one line. Pass `onWarning` to take the warnings yourself, or `strict` to reject a render that raised any. [Handle warnings](/docs/troubleshooting#handle-warnings) shows both.
 
 Generic keywords such as `sans-serif` never count as unresolved, since they resolve to the fonts you load. Emoji that `takumi-js` draws as images never count as missing characters. Spaces and invisible characters, such as a zero-width joiner, do not count either.
+
+A renderer's `prepare()` also keeps the warnings in `prepared.report.warnings`, and `ImageResponse` resolves `ready` to the same report. The report is what `prepare` found, so a font that fails when a later render of the same prepared source loads it again does not change it. Check `code` to read the fields of a warning:
 
 ```tsx twoslash title="Find the characters no font draws"
 import { Renderer } from "takumi-js/node";
@@ -339,14 +343,20 @@ import { Renderer } from "takumi-js/node";
 const renderer = new Renderer();
 const prepared = await renderer.prepare("<div>Hello 世界</div>", { width: 1200, height: 630 });
 
-console.log(prepared.report.missingCharacters); // ["世", "界"]
+for (const warning of prepared.report.warnings) {
+  if (warning.code === "missing-glyphs") {
+    console.log(warning.characters); // ["世", "界"]
+  }
+}
 ```
+
+A renderer's `render()` called without `prepare()` checks for missing characters and unresolved families only when the render passes `onWarning`, `strict`, or `onMissingGlyphs`.
 
 Takumi reads the report before layout, with the same font matching that draws the text. It checks one character at a time, so a character that shaping draws from a decomposed form, such as an accented letter built from a base letter and a combining mark, can still show up as missing.
 
 ### Load fonts for missing characters
 
-`onMissingGlyphs` loads fonts only for text that needs them. When the render finds characters no font draws, it calls the function once with those characters in document order. The fonts it returns load as part of the render's `fonts`, and the render reads the text again with them. Characters that stay uncovered go to `missingCharacters`.
+`onMissingGlyphs` loads fonts only for text that needs them. When the render finds characters no font draws, it calls the function once with those characters in document order. The fonts it returns load as part of the render's `fonts`, and the render reads the text again with them. Characters that stay uncovered raise the `missing-glyphs` warning.
 
 ```tsx twoslash title="Load a CJK font only when the text needs it"
 import { render } from "takumi-js";
