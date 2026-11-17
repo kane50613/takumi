@@ -138,6 +138,7 @@ use std::{mem::take, rc::Rc};
 
 mod bands;
 mod chunks;
+mod color_glyph;
 mod counters;
 mod emitter;
 mod filter;
