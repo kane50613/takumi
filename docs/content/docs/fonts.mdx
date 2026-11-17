@@ -331,7 +331,7 @@ A render that cannot draw something as its source asks goes on without it and ra
 | `font-load-failed`  | Each optional font or `@font-face` file that failed to load.                                              | `source` and `cause` |
 | `image-load-failed` | Each image left out under [`throwOnError: false`](/docs/images#failed-fetches).                           | `url` and `cause`    |
 
-Takumi prints each distinct warning once per process through `console.warn`, so a warning that repeats across renders prints one line. Pass `onWarning` to take the warnings yourself, or `strict` to reject a render that raised any. [Handle warnings](/docs/troubleshooting#handle-warnings) shows both.
+Takumi prints each distinct warning once per process through `console.warn`, so a warning that repeats across renders prints one line. It remembers the last 1,000 distinct warnings, so a service that raises more than that can print one again. Pass `onWarning` to take the warnings yourself, or `strict` to reject a render that raised any. [Handle warnings](/docs/troubleshooting#handle-warnings) shows both.
 
 Generic keywords such as `sans-serif` never count as unresolved, since they resolve to the fonts you load. Emoji that `takumi-js` draws as images never count as missing characters. Spaces and invisible characters, such as a zero-width joiner, do not count either.
 

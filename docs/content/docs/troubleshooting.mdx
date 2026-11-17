@@ -185,7 +185,7 @@ Give the tree a height that resolves. A percentage height in a paged render has 
 
 ## Handle warnings
 
-A log line that starts with `[takumi]` is a render warning. The render finished, but it went without a font, a family, or an image its source asks for. [What a render could not draw](/docs/fonts#what-a-render-could-not-draw) lists each kind. Takumi prints each distinct warning once per process.
+A log line that starts with `[takumi]` is a render warning. The render finished, but it went without a font, a family, or an image its source asks for. [What a render could not draw](/docs/fonts#what-a-render-could-not-draw) lists each kind. Takumi prints each distinct warning once per process, among the last 1,000 distinct ones.
 
 Pass `onWarning` to send the warnings to your error tracker instead of the console. Pass `strict` to make any warning fail the render, such as outside production:
 

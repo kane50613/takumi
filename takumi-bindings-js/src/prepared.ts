@@ -163,7 +163,12 @@ type PreparedState<TSource, TLayout> = {
   report: RenderReport;
   /** Reads the source again with `failedFontFiles`, so their rules move on to their next `src`. */
   reread: (failedFontFiles: string[]) => Awaitable<SourceNeeds>;
+  /** Where a render hands the warnings it raises past the report, such as a font that fails to load again. */
+  warnings: WarningOptions;
 };
+
+/** A {@link PreparedState} before its warnings went out. */
+type CollectedState<TSource, TLayout> = Omit<PreparedState<TSource, TLayout>, "warnings">;
 
 let createPrepared: <TSource, TLayout>(
   state: PreparedState<TSource, TLayout>,
@@ -247,13 +252,15 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
 /** A `Prepared` for `state`, once its warnings went to `onWarning` and passed `strict`. */
 function reported<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
-  state: PreparedState<TSource, TLayout>,
-  options: WarningOptions,
+  state: CollectedState<TSource, TLayout>,
+  { onWarning, strict }: WarningOptions,
 ): Promise<Prepared<TSource, TLayout>> {
-  return registry.dropOnFailure(state.loadedFonts, async () => {
-    raiseWarnings(state.report.warnings, options);
+  const warnings = { onWarning, strict };
 
-    return createPrepared(state);
+  return registry.dropOnFailure(state.loadedFonts, async () => {
+    raiseWarnings(state.report.warnings, warnings);
+
+    return createPrepared({ ...state, warnings });
   });
 }
 
@@ -333,7 +340,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   extras: PrepareExtras & { fontFamilies?: string[] },
   needs: SourceReader,
   fetchMissing: boolean,
-): Promise<PreparedState<TSource, TLayout>> {
+): Promise<CollectedState<TSource, TLayout>> {
   const { fonts, fontFamilies, images = [], signal, onMissingGlyphs, onWarning, strict } = extras;
 
   signal?.throwIfAborted();
@@ -627,6 +634,7 @@ export function renderPrepared<
         // renders. The report stays what prepare found.
         if (failedFonts.length > 0) {
           state.fonts = state.fonts && registry.without(state.fonts, failedFonts);
+          raiseWarnings(fontWarnings(failedFonts), state.warnings);
         }
 
         const failedFontFiles = [...state.failedFontFiles, ...failedAgain];

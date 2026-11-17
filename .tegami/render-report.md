@@ -20,7 +20,7 @@ packages:
 
 # Renders warn about what they could not draw, and load fonts for missing characters
 
-A render that goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false` now raises a warning. Takumi prints each distinct warning once through `console.warn`. Pass `onWarning` to handle the warnings yourself, or `strict` to reject the render.
+A render that goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false` now raises a warning. Takumi prints each distinct warning once through `console.warn`. A `render()` without `prepare()` checks for missing glyphs and families only when it passes `onWarning`, `strict`, or `onMissingGlyphs`, so the default path stays as fast as before. Pass `onWarning` to handle the warnings yourself, or `strict` to reject the render.
 
 ```tsx
 import { isTakumiError, render } from "takumi-js";

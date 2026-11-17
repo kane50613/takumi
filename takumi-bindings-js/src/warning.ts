@@ -39,7 +39,7 @@ export type RenderReport = { warnings: RenderWarning[] };
  * @internal
  */
 export type WarningOptions = {
-  /** Receives each warning of a render. Without it, each distinct warning prints once through `console.warn`. */
+  /** Receives each warning of a render. Without it, each distinct warning prints once through `console.warn`, among the last 1,000 distinct ones. */
   onWarning?: (warning: RenderWarning) => void;
   /** Rejects a render that raised any warning, with a `TakumiError` of code `ERR_TAKUMI_STRICT`. */
   strict?: boolean;
@@ -106,7 +106,15 @@ function missingGlyphs(characters: string[]): RenderWarning {
 
 /** The message of `cause`, which can be any thrown value. */
 function messageOf(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+
+  try {
+    return String(cause);
+  } catch {
+    return "a value that has no text form";
+  }
 }
 
 /**

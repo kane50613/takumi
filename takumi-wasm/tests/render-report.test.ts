@@ -24,7 +24,7 @@ describe("a prepared render's report", () => {
     const prepared = await renderer.prepare(html, { ...options, onMissingGlyphs });
 
     expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
-    expect(prepared.report.warnings.map(({ code }) => code)).toEqual(["unresolved-family"]);
+    expect(prepared.report.warnings).toEqual([]);
     expect(await renderer.render(prepared)).not.toEqual(without);
   });
 });

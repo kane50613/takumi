@@ -617,6 +617,38 @@ describe("optional fonts", () => {
     expect(call.mock.calls[0]?.[1]).toEqual({ fontFamilies: ["Inter"], images: [] });
   });
 
+  test("that fail during a default render without prepare print a warning", async () => {
+    const { fonts } = fontBackend();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    await renderPrepared(
+      fonts,
+      await readSource(fonts, textNode("a"), {}, { fonts: [broken("DefaultPath")] }, reads),
+      {},
+      () => undefined,
+    );
+
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      expect.stringContaining("Failed to load the font"),
+    ]);
+  });
+
+  test("that fail with a cause that has no text form still raise a warning", async () => {
+    const { fonts } = fontBackend();
+    const cause: unknown = Object.create(null);
+    const onWarning = mock((_warning: RenderWarning) => {});
+    const opaque = { name: "Opaque", optional: true, data: () => Promise.reject(cause) };
+
+    await renderPrepared(
+      fonts,
+      await readSource(fonts, textNode("a"), {}, { fonts: [opaque], onWarning }, reads),
+      {},
+      () => undefined,
+    );
+
+    expect(onWarning.mock.calls[0]?.[0]).toMatchObject({ code: "font-load-failed", cause });
+  });
+
   test("that a needs pass reaches are not loaded again once they failed", async () => {
     const { fonts } = fontBackend();
     const latin: [number, number][] = [[0x20, 0x7e]];
