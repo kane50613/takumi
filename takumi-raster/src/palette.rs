@@ -32,16 +32,17 @@ impl Palette {
     }
 
     let mut indices = Vec::with_capacity(rgba.as_raw().len() / 4);
-    let mut previous = None;
+    let mut rest = rgba.pixels();
 
-    for &pixel in rgba.pixels() {
-      let index = match previous {
-        Some((color, index)) if color == pixel => index,
-        _ => table.index(pixel, &mut colors)?,
-      };
+    // Flat art is mostly runs of one color, which fill their indices at once.
+    while let Some(&pixel) = rest.first() {
+      let run = rest
+        .iter()
+        .position(|other| *other != pixel)
+        .unwrap_or(rest.len());
 
-      previous = Some((pixel, index));
-      indices.push(index);
+      indices.resize(indices.len() + run, table.index(pixel, &mut colors)?);
+      rest = &rest[run..];
     }
     Some(Self { indices, colors })
   }
@@ -128,7 +129,7 @@ mod tests {
     let rgb = palette.rgb();
     let alphas = palette.alphas().unwrap();
 
-    for (pixel, &index) in rgba.pixels().zip(&palette.indices) {
+    for (pixel, &index) in rgba.pixels().iter().zip(&palette.indices) {
       let index = usize::from(index);
 
       assert_eq!(
