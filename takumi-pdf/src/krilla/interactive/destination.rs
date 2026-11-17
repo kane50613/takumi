@@ -8,11 +8,11 @@
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use pdf_writer::{Obj, Ref, Str};
+use pdf_writer::{Obj, Ref};
 use tiny_skia_path::Transform;
 
 use crate::krilla::chunk_container::ChunkContainer;
-use crate::krilla::error::{KrillaError, KrillaResult};
+use crate::krilla::error::KrillaResult;
 use crate::krilla::geom::Point;
 use crate::krilla::interchange::tagging::TagId;
 use crate::krilla::serialize::SerializeContext;
@@ -22,8 +22,6 @@ use crate::krilla::serialize::SerializeContext;
 pub enum Destination {
   /// An XYZ destination.
   Xyz(XyzDestination),
-  /// A named destination.
-  Named(NamedDestination),
 }
 
 impl Destination {
@@ -35,45 +33,7 @@ impl Destination {
 
         Ok(())
       }
-      Destination::Named(named) => named.serialize(sc, buffer),
     }
-  }
-}
-
-/// A destination associated with a name.
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub struct NamedDestination {
-  pub(crate) name: Arc<String>,
-  pub(crate) xyz_dest: Arc<XyzDestination>,
-}
-
-impl From<NamedDestination> for Destination {
-  fn from(val: NamedDestination) -> Self {
-    Destination::Named(val)
-  }
-}
-
-impl NamedDestination {
-  /// Create a new named destination.
-  ///
-  /// When used as part of a link annotation, the destination will be automatically registered
-  /// with the [`Document`](crate::krilla::Document).
-  ///
-  /// That said, you can also manually register a destination without linking to it by calling
-  /// [`Document::register_named_destination`](crate::krilla::Document::register_named_destination).
-  pub fn new(name: String, xyz_dest: XyzDestination) -> Self {
-    Self {
-      name: Arc::new(name),
-      xyz_dest: Arc::new(xyz_dest),
-    }
-  }
-
-  pub(crate) fn serialize(&self, sc: &mut SerializeContext, destination: Obj) -> KrillaResult<()> {
-    sc.register_named_destination(self.clone())
-      .ok_or_else(|| KrillaError::DuplicateNamedDestination(Arc::clone(&self.name)))?;
-    destination.primitive(Str(self.name.as_bytes()));
-
-    Ok(())
   }
 }
 
@@ -171,133 +131,5 @@ impl XyzDestination {
       None => destination.item(page_ref),
     };
     destination.xyz(mapped_point.x, mapped_point.y, None);
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use std::sync::Arc;
-
-  use crate::krilla::Document;
-  use crate::krilla::annotation::{LinkAnnotation, Target};
-  use crate::krilla::error::KrillaError;
-  use crate::krilla::geom::{Point, Rect};
-
-  use super::{NamedDestination, XyzDestination};
-
-  #[test]
-  fn named_duplicate_rejected() {
-    let mut document = Document::new();
-    assert_eq!(
-      document.register_named_destination(NamedDestination::new(
-        "same".to_string(),
-        XyzDestination::new(0, Point::from_xy(0.0, 0.0)),
-      )),
-      Some(())
-    );
-    assert_eq!(
-      document.register_named_destination(NamedDestination::new(
-        "same".to_string(),
-        XyzDestination::new(0, Point::from_xy(100.0, 100.0)),
-      )),
-      None
-    );
-  }
-
-  #[test]
-  fn named_duplicate_same_location_allowed() {
-    let mut document = Document::new();
-    assert_eq!(
-      document.register_named_destination(NamedDestination::new(
-        "same".to_string(),
-        XyzDestination::new(0, Point::from_xy(0.0, 0.0)),
-      )),
-      Some(())
-    );
-    assert_eq!(
-      document.register_named_destination(NamedDestination::new(
-        "same".to_string(),
-        XyzDestination::new(0, Point::from_xy(0.0, 0.0)),
-      )),
-      Some(())
-    );
-
-    assert!(document.finish().is_ok());
-  }
-
-  #[test]
-  fn named_duplicate_annotation_rejected() {
-    let mut document = Document::new();
-    let mut page = document.start_page();
-
-    page.add_annotation(
-      LinkAnnotation::new(
-        Rect::from_xywh(0.0, 0.0, 100.0, 100.0).unwrap(),
-        Target::Destination(
-          NamedDestination::new(
-            "same".to_string(),
-            XyzDestination::new(0, Point::from_xy(0.0, 0.0)),
-          )
-          .into(),
-        ),
-      )
-      .into(),
-    );
-    page.add_annotation(
-      LinkAnnotation::new(
-        Rect::from_xywh(0.0, 100.0, 100.0, 100.0).unwrap(),
-        Target::Destination(
-          NamedDestination::new(
-            "same".to_string(),
-            XyzDestination::new(0, Point::from_xy(100.0, 100.0)),
-          )
-          .into(),
-        ),
-      )
-      .into(),
-    );
-    drop(page);
-
-    assert_eq!(
-      document.finish(),
-      Err(KrillaError::DuplicateNamedDestination(Arc::new(
-        "same".to_string()
-      )))
-    );
-  }
-
-  #[test]
-  fn named_duplicate_manual_then_annotation_rejected() {
-    let mut document = Document::new();
-    assert_eq!(
-      document.register_named_destination(NamedDestination::new(
-        "same".to_string(),
-        XyzDestination::new(0, Point::from_xy(0.0, 0.0)),
-      )),
-      Some(())
-    );
-
-    let mut page = document.start_page();
-    page.add_annotation(
-      LinkAnnotation::new(
-        Rect::from_xywh(0.0, 0.0, 100.0, 100.0).unwrap(),
-        Target::Destination(
-          NamedDestination::new(
-            "same".to_string(),
-            XyzDestination::new(0, Point::from_xy(100.0, 100.0)),
-          )
-          .into(),
-        ),
-      )
-      .into(),
-    );
-    drop(page);
-
-    assert_eq!(
-      document.finish(),
-      Err(KrillaError::DuplicateNamedDestination(Arc::new(
-        "same".to_string()
-      )))
-    );
   }
 }

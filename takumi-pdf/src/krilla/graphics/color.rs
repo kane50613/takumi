@@ -196,11 +196,6 @@ pub mod luma {
       Self::new(0)
     }
 
-    /// Create a white RGB color.
-    pub fn white() -> Self {
-      Self::new(255)
-    }
-
     pub(crate) fn to_pdf_color(self) -> f32 {
       crate::krilla::graphics::color::component(self.0)
     }
@@ -320,34 +315,9 @@ pub mod rgb {
       Color(red, green, blue)
     }
 
-    /// Create a new linear RGB color.
-    pub fn new_linear(red: u8, green: u8, blue: u8) -> Self {
-      Color(red, green, blue)
-    }
-
     /// Create a black RGB color.
     pub fn black() -> Self {
       Self::new(0, 0, 0)
-    }
-
-    /// Create a white RGB color.
-    pub fn white() -> Self {
-      Self::new(255, 255, 255)
-    }
-
-    /// The `red` component of the color.
-    pub fn red(&self) -> u8 {
-      self.0
-    }
-
-    /// The `green` component of the color.
-    pub fn green(&self) -> u8 {
-      self.1
-    }
-
-    /// The `blue` component of the color.
-    pub fn blue(&self) -> u8 {
-      self.2
     }
 
     pub(crate) fn to_pdf_color(self) -> [f32; 3] {
@@ -441,15 +411,7 @@ pub mod separation {
     pub(crate) fallback: RegularColor,
   }
 
-  impl SeparationSpace {
-    /// Create a new Separation space.
-    ///
-    /// To export PDF/A-2 and later, make sure that a single Separation Colorant
-    /// is always used with the same fallback color.
-    pub fn new(colorant: SeparationColorant, fallback: RegularColor) -> Self {
-      Self { colorant, fallback }
-    }
-  }
+  impl SeparationSpace {}
 
   impl From<SeparationSpace> for super::SpecialColorSpace {
     fn from(value: SeparationSpace) -> Self {

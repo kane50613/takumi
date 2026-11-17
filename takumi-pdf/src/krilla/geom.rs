@@ -288,12 +288,7 @@ impl Hash for Transform {
 /// A path.
 pub struct Path(pub(crate) tiny_skia_path::Path);
 
-impl Path {
-  /// Apply a transformation to the path.
-  pub fn transform(self, transform: Transform) -> Option<Self> {
-    Some(Self(self.0.transform(transform.to_tsp())?))
-  }
-}
+impl Path {}
 
 /// A path builder.
 #[derive(Default)]

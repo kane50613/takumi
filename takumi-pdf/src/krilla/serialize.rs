@@ -22,7 +22,7 @@ use crate::krilla::graphics::icc::{ICCBasedColorSpace, ICCProfile};
 #[cfg(feature = "raster-images")]
 use crate::krilla::graphics::image::Image;
 use crate::krilla::graphics::separation::SeparationColorSpace;
-use crate::krilla::interactive::destination::{NamedDestination, XyzDestination};
+use crate::krilla::interactive::destination::XyzDestination;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
 use crate::krilla::interchange::tagging::{
@@ -327,14 +327,6 @@ impl SerializeContext {
     }
   }
 
-  pub(crate) fn set_location(&mut self, location: Location) {
-    self.location = Some(location)
-  }
-
-  pub(crate) fn reset_location(&mut self) {
-    self.location = None
-  }
-
   pub(crate) fn embed_file(
     &mut self,
     chunk_container: &mut ChunkContainer,
@@ -503,20 +495,6 @@ impl SerializeContext {
     } else {
       None
     }
-  }
-
-  pub(crate) fn register_named_destination(&mut self, nd: NamedDestination) -> Option<Ref> {
-    if let Some((dest_ref, existing)) = self.global_objects.named_destinations.get(nd.name.as_ref())
-    {
-      return (existing == nd.xyz_dest.as_ref()).then_some(*dest_ref);
-    }
-
-    let dest_ref = self.register_xyz_destination((*nd.xyz_dest).clone());
-    self
-      .global_objects
-      .named_destinations
-      .insert(nd.name.clone(), (dest_ref, (*nd.xyz_dest).clone()));
-    Some(dest_ref)
   }
 
   pub(crate) fn register_page(&mut self, page: InternalPage) {
@@ -999,10 +977,6 @@ pub(crate) struct Pdf2Namespaces {
 
 #[derive(Default)]
 pub(crate) struct GlobalObjects {
-  /// All named destinations that have been registered, including a Ref to their destination and
-  /// the destination itself.
-  // Needs to be pub(crate) because writing of named destinations happens in `ChunkContainer`.
-  pub(crate) named_destinations: MaybeTaken<HashMap<Arc<String>, (Ref, XyzDestination)>>,
   /// A map from fonts to font container.
   font_map: MaybeTaken<IndexMap<Font, Rc<RefCell<FontContainer>>>>,
   /// All XYZ destinations used in the document. The reason we need to store them
@@ -1029,7 +1003,6 @@ pub(crate) struct GlobalObjects {
 
 impl GlobalObjects {
   pub(crate) fn assert_all_taken(&self) {
-    assert!(self.named_destinations.is_taken());
     assert!(self.font_map.is_taken());
     assert!(self.xyz_destinations.is_taken());
     assert!(self.pages.is_taken());

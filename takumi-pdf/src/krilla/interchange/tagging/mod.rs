@@ -146,7 +146,6 @@ use crate::krilla::serialize::SerializeContext;
 
 pub use tag::*;
 
-pub mod fmt;
 mod tag;
 
 /// An artifact that should not be part of the accessible structure.
@@ -160,20 +159,6 @@ pub struct Artifact {
 }
 
 impl Artifact {
-  /// Create a new artifact with a type and an optional BBox.
-  ///
-  /// You must provide a bounding box if `kind` is
-  /// [`ArtifactType::Background`] and you are targetting PDF 1.7, otherwise,
-  /// Krilla will later panic.
-  pub fn new(kind: ArtifactType, bbox: Option<Rect>) -> Self {
-    Self { kind, bbox }
-  }
-
-  /// Create a new artifact with a type and no bounding box.
-  pub fn with_kind(kind: ArtifactType) -> Self {
-    Self::new(kind, None)
-  }
-
   /// Whether the artifacts requires a property list.
   pub(crate) fn requires_properties(self, pdf_version: PdfVersion) -> bool {
     self.bbox.is_some()
@@ -414,24 +399,6 @@ impl<'a> SpanTag<'a> {
   /// Sets [`SpanTag::lang`].
   pub fn with_lang(mut self, lang: Option<&'a str>) -> Self {
     self.lang = lang;
-    self
-  }
-
-  /// Sets [`SpanTag::alt_text`].
-  pub fn with_alt_text(mut self, alt_text: Option<&'a str>) -> Self {
-    self.alt_text = alt_text;
-    self
-  }
-
-  /// Sets [`SpanTag::expanded`].
-  pub fn with_expanded(mut self, expanded: Option<&'a str>) -> Self {
-    self.expanded = expanded;
-    self
-  }
-
-  /// Sets [`SpanTag::actual_text`].
-  pub fn with_actual_text(mut self, actual_text: Option<&'a str>) -> Self {
-    self.actual_text = actual_text;
     self
   }
 }

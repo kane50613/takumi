@@ -5,7 +5,6 @@
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use std::sync::Arc;
 
 use crate::krilla::configure::{ValidationError, Validators};
 #[cfg(feature = "raster-images")]
@@ -29,9 +28,6 @@ pub enum KrillaError {
   Validation(Vec<(ValidationError, Validators)>),
   /// A hard limit of the selected PDF version was exceeded.
   Limit(LimitError),
-  /// The same destination name has been associated with two different destinations,
-  /// which is prohibited.
-  DuplicateNamedDestination(Arc<String>),
   /// A duplicate [`Tag::id`] was provided.
   ///
   /// [`Tag::id`]: crate::krilla::interchange::tagging::Tag::id
@@ -69,9 +65,6 @@ impl Display for KrillaError {
         )
       }
       KrillaError::Limit(error) => write!(f, "PDF version limit exceeded: {error}"),
-      KrillaError::DuplicateNamedDestination(name) => {
-        write!(f, "duplicate named destination: {name}")
-      }
       KrillaError::DuplicateTagId(id, location) => {
         write!(
           f,

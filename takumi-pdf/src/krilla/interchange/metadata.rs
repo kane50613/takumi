@@ -23,11 +23,8 @@ pub struct Metadata {
   pub(crate) creator: Option<String>,
   pub(crate) keywords: Option<Vec<String>>,
   pub(crate) authors: Option<Vec<String>>,
-  pub(crate) document_id: Option<String>,
   pub(crate) language: Option<String>,
   pub(crate) creation_date: Option<DateTime>,
-  pub(crate) text_direction: Option<TextDirection>,
-  pub(crate) page_layout: Option<PageLayout>,
   pub(crate) custom_schemas: Vec<XmpSchema>,
 }
 
@@ -140,30 +137,9 @@ impl Metadata {
     self
   }
 
-  /// A document ID.
-  ///
-  /// This attribute will be used as an identifier for identifying
-  /// different versions of the same document.
-  pub fn document_id(mut self, document_id: String) -> Self {
-    self.document_id = Some(document_id);
-    self
-  }
-
   /// Custom namespaces written into the XMP packet.
   pub fn custom_schemas(mut self, custom_schemas: Vec<XmpSchema>) -> Self {
     self.custom_schemas = custom_schemas;
-    self
-  }
-
-  /// The main text direction of the document.
-  pub fn text_direction(mut self, text_direction: TextDirection) -> Self {
-    self.text_direction = Some(text_direction);
-    self
-  }
-
-  /// How the viewer should lay out the pages.
-  pub fn page_layout(mut self, page_layout: PageLayout) -> Self {
-    self.page_layout = Some(page_layout);
     self
   }
 
@@ -408,14 +384,6 @@ impl DateTime {
     self.utc_offset_hour = Some(hour.clamp(-23, 23));
     self
   }
-
-  /// Add the offset from UTC in minutes. This will have the same sign as set in
-  /// [`Self::utc_offset_hour`]. It will be clamped within the range 0-59.
-  #[inline]
-  pub fn utc_offset_minute(mut self, minute: u8) -> Self {
-    self.utc_offset_minute = minute.min(59);
-    self
-  }
 }
 
 /// Converts a datetime to a pdf-writer date.
@@ -452,56 +420,5 @@ fn xmp_date(datetime: DateTime) -> xmp_writer::DateTime {
     minute: Some(datetime.minute.unwrap_or(0)),
     second: Some(datetime.second.unwrap_or(0)),
     timezone,
-  }
-}
-
-/// The main text direction of the document.
-#[allow(missing_docs)]
-#[derive(Copy, Clone, Debug)]
-pub enum TextDirection {
-  LeftToRight,
-  RightToLeft,
-}
-
-impl TextDirection {
-  pub(crate) fn to_pdf(self) -> pdf_writer::types::Direction {
-    match self {
-      TextDirection::LeftToRight => pdf_writer::types::Direction::L2R,
-      TextDirection::RightToLeft => pdf_writer::types::Direction::R2L,
-    }
-  }
-}
-
-/// How the viewer should lay out the pages.
-#[derive(Copy, Clone, Debug)]
-pub enum PageLayout {
-  /// Only a single page at a time.
-  SinglePage,
-  /// A single, continuously scrolling column of pages.
-  OneColumn,
-  /// Two continuously scrolling columns of pages, laid out with odd-numbered
-  /// pages on the left.
-  TwoColumnLeft,
-  /// Two continuously scrolling columns of pages, laid out with odd-numbered
-  /// pages on the right (like in a left-bound book).
-  TwoColumnRight,
-  /// Only two pages are visible at a time, laid out with odd-numbered pages
-  /// on the left. PDF 1.5+.
-  TwoPageLeft,
-  /// Only two pages are visible at a time, laid out with odd-numbered pages
-  /// on the right (like in a left-bound book). PDF 1.5+.
-  TwoPageRight,
-}
-
-impl PageLayout {
-  pub(crate) fn to_pdf(self) -> pdf_writer::types::PageLayout {
-    match self {
-      PageLayout::SinglePage => pdf_writer::types::PageLayout::SinglePage,
-      PageLayout::OneColumn => pdf_writer::types::PageLayout::OneColumn,
-      PageLayout::TwoColumnLeft => pdf_writer::types::PageLayout::TwoColumnLeft,
-      PageLayout::TwoColumnRight => pdf_writer::types::PageLayout::TwoColumnRight,
-      PageLayout::TwoPageLeft => pdf_writer::types::PageLayout::TwoPageLeft,
-      PageLayout::TwoPageRight => pdf_writer::types::PageLayout::TwoPageRight,
-    }
   }
 }
