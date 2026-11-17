@@ -20,7 +20,7 @@ In Rust, `SvgSource::picture` returns the laid-out drawing ops with the key the 
 
 #### Migration
 
-`SvgSource::vector_ops` still works, and is deprecated.
+`SvgSource::vector_ops` is removed. `SvgSource::picture` returns the same ops, shared with the cache.
 
 ```diff
 - let ops = source.vector_ops(&host, viewport);
