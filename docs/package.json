@@ -24,7 +24,7 @@
     "fumadocs-mdx": "^15.4.0",
     "fumadocs-twoslash": "^4.0.0",
     "fumadocs-ui": "npm:@fumadocs/base-ui@^16.16.2",
-    "fumapress": "^1.6.0",
+    "fumapress": "^2.0.0",
     "js-confetti": "^0.13.1",
     "lucide-react": "^1.45.0",
     "monaco-editor": "^0.57.0",
