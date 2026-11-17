@@ -43,7 +43,7 @@ description: Embed Takumi's native addon in an executable from bun build --compi
 The addon package matches the platform it was built for, such as `@takumi-rs/core-darwin-arm64` or `@takumi-rs/core-linux-x64-musl`. Install the package of the target platform, import its `.node` file, and pass the same target to `bun build --compile --target`.
 
 <Callout type="warn">
-  The WebAssembly backend is no way around this on Bun. Bun 1.4.4 on Linux x64 cannot compile
-  Takumi's WebAssembly binary, which uses SIMD, so a `module` option fails with `WebAssembly.Module
-  doesn't parse`.
+  On an x86-64 CPU without AVX, such as some virtual machines, the WebAssembly backend is no way
+  around this. JavaScriptCore, Bun's engine, turns WebAssembly SIMD off on such CPUs, and Takumi's
+  WebAssembly binary uses SIMD, so a `module` option fails with `WebAssembly.Module doesn't parse`.
 </Callout>
