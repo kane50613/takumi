@@ -21,11 +21,7 @@ type Awaitable<T> = T | Promise<T>;
  */
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-/**
- * A font descriptor, matching each backend's generated `FontDetails`.
- *
- * @internal
- */
+/** A font descriptor, matching each backend's generated `FontDetails`. */
 export type FontDetails = {
   name?: string;
   data: ByteBuf;
@@ -47,21 +43,13 @@ export type FontDetails = {
   generic?: GenericFontFamily;
 };
 
-/**
- * A registered font, either detailed or raw bytes.
- *
- * @internal
- */
+/** A registered font, either detailed or raw bytes. */
 export type Font = FontDetails | ByteBuf;
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 type ImageCacheMode = "auto" | "none";
 
-/**
- * An image source with its URL and raw bytes, matching each backend's generated `ImageSource`.
- *
- * @internal
- */
+/** An image source with its URL and raw bytes, matching each backend's generated `ImageSource`. */
 export type ImageSource = {
   src: string;
   data: ByteBuf;
@@ -78,7 +66,6 @@ export type RegisteredFamilyLike = { name: string };
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
  * file), raw bytes, or a descriptor with a lazy `data()` loader.
- * @internal
  */
 export type FontLoader =
   | string
@@ -94,11 +81,7 @@ export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => ImageSource["data"] | Promise<ImageSource["data"]>);
 };
 
-/**
- * Images for a render: pre-fetched entries, or a group with a decode-cache default.
- *
- * @internal
- */
+/** Images for a render: pre-fetched entries, or a group with a decode-cache default. */
 export type ImagesInput =
   | ImageLoader[]
   | {
