@@ -2018,6 +2018,31 @@ fn image_object_fit() {
   });
 }
 
+/// A zero-length line with round caps draws a dot, as in Chromium.
+#[cfg(feature = "svg")]
+#[test]
+fn svg_zero_length_round_line() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <line x1="12" y1="12" x2="12" y2="12" stroke="#000" stroke-width="8" stroke-linecap="round"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-zero-length-round-line", |fonts| {
+    PdfOptions::builder()
+      .node(Node::image(ImageData {
+        src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+        width: Some(24.0),
+        height: Some(24.0),
+      }))
+      .viewport(Viewport::new((24, 24)))
+      .fonts(fonts)
+      .build()
+  });
+
+  assert!(
+    content_lines(&pdf).any(|line| line == b"S"),
+    "the dot was not stroked"
+  );
+}
+
 /// An SVG logo (gradient circle + stroked check) embeds as vector paths and
 /// shading patterns, never as a rasterized image XObject.
 #[test]
