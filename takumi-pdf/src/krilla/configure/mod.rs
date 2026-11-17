@@ -3,7 +3,7 @@
 pub mod validate;
 mod version;
 
-pub use validate::{Accessibility, Archival, ValidationError, Validator, Validators};
+pub use validate::{Accessibility, Archival, ValidationError, Validators};
 pub use version::PdfVersion;
 
 use crate::krilla::configure::validate::ValidatorsBuilder;
@@ -31,25 +31,12 @@ impl Configuration {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct ConfigurationBuilder {
   validators: ValidatorsBuilder,
-  version: Option<PdfVersion>,
 }
 
 impl ConfigurationBuilder {
   /// Create a new `ConfigurationBuilder` with default settings.
   pub fn new() -> Self {
     Self::default()
-  }
-
-  /// Set the PDF version, overwriting the current one if already set.
-  pub fn with_version(mut self, version: PdfVersion) -> Self {
-    self.version = Some(version);
-    self
-  }
-
-  /// Set a validator, overwriting the current one if the same standard family is already set.
-  pub fn set_validator(mut self, validator: Validator) -> Self {
-    self.validators = self.validators.set_validator(validator);
-    self
   }
 
   /// Set the PDF/A validator, overwriting the current one if already set.
@@ -64,35 +51,23 @@ impl ConfigurationBuilder {
     self
   }
 
-  /// Build the [`Configuration`], returning an error if the validators and version are incompatible.
+  /// Build the [`Configuration`] at the newest version every validator allows, or fail when
+  /// their version ranges do not overlap.
   pub fn finish(self) -> Result<Configuration, ConfigurationError> {
     let validators = self
       .validators
       .finish()
       .map_err(ConfigurationError::NoOverlappingValidatorsRange)?;
+    let version = if validators.is_empty() {
+      PdfVersion::default()
+    } else {
+      validators.max()
+    };
 
-    let validator_range = validators.min().unwrap_or(PdfVersion::MIN)..=validators.max();
-    match self.version {
-      Some(version) if validator_range.contains(&version) => Ok(Configuration {
-        validators,
-        version,
-      }),
-      Some(version) => Err(ConfigurationError::VersionDoesNotMatchValidatorsRange(
-        version, validators,
-      )),
-      None if !validators.is_empty() => Ok(Configuration {
-        validators,
-        version: *validator_range.end(),
-      }),
-      None => {
-        let version = PdfVersion::default();
-        debug_assert!(validator_range.contains(&version));
-        Ok(Configuration {
-          validators,
-          version,
-        })
-      }
-    }
+    Ok(Configuration {
+      validators,
+      version,
+    })
   }
 }
 
@@ -101,8 +76,6 @@ impl ConfigurationBuilder {
 pub enum ConfigurationError {
   /// The selected validators have no overlapping valid PDF version range.
   NoOverlappingValidatorsRange(Validators),
-  /// The explicitly set PDF version falls outside the range allowed by the validators.
-  VersionDoesNotMatchValidatorsRange(PdfVersion, Validators),
 }
 
 #[cfg(test)]
@@ -110,21 +83,6 @@ mod tests {
   use crate::krilla::configure::{
     Accessibility, Archival, Configuration, ConfigurationBuilder, ConfigurationError, PdfVersion,
   };
-
-  #[test]
-  fn invalid_combination_1() {
-    // A1_B max is PDF 1.4; explicit PDF 1.7 is out of range.
-    assert!(matches!(
-      ConfigurationBuilder::new()
-        .with_version(PdfVersion::Pdf17)
-        .with_archival_validator(Archival::A1_B)
-        .finish(),
-      Err(ConfigurationError::VersionDoesNotMatchValidatorsRange(
-        PdfVersion::Pdf17,
-        _
-      ))
-    ));
-  }
 
   #[test]
   fn invalid_combination_2() {
@@ -135,23 +93,6 @@ mod tests {
         .with_accessibility_validator(Accessibility::UA1)
         .finish(),
       Err(ConfigurationError::NoOverlappingValidatorsRange(_))
-    ));
-  }
-
-  #[test]
-  fn invalid_combination_3() {
-    // A1_B max is PDF 1.4; UA1 max is PDF 1.7 → intersection is PDF14..=PDF14.
-    // Explicitly setting PDF 1.7 is out of range.
-    assert!(matches!(
-      ConfigurationBuilder::new()
-        .with_archival_validator(Archival::A1_B)
-        .with_accessibility_validator(Accessibility::UA1)
-        .with_version(PdfVersion::Pdf17)
-        .finish(),
-      Err(ConfigurationError::VersionDoesNotMatchValidatorsRange(
-        PdfVersion::Pdf17,
-        _
-      ))
     ));
   }
 

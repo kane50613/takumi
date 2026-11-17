@@ -206,12 +206,6 @@ impl Validators {
     self.ua
   }
 
-  /// Whether the font must supply valid Unicode code points for each of the
-  /// drawn glyphs.
-  pub(crate) fn requires_codepoint_mappings(self) -> bool {
-    self.into_iter().any(Validator::requires_codepoint_mappings)
-  }
-
   /// Force the `DisplayDocTitle` flag set.
   pub(crate) fn requires_display_doc_title(self) -> bool {
     self
@@ -349,14 +343,6 @@ impl IntoIterator for Validators {
 pub struct ValidatorsBuilder(Validators);
 
 impl ValidatorsBuilder {
-  /// Set a validator, overwriting the current one if the same standard family is already set.
-  pub fn set_validator(self, validator: Validator) -> Self {
-    match validator {
-      Validator::A(a) => self.with_archival_validator(a),
-      Validator::Ua(ua) => self.with_accessibility_validator(ua),
-    }
-  }
-
   /// Set the PDF/A validator, overwriting the current one if already set.
   pub fn with_archival_validator(mut self, archival: Archival) -> Self {
     self.0.a = Some(archival);
@@ -387,13 +373,6 @@ pub enum Validator {
 }
 
 impl Validator {
-  fn requires_codepoint_mappings(self) -> bool {
-    match self {
-      Self::A(a) => a.requires_codepoint_mappings(),
-      Self::Ua(ua) => ua.requires_codepoint_mappings(),
-    }
-  }
-
   fn requires_tagging(self) -> bool {
     match self {
       Self::A(a) => a.requires_tagging(),
@@ -699,20 +678,6 @@ impl Archival {
         Self::A4 | Self::A4F | Self::A4E,
         ValidationError::EmbeddedFile(EmbedError::MissingDescription, _),
       ) => self == Self::A4,
-    }
-  }
-
-  fn requires_codepoint_mappings(self) -> bool {
-    match self {
-      Self::A1_A
-      | Self::A2_A
-      | Self::A2_U
-      | Self::A3_A
-      | Self::A3_U
-      | Self::A4
-      | Self::A4F
-      | Self::A4E => true,
-      Self::A1_B | Self::A2_B | Self::A3_B => false,
     }
   }
 
@@ -1144,12 +1109,6 @@ impl Accessibility {
         )
         | ValidationError::MissingDocumentDate,
       ) => false,
-    }
-  }
-
-  fn requires_codepoint_mappings(self) -> bool {
-    match self {
-      Self::UA1 | Self::UA2 => true,
     }
   }
 

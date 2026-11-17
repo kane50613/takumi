@@ -29,7 +29,6 @@ impl Tag {
   pub const T_HEAD: Self = Self::plain(TagKind::THead);
   pub const T_BODY: Self = Self::plain(TagKind::TBody);
   pub const T_FOOT: Self = Self::plain(TagKind::TFoot);
-  pub const SPAN: Self = Self::plain(TagKind::Span);
   pub const CODE: Self = Self::plain(TagKind::Code);
   pub const LINK: Self = Self::plain(TagKind::Link);
   pub const STRONG: Self = Self::plain(TagKind::Strong);
@@ -398,12 +397,7 @@ pub struct BBox {
   pub rect: Rect,
 }
 
-impl BBox {
-  /// Create a new bounding box.
-  pub fn new(page_idx: usize, rect: Rect) -> Self {
-    Self { page_idx, rect }
-  }
-}
+impl BBox {}
 
 /// An RGB color within the tag tree. The color space of this color is not
 /// specified. Each component is in the range `0..=255`; see [`Self::new_f32`]
@@ -663,36 +657,6 @@ pub struct Sides<T> {
 }
 
 impl<T> Sides<T> {
-  /// Construct a new `Sides` value with specific values for each side.
-  pub fn new(before: T, after: T, start: T, end: T) -> Self {
-    Self {
-      before,
-      after,
-      start,
-      end,
-    }
-  }
-
-  /// Construct a new `Sides` value with the same value for all sides.
-  pub fn uniform(value: T) -> Self
-  where
-    T: Copy,
-  {
-    Sides {
-      before: value,
-      after: value,
-      start: value,
-      end: value,
-    }
-  }
-
-  pub(crate) fn is_uniform(&self) -> bool
-  where
-    T: PartialEq,
-  {
-    self.before == self.after && self.before == self.start && self.before == self.end
-  }
-
   /// Returns an array for all sides.
   pub(super) fn into_array(self) -> [T; 4] {
     [self.before, self.after, self.start, self.end]
@@ -719,17 +683,7 @@ pub enum ColumnDimensions {
   Specific(Vec<f32>),
 }
 
-impl ColumnDimensions {
-  /// Construct a new `ColumnDimensions` with the same value for all columns.
-  pub fn all(value: f32) -> Self {
-    ColumnDimensions::All(value)
-  }
-
-  /// Construct a new `ColumnDimensions` with specific values for each column.
-  pub fn specific(values: Vec<f32>) -> Self {
-    ColumnDimensions::Specific(values)
-  }
-}
+impl ColumnDimensions {}
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Attr {
   Struct(StructAttr),

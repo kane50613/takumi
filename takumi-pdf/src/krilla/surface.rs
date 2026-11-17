@@ -15,9 +15,7 @@ use crate::krilla::geom::Path;
 #[cfg(feature = "raster-images")]
 use crate::krilla::geom::Size;
 use crate::krilla::geom::{Point, Transform};
-use crate::krilla::graphic::Graphic;
 use crate::krilla::graphics::blend::BlendMode;
-use crate::krilla::graphics::graphics_state::ExtGState;
 #[cfg(feature = "raster-images")]
 use crate::krilla::graphics::image::Image;
 use crate::krilla::graphics::mask::Mask;
@@ -363,21 +361,6 @@ impl<'a> Surface<'a> {
     }
   }
 
-  /// Set the location that should be assumed for subsequent operations.
-  pub fn set_location(&mut self, location: Location) {
-    self.sc.set_location(location);
-  }
-
-  /// Reset the location that should be assumed for subsequent operations.
-  pub fn reset_location(&mut self) {
-    self.sc.reset_location();
-  }
-
-  /// Return the current transformation matrix.
-  pub fn ctm(&self) -> Transform {
-    self.bd.get().cur_transform()
-  }
-
   /// The current transformation matrix composed through every open group.
   pub(crate) fn page_transform(&self) -> Transform {
     self
@@ -491,19 +474,6 @@ impl<'a> Surface<'a> {
       .draw_image(image, size, self.sc, self.chunk_container);
   }
 
-  /// Draw a new graphic.
-  ///
-  /// Drawing the same graphic multiple times is very cheap in terms of
-  /// file size.
-  pub fn draw_graphic(&mut self, graphic: Graphic) {
-    self.bd.get_mut().draw_xobject(
-      self.sc,
-      self.chunk_container,
-      graphic.x_object,
-      &ExtGState::new(),
-    )
-  }
-
   pub(crate) fn draw_shading(&mut self, shading: &ShadingFunction) {
     self
       .bd
@@ -522,11 +492,6 @@ impl<'a> Surface<'a> {
       .bd
       .get_mut()
       .draw_opacified(self.sc, self.chunk_container, opacity, stream)
-  }
-
-  /// Return the current transformation matrix of the surface.
-  pub fn cur_transform(&self) -> Transform {
-    self.bd.get().cur_transform()
   }
 
   fn context_color(&self) -> rgb::Color {
@@ -606,10 +571,6 @@ impl Builders {
       .sub_builders
       .last_mut()
       .unwrap_or(&mut self.root_builder)
-  }
-
-  fn get(&self) -> &ContentBuilder {
-    self.sub_builders.last().unwrap_or(&self.root_builder)
   }
 }
 

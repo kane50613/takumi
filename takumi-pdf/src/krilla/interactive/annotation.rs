@@ -41,12 +41,6 @@ impl Annotation {
       location: None,
     }
   }
-
-  /// Sets the location of the annotation.
-  pub fn with_location(mut self, location: Option<Location>) -> Self {
-    self.location = location;
-    self
-  }
 }
 
 impl From<LinkAnnotation> for Annotation {
@@ -144,15 +138,7 @@ pub struct LinkBorder {
   pub(crate) color: Color,
 }
 
-impl LinkBorder {
-  /// Create a new link annotation border.
-  ///
-  /// `width`: The width of the border in pt.
-  /// `color`: The color of the border.
-  pub fn new(width: f32, color: Color) -> Self {
-    Self { width, color }
-  }
-}
+impl LinkBorder {}
 
 /// A link annotation.
 pub struct LinkAnnotation {
@@ -173,56 +159,6 @@ impl LinkAnnotation {
       quad_points: None,
       target,
       border: None,
-    }
-  }
-
-  /// Create a new link annotation.
-  ///
-  /// `target`: The target of the link annotation.
-  /// `quad_points`: An array of quadrilaterals that define where the link
-  /// annotation should be activated. This is useful if you for example have
-  /// a link annotation that is broken to one or multiple lines.
-  pub fn new_with_quad_points(quad_points: Vec<Quadrilateral>, target: Target) -> Self {
-    assert!(!quad_points.is_empty());
-
-    let mut min_x = f32::INFINITY;
-    let mut min_y = f32::INFINITY;
-    let mut max_x = f32::NEG_INFINITY;
-    let mut max_y = f32::NEG_INFINITY;
-
-    for point in quad_points.iter().flat_map(|q| q.0) {
-      min_x = min_x.min(point.x);
-      min_y = min_y.min(point.y);
-      max_x = max_x.max(point.x);
-      max_y = max_y.max(point.y);
-    }
-
-    // Expand the bounding box by a little. There is a bug in adobe acrobat
-    // that sometimes prevents the quadpoints from being used if the quad
-    // points lie exactly on the bounding rectangle.
-    const EPSILON: f32 = 0.001;
-    let rect = Rect::from_ltrb(
-      min_x - EPSILON,
-      min_y - EPSILON,
-      max_x + EPSILON,
-      max_y + EPSILON,
-    )
-    .unwrap();
-
-    Self {
-      rect,
-      quad_points: Some(quad_points),
-      target,
-      border: None,
-    }
-  }
-
-  /// Set a border for this link annotation. The border will be visible on
-  /// screen but not when printed, unless when exporting with PDF/A standard.
-  pub fn with_border(self, border: LinkBorder) -> Self {
-    Self {
-      border: Some(border),
-      ..self
     }
   }
 
