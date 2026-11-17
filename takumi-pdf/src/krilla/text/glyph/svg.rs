@@ -23,8 +23,14 @@ pub(crate) fn draw_glyph(
 
   let upem = font.units_per_em();
 
-  let fn_ = surface.sc.serialize_settings().render_svg_glyph_fn;
-  fn_(svg_data, context_color, glyph, (upem, upem), surface)?;
+  let old_fill = surface.get_fill().cloned();
+  let old_stroke = surface.get_stroke().cloned();
 
-  Some(())
+  let fn_ = surface.sc.serialize_settings().render_svg_glyph_fn;
+  let result = fn_(svg_data, context_color, glyph, (upem, upem), surface);
+
+  surface.set_fill(old_fill);
+  surface.set_stroke(old_stroke);
+
+  result
 }
