@@ -3,6 +3,9 @@ import { defineConfig, type UserConfig } from "tsdown";
 
 const loaderOutputs = ["export.mjs", "export.cjs"];
 const patchedOutputs = new Set<string>();
+/** NAPI-RS's guard that checks the binary's version only when the variable is set. */
+const optionalVersionCheck =
+  /process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK\s*&&\s*(process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK\s*!==\s*(["'])0\2)/;
 
 const stringLiteral = /"[^"\n]*"|'[^'\n]*'|`[^`]*`/.source;
 
@@ -68,13 +71,17 @@ const config: UserConfig = defineConfig({
           throw new Error(`Generated loader has no missing-binding error to replace in: ${name}`);
         }
 
+        if (!optionalVersionCheck.test(original)) {
+          throw new Error(`Generated loader has no optional version check to enforce in: ${name}`);
+        }
+
         const patched = patchGeneratedLoader(original);
 
         if (patched.includes("npm has a bug")) {
           throw new Error(`Generated loader still blames npm for a missing binding in: ${name}`);
         }
 
-        if (patched.includes("NAPI_RS_ENFORCE_VERSION_CHECK &&")) {
+        if (optionalVersionCheck.test(patched)) {
           throw new Error(`Generated loader still skips its version check in: ${name}`);
         }
 
@@ -100,10 +107,7 @@ function patchGeneratedLoader(content: string) {
     .replaceAll(/^[^\n]*new URL\((["'])\.\1,\s*import\.meta\.url\)\.pathname;?[^\n]*\n?/gm, "")
     .replaceAll("process.env.NAPI_RS_NATIVE_LIBRARY_PATH", "process.env.TAKUMI_CORE_TARGET")
     .replace(npmBugMessage, () => missingBindingMessage)
-    .replaceAll(
-      /process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK && (process\.env\.NAPI_RS_ENFORCE_VERSION_CHECK !== (["'])0\2)/g,
-      "$1",
-    )
+    .replace(new RegExp(optionalVersionCheck, "g"), "$1")
     .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, "$1../core$2")
     .replaceAll(
       /(require(?:\$1)?)\((['"])@takumi-rs\/core-([^/"']+)\2\)/g,
