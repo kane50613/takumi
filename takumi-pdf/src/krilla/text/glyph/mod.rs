@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use skrifa::MetadataProvider;
+
 use crate::krilla::color::rgb;
 use crate::krilla::geom::Transform;
 use crate::krilla::surface::Surface;
@@ -7,7 +9,6 @@ use crate::krilla::text::Font;
 
 #[cfg(feature = "raster-images")]
 pub(crate) mod bitmap;
-pub(crate) mod colr;
 pub(crate) mod outline;
 pub(crate) mod svg;
 
@@ -45,17 +46,23 @@ pub(crate) fn draw_color_glyph(
   // Note: See the comment in krilla-svg in `render_svg_glyph` for why we prefer
   // COLR over SVG. For Noto Color Emoji specifically, using SVG will be slow when
   // rendering multiple glyphs.
-  let drawn = colr::draw_glyph(font.clone(), context_color, glyph, surface)
-    .or_else(|| svg::draw_glyph(font.clone(), context_color, glyph, surface))
-    .or_else(|| {
-      #[cfg(feature = "raster-images")]
-      let res = bitmap::draw_glyph(font.clone(), glyph, surface);
+  let drawn = crate::color_glyph::draw(
+    font.font_ref(),
+    font.location_ref(),
+    glyph.to_skrifa(),
+    context_color,
+    surface,
+  )
+  .or_else(|| svg::draw_glyph(font.clone(), context_color, glyph, surface))
+  .or_else(|| {
+    #[cfg(feature = "raster-images")]
+    let res = bitmap::draw_glyph(font.clone(), glyph, surface);
 
-      #[cfg(not(feature = "raster-images"))]
-      let res = None;
+    #[cfg(not(feature = "raster-images"))]
+    let res = None;
 
-      res
-    });
+    res
+  });
 
   surface.pop();
   surface.pop();
@@ -65,7 +72,11 @@ pub(crate) fn draw_color_glyph(
 
 pub(crate) fn should_outline(font: &Font, glyph: GlyphId) -> bool {
   let has_svg = svg::has_svg_data(font, glyph);
-  let has_colr = colr::has_colr_data(font, glyph);
+  let has_colr = font
+    .font_ref()
+    .color_glyphs()
+    .get(glyph.to_skrifa())
+    .is_some();
   #[cfg(feature = "raster-images")]
   let has_bitmap = bitmap::has_bitmap_data(font, glyph);
   #[cfg(not(feature = "raster-images"))]
