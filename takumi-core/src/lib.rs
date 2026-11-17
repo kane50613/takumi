@@ -1,5 +1,22 @@
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+#![deny(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::unreachable,
+  clippy::todo,
+  clippy::unimplemented
+)]
+#![cfg_attr(
+  test,
+  allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+  )
+)]
 #![deny(missing_docs)]
 //! The layout engine shared by every takumi output. It holds the node tree, the CSS cascade,
 //! layout, text shaping, and font and image resources. Its block, inline, flexbox, grid, and

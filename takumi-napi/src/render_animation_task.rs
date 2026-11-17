@@ -61,7 +61,7 @@ impl AnimationInput {
   /// Each scene's render options and how long it shows, its HTML parsed.
   pub(crate) fn scenes(&mut self) -> Result<Vec<(RenderOptions<'_>, u32)>> {
     let Some(scenes) = self.scenes.take() else {
-      unreachable!()
+      return Err(Error::from_reason("this render already used its scenes"));
     };
     let options = &mut self.options;
     let images = decode_images(

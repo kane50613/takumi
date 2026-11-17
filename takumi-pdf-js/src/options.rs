@@ -288,7 +288,11 @@ impl From<BandInput> for Band {
       BandInput::Off(False) => Self::Off,
       BandInput::Node(node) => Self::from(*node),
       // `read_document` parses every HTML band into a node before the options convert.
-      BandInput::Html(_) => unreachable!(),
+      BandInput::Html(_) => {
+        debug_assert!(false, "an HTML band reached conversion unparsed");
+
+        Self::Off
+      }
     }
   }
 }

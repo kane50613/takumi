@@ -1,7 +1,14 @@
 //! WebAssembly bindings for takumi-pdf.
 
 #![deny(missing_docs)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![deny(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::unreachable,
+  clippy::todo,
+  clippy::unimplemented
+)]
 
 mod date;
 mod metadata;

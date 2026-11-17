@@ -48,7 +48,7 @@ impl Task for SvgRenderTask {
 
   fn compute(&mut self) -> Result<Self::Output> {
     let Some(input) = self.input.take() else {
-      unreachable!()
+      return Err(Error::from_reason("this render already used its input"));
     };
     let (node, stylesheet) = input.resolve(&self.state)?;
     let images = decode_images(
