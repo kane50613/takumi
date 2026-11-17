@@ -3,6 +3,17 @@ packages:
   "@takumi-rs/helpers": patch
 ---
 
-# JSX SVG keeps `preserveAspectRatio` and `clipPathUnits`, and writes `dominantBaseline` as SVG spells it
+# `preserveAspectRatio`, `clipPathUnits`, and `dominantBaseline` take effect on a JSX `<svg>`
 
-`fromJsx` wrote `preserveAspectRatio` and `clipPathUnits` as `preserve-aspect-ratio` and `clip-path-units`, which SVG ignores, so a JSX `preserveAspectRatio="none"` had no effect. It left `dominantBaseline`, `strikethroughPosition`, `strikethroughThickness`, `renderingIntent`, and `xHeight` in camelCase, which SVG ignores too. Each attribute is now written the way React DOM writes it.
+`fromJsx` now writes each attribute of an inline `<svg>` the way React DOM writes it. Before, SVG ignored the attributes below, so `preserveAspectRatio="none"` had no effect.
+
+```tsx
+<svg viewBox="0 0 10 10" preserveAspectRatio="none">
+  …
+</svg>
+// Before: written as preserve-aspect-ratio="none", which SVG ignores
+// After: written as preserveAspectRatio="none"
+```
+
+- `preserveAspectRatio` and `clipPathUnits` stay in camelCase, as SVG spells them.
+- `dominantBaseline`, `renderingIntent`, `strikethroughPosition`, `strikethroughThickness`, and `xHeight` become `dominant-baseline`, `rendering-intent`, `strikethrough-position`, `strikethrough-thickness`, and `x-height`.
