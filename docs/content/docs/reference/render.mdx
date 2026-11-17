@@ -1,0 +1,130 @@
+---
+title: render()
+description: Render JSX, HTML, or a node tree to image bytes with render(), and every option it, renderSvg(), and ImageResponse take.
+---
+
+`render()` lays out its input and returns the encoded image. It takes JSX, an HTML string, or a node tree.
+
+```tsx twoslash title="Render a PNG"
+import { render } from "takumi-js";
+
+const png = await render(<div tw="w-full h-full bg-white">Hello</div>, {
+  width: 1200,
+  height: 630,
+});
+```
+
+It resolves to a `Buffer` in Node.js and Bun, and to a `Uint8Array` elsewhere. With `format: "raw"` the bytes are the RGBA pixels, four per pixel, row by row.
+
+`renderSvg()` takes the same input and options and resolves to an SVG document string. [`ImageResponse`](/docs/reference/image-response) and [`measure()`](/docs/reference/measure) take them too.
+
+## Options
+
+<TypeTable
+  type={{
+    width: {
+      type: "number",
+      description: "Image width in pixels. Omit it to size the width to the content.",
+    },
+    height: {
+      type: "number",
+      description: "Image height in pixels. Omit it to size the height to the content.",
+    },
+    format: {
+      type: '"png" | "jpeg" | "webp" | "ico" | "raw"',
+      default: '"png"',
+      description: "The encoder. `raw` returns the RGBA pixels unencoded.",
+      typeDescriptionLink: "/docs/formats",
+    },
+    quality: {
+      type: "number",
+      description:
+        "Encoder quality from 0 to 100, for JPEG. For WebP, it picks lossy encoding unless `lossless` is set.",
+    },
+    lossless: {
+      type: "boolean",
+      description:
+        "Encodes WebP losslessly. WebP is lossless when neither `quality` nor `lossless` is set.",
+    },
+    devicePixelRatio: {
+      type: "number",
+      default: "1",
+      description:
+        "Image pixels per CSS pixel. `width` and `height` stay the image size, so double them with a ratio of `2`.",
+      typeDescriptionLink: "/docs/formats#device-pixel-ratio",
+    },
+    fonts: {
+      type: "FontLoader[] | Promise<FontLoader[]>",
+      description:
+        "Fonts this render draws with: URLs, bytes, or descriptors. Each file loads once per renderer.",
+      typeDescriptionLink: "/docs/fonts",
+    },
+    fontFamilies: {
+      type: "string[]",
+      description:
+        "The families text falls back through, in order. Defaults to every registered family in registration order.",
+      typeDescriptionLink: "/docs/fonts",
+    },
+    lang: {
+      type: "string",
+      description: "The BCP-47 language of the root, which nodes without their own `lang` inherit.",
+      typeDescriptionLink: "/docs/typography",
+    },
+    css: {
+      type: "CssInput | CssInput[]",
+      description: "Stylesheet text or rule objects, cascading in order.",
+      typeDescriptionLink: "/docs/styles#css",
+    },
+    images: {
+      type: "ImageLoader[] | { sources, fetchCache, cache, ...fetchOptions }",
+      description: "Pre-fetched images keyed by `src`, and limits for the images Takumi fetches.",
+      typeDescriptionLink: "/docs/images",
+    },
+    emoji: {
+      type: '"twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat" | "from-font"',
+      default: '"twemoji"',
+      description: "Where emoji glyphs come from. `from-font` draws them with the loaded fonts.",
+      typeDescriptionLink: "/docs/images#emoji",
+    },
+    timeMs: {
+      type: "number",
+      default: "0",
+      description: "The point on the animation timeline to render, in milliseconds.",
+      typeDescriptionLink: "/docs/animation",
+    },
+    dithering: {
+      type: '"none" | "ordered-bayer" | "floyd-steinberg"',
+      default: '"none"',
+      description: "Dithers gradients before they quantize to 8-bit, which hides banding.",
+    },
+    drawDebugBorder: {
+      type: "boolean",
+      description: "Outlines every box, for debugging layout.",
+    },
+    jsx: {
+      type: "FromJsxOptions",
+      description: "JSX conversion options, such as `{ defaultStyles: false }`.",
+    },
+    signal: {
+      type: "AbortSignal",
+      description: "Cancels the render while it loads fonts and images.",
+      typeDescriptionLink: "/docs/formats#cancellation",
+    },
+    renderer: {
+      type: "Renderer",
+      description:
+        "A renderer you configured yourself. Without it, every render in the process shares one.",
+      typeDescriptionLink: "/docs/reference/image-response#bring-your-own-renderer",
+    },
+    module: {
+      type: "InitInput | Promise<InitInput>",
+      description:
+        "A WebAssembly binary to render with, on any runtime. Ignored when `renderer` is set.",
+      typeDescriptionLink: "/docs#use-webassembly-in-nodejs",
+    },
+  }}
+/>
+
+## renderAnimation()
+
+`renderAnimation()` encodes a list of scenes as an animated WebP, APNG, or GIF. It takes `scenes` in place of an input, and the options above. See [Animation](/docs/animation#an-animated-image-with-renderanimation).

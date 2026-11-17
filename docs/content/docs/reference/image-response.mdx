@@ -17,63 +17,10 @@ The first argument takes what `render()` takes: JSX, an HTML string, or a node t
 
 ## Options
 
-`ImageResponseOptions` is the `render()` options plus the `ResponseInit` fields and an error hook.
+`ImageResponse` takes every [`render()` option](/docs/reference/render#options), and these:
 
 <TypeTable
   type={{
-    width: {
-      type: "number",
-      description: "Image width in pixels. Omit it to size the width to the content.",
-    },
-    height: {
-      type: "number",
-      description: "Image height in pixels. Omit it to size the height to the content.",
-    },
-    format: {
-      type: '"png" | "jpeg" | "webp" | "ico" | "raw"',
-      default: '"png"',
-      description: "Output encoder. Also sets the default content-type.",
-      typeDescriptionLink: "/docs/formats",
-    },
-    quality: {
-      type: "number",
-      description: "Encoder quality, 0–100. Applies to JPEG and lossy WebP.",
-    },
-    fonts: {
-      type: "FontLoader[] | Promise<FontLoader[]>",
-      description: "Fonts for this response. Each file decodes once per renderer.",
-      typeDescriptionLink: "/docs/fonts",
-    },
-    css: {
-      type: "CssInput | CssInput[]",
-      description: "Stylesheet text or rule objects.",
-      typeDescriptionLink: "/docs/styles#css",
-    },
-    images: {
-      type: "ImageLoader[] | { sources, fetchCache, cache, ...fetchOptions }",
-      description: "Pre-fetched images keyed by src, and limits for the images Takumi fetches.",
-      typeDescriptionLink: "/docs/images",
-    },
-    emoji: {
-      type: '"twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat" | "from-font"',
-      default: '"twemoji"',
-      description: "Where emoji glyphs come from.",
-      typeDescriptionLink: "/docs/images#emoji",
-    },
-    renderer: {
-      type: "Renderer",
-      description: "A renderer you configured yourself.",
-      typeDescriptionLink: "#bring-your-own-renderer",
-    },
-    jsx: {
-      type: "FromJsxOptions",
-      description: "JSX conversion options, such as { defaultStyles: false }.",
-    },
-    signal: {
-      type: "AbortSignal",
-      description: "Cancels the render while it loads fonts and images.",
-      typeDescriptionLink: "/docs/formats#cancellation",
-    },
     headers: {
       type: "HeadersInit",
       description: "Response headers. content-type defaults to match format.",
