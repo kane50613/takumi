@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
+import { isTakumiError, type RenderReport, type RenderWarning } from "../src/warning";
 import { fontFromUrl, type Node } from "@takumi-rs/helpers";
 import { RendererStore } from "../src/store";
 import { fontBackend } from "./font-backend";
@@ -17,6 +18,12 @@ const answerFetch = (fetch: (input: string | URL | Request) => Promise<Response>
   );
 };
 const textNode = (text: string): Node => ({ type: "text", text });
+
+/** The characters the `missing-glyphs` warning of `report` lists, none without one. */
+const missingOf = (report: RenderReport) =>
+  report.warnings.flatMap((warning) =>
+    warning.code === "missing-glyphs" ? warning.characters : [],
+  );
 
 const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
   name,
@@ -718,10 +725,20 @@ describe("a prepared render's report", () => {
     const prepared = await prepareSource(fonts, textNode("中"), {}, {}, () => missing(["中"]));
 
     expect(prepared.report).toEqual({
-      missingCharacters: ["中"],
-      unresolvedFamilies: ["Absent"],
-      failedFonts: [],
-      failedImages: [],
+      warnings: [
+        {
+          code: "missing-glyphs",
+          message:
+            'No font draws "中". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.',
+          characters: ["中"],
+        },
+        {
+          code: "unresolved-family",
+          message:
+            'No font provides the family "Absent". Add a font named "Absent" to `fonts`, or correct the name.',
+          family: "Absent",
+        },
+      ],
     });
   });
 
@@ -736,7 +753,7 @@ describe("a prepared render's report", () => {
       reads,
     );
 
-    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(missingOf(prepared.report)).toEqual([]);
     expect(reads.mock.calls.at(-1)).toEqual([
       { images: [], fontFamilies: ["CJK"], failedFontFiles: [] },
     ]);
@@ -753,11 +770,19 @@ describe("a prepared render's report", () => {
       () => ({ images: ["https://images.test/a.png"], fonts: [], fontFiles: ["face.woff2"] }),
     );
 
-    expect(prepared.report.failedImages).toEqual([
-      { src: "https://images.test/a.png", error: expect.any(Error) },
-    ]);
-    expect(prepared.report.failedFonts).toEqual([
-      { source: "face.woff2", error: expect.any(Error) },
+    expect(prepared.report.warnings).toEqual([
+      {
+        code: "image-load-failed",
+        message: expect.stringContaining("Failed to load the image https://images.test/a.png: "),
+        url: "https://images.test/a.png",
+        cause: expect.any(Error),
+      },
+      {
+        code: "font-load-failed",
+        message: expect.stringContaining("Failed to load the font face.woff2: "),
+        source: "face.woff2",
+        cause: expect.any(Error),
+      },
     ]);
   });
 
@@ -810,7 +835,7 @@ describe("a prepared render's report", () => {
     );
 
     expect(replacement.data).toHaveBeenCalled();
-    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(missingOf(prepared.report)).toEqual([]);
   });
 
   test("onMissingGlyphs fonts join the registered chain when the render names no fonts", async () => {
@@ -850,9 +875,159 @@ describe("a prepared render's report", () => {
     await renderPrepared(fonts, prepared, {}, call);
 
     expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
-    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(missingOf(prepared.report)).toEqual([]);
     expect(reads).toHaveBeenCalledTimes(3);
     expect(call.mock.calls[0]?.[1].fontFamilies).toEqual(["Latin", "CJK"]);
+  });
+});
+
+describe("a render's warnings", () => {
+  const image = "https://images.test/a.png";
+  const failing = mock(async () => new Response(null, { status: 404 }));
+  /** Reads `characters` as drawn by no font, and an image and a `@font-face` file the fetch fails. */
+  const reads = (characters: string[]) => () => ({
+    images: [image],
+    fonts: [],
+    fontFiles: ["face.woff2"],
+    missingCharacters: characters,
+    unresolvedFamilies: ["Absent"],
+  });
+  const prepare = (characters: string[], extras: PrepareExtras) =>
+    prepareSource(
+      fontBackend().fonts,
+      textNode("a"),
+      {},
+      { images: { fetch: failing, throwOnError: false }, ...extras },
+      reads(characters),
+    );
+
+  test("go to onWarning, one for each thing the render could not draw", async () => {
+    const warn = spyOn(console, "warn");
+    const onWarning = mock((_warning: RenderWarning) => {});
+    const prepared = await prepare(["中", "文"], { onWarning });
+
+    expect(onWarning.mock.calls.map(([warning]) => warning.code)).toEqual([
+      "missing-glyphs",
+      "unresolved-family",
+      "image-load-failed",
+      "font-load-failed",
+    ]);
+    expect(onWarning.mock.calls.map(([warning]) => warning)).toEqual(prepared.report.warnings);
+    expect(prepared.report.warnings[0]).toEqual({
+      code: "missing-glyphs",
+      message:
+        'No font draws "中文". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.',
+      characters: ["中", "文"],
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test("print once each through console.warn without onWarning, across renders", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    await prepareSource(fontBackend().fonts, textNode("鬱"), {}, {}, () => ({
+      images: [],
+      fonts: [],
+      missingCharacters: ["鬱"],
+    }));
+    await prepareSource(fontBackend().fonts, textNode("鬱"), {}, {}, () => ({
+      images: [],
+      fonts: [],
+      missingCharacters: ["鬱"],
+    }));
+
+    expect(warn.mock.calls).toEqual([
+      [
+        '[takumi] No font draws "鬱". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.',
+      ],
+    ]);
+  });
+
+  test("reject a strict render with a TakumiError holding every warning, after onWarning saw them", async () => {
+    const onWarning = mock((_warning: RenderWarning) => {});
+    const error: unknown = await prepare(["中"], { onWarning, strict: true }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(isTakumiError(error)).toBe(true);
+
+    if (!isTakumiError(error, "ERR_TAKUMI_STRICT")) {
+      throw new Error("expected a strict error");
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe("TakumiError");
+    expect(error.warnings).toEqual(onWarning.mock.calls.map(([warning]) => warning));
+    expect(error.message).toBe(`${error.warnings[0]?.message} (and 3 more)`);
+    expect(Object.keys(error)).toEqual(expect.arrayContaining(["name", "code", "warnings"]));
+  });
+
+  test("reject a strict render for an image left out under throwOnError: false", async () => {
+    const error: unknown = await prepareSource(
+      fontBackend().fonts,
+      textNode("a"),
+      {},
+      { images: { fetch: failing, throwOnError: false }, onWarning: () => {}, strict: true },
+      () => ({ images: [image], fonts: [] }),
+    ).catch((caught: unknown) => caught);
+
+    expect(isTakumiError(error, "ERR_TAKUMI_STRICT") && error.warnings).toEqual([
+      {
+        code: "image-load-failed",
+        message: expect.stringContaining(`Failed to load the image ${image}: `),
+        url: image,
+        cause: expect.any(Error),
+      },
+    ]);
+  });
+
+  test("leave a strict render without warnings alone", async () => {
+    const prepared = await prepareSource(
+      fontBackend().fonts,
+      textNode("a"),
+      {},
+      { strict: true },
+      () => ({
+        images: [],
+        fonts: [],
+      }),
+    );
+
+    expect(prepared.report).toEqual({ warnings: [] });
+  });
+
+  test("reject a render without prepare with what onWarning throws, before it draws", async () => {
+    const { fonts } = fontBackend();
+    const thrown = new Error("from onWarning");
+    const call = mock(() => undefined);
+    const read = readSource(
+      fonts,
+      textNode("中"),
+      {},
+      {
+        onWarning: () => {
+          throw thrown;
+        },
+      },
+      () => ({ images: [], fonts: [], missingCharacters: ["中"] }),
+    );
+
+    await expect(read.then((prepared) => renderPrepared(fonts, prepared, {}, call))).rejects.toBe(
+      thrown,
+    );
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  test("are recognized when another copy of takumi raised them", () => {
+    const other = Object.assign(new Error("other copy"), {
+      [Symbol.for("takumi.error")]: true,
+      code: "ERR_TAKUMI_STRICT",
+      warnings: [],
+    });
+
+    expect(isTakumiError(other, "ERR_TAKUMI_STRICT")).toBe(true);
+    expect(isTakumiError(new Error("plain"))).toBe(false);
+    expect(isTakumiError({ code: "ERR_TAKUMI_STRICT" })).toBe(false);
   });
 });
 

@@ -1,6 +1,12 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
 import { container, fontFromUrl, image, type Node, text } from "@takumi-rs/helpers";
-import { type FontLoader, Renderer } from "../src/export";
+import {
+  type FontLoader,
+  isTakumiError,
+  type RenderReport,
+  type RenderWarning,
+  Renderer,
+} from "../src/export";
 
 const monoData = await Bun.file("../assets/fonts/geist/GeistMono[wght].woff2").arrayBuffer();
 const cjkData = await Bun.file(
@@ -30,7 +36,21 @@ const line = (content: string, fontFamily?: string): Node =>
     style: { width: 128, height: 64, fontSize: 24, fontFamily, backgroundColor: "#fff" },
     children: [text(content)],
   });
-const empty = { missingCharacters: [], unresolvedFamilies: [], failedFonts: [], failedImages: [] };
+const empty = { warnings: [] };
+
+/** The warning for the font at `url` that failed to load. */
+const fontFailure = (url: string): RenderWarning => ({
+  code: "font-load-failed",
+  message: expect.stringContaining(`Failed to load the font ${url}: `),
+  source: url,
+  cause: expect.any(Error),
+});
+
+/** The characters the `missing-glyphs` warning of `report` lists, none without one. */
+const missingOf = (report: RenderReport) =>
+  report.warnings.flatMap((warning) =>
+    warning.code === "missing-glyphs" ? warning.characters : [],
+  );
 
 describe("a prepared render's report", () => {
   test("is empty when the built-in font draws every character", async () => {
@@ -42,13 +62,20 @@ describe("a prepared render's report", () => {
   test("names each character no font draws once", async () => {
     const prepared = await new Renderer().prepare(line("a中 b中文"), options);
 
-    expect(prepared.report.missingCharacters).toEqual(["中", "文"]);
+    expect(prepared.report.warnings).toEqual([
+      {
+        code: "missing-glyphs",
+        message:
+          'No font draws "中文". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.',
+        characters: ["中", "文"],
+      },
+    ]);
   });
 
   test("leaves out the characters a listed font draws", async () => {
     const prepared = await new Renderer().prepare(line("a中"), { ...options, fonts: [cjk] });
 
-    expect(prepared.report.missingCharacters).toEqual([]);
+    expect(missingOf(prepared.report)).toEqual([]);
   });
 
   test("leaves out the characters a listed subset draws, and keeps the ones past its range", async () => {
@@ -58,7 +85,7 @@ describe("a prepared render's report", () => {
       fonts: [subset],
     });
 
-    expect(prepared.report).toEqual({ ...empty, missingCharacters: ["中"] });
+    expect(missingOf(prepared.report)).toEqual(["中"]);
   });
 
   test("names the families no font provides, but no generic keyword", async () => {
@@ -68,7 +95,11 @@ describe("a prepared render's report", () => {
       fonts: [{ name: "Mono", data: monoData }],
     });
 
-    expect(prepared.report.unresolvedFamilies).toEqual(["Missing", "Absent"]);
+    expect(
+      prepared.report.warnings.flatMap((warning) =>
+        warning.code === "unresolved-family" ? [warning.family] : [],
+      ),
+    ).toEqual(["Missing", "Absent"]);
   });
 
   test("names an optional font that failed to load", async () => {
@@ -78,7 +109,7 @@ describe("a prepared render's report", () => {
       fonts: [fontFromUrl(url, { optional: true })],
     });
 
-    expect(prepared.report.failedFonts).toEqual([{ source: url, error: expect.any(Error) }]);
+    expect(prepared.report.warnings).toEqual([fontFailure(url)]);
   });
 
   test("names an @font-face file that failed to load", async () => {
@@ -88,7 +119,7 @@ describe("a prepared render's report", () => {
       css: [`@font-face { font-family: Face; src: url(${url}) }`],
     });
 
-    expect(prepared.report.failedFonts).toEqual([{ source: url, error: expect.any(Error) }]);
+    expect(prepared.report.warnings).toContainEqual(fontFailure(url));
   });
 
   test("names an image left out under throwOnError: false", async () => {
@@ -98,7 +129,14 @@ describe("a prepared render's report", () => {
       { ...options, images: { throwOnError: false } },
     );
 
-    expect(prepared.report.failedImages).toEqual([{ src, error: expect.any(Error) }]);
+    expect(prepared.report.warnings).toEqual([
+      {
+        code: "image-load-failed",
+        message: expect.stringContaining(`Failed to load the image ${src}: `),
+        url: src,
+        cause: expect.any(Error),
+      },
+    ]);
   });
 });
 
@@ -150,7 +188,7 @@ describe("onMissingGlyphs", () => {
       onMissingGlyphs: () => [{ name: "Mono", data: monoData }],
     });
 
-    expect(prepared.report.missingCharacters).toEqual(["中"]);
+    expect(missingOf(prepared.report)).toEqual(["中"]);
   });
 
   test("leaves the report's characters alone when it changes the list it receives", async () => {
@@ -163,7 +201,7 @@ describe("onMissingGlyphs", () => {
       },
     });
 
-    expect(prepared.report.missingCharacters).toEqual(["中"]);
+    expect(missingOf(prepared.report)).toEqual(["中"]);
   });
 
   test("loads the @font-face files a family it adds reaches", async () => {
@@ -183,5 +221,42 @@ describe("onMissingGlyphs", () => {
 
     expect(hookRequests).toBe(1);
     expect(prepared.report).toEqual(empty);
+  });
+});
+
+describe("onWarning and strict", () => {
+  test("hand onWarning what a render without prepare could not draw", async () => {
+    const onWarning = mock((_warning: RenderWarning) => {});
+
+    await new Renderer().render(line("a中", "Missing"), { ...options, onWarning });
+
+    expect(onWarning.mock.calls.map(([warning]) => warning.code)).toEqual([
+      "missing-glyphs",
+      "unresolved-family",
+    ]);
+  });
+
+  test("reject a strict prepare with the warnings it found", async () => {
+    const src = `${server.url}strict.png`;
+    const error: unknown = await new Renderer()
+      .prepare(container({ children: [text("a中"), image({ src, width: 16, height: 16 })] }), {
+        ...options,
+        images: { throwOnError: false },
+        onWarning: () => {},
+        strict: true,
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(
+      isTakumiError(error, "ERR_TAKUMI_STRICT") && error.warnings.map(({ code }) => code),
+    ).toEqual(["missing-glyphs", "image-load-failed"]);
+  });
+
+  test("leave a strict render that draws everything alone", async () => {
+    const renderer = new Renderer();
+
+    expect(await renderer.render(line("Hello"), { ...options, strict: true })).toEqual(
+      await renderer.render(line("Hello"), options),
+    );
   });
 });

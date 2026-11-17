@@ -47,8 +47,11 @@ export type {
   OutputFormatOptions,
   PrepareImagesInput,
   RenderReport,
+  RenderWarning,
+  TakumiError,
+  TakumiErrorCode,
 } from "@takumi-rs/bindings-js";
-export { Prepared } from "@takumi-rs/bindings-js";
+export { isTakumiError, Prepared } from "@takumi-rs/bindings-js";
 
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;
@@ -81,14 +84,15 @@ export class Renderer {
 
   /** Reads what `source` needs under `options`, then loads its font subsets and fetches its images. */
   prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, onMissingGlyphs, ...layout } = options ?? {};
+    const { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict, ...layout } =
+      options ?? {};
     const native = toNativeSource(source);
 
     return prepareSource(
       this.fonts,
       native,
       layout,
-      { fonts, images, signal, fontFamilies, onMissingGlyphs },
+      { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict },
       (request) => this.inner.needs(native, ...needsArgs(layout, request)),
     );
   }
@@ -154,14 +158,15 @@ export class Renderer {
     source: Node | string,
     options: RenderOptions | SvgRenderOptions,
   ): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, onMissingGlyphs, ...layout } = options;
+    const { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict, ...layout } =
+      options;
     const native = toNativeSource(source);
 
     return readSource(
       this.fonts,
       native,
       layout,
-      { fonts, images, signal, fontFamilies, onMissingGlyphs },
+      { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict },
       (request) => this.inner.needs(native, ...needsArgs(layout, request)),
     );
   }
@@ -196,14 +201,24 @@ export class Renderer {
     options: PrepareAnimationOptions | RenderAnimationOptions,
     collect: typeof prepareSource,
   ): Promise<PreparedAnimation> {
-    const { fonts, images, signal, fontFamilies, onMissingGlyphs, scenes, ...layout } = options;
+    const {
+      fonts,
+      images,
+      signal,
+      fontFamilies,
+      onMissingGlyphs,
+      onWarning,
+      strict,
+      scenes,
+      ...layout
+    } = options;
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
 
     return collect(
       this.fonts,
       sources,
       layout,
-      { fonts, images, signal, fontFamilies, onMissingGlyphs },
+      { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict },
       (request) => this.inner.animationNeeds(...needsArgs({ ...layout, scenes: sources }, request)),
     );
   }

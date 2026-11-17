@@ -4,3 +4,4 @@ export * from "./prepared";
 export * from "./renderer";
 export * from "./store";
 export * from "./wasm-renderer";
+export * from "./warning";

@@ -19,6 +19,13 @@ import {
   type RegisteredFamilyLike,
   resolveImageLoaders,
 } from "./renderer";
+import {
+  fontWarnings,
+  raiseWarnings,
+  type RenderReport,
+  type WarningOptions,
+  warningsOf,
+} from "./warning";
 
 type Awaitable<T> = T | Promise<T>;
 
@@ -48,7 +55,7 @@ export type PrepareImagesInput =
  *
  * @internal
  */
-export type PrepareExtras = {
+export type PrepareExtras = WarningOptions & {
   fonts?: readonly FontLoader[] | Promise<readonly FontLoader[]>;
   images?: PrepareImagesInput;
   signal?: AbortSignal;
@@ -59,18 +66,6 @@ export type PrepareExtras = {
 export type MissingGlyphsHandler = (
   characters: string[],
 ) => Awaitable<readonly FontLoader[] | undefined>;
-
-/** What a render could not satisfy. */
-export type RenderReport = {
-  /** The characters no font in their fallback chain draws, the built-in Geist included, each once in document order. */
-  missingCharacters: string[];
-  /** The families `font-family` or `fontFamilies` names that no registered or listed font provides. */
-  unresolvedFamilies: string[];
-  /** The optional fonts and `@font-face` files that failed to load. */
-  failedFonts: FailedFont[];
-  /** The images left out under `images.throwOnError: false`. */
-  failedImages: FailedImage[];
-};
 
 /**
  * Public `prepare` options for a backend whose binding options are {@link TInternal}.
@@ -179,7 +174,7 @@ let stateOf: <TSource, TLayout>(
 
 /** A source with its layout options, the font subsets its text uses, and the images it draws, fetched. */
 export class Prepared<TSource = unknown, TLayout = unknown> {
-  /** What the render could not satisfy when it was prepared. */
+  /** What the render could not draw as its source asks, found when it was prepared. */
   readonly report: RenderReport;
   readonly #state: PreparedState<TSource, TLayout>;
 
@@ -223,11 +218,15 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
     return failed;
   });
 
-  return createPrepared({
-    ...state,
-    fonts: state.fonts && registry.without(state.fonts, failedFonts),
-    report: { ...state.report, failedFonts: [...state.report.failedFonts, ...failedFonts] },
-  });
+  return reported(
+    registry,
+    {
+      ...state,
+      fonts: state.fonts && registry.without(state.fonts, failedFonts),
+      report: { warnings: [...state.report.warnings, ...fontWarnings(failedFonts)] },
+    },
+    extras,
+  );
 }
 
 /**
@@ -242,7 +241,20 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
   extras: PrepareExtras & { fontFamilies?: string[] },
   needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
-  return createPrepared(await collect(registry, source, layout, extras, needs, false));
+  return reported(registry, await collect(registry, source, layout, extras, needs, false), extras);
+}
+
+/** A `Prepared` for `state`, once its warnings went to `onWarning` and passed `strict`. */
+function reported<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
+  registry: FontRegistry<TFamily>,
+  state: PreparedState<TSource, TLayout>,
+  options: WarningOptions,
+): Promise<Prepared<TSource, TLayout>> {
+  return registry.dropOnFailure(state.loadedFonts, async () => {
+    raiseWarnings(state.report.warnings, options);
+
+    return createPrepared(state);
+  });
 }
 
 /** The `items` not `seen` yet, which join them. */
@@ -322,7 +334,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   needs: SourceReader,
   fetchMissing: boolean,
 ): Promise<PreparedState<TSource, TLayout>> {
-  const { fonts, fontFamilies, images = [], signal, onMissingGlyphs } = extras;
+  const { fonts, fontFamilies, images = [], signal, onMissingGlyphs, onWarning, strict } = extras;
 
   signal?.throwIfAborted();
 
@@ -438,7 +450,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       const subset = loads ? resolvedFonts?.filter((_, id) => loads.includes(id)) : resolvedFonts;
       const kept = subset && registry.without(subset, failedFonts);
 
-      if (!fetchMissing && !onMissingGlyphs) {
+      // Without a fetch, a read checks what no font draws only for a hook or option that takes it.
+      if (!fetchMissing && !onMissingGlyphs && !onWarning && !strict) {
         return {
           fonts: kept,
           fontFamilies,
@@ -515,10 +528,12 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
     fontFetch,
     reread,
     report: {
-      missingCharacters: settled.coverage?.missingCharacters ?? [],
-      unresolvedFamilies: settled.coverage?.unresolvedFamilies ?? [],
-      failedFonts,
-      failedImages,
+      warnings: warningsOf(
+        settled.coverage?.missingCharacters ?? [],
+        settled.coverage?.unresolvedFamilies ?? [],
+        failedImages,
+        failedFonts,
+      ),
     },
   };
 }

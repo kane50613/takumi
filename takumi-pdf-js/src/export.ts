@@ -15,6 +15,7 @@ import {
   sheetsOf,
   toNativeSource,
   WasmRenderer,
+  type WarningOptions,
 } from "@takumi-rs/bindings-js";
 import {
   type PageOverride,
@@ -37,8 +38,11 @@ export type {
   ImagesInput,
   PrepareImagesInput,
   RenderReport,
+  RenderWarning,
+  TakumiError,
+  TakumiErrorCode,
 } from "@takumi-rs/bindings-js";
-export { Prepared } from "@takumi-rs/bindings-js";
+export { isTakumiError, Prepared } from "@takumi-rs/bindings-js";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
 
@@ -168,18 +172,19 @@ type ViewportOptions = {
 export type MeasureOptions = (
   | { size?: PageSize; landscape?: boolean; viewport?: never }
   | { viewport: ViewportInput; size?: never; landscape?: never }
-) & {
-  /** Fonts to register before layout, deduped across calls. */
-  fonts?: FontLoader[];
-  /** Pre-fetched images for `src` URLs in the tree. */
-  images?: ImagesInput;
-  /** CSS to apply before layout, one string or a list cascading in order. */
-  css?: CssInput | readonly CssInput[];
-  /** Per-render font stack: ordered family names used as the fallback chain. */
-  fontFamilies?: string[];
-  /** Default BCP-47 language tag applied to the root. */
-  lang?: string;
-};
+) &
+  WarningOptions & {
+    /** Fonts to register before layout, deduped across calls. */
+    fonts?: FontLoader[];
+    /** Pre-fetched images for `src` URLs in the tree. */
+    images?: ImagesInput;
+    /** CSS to apply before layout, one string or a list cascading in order. */
+    css?: CssInput | readonly CssInput[];
+    /** Per-render font stack: ordered family names used as the fallback chain. */
+    fontFamilies?: string[];
+    /** Default BCP-47 language tag applied to the root. */
+    lang?: string;
+  };
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
@@ -293,7 +298,8 @@ type ConformanceOptions =
   | { pdfa: "4f"; tagged?: boolean | "ua2"; attachments?: ArchivalAttachment[] };
 
 export type RenderOptions = (PagedOptions | ViewportOptions) &
-  ConformanceOptions & {
+  ConformanceOptions &
+  WarningOptions & {
     /** Fonts to register before rendering, deduped across calls. */
     fonts?: FontLoader[];
     /**
@@ -364,7 +370,15 @@ export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout
 /** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
 type DocumentLayout = DistributiveOmit<
   PrepareOptions,
-  "fonts" | "images" | "signal" | "fontFamilies" | "css" | "header" | "footer" | "pages"
+  | "fonts"
+  | "images"
+  | "signal"
+  | "fontFamilies"
+  | "css"
+  | "header"
+  | "footer"
+  | "pages"
+  | keyof WarningOptions
 > & {
   header?: Node | string;
   footer?: Node | string;
@@ -474,7 +488,19 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 
   /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
+    const {
+      fonts,
+      images,
+      signal,
+      fontFamilies,
+      onWarning,
+      strict,
+      header,
+      footer,
+      pages,
+      css,
+      ...rest
+    } = options;
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
@@ -482,7 +508,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
       this.fonts,
       document.node,
       layout,
-      { fonts, images, signal, fontFamilies },
+      { fonts, images, signal, fontFamilies, onWarning, strict },
       (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
     );
   }
@@ -522,7 +548,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
       );
     }
 
-    const { fonts, images, css, fontFamilies, ...rest } = options;
+    const { fonts, images, css, fontFamilies, onWarning, strict, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
@@ -531,7 +557,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
       this.fonts,
       main.node,
       layout,
-      { fonts, images, fontFamilies },
+      { fonts, images, fontFamilies, onWarning, strict },
       (request) => this.inner.needs(main.node, ...needsArgs(layout, request)),
     );
 
@@ -542,7 +568,19 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
   private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
-    const { fonts, images, header, footer, pages, css, fontFamilies, signal, ...rest } = options;
+    const {
+      fonts,
+      images,
+      header,
+      footer,
+      pages,
+      css,
+      fontFamilies,
+      signal,
+      onWarning,
+      strict,
+      ...rest
+    } = options;
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
@@ -550,7 +588,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
       this.fonts,
       document.node,
       layout,
-      { fonts, images, signal, fontFamilies },
+      { fonts, images, signal, fontFamilies, onWarning, strict },
       (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
     );
   }

@@ -8,6 +8,7 @@ import {
 } from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
 import type { ListedFont, MissingGlyphsHandler, PrepareExtras } from "./prepared";
+import type { WarningOptions } from "./warning";
 import { RendererStore } from "./store";
 import { unicodeRangeOf } from "./unicode-range";
 
@@ -160,7 +161,7 @@ export type AnimationOutputFormatOptions =
   | { format: "gif" };
 
 /** The wrapper-managed extras every render entry point accepts on top of the binding options. */
-type RenderExtras = {
+type RenderExtras = WarningOptions & {
   fonts?: readonly FontLoader[] | Promise<readonly FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
