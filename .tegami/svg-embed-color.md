@@ -8,4 +8,13 @@ packages:
 
 # An SVG image embedded in SVG output takes the host's color whenever it draws with it
 
-SVG output now adds the host's `color` to an embedded SVG image's root exactly when the image's layout, at the size it is drawn, reads it and the root sets no `color` of its own, including through an escaped `currentColor`. `SvgSource::embedded_source` returns that markup, and `source_with_current_color` is deprecated.
+In SVG output, an embedded SVG image that draws with `currentColor` now gets the host's `color` on its root, so a viewer draws it as takumi's own renders do. Before, the color was added only when the markup spelled out `currentColor`, so a stylesheet that escaped the keyword drew black in a viewer. An image that does not read the color at the size it is drawn, or whose root sets its own `color`, stays as written.
+
+#### Migration
+
+`SvgSource::source_with_current_color` still adds the color whenever the root sets none, and is deprecated. `SvgSource::embedded_source` adds it only when the image reads it.
+
+```diff
+- let markup = source.source_with_current_color(color);
++ let markup = source.embedded_source(&host, viewport);
+```
