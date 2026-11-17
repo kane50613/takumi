@@ -9,7 +9,7 @@ use takumi_core::Fonts;
 use takumi_raster::needs;
 
 use crate::{
-  NodeSource,
+  NodeSource, guarded,
   render_animation_task::AnimationInput,
   render_job::RenderJob,
   renderer::{RenderNeeds, RendererState},
@@ -52,7 +52,7 @@ impl Task for NeedsTask {
   type JsValue = RenderNeeds;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    Ok(needs(self.job.raster()?))
+    guarded(|| Ok(needs(self.job.raster()?)))
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -91,14 +91,16 @@ impl Task for AnimationNeedsTask {
   type JsValue = RenderNeeds;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    Ok(
-      self
-        .input
-        .scenes()?
-        .into_iter()
-        .map(|(options, _)| needs(options))
-        .collect(),
-    )
+    guarded(|| {
+      Ok(
+        self
+          .input
+          .scenes()?
+          .into_iter()
+          .map(|(options, _)| needs(options))
+          .collect(),
+      )
+    })
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

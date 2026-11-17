@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 
 use takumi_core::resources::font::FontResource;
 
-use crate::{RegisteredFamily, map_error, renderer::RendererState};
+use crate::{RegisteredFamily, guarded, map_error, renderer::RendererState};
 
 pub struct LoadFontTask {
   pub(crate) state: Arc<RendererState>,
@@ -19,12 +19,14 @@ impl Task for LoadFontTask {
 
   /// Decompresses the font off the JS thread, the costly part of loading it.
   fn compute(&mut self) -> Result<Self::Output> {
-    self
-      .resource
-      .take()
-      .ok_or_else(|| Error::from_reason("The font was already loaded"))?
-      .into_resolved()
-      .map_err(map_error)
+    guarded(|| {
+      self
+        .resource
+        .take()
+        .ok_or_else(|| Error::from_reason("The font was already loaded"))?
+        .into_resolved()
+        .map_err(map_error)
+    })
   }
 
   /// Registers the font on the JS thread, where every font change runs, then releases fonts past

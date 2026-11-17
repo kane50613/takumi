@@ -12,7 +12,7 @@ use takumi_core::Fonts;
 use takumi_raster::{RenderOptions, SequentialScene, write_animation};
 
 use crate::{
-  NodeSource, deserialize_with_tracing, map_error,
+  NodeSource, deserialize_with_tracing, guarded, map_error,
   renderer::{AnimationScene, RendererState},
 };
 
@@ -98,30 +98,32 @@ impl Task for RenderAnimationTask {
   type JsValue = Buffer;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let options = &self.0.options;
-    let format = options
-      .format
-      .unwrap_or_default()
-      .raster(options.quality, options.lossless);
-    let fps = options.fps;
+    guarded(|| {
+      let options = &self.0.options;
+      let format = options
+        .format
+        .unwrap_or_default()
+        .raster(options.quality, options.lossless);
+      let fps = options.fps;
 
-    crate::pool::install(move || {
-      let scenes = self
-        .0
-        .scenes()?
-        .into_iter()
-        .map(|(options, duration_ms)| {
-          SequentialScene::builder()
-            .duration_ms(duration_ms)
-            .options(options)
-            .build()
-        })
-        .collect::<Vec<_>>();
-      let mut buffer = Vec::new();
+      crate::pool::install(move || {
+        let scenes = self
+          .0
+          .scenes()?
+          .into_iter()
+          .map(|(options, duration_ms)| {
+            SequentialScene::builder()
+              .duration_ms(duration_ms)
+              .options(options)
+              .build()
+          })
+          .collect::<Vec<_>>();
+        let mut buffer = Vec::new();
 
-      write_animation(&scenes, fps, format, &mut buffer).map_err(map_error)?;
+        write_animation(&scenes, fps, format, &mut buffer).map_err(map_error)?;
 
-      Ok(buffer)
+        Ok(buffer)
+      })
     })
   }
 

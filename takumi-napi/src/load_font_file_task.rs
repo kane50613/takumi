@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 
 use takumi_core::resources::font::FontSource;
 
-use crate::{JsBytes, map_error, renderer::RendererState};
+use crate::{JsBytes, guarded, map_error, renderer::RendererState};
 
 /// Loads an `@font-face` file a render's `needs` reported.
 pub struct LoadFontFileTask {
@@ -19,9 +19,11 @@ impl Task for LoadFontFileTask {
 
   /// Decompresses the file off the JS thread, the costly part of loading it.
   fn compute(&mut self) -> Result<Self::Output> {
-    FontSource::from(take(&mut self.buffer).into_vec())
-      .into_decoded()
-      .map_err(map_error)
+    guarded(|| {
+      FontSource::from(take(&mut self.buffer).into_vec())
+        .into_decoded()
+        .map_err(map_error)
+    })
   }
 
   /// Hands the file over on the JS thread, where every font change runs, then releases what the

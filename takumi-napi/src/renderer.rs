@@ -192,6 +192,7 @@ pub struct AnimationScene<'ctx> {
 impl Renderer {
   /// Creates a new Renderer instance.
   #[napi(
+    catch_unwind,
     constructor,
     ts_args_type = "options?: RendererOptions | undefined | null"
   )]
@@ -218,6 +219,7 @@ impl Renderer {
   /// Register font into the renderer, under `key` when its loader gives one, returning the
   /// families produced. It is never released for space.
   #[napi(
+    catch_unwind,
     js_name = "registerFont",
     ts_args_type = "fonts: Font, key?: string | null, signal?: AbortSignal",
     ts_return_type = "Promise<RegisteredFamily[]>"
@@ -235,6 +237,7 @@ impl Renderer {
   /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
   /// font cache is past its budget.
   #[napi(
+    catch_unwind,
     js_name = "cacheFont",
     ts_args_type = "fonts: Font, key: string, signal?: AbortSignal",
     ts_return_type = "Promise<RegisteredFamily[]>"
@@ -251,7 +254,7 @@ impl Renderer {
 
   /// The families a registration under `key` added, when the renderer still holds them; `pin`
   /// keeps them from being released for space.
-  #[napi(js_name = "cachedFonts")]
+  #[napi(js_name = "cachedFonts", catch_unwind)]
   pub fn cached_fonts(&self, key: String, pin: bool) -> Result<Option<Vec<RegisteredFamily>>> {
     let registered = if pin {
       self.state.update_fonts(|_, cache| Ok(cache.pin(&key)))?
@@ -265,6 +268,7 @@ impl Renderer {
   /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
   /// font cache is past its budget.
   #[napi(
+    catch_unwind,
     js_name = "cacheFontFile",
     ts_args_type = "url: string, data: Uint8Array | ArrayBuffer, signal?: AbortSignal",
     ts_return_type = "Promise<void>"
@@ -309,7 +313,7 @@ impl Renderer {
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
-  #[napi(js_name = "unregisterFont")]
+  #[napi(js_name = "unregisterFont", catch_unwind)]
   pub fn unregister_font(&self, family: String) -> Result<bool> {
     self.state.update_fonts(|fonts, cache| {
       cache.forget(&family);
@@ -319,7 +323,7 @@ impl Renderer {
   }
 
   /// Removes every registered font, leaving the bundled fallback font.
-  #[napi(js_name = "clearFonts")]
+  #[napi(js_name = "clearFonts", catch_unwind)]
   pub fn clear_fonts(&self) -> Result<()> {
     self.state.update_fonts(|fonts, cache| {
       *fonts = default_fonts().map_err(map_error)?;
@@ -331,6 +335,7 @@ impl Renderer {
 
   /// Renders a node tree, or HTML, into an image buffer asynchronously.
   #[napi(
+    catch_unwind,
     ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]
@@ -348,6 +353,7 @@ impl Renderer {
 
   /// Renders a node tree, or HTML, into an SVG document string asynchronously.
   #[napi(
+    catch_unwind,
     ts_args_type = "source: Node | string | { json: string }, options?: SvgRenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<string>"
   )]
@@ -369,6 +375,7 @@ impl Renderer {
 
   /// Measures a node tree, or HTML, and returns layout information asynchronously.
   #[napi(
+    catch_unwind,
     ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<MeasuredNode>"
   )]
@@ -386,6 +393,7 @@ impl Renderer {
 
   /// Reads what a node tree, or HTML, needs fetched before it renders, asynchronously.
   #[napi(
+    catch_unwind,
     ts_args_type = "source: Node | string | { json: string }, options?: RenderOptions, fonts?: ListedFont[], signal?: AbortSignal",
     ts_return_type = "Promise<RenderNeeds>"
   )]
@@ -409,6 +417,7 @@ impl Renderer {
 
   /// Reads what every scene of an animation needs fetched before it renders, asynchronously.
   #[napi(
+    catch_unwind,
     js_name = "animationNeeds",
     ts_args_type = "options: RenderAnimationOptions, fonts?: ListedFont[], signal?: AbortSignal",
     ts_return_type = "Promise<RenderNeeds>"
@@ -431,6 +440,7 @@ impl Renderer {
 
   /// Renders a sequential scene animation into a buffer asynchronously.
   #[napi(
+    catch_unwind,
     ts_args_type = "options: RenderAnimationOptions, signal?: AbortSignal",
     ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]

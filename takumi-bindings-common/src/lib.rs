@@ -24,7 +24,12 @@ pub mod source_cache;
 
 #[cfg(feature = "wasm")]
 use std::fmt::Display;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+  cell::RefCell,
+  panic::{AssertUnwindSafe, catch_unwind},
+  rc::Rc,
+  sync::Arc,
+};
 
 use font_cache::FontCache;
 use input::{Font, ListedFonts, register_font};
@@ -366,5 +371,45 @@ impl NeedsOutput {
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
     }
+  }
+}
+
+/// Runs `run`, with the message of a panic it raises as the error, so a binding can report the
+/// panic to its caller instead of aborting.
+pub fn catch_panic<T>(run: impl FnOnce() -> T) -> Result<T, String> {
+  catch_unwind(AssertUnwindSafe(run)).map_err(|payload| {
+    payload
+      .downcast_ref::<&str>()
+      .map(|message| (*message).to_owned())
+      .or_else(|| payload.downcast_ref::<String>().cloned())
+      .unwrap_or_else(|| "no message".to_owned())
+  })
+}
+
+#[cfg(test)]
+mod panic_tests {
+  use super::catch_panic;
+
+  #[test]
+  fn a_panic_becomes_its_message() {
+    assert_eq!(
+      catch_panic(|| -> u8 { panic!("an index out of bounds") }),
+      Err("an index out of bounds".to_owned())
+    );
+  }
+
+  #[test]
+  fn a_formatted_panic_keeps_its_message() {
+    let index = 7;
+
+    assert_eq!(
+      catch_panic(|| -> u8 { panic!("index {index} out of bounds") }),
+      Err("index 7 out of bounds".to_owned())
+    );
+  }
+
+  #[test]
+  fn a_return_passes_through() {
+    assert_eq!(catch_panic(|| 7), Ok(7));
   }
 }

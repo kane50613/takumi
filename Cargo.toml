@@ -218,6 +218,12 @@ opt-level = "s"
 [profile.release.package."takumi-bindings-common"]
 opt-level = "z"
 
+# A Node.js process serves other requests, so a panic in one render unwinds into that render's
+# error, which the napi bindings catch, instead of aborting the process.
+[profile.release-napi]
+inherits = "release"
+panic = "unwind"
+
 [profile.bench]
 debug = true
 strip = "debuginfo"

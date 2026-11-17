@@ -8,7 +8,7 @@ use takumi_bindings_common::{
 };
 use takumi_core::Fonts;
 
-use crate::{NodeSource, RenderInput, map_error, renderer::RendererState};
+use crate::{NodeSource, RenderInput, guarded, map_error, renderer::RendererState};
 
 pub struct SvgRenderTask {
   input: Option<RenderInput>,
@@ -47,23 +47,25 @@ impl Task for SvgRenderTask {
   type JsValue = String;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let Some(input) = self.input.take() else {
-      unreachable!()
-    };
-    let (node, stylesheet) = input.resolve(&self.state)?;
-    let images = decode_images(
-      &self.state.resource_cache,
-      &self.options.images.take().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
-    let draw = Draw {
-      fonts: &self.fonts,
-      cache: &self.state.resource_cache,
-      stylesheet,
-      images,
-    };
+    guarded(|| {
+      let Some(input) = self.input.take() else {
+        unreachable!()
+      };
+      let (node, stylesheet) = input.resolve(&self.state)?;
+      let images = decode_images(
+        &self.state.resource_cache,
+        &self.options.images.take().unwrap_or_default(),
+      )
+      .map_err(map_error)?;
+      let draw = Draw {
+        fonts: &self.fonts,
+        cache: &self.state.resource_cache,
+        stylesheet,
+        images,
+      };
 
-    takumi_svg::render(self.options.svg(node, draw).map_err(map_error)?).map_err(map_error)
+      takumi_svg::render(self.options.svg(node, draw).map_err(map_error)?).map_err(map_error)
+    })
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

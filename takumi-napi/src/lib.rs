@@ -23,7 +23,7 @@ pub use renderer::Renderer;
 use renderer::RendererState;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
-  append_css,
+  append_css, catch_panic,
   input::{FontOptions, node_from_json},
   source_cache::{ParsedSource, SourceCache, SourceKind},
   stylesheet,
@@ -48,7 +48,7 @@ use takumi_core::{
 /// Raise it for scripts with large glyph sets: a CJK outline runs a few
 /// kilobytes, so the default holds around a thousand of them and a page of
 /// Chinese re-rasterizes glyphs it just evicted.
-#[napi(js_name = "setGlyphCacheMaxBytes")]
+#[napi(js_name = "setGlyphCacheMaxBytes", catch_unwind)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
 }
@@ -261,4 +261,13 @@ impl RenderInput {
 
 pub(crate) fn map_error<E: Display>(err: E) -> napi::Error {
   napi::Error::from_reason(err.to_string())
+}
+
+/// Runs a task's `compute`, turning a panic into its error so one render never aborts the process.
+pub(crate) fn guarded<T>(compute: impl FnOnce() -> Result<T>) -> Result<T> {
+  catch_panic(compute).unwrap_or_else(|message| {
+    Err(Error::from_reason(format!(
+      "Takumi panicked: {message}. Please report it at https://github.com/kane50613/takumi/issues"
+    )))
+  })
 }
