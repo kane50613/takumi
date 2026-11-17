@@ -8,7 +8,16 @@ packages:
 
 # A positioned or stacking inline element paints as a layer of its own
 
-A `display: inline` element with `position`, `opacity`, `filter`, `mix-blend-mode`, `clip-path`, or `mask` now paints as a layer of its own, as Chrome paints it. Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing.
+A `display: inline` element now paints as a layer of its own, as Chrome paints it, when it sets any of these:
+
+- `position`
+- `opacity`
+- `filter`
+- `mix-blend-mode`
+- `clip-path`
+- `mask`
+
+Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing.
 
 ```html
 <!-- Before: each line and each text run fades on its own -->
@@ -23,9 +32,9 @@ A `display: inline` element with `position`, `opacity`, `filter`, `mix-blend-mod
 
 #### Migration
 
-`InlineBrush` no longer has an `opacity` field. An inline element's `opacity` now applies once, as an effect in the `properties` of the `NodePaint` whose `inline_layer` is set.
+`InlineBrush` no longer has an `opacity` field, since an inline element's `opacity` no longer applies per text run. It applies once, to the layer of the `NodePaint` whose `inline_layer` is set. In the paint tree, that element's box holds the value in `effects.opacity`.
 
 ```diff
-- let opacity = brush.opacity;
-+ // Read the opacity from the effects in `node_paint.properties`
+- brush.opacity          // on each text run of the element
++ box.effects.opacity    // once, on the element's box in the paint tree
 ```

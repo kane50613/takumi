@@ -16,7 +16,22 @@ warning: no font draws 你 (U+4F60), 好 (U+597D), so each shows as an empty box
 
 The rest of the command line says more when something is off:
 
-- `--list-resources` lists a file that is not there as `missing`, where it said `blocked`.
+- `--list-resources` lists a file that is not there as `missing`, where it said `blocked`. Scripts that read the status column see the new value.
 - `--margin` and `--page` refuse a number without a unit, such as `--margin 5`.
 - An error that `--font`, `--root`, or `takumi pdf` fixes now names that flag or command, such as "`takumi image` writes images, but the output ends in `.pdf`. Use `takumi pdf`."
-- In the `takumi` crate, `uncovered_characters` returns the characters no font draws for a render.
+
+```diff
+  $ takumi image page.html --list-resources
+- image	blocked	file:///site/gone.png	…
++ image	missing	file:///site/gone.png	…
+```
+
+In the `takumi` crate, `uncovered_characters` returns the characters no registered font draws for a render, each once.
+
+```rust
+let missing: Vec<char> = takumi::uncovered_characters(options)?;
+
+if !missing.is_empty() {
+  eprintln!("no font draws {missing:?}");
+}
+```

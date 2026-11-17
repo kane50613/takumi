@@ -10,5 +10,7 @@ The `document` option of `FromHtmlOptions` parses the source as a browser opens 
 ```rust
 let options = FromHtmlOptions::builder().document(true).build();
 // The tree has `html`, `head`, and `body`, so the `body` rule matches
-let node = from_html("<style>body { margin: 0 }</style><p>Hello</p>", options)?;
+let parsed = parse_html("<style>body { margin: 0 }</style><p>Hello</p>", options)?;
+let stylesheet = StyleSheet::parse(&parsed.css.join("\n"))?;
+// Render `parsed.node` with `.stylesheet(stylesheet.into())`
 ```
