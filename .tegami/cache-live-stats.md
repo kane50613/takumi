@@ -20,4 +20,19 @@ packages:
 
 # Change a renderer's cache while it runs, and see what the cache holds
 
-`Renderer`, `PdfRenderer`, and `Painter` have `setCacheOptions(options)`, which takes the constructor's `cache` options and applies them to the renderer in use. A smaller `maxBytes` or budget evicts what no longer fits right away, and `budgets.fonts` releases fonts the same way. `cacheStats()` reports the bytes the pool holds now, its high-water mark, and its `maxBytes` under `memory`, and each kind's bytes, budget, hits, misses, and evictions under its `budgets` key. In `takumi-js`, `setCacheOptions` now applies to the shared renderer after the first render too, where it used to be ignored, and `cacheStats()` reports that renderer's cache. In Rust, `Cache::set_options` applies a `CacheOptions` to a cache in use, and `Cache::stats` returns a `CacheStats`. `CacheOptions` fields are public, and `CacheOptions::default()` starts from the default size. `@takumi-rs/helpers` exports `CacheStats`, `CacheMemoryStats`, and `CacheKindStats`.
+`Renderer`, `PdfRenderer`, and `Painter` have `setCacheOptions(options)`, which applies the constructor's `cache` options to the renderer in use, and `cacheStats()`, which reports what the cache holds.
+
+```ts
+renderer.setCacheOptions({ maxBytes: 32 * 1024 * 1024 });
+
+const { memory, budgets } = renderer.cacheStats();
+console.log(memory.current, memory.high, memory.max);
+console.log(budgets.images.hits, budgets.images.misses, budgets.images.evictions);
+```
+
+- A smaller `maxBytes` or budget evicts what no longer fits right away, and `budgets.fonts` releases fonts the same way.
+- `cacheStats().memory` reports the bytes the pool holds now, its high-water mark, and its `maxBytes`.
+- Each key of `cacheStats().budgets` reports that kind's bytes, budget, hits, misses, and evictions.
+- In `takumi-js`, `setCacheOptions` now applies to the shared renderer after the first render too, where it used to be ignored. `cacheStats()` reports that renderer's cache, or `undefined` before the first render.
+- In Rust, `Cache::set_options` applies a `CacheOptions` to a cache in use, and `Cache::stats` returns a `CacheStats`. `CacheOptions` fields are public, and `CacheOptions::default()` starts from the default size.
+- `@takumi-rs/helpers` exports `CacheStats`, `CacheMemoryStats`, and `CacheKindStats`.
