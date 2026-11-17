@@ -48,8 +48,7 @@ pub(crate) struct BlockBreakToken {
 }
 
 impl BlockBreakToken {
-  /// How far the furthest box the token resumes moves a child below that child's monolithic
-  /// overflow, zero when none does.
+  /// How far the furthest resumed box pushes a child past its monolithic overflow, or zero.
   pub(crate) fn monolithic_overflow_pushed_inside(&self) -> LayoutUnit {
     self
       .child_break_tokens
