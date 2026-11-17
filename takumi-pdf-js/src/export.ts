@@ -14,6 +14,8 @@ import {
   resolveDocument,
   sheetsOf,
   toNativeSource,
+  splitExtras,
+  type SourceExtras,
   WasmRenderer,
   type WarningOptions,
 } from "@takumi-rs/bindings-js";
@@ -370,15 +372,7 @@ export type PreparedSource = Prepared<Node | string | JsonSource, DocumentLayout
 /** The binding options a document lays out with, its bands resolved to what the wasm side reads. */
 type DocumentLayout = DistributiveOmit<
   PrepareOptions,
-  | "fonts"
-  | "images"
-  | "signal"
-  | "fontFamilies"
-  | "css"
-  | "header"
-  | "footer"
-  | "pages"
-  | keyof WarningOptions
+  keyof SourceExtras | "css" | "header" | "footer" | "pages"
 > & {
   header?: Node | string;
   footer?: Node | string;
@@ -489,27 +483,14 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
   /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const {
-      fonts,
-      images,
-      signal,
-      fontFamilies,
-      onWarning,
-      strict,
-      header,
-      footer,
-      pages,
-      css,
-      ...rest
-    } = options;
+      extras,
+      layout: { header, footer, pages, css, ...rest },
+    } = splitExtras(options);
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
-    return prepareSource(
-      this.fonts,
-      document.node,
-      layout,
-      { fonts, images, signal, fontFamilies, onWarning, strict },
-      (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
+    return prepareSource(this.fonts, document.node, layout, extras, (request) =>
+      this.inner.needs(document.node, ...needsArgs(layout, request)),
     );
   }
 
@@ -548,17 +529,16 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
       );
     }
 
-    const { fonts, images, css, fontFamilies, onWarning, strict, ...rest } = options;
+    const {
+      extras,
+      layout: { css, ...rest },
+    } = splitExtras(options);
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
     // The tree measured may itself be a band, so its counters are always in play.
-    const prepared = await readSource(
-      this.fonts,
-      main.node,
-      layout,
-      { fonts, images, fontFamilies, onWarning, strict },
-      (request) => this.inner.needs(main.node, ...needsArgs(layout, request)),
+    const prepared = await readSource(this.fonts, main.node, layout, extras, (request) =>
+      this.inner.needs(main.node, ...needsArgs(layout, request)),
     );
 
     return renderPrepared(this.fonts, prepared, {}, (native, opts) =>
@@ -569,27 +549,14 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
   /** A document and its bands read under `options` without fetching, for {@link render}. */
   private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
     const {
-      fonts,
-      images,
-      header,
-      footer,
-      pages,
-      css,
-      fontFamilies,
-      signal,
-      onWarning,
-      strict,
-      ...rest
-    } = options;
+      extras,
+      layout: { header, footer, pages, css, ...rest },
+    } = splitExtras(options);
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
 
-    return readSource(
-      this.fonts,
-      document.node,
-      layout,
-      { fonts, images, signal, fontFamilies, onWarning, strict },
-      (request) => this.inner.needs(document.node, ...needsArgs(layout, request)),
+    return readSource(this.fonts, document.node, layout, extras, (request) =>
+      this.inner.needs(document.node, ...needsArgs(layout, request)),
     );
   }
 }

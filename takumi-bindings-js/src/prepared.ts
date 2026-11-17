@@ -62,6 +62,41 @@ export type PrepareExtras = WarningOptions & {
   onMissingGlyphs?: MissingGlyphsHandler;
 };
 
+/**
+ * What a render reads its source with: {@link PrepareExtras} and the fallback `fontFamilies`.
+ *
+ * @internal
+ */
+export type SourceExtras = PrepareExtras & { fontFamilies?: string[] };
+
+/** {@link SourceExtras} apart from the layout options of `T`. */
+type SplitExtras<T> = { extras: SourceExtras; layout: Omit<T, keyof SourceExtras> };
+
+/**
+ * `options` split into its {@link SourceExtras} and the layout options the binding takes, member by
+ * member when `T` is a union, so the layout keeps its discriminants.
+ *
+ * @internal
+ */
+export function splitExtras<T extends SourceExtras>(
+  options: T,
+): T extends unknown ? SplitExtras<T> : never;
+export function splitExtras<T extends SourceExtras>({
+  fonts,
+  images,
+  signal,
+  fontFamilies,
+  onMissingGlyphs,
+  onWarning,
+  strict,
+  ...layout
+}: T): SplitExtras<T> {
+  return {
+    extras: { fonts, images, signal, fontFamilies, onMissingGlyphs, onWarning, strict },
+    layout,
+  };
+}
+
 /** Returns fonts for the characters no font of a render draws, which then load as part of its `fonts`. */
 export type MissingGlyphsHandler = (
   characters: string[],
@@ -204,7 +239,7 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
   registry: FontRegistry<TFamily>,
   source: TSource,
   layout: TLayout,
-  extras: PrepareExtras & { fontFamilies?: string[] },
+  extras: SourceExtras,
   needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
   const state = await collect(registry, source, layout, extras, needs, true);
@@ -243,7 +278,7 @@ export async function readSource<TFamily extends RegisteredFamilyLike, TSource, 
   registry: FontRegistry<TFamily>,
   source: TSource,
   layout: TLayout,
-  extras: PrepareExtras & { fontFamilies?: string[] },
+  extras: SourceExtras,
   needs: SourceReader,
 ): Promise<Prepared<TSource, TLayout>> {
   return reported(registry, await collect(registry, source, layout, extras, needs, false), extras);
@@ -337,7 +372,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   registry: FontRegistry<TFamily>,
   source: TSource,
   layout: TLayout,
-  extras: PrepareExtras & { fontFamilies?: string[] },
+  extras: SourceExtras,
   needs: SourceReader,
   fetchMissing: boolean,
 ): Promise<CollectedState<TSource, TLayout>> {
