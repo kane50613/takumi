@@ -28,7 +28,11 @@ export type {
   MissingGlyphsHandler,
   OutputFormat,
   RenderReport,
+  RenderWarning,
+  TakumiError,
+  TakumiErrorCode,
 } from "@takumi-rs/core";
+export { isTakumiError } from "@takumi-rs/bindings-js";
 export { cacheStats, setCacheOptions, setGlyphCacheMaxBytes } from "./cache";
 export { measure, render, renderAnimation, renderSvg } from "./render";
 

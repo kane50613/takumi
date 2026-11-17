@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import ImageResponse from "../src/response";
-import { render } from "../src";
+import { isTakumiError, render, type RenderWarning } from "../src";
 import type { Node } from "@takumi-rs/helpers";
 
 describe("ImageResponse", () => {
@@ -55,12 +55,31 @@ describe("ImageResponse", () => {
 
     await response.arrayBuffer();
 
-    expect(await response.ready).toEqual({
-      missingCharacters: ["中"],
-      unresolvedFamilies: ["Missing"],
-      failedFonts: [],
-      failedImages: [],
+    expect((await response.ready).warnings.map(({ code }) => code)).toEqual([
+      "missing-glyphs",
+      "unresolved-family",
+    ]);
+  });
+
+  test("hands each warning to onWarning and rejects ready under strict", async () => {
+    const onWarning = mock((_warning: RenderWarning) => {});
+    const onError = mock((_error: unknown) => {});
+    const response = new ImageResponse(<div style={{ fontFamily: "Absent" }}>Hello</div>, {
+      width: 100,
+      height: 100,
+      onWarning,
+      strict: true,
+      onError,
     });
+    const body = response.arrayBuffer().catch((caught: unknown) => caught);
+    const error: unknown = await response.ready.catch((caught: unknown) => caught);
+
+    expect(isTakumiError(error, "ERR_TAKUMI_STRICT") && error.warnings).toEqual(
+      onWarning.mock.calls.map(([warning]) => warning),
+    );
+    expect(onWarning.mock.calls.map(([warning]) => warning.code)).toEqual(["unresolved-family"]);
+    expect(await body).toBe(error);
+    expect(onError.mock.calls).toEqual([[error]]);
   });
 
   test("loads the fonts onMissingGlyphs returns", async () => {
@@ -77,7 +96,7 @@ describe("ImageResponse", () => {
     await response.arrayBuffer();
 
     expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
-    expect((await response.ready).missingCharacters).toEqual([]);
+    expect((await response.ready).warnings).toEqual([]);
   });
 
   test("should set content-type", async () => {

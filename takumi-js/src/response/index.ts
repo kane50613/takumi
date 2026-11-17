@@ -75,7 +75,7 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
  * ```
  */
 export class ImageResponse extends Response {
-  /** Resolves to the report of what the render could not satisfy once it finishes, and rejects when it fails. */
+  /** Resolves to the report of what the render could not draw once it finishes, and rejects when it fails, as under `strict` for any warning. */
   readonly ready: Promise<RenderReport>;
 
   constructor(component: RenderInput, options?: ImageResponseOptions) {
