@@ -1,6 +1,13 @@
 //! WebAssembly bindings for takumi's paint tree.
 #![deny(missing_docs)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![deny(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::unreachable,
+  clippy::todo,
+  clippy::unimplemented
+)]
 
 use std::mem::take;
 
