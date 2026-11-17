@@ -1,5 +1,15 @@
 {
   "defaultOpen": true,
   "icon": "ToyBrick",
-  "pages": ["nextjs", "fumapress", "nuxt", "sveltekit", "tanstack-start", "nitro", "astro"]
+  "pages": [
+    "nextjs",
+    "fumapress",
+    "nuxt",
+    "sveltekit",
+    "tanstack-start",
+    "nitro",
+    "astro",
+    "cloudflare-workers",
+    "bun-compile"
+  ]
 }
