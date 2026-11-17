@@ -2160,7 +2160,10 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
         self.add_line_for_fragmentation(&line, offset.block_offset);
         inline_child.lines.push(line);
       }
-      (InflowChild::Inline(_), None) => unreachable!("an inline child lays out a line"),
+      // An inline child lays out a line, so this only skips one that did not.
+      (InflowChild::Inline(_), None) => {
+        debug_assert!(false, "an inline child laid out no line");
+      }
     }
 
     *previous = self.compute_inflow_position(

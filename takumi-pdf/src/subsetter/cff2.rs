@@ -10,7 +10,7 @@ pub fn subset(ctx: &mut Context) -> crate::subsetter::Result<()> {
 
   glyf::subset_with(ctx, |old_gid, ctx| {
     let data = match &ctx.interjector {
-      Interjector::Dummy(_) => unreachable!(),
+      Interjector::Dummy(_) => return Err(MalformedFont),
       Interjector::Skrifa(s) => {
         let (advance, lsb, data) = s.interject(&mut maxp_data, old_gid).ok_or(MalformedFont)?;
         hmtx_data.push((advance, lsb));

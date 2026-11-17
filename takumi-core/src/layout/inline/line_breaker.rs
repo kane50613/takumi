@@ -47,9 +47,8 @@ use crate::{
   },
   text::{
     character::{
-      CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
-      POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE, SOFT_HYPHEN, TAB, ZERO_WIDTH_SPACE,
-      char_at, char_before, is_other_space_separator,
+      LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE,
+      SOFT_HYPHEN, TAB, ZERO_WIDTH_SPACE, char_at, char_before, is_other_space_separator,
     },
     line_break_iterator::{
       BreakOptions, BreakSpaceType, LineBreakIterator, LineBreakStrictness, LineBreakType,
@@ -1028,7 +1027,8 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           debug_assert!(!line_info.results[index].can_break_after);
           self.move_to_next_of_item(item_index);
         }
-        _ => unreachable!("an item with characters the line breaker does not handle"),
+        // Text and control items take the paths above, so this only steps past one that did not.
+        _ => self.move_to_next_of_item(item_index),
       }
     }
   }
@@ -2359,13 +2359,13 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
         item_result.can_break_after = true;
       }
-      CARRIAGE_RETURN | FORM_FEED => {
-        // <https://drafts.csswg.org/css-text-3/#white-space-processing>
+      // <https://drafts.csswg.org/css-text-3/#white-space-processing>: a carriage return or form
+      // feed renders nothing, and so does a control item for any other character.
+      _ => {
         self.handle_empty_text(item_index, line_info);
 
         return;
       }
-      _ => unreachable!("a control item for another character"),
     }
 
     self.move_to_next_of_item(item_index);

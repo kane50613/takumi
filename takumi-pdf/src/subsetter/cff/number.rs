@@ -99,17 +99,15 @@ impl Writeable for RealNumber {
   fn write(&self, w: &mut Writer) {
     let mut nibbles = vec![];
 
-    let string_form = format!("{}", self.0);
-    let mut r = Reader::new(string_form.as_bytes());
+    // `Display` writes `NaN` and `inf` in letters, which a CFF real number has no nibble for.
+    let value = if self.0.is_finite() { self.0 } else { 0.0 };
 
-    while !r.at_end() {
-      let byte = r.read::<u8>().unwrap();
-
+    for byte in format!("{value}").bytes() {
       match byte {
         b'0'..=b'9' => nibbles.push(byte - 48),
         b'.' => nibbles.push(0xA),
         b'-' => nibbles.push(0xE),
-        _ => unreachable!(),
+        _ => {}
       }
     }
 
@@ -402,6 +400,19 @@ impl Writeable for U24 {
 mod tests {
   use crate::subsetter::cff::number::*;
   use crate::subsetter::read::Reader;
+
+  #[test]
+  fn a_real_number_that_is_not_finite_writes_as_zero() {
+    let written = |value: f32| {
+      let mut w = Writer::new();
+      w.write(RealNumber(value));
+      w.finish()
+    };
+
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+      assert_eq!(written(value), written(0.0), "{value}");
+    }
+  }
 
   #[test]
   fn u24() {

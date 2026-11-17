@@ -565,10 +565,9 @@ impl ColorPainter for ColrBuilder {
     // https://github.com/googlefonts/fontations/blob/fd0178ce4ea48301a7f06b35a6fce9879c102292/skrifa/src/color/traversal.rs#L566-L593
     // Everything is wrapped in a `SrcOver` base layer.
     if composite == CompositeMode::SrcOver {
-      if let Some(Instruction::Layer(_, _)) = instructions.last() {
-        let Some(Instruction::Layer(mode, source)) = instructions.pop() else {
-          unreachable!();
-        };
+      if let Some(Instruction::Layer(mode, source)) =
+        instructions.pop_if(|instruction| matches!(instruction, Instruction::Layer(..)))
+      {
         stack.push(Instruction::Composite {
           source,
           mode,

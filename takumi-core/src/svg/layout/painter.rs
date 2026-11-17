@@ -436,22 +436,15 @@ fn scope_bounds(ops: &mut [SvgOp], index: &mut usize) -> ScopeBounds {
     *index += 1;
     let current = match &ops[op_index] {
       SvgOp::Pop => return bounds,
-      SvgOp::PushTransform(_) => {
-        let transform = match &ops[op_index] {
-          SvgOp::PushTransform(transform) => *transform,
-          _ => unreachable!(),
-        };
+      SvgOp::PushTransform(transform) => {
+        let transform = *transform;
 
         scope_bounds(ops, index).transformed(transform)
       }
-      SvgOp::PushClip { .. } => {
-        let child = scope_bounds(ops, index);
-        let clip = match &ops[op_index] {
-          SvgOp::PushClip { bounds, .. } => *bounds,
-          _ => unreachable!(),
-        };
+      SvgOp::PushClip { bounds, .. } => {
+        let clip = *bounds;
 
-        child.clipped(clip)
+        scope_bounds(ops, index).clipped(clip)
       }
       SvgOp::PushBlend { .. } => {
         let child = scope_bounds(ops, index);
