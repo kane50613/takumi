@@ -53,7 +53,16 @@ reviews:
         Each fixture pins one behavior that no other fixture pins. For a fixture that matches browser behavior, check what Chromium renders for the same HTML, and flag a fixture whose expected output Chromium would not produce.
     - path: ".tegami/*.md"
       instructions: |
-        A changeset entry is earned only when a published package's output, public API, or errors change. Refactors, performance work, tests, CI, and docs take no entry. The entry has one `#` heading written as the outcome a user gets, then at most one short paragraph.
+        A user reads a changeset to decide whether to upgrade and what to change. Review each entry as that user.
+
+        - An entry is earned only when a published package's output, public API, or errors change. Refactors, performance work, tests, CI, and docs take no entry.
+        - The entry has one `#` heading that states the outcome a user gets, such as "`registerFont` rejects data that is not a font", not the mechanism, such as "Check the face count in `FontContext::register`".
+        - The body opens with one short paragraph on who is affected and what they see now. Flag a single dense paragraph that packs several cases, options, or conditions together. Those belong in a list.
+        - A change to what a user writes or gets back has a code block. A changed behavior shows `// Before` and `// After` in one block, or a `diff` block. A new option, function, or CLI flag is shown in use. A pure rendering fix may go without one.
+        - A deprecation or breaking change has a `#### Migration` section with the replacement as a `diff` block.
+        - Flag implementation details, such as internal modules, private types, algorithms, Blink function names, which crate changed, tests, and how the bug was found. Every sentence names something a user can see, type, configure, or catch.
+        - Check each claim against the diff. Flag a behavior, option, or error message the code does not have.
+        - Each paragraph is one line, since changelogs render every line break.
   pre_merge_checks:
     custom_checks:
       - name: "Chromium parity"
