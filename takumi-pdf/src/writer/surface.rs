@@ -10,11 +10,11 @@ use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::content::ContentBuilder;
 use crate::writer::geom::Path;
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::geom::Size;
 use crate::writer::geom::{Point, Transform};
 use crate::writer::graphics::blend::BlendMode;
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
 use crate::writer::graphics::paint::{Fill, FillRule, Stroke};
@@ -447,7 +447,7 @@ impl<'a> Surface<'a> {
     }
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   /// Draw a new bitmap image.
   pub fn draw_image(&mut self, image: Image, size: Size) {
     self

@@ -14,12 +14,12 @@ use tiny_skia_path::{Path, PathSegment, PathVerb};
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::ValidationError;
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::geom::Size;
 use crate::writer::geom::{Point, Rect, Transform};
 use crate::writer::graphics::color::{Color, ColorSpace};
 use crate::writer::graphics::graphics_state::{ExtGState, GraphicsStates};
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
 use crate::writer::graphics::paint::{
@@ -942,7 +942,7 @@ impl ContentBuilder {
     self.draw_xobject(sc, chunk_container, x_object, &state);
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn draw_image(
     &mut self,
     image: Image,

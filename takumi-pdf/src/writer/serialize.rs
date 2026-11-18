@@ -17,7 +17,7 @@ use crate::writer::error::{LimitError, WriterError, WriterResult};
 use crate::writer::geom::Size;
 use crate::writer::graphics::color::{ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::writer::graphics::icc::{ICCBasedColorSpace, ICCProfile};
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::interactive::destination::XyzDestination;
 use crate::writer::interchange::embed::EmbeddedFile;
@@ -528,7 +528,7 @@ impl SerializeContext {
     Resource::new(self.register_cacheable(chunk_container, object))
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn register_image(
     &mut self,
     chunk_container: &mut ChunkContainer,
