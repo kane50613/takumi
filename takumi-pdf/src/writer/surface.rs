@@ -19,6 +19,8 @@ use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
 use crate::writer::graphics::paint::{Fill, FillRule, Stroke};
 use crate::writer::graphics::shading_function::ShadingFunction;
+#[cfg(all(feature = "svg", feature = "images"))]
+use crate::writer::graphics::{graphics_state::ExtGState, xobject::XObject};
 use crate::writer::interchange::tagging::{ContentTag, Identifier, PageTagIdentifier};
 use crate::writer::num::NormalizedF32;
 use crate::writer::paint::{InnerPaint, Paint};
@@ -454,6 +456,15 @@ impl<'a> Surface<'a> {
       .bd
       .get_mut()
       .draw_image(image, size, self.sc, self.chunk_container);
+  }
+
+  /// Invokes `x_object`, so a document that draws it again writes its content once.
+  #[cfg(all(feature = "svg", feature = "images"))]
+  pub(crate) fn draw_xobject(&mut self, x_object: XObject) {
+    self
+      .bd
+      .get_mut()
+      .draw_xobject(self.sc, self.chunk_container, x_object, &ExtGState::new());
   }
 
   pub(crate) fn draw_shading(&mut self, shading: &ShadingFunction) {
