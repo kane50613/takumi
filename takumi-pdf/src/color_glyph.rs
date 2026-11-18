@@ -144,7 +144,7 @@ impl Colors<'_> {
           y2: p1.y,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: pdf_transform(transform),
+          transform: Transform::from_tsp(transform),
           anti_alias: false,
         }
         .into(),
@@ -168,7 +168,7 @@ impl Colors<'_> {
           cr: r1,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: pdf_transform(transform),
+          transform: Transform::from_tsp(transform),
           anti_alias: false,
         }
         .into(),
@@ -190,7 +190,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: pdf_transform(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
+          transform: Transform::from_tsp(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
           anti_alias: false,
         }
         .into(),
@@ -204,17 +204,6 @@ impl Colors<'_> {
       rule: FillRule::default(),
     })
   }
-}
-
-fn pdf_transform(transform: tiny_skia_path::Transform) -> Transform {
-  Transform::from_row(
-    transform.sx,
-    transform.ky,
-    transform.kx,
-    transform.sy,
-    transform.tx,
-    transform.ty,
-  )
 }
 
 fn spread_method(extend: Extend) -> SpreadMethod {
