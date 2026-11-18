@@ -99,17 +99,15 @@ impl Writeable for RealNumber {
   fn write(&self, w: &mut Writer) {
     let mut nibbles = vec![];
 
-    let string_form = format!("{}", self.0);
-    let mut r = Reader::new(string_form.as_bytes());
+    // `Display` writes `NaN` and `inf` in letters, which a CFF real number has no nibble for.
+    let value = if self.0.is_finite() { self.0 } else { 0.0 };
 
-    while !r.at_end() {
-      let byte = r.read::<u8>().unwrap();
-
+    for byte in format!("{value}").bytes() {
       match byte {
         b'0'..=b'9' => nibbles.push(byte - 48),
         b'.' => nibbles.push(0xA),
         b'-' => nibbles.push(0xE),
-        _ => unreachable!(),
+        _ => {}
       }
     }
 
@@ -288,20 +286,25 @@ impl Number {
     u32::try_from(self.as_i32()?).ok()
   }
 
-  // Adapted from ttf_parser's Transform::combine
-  pub fn combine(t1: [Self; 6], t2: [Self; 6]) -> [Self; 6] {
-    [
-      Number::from_f32((t1[0].as_f64() * t2[0].as_f64() + t1[2].as_f64() * t2[1].as_f64()) as f32),
-      Number::from_f32((t1[1].as_f64() * t2[0].as_f64() + t1[3].as_f64() * t2[1].as_f64()) as f32),
-      Number::from_f32((t1[0].as_f64() * t2[2].as_f64() + t1[2].as_f64() * t2[3].as_f64()) as f32),
-      Number::from_f32((t1[1].as_f64() * t2[2].as_f64() + t1[3].as_f64() * t2[3].as_f64()) as f32),
-      Number::from_f32(
-        (t1[0].as_f64() * t2[4].as_f64() + t1[2].as_f64() * t2[5].as_f64() + t1[4].as_f64()) as f32,
-      ),
-      Number::from_f32(
-        (t1[1].as_f64() * t2[4].as_f64() + t1[3].as_f64() * t2[5].as_f64() + t1[5].as_f64()) as f32,
-      ),
+  /// Multiplies two matrices, or `None` when an entry overflows `f32`, which would leave a
+  /// singular matrix once written. Adapted from ttf_parser's `Transform::combine`.
+  pub fn combine(t1: [Self; 6], t2: [Self; 6]) -> Option<[Self; 6]> {
+    let [a1, b1, c1, d1, e1, f1] = t1.map(|n| n.as_f64());
+    let [a2, b2, c2, d2, e2, f2] = t2.map(|n| n.as_f64());
+    let entries = [
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1,
     ]
+    .map(|entry| entry as f32);
+
+    entries
+      .iter()
+      .all(|entry| entry.is_finite())
+      .then(|| entries.map(Number::from_f32))
   }
 }
 
@@ -400,8 +403,30 @@ impl Writeable for U24 {
 
 #[cfg(test)]
 mod tests {
+  #[test]
+  fn a_combined_matrix_that_overflows_f32_is_rejected() {
+    let matrix = [1e36, 0.0, 0.0, 0.001, 0.0, 0.0].map(Number::from_f32);
+    let scale = [1000.0, 0.0, 0.0, 1000.0, 0.0, 0.0].map(Number::from_f32);
+
+    assert!(Number::combine(matrix, scale).is_none());
+    assert!(Number::combine(scale, scale).is_some());
+  }
+
   use crate::subsetter::cff::number::*;
   use crate::subsetter::read::Reader;
+
+  #[test]
+  fn a_real_number_that_is_not_finite_writes_as_zero() {
+    let written = |value: f32| {
+      let mut w = Writer::new();
+      w.write(RealNumber(value));
+      w.finish()
+    };
+
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+      assert_eq!(written(value), written(0.0), "{value}");
+    }
+  }
 
   #[test]
   fn u24() {

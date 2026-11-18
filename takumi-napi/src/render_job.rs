@@ -47,7 +47,7 @@ impl RenderJob {
   /// The raster options of the render, its source parsed and its images decoded.
   pub(crate) fn raster(&mut self) -> Result<takumi_raster::RenderOptions<'_>> {
     let Some(input) = self.input.take() else {
-      unreachable!()
+      return Err(Error::from_reason("this render already used its input"));
     };
     let (node, stylesheet) = input.resolve(&self.state)?;
     let images = decode_images(

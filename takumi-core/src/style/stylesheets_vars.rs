@@ -278,8 +278,7 @@ impl<'a> Resolver<'a> {
           let (open, close) = match token {
             Token::ParenthesisBlock => ("(", ")"),
             Token::SquareBracketBlock => ("[", "]"),
-            Token::CurlyBracketBlock => ("{", "}"),
-            _ => unreachable!(),
+            _ => ("{", "}"),
           };
           output.append(open, &mut self.budget)?;
           input

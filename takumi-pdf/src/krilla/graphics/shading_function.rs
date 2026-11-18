@@ -406,12 +406,9 @@ fn select_postscript_function(
 ) -> Ref {
   debug_assert!(properties.stops.len() > 1);
 
-  if properties.gradient_type == GradientType::Linear {
-    serialize_linear_postscript(properties, chunk, sc, use_opacities)
-  } else if properties.gradient_type == GradientType::Sweep {
-    serialize_sweep_postscript(properties, chunk, sc, bump, use_opacities)
-  } else {
-    todo!();
+  match properties.gradient_type {
+    GradientType::Linear => serialize_linear_postscript(properties, chunk, sc, use_opacities),
+    GradientType::Sweep => serialize_sweep_postscript(properties, chunk, sc, bump, use_opacities),
   }
 }
 

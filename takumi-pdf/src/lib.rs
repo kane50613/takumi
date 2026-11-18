@@ -1,6 +1,23 @@
 #![deny(missing_docs)]
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+#![deny(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::unreachable,
+  clippy::todo,
+  clippy::unimplemented
+)]
+#![cfg_attr(
+  test,
+  allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented
+  )
+)]
 //! Writes vector PDFs from HTML or a takumi node tree, without a browser. Text stays selectable and
 //! searchable because the file embeds a subset of each font it uses. Layout comes from
 //! `takumi-core`, the same engine that renders takumi images.

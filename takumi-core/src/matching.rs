@@ -920,7 +920,7 @@ impl RuleIndex {
           SelectorKey::Class(name) => index.by_class.entry(name),
           SelectorKey::Attribute(name) => index.by_attribute.entry(name),
           SelectorKey::Tag(name) => index.by_tag.entry(name),
-          SelectorKey::Any => unreachable!("handled above"),
+          SelectorKey::Any => continue,
         }
         .or_default();
 

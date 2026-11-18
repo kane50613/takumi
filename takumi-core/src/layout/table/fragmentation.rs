@@ -706,8 +706,12 @@ impl TableLayoutAlgorithm<'_, '_> {
     false
   }
 
+  /// Without fragmentation every table box is the last, so it lays out as it did.
   pub(super) fn relayout_as_last_table_box(self) -> LayoutResult {
-    unreachable!("a table box ends where it starts without fragmentation")
+    TableLayoutAlgorithm::new(self.tree, self.node, self.space, self.input).map_or_else(
+      || LayoutResult::new(Default::default()),
+      TableLayoutAlgorithm::layout,
+    )
   }
 
   pub(super) fn break_before_repeated_footer(&mut self, _footer: NodeId, _result: &LayoutResult) {}

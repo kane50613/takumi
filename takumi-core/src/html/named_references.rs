@@ -148,6 +148,8 @@ static ENTRIES: [Entry; REFERENCES.len()] = {
   entries
 };
 
+// Only `static` initializers call it, so invalid UTF-8 fails the build instead of a render.
+#[allow(clippy::unreachable)]
 const fn utf8(bytes: &'static [u8]) -> &'static str {
   match str::from_utf8(bytes) {
     Ok(text) => text,

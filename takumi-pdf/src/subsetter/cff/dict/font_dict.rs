@@ -1,4 +1,4 @@
-use crate::subsetter::Error::SubsetError;
+use crate::subsetter::Error::{MalformedFont, SubsetError};
 use crate::subsetter::Result;
 use crate::subsetter::cff::Offsets;
 use crate::subsetter::cff::cid_font::CIDMetadata;
@@ -79,33 +79,30 @@ pub fn rewrite_font_dict_index(
     let mut w = Writer::new();
 
     // See comment in `rewrite_top_dict_index`.
-    w.write(
-      dict
-        .font_matrix
-        .map(|m| {
-          if top_dict_is_missing_font_matrix {
-            let scale = [
-              Number::from_f32(1000.0),
-              Number::zero(),
-              Number::zero(),
-              Number::from_f32(1000.0),
-              Number::zero(),
-              Number::zero(),
-            ];
-            Number::combine(m, scale)
-          } else {
-            m
-          }
-        })
-        .unwrap_or([
-          Number::one(),
+    let font_matrix = match dict.font_matrix {
+      Some(m) if top_dict_is_missing_font_matrix => {
+        let scale = [
+          Number::from_f32(1000.0),
           Number::zero(),
           Number::zero(),
-          Number::one(),
+          Number::from_f32(1000.0),
           Number::zero(),
           Number::zero(),
-        ]),
-    );
+        ];
+
+        Some(Number::combine(m, scale).ok_or(MalformedFont)?)
+      }
+      matrix => matrix,
+    };
+
+    w.write(font_matrix.unwrap_or([
+      Number::one(),
+      Number::zero(),
+      Number::zero(),
+      Number::one(),
+      Number::zero(),
+      Number::zero(),
+    ]));
     w.write(FONT_MATRIX);
 
     // Write the length and offset of the private dict.
