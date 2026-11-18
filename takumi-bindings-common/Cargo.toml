@@ -9,6 +9,10 @@ arc-swap.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
 
+[dependencies.log]
+workspace = true
+features = ["kv"]
+
 [dependencies.serde_json]
 workspace = true
 features = ["float_roundtrip"]

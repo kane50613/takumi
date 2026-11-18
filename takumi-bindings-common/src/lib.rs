@@ -38,6 +38,7 @@ pub mod options;
 #[cfg(feature = "wasm")]
 pub mod source;
 pub mod source_cache;
+pub mod warning;
 
 #[cfg(feature = "wasm")]
 use std::fmt::Display;

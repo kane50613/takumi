@@ -2,12 +2,24 @@
 
 use std::fmt::Display;
 
+use takumi_bindings_common::warning::WarningLog;
 use takumi_core::resources::glyph_cache;
 use wasm_bindgen::prelude::wasm_bindgen;
+
+#[wasm_bindgen]
+extern "C" {
+  #[wasm_bindgen(js_namespace = console, js_name = warn)]
+  fn console_warn(message: String);
+}
 
 /// Maps any error to a JavaScript Error object.
 pub fn map_error<E: Display>(err: E) -> js_sys::Error {
   js_sys::Error::new(&err.to_string())
+}
+
+/// Sends takumi's warnings, such as an unsupported CSS property, to `console.warn`.
+pub(crate) fn forward_warnings() {
+  WarningLog::install(console_warn);
 }
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
