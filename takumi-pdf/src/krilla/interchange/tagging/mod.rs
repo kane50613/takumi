@@ -208,7 +208,7 @@ impl PageTagIdentifier {
   pub(crate) fn bump(&mut self) -> PageTagIdentifier {
     let old = *self;
 
-    self.mcid = self.mcid.checked_add(1).unwrap();
+    self.mcid = self.mcid.saturating_add(1);
 
     old
   }
@@ -311,21 +311,21 @@ impl Tag {
           }
           struct_elem.custom_kind(role2.to_name(&mut [0; 6]));
         } else {
-          struct_elem.kind_2(role2, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(role2, sc.ssn_ref);
         }
       }
       TagKind::Strong => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Strong"));
         } else {
-          struct_elem.kind_2(StructRole2::Strong, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(StructRole2::Strong, sc.ssn_ref);
         }
       }
       TagKind::Em => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Em"));
         } else {
-          struct_elem.kind_2(StructRole2::Em, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(StructRole2::Em, sc.ssn_ref);
         }
       }
     };
@@ -365,7 +365,7 @@ fn write_kind_compat(
     let compat = role.compatibility_1_7(RoleMapOpts::default());
     struct_elem.kind(compat.role());
   } else {
-    struct_elem.kind_2(role, sc.pdf2_ns.ssn_ref);
+    struct_elem.kind_2(role, sc.ssn_ref);
   }
 }
 
@@ -748,7 +748,8 @@ fn serialize_children(
           }
           parent_tree_map.insert(ai.into(), *annotation_ref);
 
-          struct_parent.set(parent_ref).expect("only one parent");
+          // The duplicate check above keeps each annotation to one parent.
+          let _ = struct_parent.set(parent_ref);
 
           struct_children
             .object_ref()

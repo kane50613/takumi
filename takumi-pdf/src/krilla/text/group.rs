@@ -116,14 +116,13 @@ where
     where
       U: Glyph,
     {
+      let range = g.text_range().clone();
       let (identifier, pdf_glyph) =
         font_container.add_glyph(ColoredGlyph::new(g.glyph_id(), context_color));
-      let pdf_font = font_container
-        .get_from_identifier_mut(identifier.clone())
-        .unwrap();
-
-      let range = g.text_range().clone();
-      let text = unicode.unwrap_or(&text[range.clone()]);
+      let Some(pdf_font) = font_container.get_from_identifier_mut(identifier.clone()) else {
+        return (range, false);
+      };
+      let text = unicode.unwrap_or(text.get(range.clone()).unwrap_or_default());
       let codepoints = pdf_font.get_codepoints(pdf_glyph);
       // Check if the glyph has already been assigned codepoints that don't match the
       // one we are seeing right now.
@@ -443,10 +442,10 @@ pub(crate) fn get_glyph_props<U>(
 where
   U: Glyph,
 {
-  // Safe because we've already added all glyphs in the text spanner.
+  // The text spanner already added every glyph, so this only looks the glyph up.
   let font_identifier = font_container
-    .font_identifier(ColoredGlyph::new(g.glyph_id(), context_color))
-    .unwrap();
+    .add_glyph(ColoredGlyph::new(g.glyph_id(), context_color))
+    .0;
 
   GlyphProps {
     font_identifier,
@@ -494,7 +493,9 @@ pub fn use_text_spanner(
   }
 
   // Since windows checks groups of two, we need to manually check the last glyph
-  check_single(glyphs.last().unwrap(), &mut do_text_span);
+  if let Some(last) = glyphs.last() {
+    check_single(last, &mut do_text_span);
+  }
 
   do_text_span
 }
@@ -508,12 +509,11 @@ fn check_text_span_prop(
 ) {
   let (identifier, pdf_glyph) =
     font_container.add_glyph(ColoredGlyph::new(glyph.glyph_id(), context_color));
-  let pdf_font = font_container
-    .get_from_identifier_mut(identifier.clone())
-    .unwrap();
+  let Some(pdf_font) = font_container.get_from_identifier_mut(identifier.clone()) else {
+    return;
+  };
 
-  let range = glyph.text_range().clone();
-  let text = &text[range.clone()];
+  let text = text.get(glyph.text_range()).unwrap_or_default();
   let codepoints = pdf_font.get_codepoints(pdf_glyph);
 
   if codepoints.is_some_and(|t| t != text) {

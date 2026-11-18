@@ -298,11 +298,9 @@ impl<'a> Context<'a> {
 
     match tag {
       Tag::GLYF => glyf::subset(self)?,
-      Tag::LOCA => panic!("handled by glyf"),
       Tag::CFF => cff::subset(self)?,
       Tag::CFF2 => cff2::subset(self)?,
       Tag::HEAD => head::subset(self)?,
-      Tag::HHEA => panic!("handled by hmtx"),
       Tag::HMTX => hmtx::subset(self)?,
       Tag::POST => post::subset(self)?,
       Tag::MAXP => maxp::subset(self)?,

@@ -401,37 +401,48 @@ impl<'a> Surface<'a> {
       .push(ContentBuilder::new(Transform::identity(), true, self.sc));
   }
 
-  /// Pop the last `push` instruction.
-  ///
-  /// # Panics
-  /// Panics if the there wasn't a corresponding `push` to the `pop`.
+  /// Pop the last `push` instruction. A `pop` without a `push` does nothing.
   pub fn pop(&mut self) {
-    match self.push_instructions.pop().unwrap() {
+    let Some(instruction) = self.push_instructions.pop() else {
+      debug_assert!(false, "pop without a push");
+      return;
+    };
+
+    match instruction {
       PushInstruction::Transform => self.bd.get_mut().restore_graphics_state(),
       PushInstruction::Opacity(o) => {
         if o != NormalizedF32::ONE {
-          let stream = self.bd.sub_builders.pop().unwrap().finish(self.sc);
-          self
-            .bd
-            .get_mut()
-            .draw_opacified(self.sc, self.chunk_container, o, stream);
+          if let Some(builder) = self.bd.sub_builders.pop() {
+            let stream = builder.finish(self.sc);
+
+            self
+              .bd
+              .get_mut()
+              .draw_opacified(self.sc, self.chunk_container, o, stream);
+          }
         }
       }
       PushInstruction::ClipPath => self.bd.get_mut().pop_clip_path(),
       PushInstruction::BlendMode => self.bd.get_mut().restore_graphics_state(),
       PushInstruction::Mask(mask) => {
-        let stream = self.bd.sub_builders.pop().unwrap().finish(self.sc);
-        self
-          .bd
-          .get_mut()
-          .draw_masked(self.sc, self.chunk_container, *mask, stream)
+        if let Some(builder) = self.bd.sub_builders.pop() {
+          let stream = builder.finish(self.sc);
+
+          self
+            .bd
+            .get_mut()
+            .draw_masked(self.sc, self.chunk_container, *mask, stream);
+        }
       }
       PushInstruction::Isolated => {
-        let stream = self.bd.sub_builders.pop().unwrap().finish(self.sc);
-        self
-          .bd
-          .get_mut()
-          .draw_isolated(self.sc, self.chunk_container, stream);
+        if let Some(builder) = self.bd.sub_builders.pop() {
+          let stream = builder.finish(self.sc);
+
+          self
+            .bd
+            .get_mut()
+            .draw_isolated(self.sc, self.chunk_container, stream);
+        }
       }
     }
   }
@@ -513,9 +524,9 @@ impl Drop for Surface<'_> {
       None => 0,
     };
 
-    assert!(self.bd.sub_builders.is_empty());
-    assert!(self.push_instructions.is_empty());
-    assert!(!root_builder.active_marked_content);
+    debug_assert!(self.bd.sub_builders.is_empty());
+    debug_assert!(self.push_instructions.is_empty());
+    debug_assert!(!root_builder.active_marked_content);
 
     (self.finish_fn)(root_builder.finish(self.sc), num_mcids)
   }

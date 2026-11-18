@@ -105,16 +105,14 @@ impl XyzDestination {
     chunk_container: &mut ChunkContainer,
     root_ref: Ref,
   ) {
-    let chunk = &mut chunk_container.non_stream.destinations;
-    let destination = chunk.destination(root_ref);
-
-    let page_info = sc.page_infos().get(self.0.page_index).unwrap_or_else(|| {
-      panic!(
-        "attempted to link to page {}, but document only has {} pages",
-        self.0.page_index + 1,
-        sc.page_infos().len()
-      )
-    });
+    // A destination past the last page points at the last page.
+    let Some(page_info) = sc
+      .page_infos()
+      .get(self.0.page_index)
+      .or_else(|| sc.page_infos().last())
+    else {
+      return;
+    };
 
     let page_ref = page_info.ref_();
     let page_size = page_info.size().height();
@@ -124,7 +122,10 @@ impl XyzDestination {
     let invert_transform = Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, page_size);
     invert_transform.map_point(&mut mapped_point);
 
-    let mut destination = destination;
+    let mut destination = chunk_container
+      .non_stream
+      .destinations
+      .destination(root_ref);
 
     match self.0.structure.as_ref().and_then(|id| sc.tag_ref(id)) {
       Some(struct_ref) => destination.item(struct_ref),

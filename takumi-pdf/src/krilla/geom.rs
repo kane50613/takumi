@@ -61,6 +61,21 @@ impl Hash for Rect {
 }
 
 impl Rect {
+  /// The square from the origin to (1, 1).
+  #[expect(clippy::unwrap_used, reason = "the unit square is a valid rectangle")]
+  pub(crate) fn unit() -> Self {
+    Self::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()
+  }
+
+  /// The empty rectangle at the origin.
+  #[expect(
+    clippy::unwrap_used,
+    reason = "a zero-size rectangle at the origin is valid"
+  )]
+  pub(crate) fn empty() -> Self {
+    Self::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap()
+  }
+
   /// Creates new `Rect`.
   pub fn from_ltrb(left: f32, top: f32, right: f32, bottom: f32) -> Option<Self> {
     Some(Self(tiny_skia_path::Rect::from_ltrb(
@@ -121,7 +136,10 @@ impl Rect {
     let top = self.top().min(other.top());
     let right = self.right().max(other.right());
     let bottom = self.bottom().max(other.bottom());
-    *self = Rect::from_ltrb(left, top, right, bottom).unwrap();
+    // The union of two finite rectangles can still be too wide for an `f32` width.
+    if let Some(union) = Rect::from_ltrb(left, top, right, bottom) {
+      *self = union;
+    }
   }
 
   pub(crate) fn to_pdf_rect(self) -> pdf_writer::Rect {

@@ -721,7 +721,7 @@ fn encode_stops_impl<'a>(
       }
 
       // Sanity check that both stops have the same number of components.
-      assert_eq!(
+      debug_assert_eq!(
         c0.len(),
         c1.len(),
         "cannot create gradient with stops from different color spaces"
@@ -846,7 +846,7 @@ fn serialize_exponential(
   sc: &mut SerializeContext,
 ) -> Ref {
   let root_ref = sc.new_ref();
-  assert_eq!(
+  debug_assert_eq!(
     c0.len(),
     c1.len(),
     "cannot create gradient with stops from different color spaces"

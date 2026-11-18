@@ -143,7 +143,7 @@ impl LinkAnnotation {
     let actual_rect = self
       .rect
       .transform(page_root_transform(page_height))
-      .unwrap();
+      .unwrap_or(self.rect);
     annotation.rect(actual_rect.to_pdf_rect());
     annotation.border(0.0, 0.0, 0.0, None);
 

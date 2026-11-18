@@ -6,8 +6,8 @@ use std::sync::{Arc, OnceLock};
 
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
-use skrifa::raw::TableProvider;
 use skrifa::raw::types::NameId;
+use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider, OutlineGlyphCollection};
 use tiny_skia_path::FiniteF32;
 use yoke::{Yoke, Yokeable};
@@ -52,15 +52,19 @@ impl Font {
       location: font_info.location.clone(),
     };
 
-    let font_ref_yoke =
-      Yoke::<FontRefYoke<'static>, Box<YokeData>>::attach_to_cart(Box::new(yoke_data), |data| {
-        let font_ref = FontRef::from_index(data.data.as_ref().as_ref(), font_info.index).unwrap();
-        FontRefYoke {
+    let font_ref_yoke = Yoke::<FontRefYoke<'static>, Box<YokeData>>::try_attach_to_cart(
+      Box::new(yoke_data),
+      |data| {
+        let font_ref = FontRef::from_index(data.data.as_ref().as_ref(), font_info.index)?;
+
+        Ok::<_, ReadError>(FontRefYoke {
           font_ref: font_ref.clone(),
           glyph_metrics: font_ref.glyph_metrics(Size::unscaled(), &data.location),
           outline_glyphs: font_ref.outline_glyphs(),
-        }
-      });
+        })
+      },
+    )
+    .ok()?;
 
     Some(Font(Arc::new(Prehashed::new(Repr {
       font_data: data,
@@ -334,8 +338,10 @@ impl FontInfo {
         .unwrap_or(metrics.descent),
     )?;
     let is_monospaced = metrics.is_monospace;
-    let cap_height = metrics.cap_height.map(|n| FiniteF32::new(n).unwrap());
-    let italic_angle = FiniteF32::new(metrics.italic_angle).unwrap();
+    let cap_height = metrics.cap_height.and_then(FiniteF32::new);
+    // Unlike the optional cap height, the descriptor requires an italic angle, so a damaged one
+    // is written as upright.
+    let italic_angle = FiniteF32::new(metrics.italic_angle).or_else(|| FiniteF32::new(0.0))?;
     let weight = FiniteF32::new(font_ref.attributes().weight.value())?;
     let stretch = FiniteF32::new(font_ref.attributes().stretch.ratio())?;
     let units_per_em = metrics.units_per_em;

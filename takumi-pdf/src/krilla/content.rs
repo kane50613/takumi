@@ -107,9 +107,7 @@ impl ContentBuilder {
 
     Stream::new(
       buf.into_vec(),
-      self
-        .bbox
-        .unwrap_or(Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()),
+      self.bbox.unwrap_or_else(Rect::unit),
       self.validation_errors.into_iter().collect(),
       self.rd_builder.finish(),
       self.uses_mask,
@@ -118,10 +116,7 @@ impl ContentBuilder {
 
   #[track_caller]
   fn start_marked_content_prelude(&mut self) {
-    if self.active_marked_content {
-      panic!("can't start marked content twice");
-    }
-
+    debug_assert!(!self.active_marked_content, "marked content started twice");
     self.active_marked_content = true;
   }
 
@@ -147,7 +142,8 @@ impl ContentBuilder {
   #[track_caller]
   pub(crate) fn end_marked_content(&mut self) {
     if !self.active_marked_content {
-      panic!("can't end marked content when none has been started");
+      debug_assert!(false, "marked content ended without a start");
+      return;
     }
 
     self.content.end_marked_content();
@@ -353,13 +349,16 @@ impl ContentBuilder {
 
   pub(crate) fn push_clip_path(&mut self, path: &Path, clip_rule: &FillRule) {
     self.content_save_state();
-    self.content_draw_path(
-      path
-        .clone()
-        .transform(self.cur_transform_with_root_transform().to_tsp())
-        .unwrap()
-        .segments(),
-    );
+    match path
+      .clone()
+      .transform(self.cur_transform_with_root_transform().to_tsp())
+    {
+      Some(path) => self.content_draw_path(path.segments()),
+      // A transform that overflows the path leaves nothing inside the clip.
+      None => {
+        self.content.rect(0.0, 0.0, 0.0, 0.0);
+      }
+    }
 
     match clip_rule {
       FillRule::NonZero => self.content.clip_nonzero(),
@@ -408,7 +407,7 @@ impl ContentBuilder {
         sb.expand_bbox(bbox);
         bbox
       } else {
-        Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()
+        Rect::unit()
       };
 
       sb.content_set_fill_properties(bbox, fill, sc, chunk_container)
@@ -424,7 +423,7 @@ impl ContentBuilder {
         sb.expand_bbox(bbox);
         bbox
       } else {
-        Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()
+        Rect::unit()
       };
 
       sb.content_set_stroke_properties(bbox, stroke, sc, chunk_container);
@@ -575,9 +574,11 @@ impl ContentBuilder {
     context_color: rgb::Color,
     glyph: &impl Glyph,
   ) {
-    let pdf_glyph = pdf_font
-      .get_gid(ColoredGlyph::new(glyph.glyph_id(), context_color))
-      .unwrap();
+    let Some(pdf_glyph) = pdf_font.get_gid(ColoredGlyph::new(glyph.glyph_id(), context_color))
+    else {
+      return;
+    };
+
     self.scratch.clear();
     let encoded = &mut self.scratch;
     pdf_glyph.encode_into(encoded);
@@ -601,9 +602,10 @@ impl ContentBuilder {
     let mut items = positioned.items();
 
     for glyph in glyphs {
-      let pdf_glyph = pdf_font
-        .get_gid(ColoredGlyph::new(glyph.glyph_id(), context_color))
-        .unwrap();
+      let Some(pdf_glyph) = pdf_font.get_gid(ColoredGlyph::new(glyph.glyph_id(), context_color))
+      else {
+        continue;
+      };
 
       let scale = |val| val * pdf_font.units_per_em();
 
@@ -821,9 +823,9 @@ impl ContentBuilder {
     closing: Option<f32>,
   ) {
     let borrowed = font_container.borrow();
-    let pdf_font = borrowed
-      .get_from_identifier(glyph_group.font_identifier.clone())
-      .unwrap();
+    let Some(pdf_font) = borrowed.get_from_identifier(glyph_group.font_identifier.clone()) else {
+      return;
+    };
 
     if fill_render_mode == TextRenderingMode::Fill || pdf_font.force_fill() {
       self
@@ -954,7 +956,7 @@ impl ContentBuilder {
         let transform =
           Transform::from_row(size.width(), 0.0, 0.0, -size.height(), 0.0, size.height());
         sb.concat_transform(&transform);
-        sb.expand_bbox(Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap());
+        sb.expand_bbox(Rect::unit());
       },
       move |sb, sc, chunk_container| {
         let image_name = sb.rd_builder.register_resource(resource::XObject::new(
@@ -1290,7 +1292,9 @@ impl ContentBuilder {
         PathSegment::QuadTo(p1, p2) => {
           // Since PDF doesn't support quad curves, we need to convert them into
           // cubic.
-          let prev = p_prev.unwrap();
+          let Some(prev) = p_prev else {
+            continue;
+          };
           self.content.cubic_to(
             calc(prev.x, p1.x),
             calc(prev.y, p1.y),
@@ -1469,7 +1473,7 @@ fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font)
     y -= glyph.y_advance(size);
   }
 
-  Rect::from_ltrb(bl, bt, br, bb).unwrap()
+  Rect::from_ltrb(bl, bt, br, bb).unwrap_or_else(Rect::unit)
 }
 
 #[cfg(test)]

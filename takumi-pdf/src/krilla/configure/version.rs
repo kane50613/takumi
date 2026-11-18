@@ -119,17 +119,48 @@ impl PdfVersion {
 }
 
 /// The ICC v4 profile for the SRGB color space.
+#[expect(
+  clippy::unwrap_used,
+  reason = "the bundled profile parses, as a test checks"
+)]
 static SRGB_V4_ICC: LazyLock<ICCProfile<3>> =
   LazyLock::new(|| ICCProfile::new(include_bytes!("../../../icc/sRGB-v4.icc")).unwrap());
 /// The ICC v2 profile for the SRGB color space.
+#[expect(
+  clippy::unwrap_used,
+  reason = "the bundled profile parses, as a test checks"
+)]
 static SRGB_V2_ICC: LazyLock<ICCProfile<3>> =
   LazyLock::new(|| ICCProfile::new(include_bytes!("../../../icc/sRGB-v2-magic.icc")).unwrap());
 /// The ICC v4 profile for the sgray color space.
+#[expect(
+  clippy::unwrap_used,
+  reason = "the bundled profile parses, as a test checks"
+)]
 static GREY_V4_ICC: LazyLock<ICCProfile<1>> =
   LazyLock::new(|| ICCProfile::new(include_bytes!("../../../icc/sGrey-v4.icc")).unwrap());
 /// The ICC v2 profile for the sgray color space.
+#[expect(
+  clippy::unwrap_used,
+  reason = "the bundled profile parses, as a test checks"
+)]
 static GREY_V2_ICC: LazyLock<ICCProfile<1>> =
   LazyLock::new(|| ICCProfile::new(include_bytes!("../../../icc/sGrey-v2-magic.icc")).unwrap());
+
+#[cfg(test)]
+mod bundled_profile_tests {
+  use std::sync::LazyLock;
+
+  use super::{GREY_V2_ICC, GREY_V4_ICC, SRGB_V2_ICC, SRGB_V4_ICC};
+
+  #[test]
+  fn every_bundled_profile_parses() {
+    LazyLock::force(&SRGB_V4_ICC);
+    LazyLock::force(&SRGB_V2_ICC);
+    LazyLock::force(&GREY_V4_ICC);
+    LazyLock::force(&GREY_V2_ICC);
+  }
+}
 
 #[cfg(all(test, feature = "raster-images"))]
 mod tests {

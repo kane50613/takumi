@@ -1,7 +1,6 @@
 use std::cell::{OnceCell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::num::NonZeroU16;
-use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -221,8 +220,8 @@ impl MaybeDeviceColorSpace {
 pub(crate) struct SerializeContext {
   /// The ref of the page tree.
   page_tree_ref: Ref,
-  /// PDF 2.0 namespaces.
-  pub(crate) pdf2_ns: Pdf2Namespaces,
+  /// The PDF 2.0 standard structure namespace (`http://iso.org/pdf2/ssn`).
+  pub(crate) ssn_ref: Ref,
   /// All global objects, such as PDF fonts, that are populated over time.
   pub(crate) global_objects: GlobalObjects,
   /// Information for each page written so far, index by the page index.
@@ -266,10 +265,7 @@ impl SerializeContext {
 
     let mut cur_ref = Ref::new(1);
     let page_tree_ref = cur_ref.bump();
-    let pdf2_ns = Pdf2Namespaces {
-      ssn_ref: cur_ref.bump(),
-      krilla_ref: cur_ref.bump(),
-    };
+    let ssn_ref = cur_ref.bump();
 
     let chunk_settings = Settings {
       pretty: serialize_settings.pretty,
@@ -277,7 +273,7 @@ impl SerializeContext {
 
     Self {
       cached_mappings: FxHashMap::default(),
-      pdf2_ns,
+      ssn_ref,
       global_objects: GlobalObjects::default(),
       cur_ref,
       page_tree_ref,
@@ -314,7 +310,7 @@ impl SerializeContext {
         .prohibits(&ValidationError::MissingDocumentOutline)
         .is_some()
     {
-      self.global_objects.outline = MaybeTaken::new(Some(outline));
+      self.global_objects.outline = Some(outline);
     }
   }
 
@@ -340,7 +336,7 @@ impl SerializeContext {
   pub(crate) fn set_tag_tree(&mut self, root: TagTree) {
     // Only set the tag tree if the user actually enabled tagging.
     if self.serialize_settings.enable_tagging {
-      self.global_objects.tag_tree = MaybeTaken::new(Some(root))
+      self.global_objects.tag_tree = Some(root)
     }
   }
 
@@ -429,8 +425,6 @@ impl SerializeContext {
     }
 
     // Just a sanity check that we've actually processed all items.
-    self.global_objects.assert_all_taken();
-
     Ok((pdf, next_ref, object_stream))
   }
 }
@@ -462,7 +456,7 @@ impl SerializeContext {
         .global_objects
         .struct_parents
         .push(StructParentElement::Page(page_index, num_mcids));
-      Some(i32::try_from(id).unwrap())
+      Some(i32::try_from(id).unwrap_or(i32::MAX))
     } else {
       None
     }
@@ -477,7 +471,7 @@ impl SerializeContext {
         .global_objects
         .struct_parents
         .push(StructParentElement::Annotation(ai));
-      Some(i32::try_from(id).unwrap())
+      Some(i32::try_from(id).unwrap_or(i32::MAX))
     } else {
       None
     }
@@ -637,7 +631,7 @@ impl SerializeContext {
   }
 
   fn serialize_fonts(&mut self, chunk_container: &mut ChunkContainer) -> KrillaResult<()> {
-    let fonts = self.global_objects.font_map.take();
+    let fonts = std::mem::take(&mut self.global_objects.font_map);
     for font_container in fonts.values() {
       let borrowed = font_container.borrow();
 
@@ -660,7 +654,7 @@ impl SerializeContext {
   }
 
   fn serialize_pages(&mut self, chunk_container: &mut ChunkContainer) -> KrillaResult<()> {
-    let pages = self.global_objects.pages.take();
+    let pages = std::mem::take(&mut self.global_objects.pages);
     for (ref_, page) in pages {
       page.serialize(self, chunk_container, ref_)?;
     }
@@ -681,7 +675,7 @@ impl SerializeContext {
     &mut self,
     chunk_container: &mut ChunkContainer,
   ) -> KrillaResult<()> {
-    let xyz_destinations = self.global_objects.xyz_destinations.take();
+    let xyz_destinations = std::mem::take(&mut self.global_objects.xyz_destinations);
     for (ref_, dest) in &xyz_destinations {
       dest.serialize(self, chunk_container, *ref_);
     }
@@ -691,7 +685,7 @@ impl SerializeContext {
 
   fn serialize_tag_tree(&mut self, chunk_container: &mut ChunkContainer) -> KrillaResult<()> {
     let tag_tree = self.global_objects.tag_tree.take();
-    let struct_parents = self.global_objects.struct_parents.take();
+    let struct_parents = std::mem::take(&mut self.global_objects.struct_parents);
     if let Some(root) = &tag_tree {
       let mut parent_tree_map = HashMap::new();
       let mut id_tree_map = BTreeMap::new();
@@ -715,12 +709,7 @@ impl SerializeContext {
 
       if self.serialize_settings.pdf_version() < PdfVersion::Pdf20 {
         let mut role_map = tree.role_map();
-        // Custom structure elements.
-        role_map.insert(Name(b"Datetime"), StructRole::Span);
-        role_map.insert(Name(b"Terms"), StructRole::Part);
-
         // PDF 2.0 exclusive structure elements.
-        role_map.insert(Name(b"Title"), StructRole::P);
         role_map.insert(Name(b"Strong"), StructRole::Span);
         role_map.insert(Name(b"Em"), StructRole::Span);
         for level in self.global_objects.custom_heading_roles.iter() {
@@ -731,29 +720,15 @@ impl SerializeContext {
         let mut namespaces = tree.namespaces();
 
         // PDF 2.0 standard structure namespace
-        namespaces.item(self.pdf2_ns.ssn_ref);
+        namespaces.item(self.ssn_ref);
         let mut ns_chunk = self.new_chunk();
         // TODO: restore `pdf_2_ns()` once pdf-writer > 0.15.0 ships the fix. It
         // writes `https://www.iso.org/pdf2/ssn`, while ISO 32000-2:2020, 14.8.6
         // defines the identifier below.
         // https://github.com/typst/pdf-writer/pull/85
         ns_chunk
-          .namespace(self.pdf2_ns.ssn_ref)
+          .namespace(self.ssn_ref)
           .ns(TextStr("http://iso.org/pdf2/ssn"));
-        sub_chunks.push(ns_chunk);
-
-        // Custom krilla namspace
-        namespaces.item(self.pdf2_ns.krilla_ref);
-        let mut ns_chunk = self.new_chunk();
-        let mut ns = ns_chunk.namespace(self.pdf2_ns.krilla_ref);
-        ns.ns(TextStr("https://github.com/LaurenzV/krilla"));
-
-        // Custom structure elements.
-        ns.role_map_ns()
-          .to_pdf_2_0(Name(b"Datetime"), StructRole2::Span, self.pdf2_ns.ssn_ref)
-          .to_pdf_2_0(Name(b"Terms"), StructRole2::Part, self.pdf2_ns.ssn_ref);
-
-        ns.finish();
         sub_chunks.push(ns_chunk);
       }
       tree.children().item(document_ref);
@@ -878,97 +853,30 @@ impl SerializeContext {
   }
 }
 
-/// This struct is essentially a thin wrapper around `std::mem::replace`. When finishing the
-/// document, we need to take ownership of many of the items in `GlobalObjects` in order to
-/// prevent having to clone them. However, the problem is that we cannot easily take ownership
-/// of them, because they are part of the SerializeContext. Because of this, what we
-/// do is that we `std::mem::replace` the elements step by step and then serialize them.
-/// The `MaybeTaken` struct helps us to ensure that once we have taken a value, we do not
-/// accidentally attempt to write/read it again.
-pub(crate) struct MaybeTaken<T>(Option<T>);
-
-impl<T> MaybeTaken<T> {
-  pub(crate) fn new(item: T) -> Self {
-    Self(Some(item))
-  }
-
-  pub(crate) fn is_taken(&self) -> bool {
-    self.0.is_none()
-  }
-}
-
-impl<T> MaybeTaken<T> {
-  #[track_caller]
-  pub(crate) fn take(&mut self) -> T {
-    self.0.take().expect("value was already taken before")
-  }
-}
-
-impl<T: Default> Default for MaybeTaken<T> {
-  fn default() -> Self {
-    Self::new(T::default())
-  }
-}
-
-impl<T> Deref for MaybeTaken<T> {
-  type Target = T;
-
-  #[track_caller]
-  fn deref(&self) -> &Self::Target {
-    self.0.as_ref().expect("value was taken")
-  }
-}
-
-impl<T> DerefMut for MaybeTaken<T> {
-  #[track_caller]
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    self.0.as_mut().expect("value was taken")
-  }
-}
-
-pub(crate) struct Pdf2Namespaces {
-  /// The ref of the PDF 2.0 standard structure namspace (`https://www.iso.org/pdf2/ssn`).
-  pub(crate) ssn_ref: Ref,
-  /// The ref of the custom krilla namespace used for role mapping.
-  pub(crate) krilla_ref: Ref,
-}
-
 #[derive(Default)]
 pub(crate) struct GlobalObjects {
   /// A map from fonts to font container.
-  font_map: MaybeTaken<IndexMap<Font, Rc<RefCell<FontContainer>>>>,
+  font_map: IndexMap<Font, Rc<RefCell<FontContainer>>>,
   /// All XYZ destinations used in the document. The reason we need to store them
   /// separately is that we can only serialize them in the very end, once all pages
   /// have been written, so that we know the Ref of the page they belong to.
-  xyz_destinations: MaybeTaken<Vec<(Ref, XyzDestination)>>,
+  xyz_destinations: Vec<(Ref, XyzDestination)>,
   /// All pages and their corresponding chunks. Similarly to destinations, they need
   /// to be written in the very end, because pages might contain annotations which in turn
   /// depend on future pages (not written yet), so pages must also only be written in the
   /// very end.
-  pages: MaybeTaken<Vec<(Ref, InternalPage)>>,
+  pages: Vec<(Ref, InternalPage)>,
   /// Stores the struct parent elements.
-  struct_parents: MaybeTaken<Vec<StructParentElement>>,
+  struct_parents: Vec<StructParentElement>,
   /// Stores the document outline.
-  outline: MaybeTaken<Option<Outline>>,
+  outline: Option<Outline>,
   /// Stores the tag tree.
-  tag_tree: MaybeTaken<Option<TagTree>>,
+  tag_tree: Option<TagTree>,
   /// Stores the association of the names of embedded files to their refs,
   /// for the catalog dictionary.
-  pub(crate) embedded_files: MaybeTaken<BTreeMap<String, Ref>>,
+  pub(crate) embedded_files: BTreeMap<String, Ref>,
   /// A list of custom headings numbers used in the document.
   pub(crate) custom_heading_roles: BTreeSet<NonZeroU16>,
-}
-
-impl GlobalObjects {
-  pub(crate) fn assert_all_taken(&self) {
-    assert!(self.font_map.is_taken());
-    assert!(self.xyz_destinations.is_taken());
-    assert!(self.pages.is_taken());
-    assert!(self.struct_parents.is_taken());
-    assert!(self.outline.is_taken());
-    assert!(self.tag_tree.is_taken());
-    assert!(self.embedded_files.is_taken());
-  }
 }
 
 pub(crate) trait Cacheable: SipHashable {
