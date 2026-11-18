@@ -43,11 +43,11 @@
     },
     "./no-bundler": {
       "import": {
-        "types": "./dist/export.d.mts",
+        "types": "./bundlers/no-bundler.d.ts",
         "default": "./dist/export.mjs"
       },
       "require": {
-        "types": "./dist/export.d.cts",
+        "types": "./bundlers/no-bundler.d.cts",
         "default": "./dist/export.cjs"
       }
     },

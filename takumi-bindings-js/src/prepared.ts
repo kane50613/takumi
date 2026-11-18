@@ -15,11 +15,7 @@ type Awaitable<T> = T | Promise<T>;
 /** The binding options that only change how a laid-out page is encoded. */
 type OutputOnly = "format" | "quality" | "lossless" | "dithering" | "drawDebugBorder";
 
-/**
- * Images for {@link Prepared}: entries to use as they are, and how to fetch the rest.
- *
- * @internal
- */
+/** Images for {@link Prepared}: entries to use as they are, and how to fetch the rest. */
 export type PrepareImagesInput =
   | ImageLoader[]
   | (Omit<FetchOptions, "signal"> & {

@@ -78,7 +78,6 @@ export type RegisteredFamilyLike = { name: string };
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
  * file), raw bytes, or a descriptor with a lazy `data()` loader.
- * @internal
  */
 export type FontLoader =
   | string
@@ -89,15 +88,12 @@ export type FontLoader =
       ranges?: [number, number][];
     } & ({ key: string } | { name: string }));
 
-/** @internal */
 export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageSource["data"] | (() => ImageSource["data"] | Promise<ImageSource["data"]>);
 };
 
 /**
  * Images for a render: pre-fetched entries, or a group with a decode-cache default.
- *
- * @internal
  */
 export type ImagesInput =
   | ImageLoader[]
@@ -114,7 +110,6 @@ export type ImagesInput =
  * WebP honors both — `lossless` takes precedence over `quality`, and omitting both encodes
  * losslessly. On wasm (`@takumi-rs/wasm`) WebP is always lossless: `lossless` is effectively always
  * on and `quality` is ignored for WebP (lossy WebP is native-only).
- * @internal
  */
 export type OutputFormatOptions =
   | { format?: "png" }
@@ -127,7 +122,6 @@ export type OutputFormatOptions =
  * Animation output format. `quality` and `lossless` are WebP-only. On native, `lossless` takes
  * precedence over `quality` and omitting both encodes losslessly; on wasm animated WebP is always
  * lossless and `quality` is ignored.
- * @internal
  */
 export type AnimationOutputFormatOptions =
   | { format?: "webp"; quality?: number; lossless?: boolean }
@@ -148,7 +142,7 @@ type RenderExtras = {
  */
 export type BackendRenderOptions<TInternal> = Omit<
   TInternal,
-  "images" | "format" | "quality" | "lossless"
+  "images" | "failedFontFiles" | "format" | "quality" | "lossless"
 > &
   OutputFormatOptions &
   RenderExtras;
@@ -156,7 +150,7 @@ export type BackendRenderOptions<TInternal> = Omit<
 /** An animation's scenes and options, besides what a render loads, for a backend whose binding options are {@link TInternal}. */
 type AnimationLayout<TInternal extends { scenes: { node: unknown }[] }> = Omit<
   TInternal,
-  "images" | "format" | "quality" | "lossless" | "scenes"
+  "images" | "failedFontFiles" | "format" | "quality" | "lossless" | "scenes"
 > & {
   /** The scenes to render in order, each a node tree or HTML markup. */
   scenes: (Omit<TInternal["scenes"][number], "node"> & {
@@ -185,7 +179,8 @@ export type BackendPrepareAnimationOptions<TInternal extends { scenes: { node: u
  *
  * @internal
  */
-export type BackendSvgOptions<TInternal> = Omit<TInternal, "images"> & RenderExtras;
+export type BackendSvgOptions<TInternal> = Omit<TInternal, "images" | "failedFontFiles"> &
+  RenderExtras;
 
 function isBuffer(data: unknown): data is ByteBuf {
   return (

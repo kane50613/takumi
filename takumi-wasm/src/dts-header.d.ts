@@ -278,7 +278,7 @@ export type MeasuredNode = {
 };
 
 /** The images a node tree looks up by URL and the listed fonts the render loads, read after the cascade. */
-export type RenderNeeds = {
+type RenderNeeds = {
   /** The URLs of image elements and computed background, mask, and list marker images, except `data:` URIs and inline SVG, sorted. */
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */

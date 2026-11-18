@@ -100,7 +100,9 @@ export class Renderer {
     );
   }
 
+  /** @deprecated Call `render` and encode its bytes instead. Will be removed in v3. */
   renderAsDataUrl(source: PreparedSource, options?: PreparedRenderOptions): Promise<string>;
+  /** @deprecated Call `render` and encode its bytes instead. Will be removed in v3. */
   renderAsDataUrl(source: Node | string, options?: RenderOptions): Promise<string>;
   async renderAsDataUrl(
     source: PreparedSource | Node | string,
