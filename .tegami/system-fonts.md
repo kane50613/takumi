@@ -5,7 +5,9 @@ packages:
 
 # `Fonts::with_system_fonts` replaces `FontResource::last_resort`
 
-`Fonts::with_system_fonts` creates a `Fonts` with the fonts it is given installed as system fonts, the fonts a renderer starts with. A family name reaches a system font only when no registered font has that name, and font fallback tries the system fonts after every registered family, as `last_resort` fonts did. `unregister_family` never removes a system font.
+`Fonts::with_system_fonts` creates a `Fonts` with the fonts it is given installed as system fonts, the fonts a renderer starts with. A family name reaches a system font only when no registered font has that name. `unregister_family` never removes a system font.
+
+Font fallback tries the system fonts last, as it did `last_resort` fonts. By default they come after every registered family. A snapshot from `snapshot_with_fallbacks` tries only the families it lists before the system fonts, and a system family it lists by name draws at its place in that list.
 
 ```rust
 let mut fonts = Fonts::with_system_fonts([FontResource::new(geist).override_info(FontOverride {
@@ -13,7 +15,8 @@ let mut fonts = Fonts::with_system_fonts([FontResource::new(geist).override_info
   ..Default::default()
 })])?;
 
-// A font registered as Geist draws first, and the system Geist draws what it lacks.
+// A font registered as Geist draws first. The system Geist draws a character it lacks
+// when no other registered font has that character.
 fonts.register(FontResource::new(geist_cyrillic).override_info(FontOverride {
   family_name: Some("Geist".into()),
   ..Default::default()
