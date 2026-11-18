@@ -65,14 +65,20 @@ export type ImageSource = {
  */
 export type RegisteredFamilyLike = { name: string };
 
-/** Whether a renderer keeps a font a render's `fonts` list loaded once the render settles. */
-type FontCachePolicy = {
+/** How a render treats a font of its `fonts` list. */
+type FontPolicy = {
   /**
    * `"none"` lets the font go once the render that loaded it settles, though a render still uses
    * one the renderer already holds. `registerFont` keeps a font whatever this says.
    * @default "auto"
    */
   cache?: CacheMode;
+  /**
+   * Lets the render go on without the font when it fails to download or decode, as `@font-face`
+   * moves on past a failed `src`. `registerFont` rejects whatever this says.
+   * @default false
+   */
+  optional?: boolean;
 };
 
 /**
@@ -82,9 +88,9 @@ type FontCachePolicy = {
 export type FontLoader =
   | string
   | ByteBuf
-  | (FontDetails & FontCachePolicy)
+  | (FontDetails & FontPolicy)
   | (Omit<FontDetails, "data"> &
-      FontCachePolicy & {
+      FontPolicy & {
         data: () => Promise<FontDetails["data"]> | FontDetails["data"];
         /** @deprecated Use `unicodeRange`. */
         ranges?: [number, number][];
@@ -307,7 +313,7 @@ export type HeldFontFiles = {
 type ResolvedResources = {
   images?: ImageSource[];
   fontFamilies?: string[];
-  /** The held `@font-face` files that failed to load again. */
+  /** The held `@font-face` files that failed to load again, and the optional fonts that failed. */
   failedFontFiles?: string[];
 };
 
@@ -416,15 +422,37 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     await this.backend.cacheFontFile(url, asView(data), lease);
   }
 
-  /** Loads each of `fonts` the backend does not hold, leased to `lease`, and returns whether any was loaded. */
-  async cache(fonts: FontLoader[], lease: number): Promise<boolean> {
+  /**
+   * Loads each of `fonts` the backend does not hold, leased to `lease`, adding the key of each
+   * optional one that fails to `failed`, and returns whether any was loaded.
+   */
+  async cache(fonts: FontLoader[], lease: number, failed: string[]): Promise<boolean> {
     const loaders = fonts
       .map((font) => toLoader(font))
       .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
 
-    await Promise.all(loaders.map((loader) => this.register(loader, lease)));
+    await Promise.all(loaders.map((loader) => this.admit(loader, lease, failed)));
 
     return loaders.length > 0;
+  }
+
+  /** {@link register} for a render's `fonts` list, adding the key of an optional font that fails to `failed` instead of rejecting. */
+  private async admit(
+    loader: Exclude<FontLoader, string>,
+    lease: number,
+    failed: string[],
+  ): Promise<TFamily[]> {
+    try {
+      return await this.register(loader, lease);
+    } catch (error) {
+      if (isBuffer(loader) || !loader.optional) {
+        throw error;
+      }
+
+      failed.push(this.keyOf(loader));
+
+      return [];
+    }
   }
 
   /** Calls `use` with a set of leases, released once what it returns settles. */
@@ -458,7 +486,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    */
   dropUnkept(fonts: FontLoader[] | undefined): void {
     for (const font of fonts ?? []) {
-      const key = this.keyOf(toLoader(font));
+      const key = this.key(font);
 
       if (this.transient.has(key)) {
         this.unkept.add(key);
@@ -510,6 +538,16 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
       return { key, name, weight, style, unicodeRange: unicodeRangeOf(loader) };
     });
+  }
+
+  /** `fonts` without the ones whose keys `failed` lists. */
+  without(fonts: FontLoader[], failed: string[]): FontLoader[] {
+    return failed.length > 0 ? fonts.filter((font) => !failed.includes(this.key(font))) : fonts;
+  }
+
+  /** The key the backend keeps `font` under. */
+  private key(font: FontLoader): string {
+    return this.keyOf(toLoader(font));
   }
 
   private keyOf(loader: Exclude<FontLoader, string>) {
@@ -567,8 +605,12 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const loaders = fonts?.map((font) => toLoader(font)) ?? [];
 
     return this.leased(async (lease) => {
-      const families = await Promise.all(loaders.map((loader) => this.register(loader, lease)));
-      const failedFontFiles = files ? await this.holdFiles(files, lease) : [];
+      const failedFontFiles: string[] = [];
+      const families = await Promise.all(
+        loaders.map((loader) => this.admit(loader, lease, failedFontFiles)),
+      );
+
+      failedFontFiles.push(...(files ? await this.holdFiles(files, lease) : []));
       const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
 
       // Nothing yields from here into `use`, so the order stands when the render takes its fonts.

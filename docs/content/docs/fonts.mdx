@@ -17,11 +17,11 @@ Load a font for every script your text uses.
 
 Pass the fonts a render needs through `fonts`. Each entry takes one of three forms:
 
-| Entry      | Resolves to                                                                 |
-| ---------- | --------------------------------------------------------------------------- |
-| URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                           |
-| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.            |
-| Descriptor | `{ name, data, weight, style, generic, unicodeRange, cache }`. <sup>2</sup> |
+| Entry      | Resolves to                                                                           |
+| ---------- | ------------------------------------------------------------------------------------- |
+| URL string | Fetched on demand, keyed by the URL. <sup>1</sup>                                     |
+| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                      |
+| Descriptor | `{ name, data, weight, style, generic, unicodeRange, cache, optional }`. <sup>2</sup> |
 
 <sup>1</sup> Name, weight, and style come from the file. Takumi downloads it with the `fetch`,
 `timeout`, `maxBytes`, and `allowUrl` you pass in `images`, as it does images.
@@ -300,6 +300,30 @@ const image = await render(<div style={{ fontFamily: "Noto Sans JP" }}>{title}</
 ```
 
 A font another render is using stays until the last of them settles. A render without `"none"` that uses the font keeps it. The downloaded file still goes to the [download store](/docs/caching#downloaded-bytes), so the next render that needs it skips the download. Set the store to `null` to keep neither.
+
+### Fonts that may fail
+
+A font in the `fonts` list takes `optional: true`. When it fails to download, `allowUrl` refuses its URL, or its bytes do not decode, the render goes on without it, as an `@font-face` rule moves on past a failed `src`. Text falls back to the next font in its stack. A font without `optional` still rejects the render.
+
+A URL string cannot carry options, so pass `fontFromUrl(url, { optional: true })` to mark a URL optional. That loader downloads with the fetch options you give `fontFromUrl`, not the ones in the render's `images`:
+
+```tsx twoslash title="Render without a font that fails"
+import { render } from "takumi-js";
+import { fontFromUrl } from "takumi-js/helpers";
+
+const image = await render(<div style={{ fontFamily: "Brand, Inter" }}>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: [
+    fontFromUrl("https://example.com/Inter.woff2"),
+    fontFromUrl("https://cdn.example.com/Brand.woff2", { optional: true }), // [!code highlight]
+  ],
+});
+```
+
+A descriptor takes the field directly, such as `{ name: "Brand", data: loadBrand, optional: true }`.
+
+A prepared source picks its `unicodeRange` subsets once, in `prepare`. When an optional font it picked loads there but fails when a later render loads it again, as after the renderer released it, that render draws without it and does not reach the next family for those characters. Prepare the source again to pick its subsets anew.
 
 ## Choosing a font
 

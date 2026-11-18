@@ -136,6 +136,7 @@ type PreparedState<TSource, TLayout> = {
   images: ImageSource[];
   /** The `@font-face` files the source draws with, which a render loads again once the renderer evicted them. */
   fontFiles: string[];
+  /** The `@font-face` files and the optional fonts that failed to load, which `fonts` leaves out. */
   failedFontFiles: string[];
   fontFetch: FontFetch;
   /** Reads the source again with `failedFontFiles`, so their rules move on to their next `src`. */
@@ -178,17 +179,24 @@ export async function prepareSource<TFamily extends RegisteredFamilyLike, TSourc
 ): Promise<Prepared<TSource, TLayout>> {
   const state = await collect(registry, source, layout, extras, needs, true);
 
-  await registry.dropOnFailure(state.fonts, async () => {
-    await registry.resolveResources(
+  const failed = await registry.dropOnFailure(state.fonts, async () => {
+    const failedFonts = await registry.resolveResources(
       state.fonts && registry.loaders(state.fonts, { ...state.fontFetch, signal: extras.signal }),
       undefined,
       state.fontFamilies,
-      () => undefined,
+      (resolved) => resolved.failedFontFiles ?? [],
     );
+
     extras.signal?.throwIfAborted();
+
+    return failedFonts;
   });
 
-  return createPrepared(state);
+  return createPrepared({
+    ...state,
+    fonts: state.fonts && registry.without(state.fonts, failed),
+    failedFontFiles: [...state.failedFontFiles, ...failed],
+  });
 }
 
 /**
@@ -264,7 +272,7 @@ async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
 type Reach = {
   /** The `@font-face` files handled, each at most once. */
   tried: Set<string>;
-  /** The `@font-face` files that failed, which each read moves their rules on from. */
+  /** The `@font-face` files and the optional listed fonts that failed, which each read moves on from. */
   failedFontFiles: string[];
   /** How to fetch `@font-face` files, which are left alone without it. */
   fetch?: FontFetch & { signal?: AbortSignal };
@@ -305,7 +313,7 @@ async function loadReached<TFamily extends RegisteredFamilyLike>(
 
     signal?.throwIfAborted();
 
-    const loadedListed = await registry.cache(uncachedOf?.(latest) ?? [], lease);
+    const loadedListed = await registry.cache(uncachedOf?.(latest) ?? [], lease, failedFontFiles);
 
     signal?.throwIfAborted();
 
@@ -369,7 +377,12 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const fontFetch = { ...fetchOptions, fetchCache };
   const fetch = { ...fontFetch, signal };
   const reread = (failed: string[]) =>
-    needs({ ...request, images: entries, failedFontFiles: failed });
+    needs({
+      ...request,
+      fonts: listedWithout(listed, failed),
+      images: entries,
+      failedFontFiles: failed,
+    });
   // The fonts each read loads stay leased, so the next read sees them however small the cache.
   const reached = await registry.dropOnFailure(resolvedFonts, () =>
     registry.leased((lease) =>
@@ -401,7 +414,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   return {
     source,
     layout,
-    fonts: subset,
+    fonts: subset && registry.without(subset, failedFontFiles),
     loadedFonts: listed ? resolvedFonts?.filter((_, id) => cached.has(id)) : resolvedFonts,
     fontFamilies,
     images: entries,
@@ -410,6 +423,18 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
     fontFetch,
     reread,
   };
+}
+
+/** `listed` with each font whose key `failed` lists left as a bare key, so a read reaches the family after it. */
+function listedWithout(
+  listed: ListedFont[] | undefined,
+  failed: string[],
+): ListedFont[] | undefined {
+  if (!listed || failed.length === 0) {
+    return listed;
+  }
+
+  return listed.map((font) => (failed.includes(font.key) ? { key: font.key } : font));
 }
 
 /**

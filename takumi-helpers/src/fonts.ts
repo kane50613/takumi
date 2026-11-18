@@ -393,10 +393,17 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
 /** A loader that fetches the font at `url` on demand, its name, weight, and style read from the file. */
 export function fontFromUrl(
   url: string,
-  options: FetchOptions = {},
-): { key: string; data: () => Promise<ArrayBuffer> } {
+  {
+    optional,
+    ...options
+  }: FetchOptions & {
+    /** Lets a render go on without the font when it fails to download or decode. */
+    optional?: boolean;
+  } = {},
+): { key: string; optional?: boolean; data: () => Promise<ArrayBuffer> } {
   return {
     key: url,
+    ...(optional ? { optional } : {}),
     data: () => fetchBytes(url, { ...options, store: storeOf(options) }),
   };
 }
