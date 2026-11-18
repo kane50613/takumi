@@ -11,7 +11,7 @@ use std::{
   path::{Path, PathBuf},
   process::Command,
   result::Result,
-  sync::{Arc, LazyLock, OnceLock},
+  sync::{Arc, LazyLock},
 };
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -19,7 +19,7 @@ use takumi::{
   measure, prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp,
   write_image,
 };
-use takumi_core::resources::image::ResourceCache;
+use takumi_core::resources::cache::Cache;
 use takumi_svg::{SvgOptions, render as svg_render};
 use zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions};
 use zune_jpeg::JpegDecoder;
@@ -110,28 +110,23 @@ pub const GENERATED_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixt
 pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
 
 /// Test images, provided to renders as pre-fetched resources. Loaded through
-/// an [`ResourceCache`] so fixtures exercise the same decode-at-draw-size path as
+/// a [`Cache`] so fixtures exercise the same decode-at-draw-size path as
 /// the renderer bindings.
 pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new(|| {
-  let cache = ResourceCache::default();
-  let images = IMAGES
+  let cache = Cache::shared();
+
+  IMAGES
     .iter()
     .map(|path| {
       let data = fs::read(repo_base_path(path)).unwrap();
 
       (
         Arc::from(*path),
-        cache.get_or_decode(&data, ImageCacheMode::Auto).unwrap(),
+        cache.decode_image(&data, ImageCacheMode::Auto).unwrap(),
       )
     })
-    .collect();
-  CACHE.set(cache).ok().unwrap();
-  images
+    .collect()
 });
-
-/// Keeps the decode cache alive so lazily decoded sources keep their sized
-/// entries across renders.
-static CACHE: OnceLock<ResourceCache> = OnceLock::new();
 
 /// Inclusive edges of the dark ink: left, top, right, bottom.
 pub type InkBounds = (u32, u32, u32, u32);

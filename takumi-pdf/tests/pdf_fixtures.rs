@@ -21,8 +21,9 @@ use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage},
   resources::{
+    cache::CacheOptions,
     font::{FontOverride, FontResource},
-    image::{ImageCacheMode, ImageSource, ResourceCache},
+    image::{ImageCacheMode, ImageSource},
     image_buffer::ImageBuffer,
     unicode_range::{UnicodeRange, UnicodeRangeSet},
   },
@@ -6233,12 +6234,12 @@ fn encoded_bitmaps_embed_their_own_bytes() {
   const JPEG: &[u8] = include_bytes!("images/checker.jpg");
   const WEBP: &[u8] = include_bytes!("images/checker.webp");
 
-  let cache = ResourceCache::new(1 << 20);
+  let cache = CacheOptions::builder().images(1 << 20).build();
   let images: HashMap<Arc<str>, ImageSource> = [("jpeg", JPEG), ("webp", WEBP)]
     .into_iter()
     .map(|(name, bytes)| {
       let source = cache
-        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .decode_image(bytes, ImageCacheMode::Auto)
         .expect("decode test image");
 
       (name.into(), source)
@@ -6282,12 +6283,12 @@ fn opaque_pngs_embed_their_own_streams() {
   const RGB: &[u8] = include_bytes!("images/checker.png");
   const INDEXED: &[u8] = include_bytes!("images/checker-indexed.png");
 
-  let cache = ResourceCache::new(1 << 20);
+  let cache = CacheOptions::builder().images(1 << 20).build();
   let images: HashMap<Arc<str>, ImageSource> = [("rgb", RGB), ("indexed", INDEXED)]
     .into_iter()
     .map(|(name, bytes)| {
       let source = cache
-        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .decode_image(bytes, ImageCacheMode::Auto)
         .expect("decode test image");
 
       (name.into(), source)
@@ -6393,9 +6394,9 @@ fn an_undecodable_image_stops_the_render() {
 
   bytes[idat..].fill(0);
 
-  let cache = ResourceCache::new(1 << 20);
+  let cache = CacheOptions::builder().images(1 << 20).build();
   let source = cache
-    .get_or_decode(&bytes, ImageCacheMode::Auto)
+    .decode_image(&bytes, ImageCacheMode::Auto)
     .expect("the png header still parses");
   let doc = r#"<img src="broken" style="filter: grayscale(1); width: 32px; height: 32px;" />"#;
   let error = render(

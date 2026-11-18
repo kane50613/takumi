@@ -1,5 +1,6 @@
 #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 mod animated;
+pub mod cache;
 pub mod color_glyph;
 /// Font loading and processing functionality
 pub mod font;
