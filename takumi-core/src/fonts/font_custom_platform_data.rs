@@ -36,7 +36,7 @@ use crate::{
 };
 
 /// The `unitsPerEm` range OTS accepts, as [`head.cc`](https://github.com/khaledhosny/ots/blob/main/src/head.cc) checks it.
-const UNITS_PER_EM_RANGE: RangeInclusive<u16> = 16..=16384;
+pub(crate) const UNITS_PER_EM_RANGE: RangeInclusive<u16> = 16..=16384;
 
 const ITAL_TAG: Tag = Tag::new(b"ital");
 const OPSZ_TAG: Tag = Tag::new(b"opsz");
