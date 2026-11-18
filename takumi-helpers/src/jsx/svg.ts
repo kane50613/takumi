@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactElement } from "react";
 import {
   camelToKebab,
-  isFunctionComponent,
+  componentRenderer,
   isReactForwardRef,
   isReactMemo,
   isValidElement,
@@ -114,7 +114,9 @@ function serializeElement(element: ReactElementLike): string {
   const { type } = element;
   const props = (element.props as Record<string, unknown>) || {};
 
-  if (isFunctionComponent(type)) return serializeNode(type(element.props));
+  const render = componentRenderer(type);
+
+  if (render) return serializeNode(render(element.props));
 
   // Fragments and other symbol types have no tag of their own; emit their children in place.
   if (typeof type === "symbol") return serializeNode(props.children);
