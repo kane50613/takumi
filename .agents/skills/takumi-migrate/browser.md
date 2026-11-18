@@ -13,6 +13,8 @@ Takumi lays out the page's HTML and CSS without starting a browser, and runs no 
 
 3. **Move stylesheets and images.** Pass `<link>`ed CSS through the `css` option, or keep it in a `<style>` element. Pass local image files as `images: [{ src, data }]`. The swap is done when no stylesheet or image loads from the local file system by path.
 
+4. **Restrict the image URLs.** Takumi fetches each remote image from your server and allows every URL by default, so removing the browser's request limits can open your network to the markup. When user input can reach an image URL, set `images.allowUrl`. To filter by resolved address, pass your own `fetch`, as [images.md](https://takumi.kane.tw/docs/images.md#urls-from-user-input) describes. The swap is done when every URL that user input reaches passes through `allowUrl`.
+
 ## Workarounds to delete
 
 - browser launch, page pools, and their timeouts

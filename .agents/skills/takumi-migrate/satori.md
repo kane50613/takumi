@@ -14,7 +14,7 @@ Pass `width` and `height` to every call. `next/og` defaults to 1200 × 630, whil
 
 ## Workarounds to delete
 
-- base64 data URLs for images, replaced by the remote URL or an `images: [{ src, data }]` entry
+- base64 data URLs for images, replaced by the remote URL or an `images: [{ src, data }]` entry. When a loader limited which URLs could become a data URL, set an equivalent `images.allowUrl` for the remote URL, or keep that loader and pass its bytes through `images`.
 - hand-drawn SVG standing in for gradients, masks, `clip-path`, or `background-image`
 - colors converted from `oklch()`, `color-mix()`, or `var()` tokens to hex
 - static font instances chosen because variable fonts drew at their default

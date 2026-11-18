@@ -14,7 +14,7 @@ Takumi lays out a template the way Chromium does, so write it as you would for a
    - A script or server function awaits `render(node, options)` from `takumi-js`. For SVG, pass `format: "svg"`, which returns the document as UTF-8 bytes.
    - An animated WebP, APNG, or GIF comes from `renderAnimation`. See [animation.md](https://takumi.kane.tw/docs/animation.md).
 
-   Done when the code imports only from `takumi-js`, `takumi-js/response`, and `takumi-js/node`. `takumi-js` loads its own backend, so any wasm init code or `@takumi-rs/*` import is a deployment problem for `takumi-deploy`.
+   Done when the code imports only from `takumi-js`, `takumi-js/response`, and `takumi-js/node`, plus the `takumi-js/wasm-url` that `takumi-deploy` adds for a WebAssembly fallback. `takumi-js` loads its own backend, so any wasm init code or `@takumi-rs/*` import is a deployment problem for `takumi-deploy`.
 
 2. **Size the canvas and the root.** Pass `width` and `height` to every call, because an omitted dimension follows the content. Give the root `width: 100%` and `height: 100%`, or `tw="w-full h-full"`, since it otherwise lays out as a block as tall as its content. Done when every call passes both dimensions and the root fills them.
 
