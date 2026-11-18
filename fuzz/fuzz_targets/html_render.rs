@@ -18,7 +18,7 @@ fuzz_target!(|html: &str| {
   let Ok(parsed) = takumi::parse_html(html, FromHtmlOptions::default()) else {
     return;
   };
-  let stylesheet = StyleSheet::parse(&parsed.css.join("\n")).unwrap_or_default();
+  let stylesheet = StyleSheet::parse_loosy(&parsed.css.join("\n"));
   let options = RenderOptions::builder()
     .viewport(Viewport::new((96, 64)))
     .node(parsed.node)
