@@ -311,21 +311,21 @@ impl Tag {
           }
           struct_elem.custom_kind(role2.to_name(&mut [0; 6]));
         } else {
-          struct_elem.kind_2(role2, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(role2, sc.ssn_ref);
         }
       }
       TagKind::Strong => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Strong"));
         } else {
-          struct_elem.kind_2(StructRole2::Strong, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(StructRole2::Strong, sc.ssn_ref);
         }
       }
       TagKind::Em => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Em"));
         } else {
-          struct_elem.kind_2(StructRole2::Em, sc.pdf2_ns.ssn_ref);
+          struct_elem.kind_2(StructRole2::Em, sc.ssn_ref);
         }
       }
     };
@@ -365,7 +365,7 @@ fn write_kind_compat(
     let compat = role.compatibility_1_7(RoleMapOpts::default());
     struct_elem.kind(compat.role());
   } else {
-    struct_elem.kind_2(role, sc.pdf2_ns.ssn_ref);
+    struct_elem.kind_2(role, sc.ssn_ref);
   }
 }
 
