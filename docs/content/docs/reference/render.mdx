@@ -14,9 +14,9 @@ const png = await render(<div tw="w-full h-full bg-white">Hello</div>, {
 });
 ```
 
-It resolves to a `Buffer` in Node.js and Bun, and to a `Uint8Array` elsewhere. With `format: "raw"` the bytes are the RGBA pixels, four per pixel, row by row.
+It resolves to a `Buffer` on the native backend, which Node.js and Bun use unless you pass `module`, and to a `Uint8Array` on WebAssembly. With `format: "raw"` the bytes are the RGBA pixels, four per pixel, row by row.
 
-`renderSvg()` takes the same input and options and resolves to an SVG document string. [`ImageResponse`](/docs/reference/image-response) and [`measure()`](/docs/reference/measure) take them too.
+`renderSvg()` takes the same input and options, except the raster-only `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, and `devicePixelRatio`, and resolves to an SVG document string. [`ImageResponse`](/docs/reference/image-response) and [`measure()`](/docs/reference/measure) take them too.
 
 ## Options
 
@@ -39,7 +39,7 @@ It resolves to a `Buffer` in Node.js and Bun, and to a `Uint8Array` elsewhere. W
     quality: {
       type: "number",
       description:
-        "Encoder quality from 0 to 100, for JPEG. For WebP, it picks lossy encoding unless `lossless` is set.",
+        "Encoder quality from 0 to 100, for JPEG. For WebP on the native backend, it picks lossy encoding unless `lossless` is set. WebAssembly always encodes WebP losslessly and ignores it.",
     },
     lossless: {
       type: "boolean",
@@ -127,4 +127,4 @@ It resolves to a `Buffer` in Node.js and Bun, and to a `Uint8Array` elsewhere. W
 
 ## renderAnimation()
 
-`renderAnimation()` encodes a list of scenes as an animated WebP, APNG, or GIF. It takes `scenes` in place of an input, and the options above. See [Animation](/docs/animation#an-animated-image-with-renderanimation).
+`renderAnimation()` encodes a list of scenes as an animated WebP, APNG, or GIF. It takes one options object that holds `scenes` and requires `width`, `height`, and `fps`, and its `format` is `"webp"`, `"apng"`, or `"gif"` rather than the static formats above. See [Animation](/docs/animation#an-animated-image-with-renderanimation).

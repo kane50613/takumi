@@ -46,7 +46,7 @@ For how a render goes from input to output, and where it differs from a browser,
 npm i takumi-js react
 ```
 
-The examples below write JSX, and `react` provides the JSX runtime that compiles it. Leave `react` out if you pass HTML strings or node trees instead.
+The examples below write JSX, and `react` provides the JSX runtime that compiles it. If you pass HTML strings or node trees instead, you can leave the `react` runtime out, but a TypeScript project still needs `@types/react`, which the types of `takumi-js` import.
 
 `takumi-js` ships two backends and picks one at runtime:
 

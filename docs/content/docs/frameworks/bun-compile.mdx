@@ -11,6 +11,8 @@ description: Embed Takumi's native addon in an executable from bun build --compi
 
     Import the addon of the platform you build for with `type: "file"`, and set `TAKUMI_CORE_TARGET` to its path before `takumi-js` loads. A static `import` would load `takumi-js` first, so import it dynamically.
 
+    In a workspace that uses Bun's isolated linker, `image.ts` cannot resolve a package that only `takumi-js` depends on, so install the addon first with the version of `@takumi-rs/core` you have, such as `bun add @takumi-rs/core-linux-x64-gnu`. A single-package project uses the hoisted linker and resolves it already.
+
     ```ts title="image.ts"
     import addon from "@takumi-rs/core-linux-x64-gnu/core.linux-x64-gnu.node" with { type: "file" };
 

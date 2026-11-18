@@ -22,9 +22,15 @@ Takumi renders in a Worker on its WebAssembly backend. Wrangler resolves the `wo
     ```ts title="src/worker.ts"
     import { render } from "takumi-js";
 
+    // A tag in `title` would otherwise load whatever URL it names.
+    const escapeHtml = (text: string) =>
+      text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+
     export default {
       async fetch(request: Request): Promise<Response> {
-        const title = new URL(request.url).searchParams.get("title") ?? "Hello from a Worker";
+        const title = escapeHtml(
+          new URL(request.url).searchParams.get("title") ?? "Hello from a Worker",
+        );
         const png = await render(
           `<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #f48120; color: white; font-size: 64px">${title}</div>`,
           { width: 1200, height: 630 },
@@ -35,7 +41,7 @@ Takumi renders in a Worker on its WebAssembly backend. Wrangler resolves the `wo
     };
     ```
 
-    Escape `title` before you put it in HTML, or build a [node tree](/docs/reference/helpers) instead, which takes text as text.
+    Escape any text a request supplies before it goes into HTML, as `escapeHtml` does, or build a [node tree](/docs/reference/helpers) instead, which takes text as text.
 
   </Step>
   <Step>
