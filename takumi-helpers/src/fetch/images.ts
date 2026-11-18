@@ -95,18 +95,27 @@ export async function fetchImages<T extends { src: string } = FetchedImage>({
   );
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
-  const tasks = missing.map(async (src): Promise<FetchedImage> => ({
+  const fetchImage = async (src: string): Promise<FetchedImage> => ({
     src,
     data:
       !fetchCache && !allowUrl && isEmojiImageUrl(src)
         ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
         : await fetchImageData(src, fetchOptions, fetchCache),
-  }));
-  const fetched = throwOnError
-    ? await Promise.all(tasks)
-    : (await Promise.allSettled(tasks))
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => result.value);
+  });
+  // An emoji image never rejects the render. One that fails to fetch is left out.
+  const emoji = fulfilled(missing.filter(isEmojiImageUrl).map(fetchImage));
+  const markup = missing.filter((url) => !isEmojiImageUrl(url)).map(fetchImage);
+  const fetched = throwOnError ? await Promise.all(markup) : await fulfilled(markup);
+  const emojiFetched = await emoji;
 
-  return [...provided.values(), ...fetched];
+  signal?.throwIfAborted();
+
+  return [...provided.values(), ...fetched, ...emojiFetched];
+}
+
+/** The values of the `tasks` that fulfil, leaving out the ones that reject. */
+async function fulfilled<T>(tasks: Promise<T>[]): Promise<T[]> {
+  return (await Promise.allSettled(tasks)).flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
 }

@@ -41,3 +41,11 @@ test("draws the emoji in JSX as an image from the CDN", async () => {
   expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([twemoji]);
   expect(center(image)).toEqual([255, 0, 0, 255]);
 });
+
+test("renders without an emoji whose image fails to fetch", async () => {
+  const fetch = mock(async (_url: string | URL | Request) => new Response(null, { status: 404 }));
+  const image = await render(<div style={{ fontSize: 20 }}>😀</div>, { ...raw, images: { fetch } });
+
+  expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([twemoji]);
+  expect(center(image)).toEqual([0, 0, 0, 0]);
+});
