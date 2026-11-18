@@ -169,10 +169,10 @@ Vite writes the client asset and the server chunk to different directories. The 
 
 ### No font the text can use draws क (U+0915)
 
-Check that each font's `unicodeRange` includes the characters the error names, and that its family is in the `font-family` stack. If none of your fonts has them, register one that does:
+Check that each font's `unicodeRange` includes the characters the error names, and that its family is in the `font-family` stack. If none of your fonts has them, pass one that does through `fonts`:
 
 ```ts title="Load a Devanagari font"
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 import { render } from "takumi-pdf";
 
 const pdf = await render(document, {

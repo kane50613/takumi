@@ -3,10 +3,14 @@ title: Helpers
 description: Look up the helpers that build node trees, convert JSX and HTML, prepare images, and load fonts.
 ---
 
-`takumi-js/helpers` builds node trees and prepares fonts and images for `render`.
+`@takumi-rs/helpers` builds node trees and loads fonts for `render`. Install it next to `takumi-js`, `takumi-pdf`, or a renderer binding:
+
+```bash
+npm install @takumi-rs/helpers
+```
 
 ```ts twoslash title="Build a node tree"
-import { container, text } from "takumi-js/helpers";
+import { container, text } from "@takumi-rs/helpers";
 
 const node = container({
   style: { padding: 32, backgroundColor: "white" },
@@ -14,7 +18,7 @@ const node = container({
 });
 ```
 
-`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use it when you want to build node trees or prepare fonts and images yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources.
+Use it to build node trees or load fonts yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources. `takumi-js/helpers` re-exports this package.
 
 ## Fonts
 
@@ -27,7 +31,8 @@ const node = container({
 <sup>1</sup> `render` keeps only the subsets the text uses. See [Fonts &
 text](/docs/fonts#from-google-fonts).
 
-<sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits).
+<sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits). Without them, pass the
+URL string in `fonts` instead.
 
 <sup>3</sup> `subsetFonts` is no longer needed, since a render keeps the subsets its text uses, the
 text inside SVG images included.
@@ -62,23 +67,24 @@ Length and color shorthands return CSS strings. `vw` and `vh` are viewport units
 
 ## Parsing templates
 
-| Helper                       | Import                   | Use                                                |
-| :--------------------------- | :----------------------- | :------------------------------------------------- |
-| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
-| `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, css }`.         |
+| Helper                       | Import                    | Use                                                |
+| :--------------------------- | :------------------------ | :------------------------------------------------- |
+| `fromJsx(element, options?)` | `@takumi-rs/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
+| `fromHtml(html)`             | `@takumi-rs/helpers/html` | Convert an HTML string to `{ node, css }`.         |
 
 `fromJsx` resolves React hooks and context without `react-dom`. Components that call `useState`, `useContext`, or `use()` render with server semantics: initial state, no effects. Preact trees work only when their components call no Preact hooks.
 
 ## Images & emoji
 
-| Helper                           | Import                    | Use                                                |
-| :------------------------------- | :------------------------ | :------------------------------------------------- |
-| `prepareImages(options)`         | `takumi-js/helpers`       | Deprecated. <sup>1</sup>                           |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. <sup>2</sup> |
+| Helper                           | Import                     | Use                                                |
+| :------------------------------- | :------------------------- | :------------------------------------------------- |
+| `prepareImages(options)`         | `@takumi-rs/helpers`       | Deprecated. <sup>1</sup>                           |
+| `extractEmojis(node, emojiType)` | `@takumi-rs/helpers/emoji` | Replace emoji with CDN `<img>` nodes. <sup>2</sup> |
 
 <sup>1</sup> Use a renderer's `prepare` instead, which reads the images a document draws and fetches
 them.
 
-<sup>2</sup> See [Emoji](/docs/images#emoji).
+<sup>2</sup> `takumi-js` does this through its `emoji` option, so call it only on a renderer
+binding. See [Emoji](/docs/images#emoji).
 
 `emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing.

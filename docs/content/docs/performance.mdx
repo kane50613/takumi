@@ -16,7 +16,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler so its registered fonts and decoded resources survive between renders.
+`render` and `ImageResponse` share one renderer per process, so fonts, decoded images, and parsed stylesheets survive between renders without setup. Define the `fonts` list once at module level, so every render passes the same entries and each file [decodes once](/docs/fonts#reusing-fonts-across-renders).
 
 ### Share one renderer between requests
 
@@ -55,10 +55,15 @@ Measure the first render separately from repeated renders, because font download
 
 ### Resource cache
 
-```ts twoslash title="Resource cache"
+The shared renderer keeps 64 MiB of decoded resources. To change the budget, create one renderer at module level and pass it to every render as `renderer`:
+
+```tsx twoslash title="Resource cache"
+import { render } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 
-const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]
+const renderer = new Renderer({ cacheMaxBytes: 256 * 1024 * 1024 }); // [!code highlight]
+
+const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, { renderer });
 ```
 
 Raise the budget when reused images or stylesheets get evicted. For an image used once, [`cache: "none"`](/docs/images#decode-caching) keeps it from pushing out reusable entries. This budget does not cover `images.fetchCache`, so bound that cache yourself.
@@ -109,7 +114,7 @@ In [PR #2517](https://github.com/kane50613/takumi/pull/2517), mimalloc raised fo
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/images#external-images), since the renderer's decode cache does not replace a download cache.
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A `fonts` list defined once decodes each file once (see [Reusing fonts across renders](/docs/fonts#reusing-fonts-across-renders)). For repeated remote images, use a bounded [fetch cache](/docs/images#external-images), since the renderer's decode cache does not replace a download cache.
 
 ## Reduce painting work
 
