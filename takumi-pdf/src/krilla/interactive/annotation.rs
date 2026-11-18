@@ -14,7 +14,7 @@ use crate::krilla::color::Color;
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
 use crate::krilla::geom::{Quadrilateral, Rect};
-use crate::krilla::interactive::action::Action;
+use crate::krilla::interactive::action::LinkAction;
 use crate::krilla::interactive::destination::Destination;
 use crate::krilla::page::page_root_transform;
 use crate::krilla::serialize::SerializeContext;
@@ -128,8 +128,8 @@ impl AnnotationType {
 pub enum Target {
   /// A destination within the document.
   Destination(Destination),
-  /// An action to be performed.
-  Action(Action),
+  /// A link to open.
+  Action(LinkAction),
 }
 
 /// Border of a link annotation.
@@ -212,7 +212,11 @@ impl LinkAnnotation {
       Target::Destination(destination) => {
         destination.serialize(sc, annotation.insert(Name(b"Dest")))
       }
-      Target::Action(action) => action.serialize(sc, annotation.action()),
+      Target::Action(action) => {
+        action.serialize(annotation.action());
+
+        Ok(())
+      }
     }
   }
 }

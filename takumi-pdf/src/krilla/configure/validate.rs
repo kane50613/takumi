@@ -151,8 +151,6 @@ pub enum ValidationError {
 pub enum VersionedFeature {
   /// Tabbing through the document according to the structure order.
   StructureOrderTabbing,
-  /// Header and footer artifact subtypes.
-  HeaderFooterArtifactSubtypes,
   /// Scope attribute for table header cells.
   TableHeaderScope,
 }
@@ -162,7 +160,6 @@ impl VersionedFeature {
   pub fn minimum_pdf_version(&self) -> PdfVersion {
     match self {
       VersionedFeature::StructureOrderTabbing => PdfVersion::Pdf15,
-      VersionedFeature::HeaderFooterArtifactSubtypes => PdfVersion::Pdf17,
       VersionedFeature::TableHeaderScope => PdfVersion::Pdf15,
     }
   }
@@ -548,9 +545,7 @@ impl Archival {
         | ValidationError::MissingDocumentOutline
         | ValidationError::EmbeddedFile(_, _)
         | ValidationError::RequiresNewerPdfVersion(
-          VersionedFeature::HeaderFooterArtifactSubtypes
-          | VersionedFeature::StructureOrderTabbing
-          | VersionedFeature::TableHeaderScope,
+          VersionedFeature::StructureOrderTabbing | VersionedFeature::TableHeaderScope,
           _,
         ),
       ) => false,
@@ -592,9 +587,7 @@ impl Archival {
         | ValidationError::MissingHeadingTitle
         | ValidationError::MissingDocumentOutline
         | ValidationError::RequiresNewerPdfVersion(
-          VersionedFeature::HeaderFooterArtifactSubtypes
-          | VersionedFeature::StructureOrderTabbing
-          | VersionedFeature::TableHeaderScope,
+          VersionedFeature::StructureOrderTabbing | VersionedFeature::TableHeaderScope,
           _,
         ),
       ) => false,
@@ -662,9 +655,7 @@ impl Archival {
         | ValidationError::EmbeddedFile(EmbedError::MissingDate | EmbedError::MissingMimeType, _)
         | ValidationError::MissingTagging
         | ValidationError::RequiresNewerPdfVersion(
-          VersionedFeature::HeaderFooterArtifactSubtypes
-          | VersionedFeature::StructureOrderTabbing
-          | VersionedFeature::TableHeaderScope,
+          VersionedFeature::StructureOrderTabbing | VersionedFeature::TableHeaderScope,
           _,
         ),
       ) => false,
@@ -1081,9 +1072,7 @@ impl Accessibility {
         | ValidationError::MissingTagging
         | ValidationError::EmbeddedPDF(_)
         | ValidationError::RequiresNewerPdfVersion(
-          VersionedFeature::HeaderFooterArtifactSubtypes
-          | VersionedFeature::StructureOrderTabbing
-          | VersionedFeature::TableHeaderScope,
+          VersionedFeature::StructureOrderTabbing | VersionedFeature::TableHeaderScope,
           _,
         ),
       ) => true,

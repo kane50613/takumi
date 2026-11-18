@@ -32,10 +32,6 @@ pub enum KrillaError {
   ///
   /// [`Tag::id`]: crate::krilla::interchange::tagging::Tag::id
   DuplicateTagId(TagId, Option<Location>),
-  /// A [`TagId`] was not found in the [`TagTree`].
-  ///
-  /// [`TagTree`]: crate::krilla::interchange::tagging::TagTree
-  UnknownTagId(TagId, Option<Location>),
   /// The tag tree references content that does not exist, references it
   /// twice, or omits recorded content.
   ///
@@ -69,14 +65,6 @@ impl Display for KrillaError {
         write!(
           f,
           "duplicate tag id {}",
-          String::from_utf8_lossy(id.as_bytes())
-        )?;
-        write_location(f, *location)
-      }
-      KrillaError::UnknownTagId(id, location) => {
-        write!(
-          f,
-          "unknown tag id {}",
           String::from_utf8_lossy(id.as_bytes())
         )?;
         write_location(f, *location)

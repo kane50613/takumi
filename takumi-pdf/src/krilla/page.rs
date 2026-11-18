@@ -1,12 +1,10 @@
 //! Working with pages of a PDF document.
 
 use std::cell::OnceCell;
-use std::num::NonZeroU32;
 use std::ops::DerefMut;
 
 use pdf_writer::types::TabOrder;
-use pdf_writer::writers::NumberTree;
-use pdf_writer::{Chunk, Finish, Ref, TextStr};
+use pdf_writer::{Chunk, Finish, Ref};
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::configure::ValidationError;
@@ -22,86 +20,40 @@ use crate::krilla::stream::{FilterStreamBuilder, Stream};
 use crate::krilla::surface::Surface;
 use crate::krilla::util::Deferred;
 
-#[derive(Clone, Debug)]
 /// The settings of a page.
+#[derive(Clone, Debug)]
 pub struct PageSettings {
-  /// The media box of the page, which defines the visible area of the surface.
-  media_box: Option<Rect>,
-  /// The page label of the page.
-  page_label: PageLabel,
-  /// The size of the surface.
+  /// The size of the surface, which the media box spans.
   surface_size: Size,
-  /// The crop box of the page
-  crop_box: Option<Rect>,
-  /// The bleed box of the page
-  bleed_box: Option<Rect>,
-  /// The trim box of the page
-  trim_box: Option<Rect>,
-  /// The actual content boundaries
-  art_box: Option<Rect>,
 }
 
 impl PageSettings {
   /// Create new page settings and define the size of the page surface.
   pub fn new(size: Size) -> Self {
-    Self {
-      media_box: Some(Rect::from_xywh(0.0, 0.0, size.width(), size.height()).unwrap()),
-      surface_size: size,
-      ..Default::default()
-    }
+    Self { surface_size: size }
   }
 
-  /// The current media box.
-  pub(crate) fn media_box(&self) -> Option<Rect> {
-    self.media_box
+  /// The visible area of the surface.
+  pub(crate) fn media_box(&self) -> Rect {
+    Rect::from_xywh(
+      0.0,
+      0.0,
+      self.surface_size.width(),
+      self.surface_size.height(),
+    )
+    .unwrap()
   }
 
   /// The current surface size.
   pub(crate) fn surface_size(&self) -> Size {
     self.surface_size
   }
-
-  /// The current page label.
-  pub(crate) fn page_label(&self) -> &PageLabel {
-    &self.page_label
-  }
-
-  /// The current crop box.
-  pub(crate) fn crop_box(&self) -> Option<Rect> {
-    self.crop_box
-  }
-
-  /// The current bleed box.
-  pub(crate) fn bleed_box(&self) -> Option<Rect> {
-    self.bleed_box
-  }
-
-  /// The current trim box.
-  pub(crate) fn trim_box(&self) -> Option<Rect> {
-    self.trim_box
-  }
-
-  /// The current art box.
-  pub(crate) fn art_box(&self) -> Option<Rect> {
-    self.art_box
-  }
 }
 
 impl Default for PageSettings {
+  /// An A4 page.
   fn default() -> Self {
-    // Default for A4.
-    let width = 595.0;
-    let height = 842.0;
-
-    Self {
-      media_box: Some(Rect::from_xywh(0.0, 0.0, width, height).unwrap()),
-      surface_size: Size::from_wh(width, height).unwrap(),
-      page_label: PageLabel::default(),
-      crop_box: None,
-      bleed_box: None,
-      trim_box: None,
-      art_box: None,
-    }
+    Self::new(Size::from_wh(595.0, 842.0).unwrap())
   }
 }
 
@@ -168,11 +120,7 @@ impl<'a> Page<'a> {
   /// Get the surface of the page to draw on. Calling this multiple times
   /// on the same page will reset any previous drawings.
   pub fn surface(&mut self) -> Surface<'_> {
-    let root_builder = ContentBuilder::new(
-      self.root_transform(),
-      self.page_settings.media_box.is_none(),
-      self.sc,
-    );
+    let root_builder = ContentBuilder::new(self.root_transform(), false, self.sc);
 
     let finish_fn = Box::new(|stream, num_mcids| {
       self.page_stream = stream;
@@ -226,33 +174,6 @@ impl Drop for Page<'_> {
   }
 }
 
-/// The numbering style of a page label.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum NumberingStyle {
-  /// Arabic numerals.
-  Arabic,
-  /// Lowercase Roman numerals.
-  LowerRoman,
-  /// Uppercase Roman numerals.
-  UpperRoman,
-  /// Lowercase letters (a-z, then aa-zz, ...).
-  LowerAlpha,
-  /// Uppercase letters (A-Z, then AA-ZZ, ...).
-  UpperAlpha,
-}
-
-impl NumberingStyle {
-  fn to_pdf(self) -> pdf_writer::types::NumberingStyle {
-    match self {
-      NumberingStyle::Arabic => pdf_writer::types::NumberingStyle::Arabic,
-      NumberingStyle::LowerRoman => pdf_writer::types::NumberingStyle::LowerRoman,
-      NumberingStyle::UpperRoman => pdf_writer::types::NumberingStyle::UpperRoman,
-      NumberingStyle::LowerAlpha => pdf_writer::types::NumberingStyle::LowerAlpha,
-      NumberingStyle::UpperAlpha => pdf_writer::types::NumberingStyle::UpperAlpha,
-    }
-  }
-}
-
 pub(crate) struct InternalPage {
   pub stream_ref: Ref,
   pub stream_resources: ResourceDictionary,
@@ -260,7 +181,6 @@ pub(crate) struct InternalPage {
   pub page_settings: PageSettings,
   pub page_index: usize,
   pub struct_parent: Option<i32>,
-  pub bbox: Rect,
   pub annotations: Vec<Annotation>,
 }
 
@@ -299,7 +219,6 @@ impl InternalPage {
       stream_ref,
       stream_chunk,
       struct_parent,
-      bbox: stream.bbox,
       annotations,
       page_settings,
       page_index,
@@ -344,30 +263,8 @@ impl InternalPage {
         .unwrap()
     };
 
-    // media box is mandatory, so we need to fall back to the default bbox
-    let media_box = transform_rect(self.page_settings.media_box().unwrap_or(self.bbox));
+    let media_box = transform_rect(self.page_settings.media_box());
     page.media_box(media_box.to_pdf_rect());
-
-    // the remaining type of box are not mandatory, so we only set them if they are present
-    if let Some(crop_box) = self.page_settings.crop_box() {
-      let crop_box = transform_rect(crop_box);
-      page.crop_box(crop_box.to_pdf_rect());
-    }
-
-    if let Some(bleed_box) = self.page_settings.bleed_box() {
-      let bleed_box = transform_rect(bleed_box);
-      page.bleed_box(bleed_box.to_pdf_rect());
-    }
-
-    if let Some(trim_box) = self.page_settings.trim_box() {
-      let trim_box = transform_rect(trim_box);
-      page.trim_box(trim_box.to_pdf_rect());
-    }
-
-    if let Some(art_box) = self.page_settings.art_box() {
-      let art_box = transform_rect(art_box);
-      page.art_box(art_box.to_pdf_rect());
-    }
 
     if let Some(struct_parent) = self.struct_parent {
       page.struct_parents(struct_parent);
@@ -427,98 +324,5 @@ impl InternalPage {
     chunk_container.streams.pages.push(self.stream_chunk);
 
     Ok(())
-  }
-}
-
-/// A page label.
-#[derive(Debug, Hash, Eq, PartialEq, Default, Clone)]
-pub struct PageLabel {
-  /// The numbering style of the page label.
-  pub(crate) style: Option<NumberingStyle>,
-  /// The prefix of the page label.
-  pub(crate) prefix: Option<String>,
-  /// The numeric value of the page label.
-  pub(crate) offset: Option<NonZeroU32>,
-}
-
-impl PageLabel {
-  pub(crate) fn is_empty(&self) -> bool {
-    self.style.is_none() && self.prefix.is_none() && self.offset.is_none()
-  }
-
-  pub(crate) fn serialize(&self, chunk_container: &mut ChunkContainer, root_ref: Ref) {
-    let chunk = &mut chunk_container.non_stream.page_labels;
-    let mut label = chunk
-      .indirect(root_ref)
-      .start::<pdf_writer::writers::PageLabel>();
-
-    if let Some(style) = self.style {
-      label.style(style.to_pdf());
-    }
-
-    if let Some(prefix) = &self.prefix {
-      label.prefix(TextStr(prefix));
-    }
-
-    if let Some(offset) = self.offset.and_then(|o| i32::try_from(o.get()).ok()) {
-      label.offset(offset);
-    }
-
-    label.finish();
-  }
-}
-
-#[derive(Hash)]
-pub(crate) struct PageLabelContainer<'a> {
-  labels: &'a [PageLabel],
-}
-
-impl<'a> PageLabelContainer<'a> {
-  pub(crate) fn new(labels: &'a [PageLabel]) -> Option<Self> {
-    if labels.iter().all(|f| f.is_empty()) {
-      None
-    } else {
-      Some(PageLabelContainer { labels })
-    }
-  }
-
-  pub(crate) fn serialize(
-    &self,
-    sc: &mut SerializeContext,
-    chunk_container: &mut ChunkContainer,
-    root_ref: Ref,
-  ) {
-    // Will always contain at least one entry, since we ensured that a PageLabelContainer cannot
-    // be empty
-    let mut filtered_entries = vec![];
-    let mut prev: Option<PageLabel> = None;
-
-    for (i, label) in self.labels.iter().enumerate() {
-      if let Some(n_prev) = &prev {
-        if n_prev.style != label.style
-          || n_prev.prefix != label.prefix
-          || n_prev.offset.map(|n| n.get()) != label.offset.map(|n| n.get() + 1)
-        {
-          filtered_entries.push((i, label.clone()));
-          prev = Some(label.clone());
-        }
-      } else {
-        filtered_entries.push((i, label.clone()));
-        prev = Some(label.clone());
-      }
-    }
-
-    let mut chunk = sc.new_chunk();
-    let mut num_tree = chunk.indirect(root_ref).start::<NumberTree<Ref>>();
-    let mut nums = num_tree.nums();
-
-    for (page_num, label) in filtered_entries {
-      let label_ref = sc.register_page_label(chunk_container, label);
-      nums.insert(page_num as i32, label_ref);
-    }
-
-    nums.finish();
-    num_tree.finish();
-    chunk_container.non_stream.page_label_tree = Some((root_ref, chunk));
   }
 }

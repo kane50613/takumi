@@ -29,7 +29,7 @@ use crate::krilla::interchange::tagging::{
   AnnotationIdentifier, PageTagIdentifier, TagId, TagTree,
 };
 use crate::krilla::object_stream::ObjectStreams;
-use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
+use crate::krilla::page::InternalPage;
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
 use crate::krilla::surface::{Location, Surface};
@@ -162,7 +162,6 @@ pub(crate) struct PageInfo {
   ref_: Ref,
   surface_size: Size,
   annotations: Vec<(Ref, OnceCell<Ref>)>,
-  page_label: PageLabel,
 }
 
 impl PageInfo {
@@ -172,10 +171,6 @@ impl PageInfo {
 
   pub(crate) fn size(&self) -> Size {
     self.surface_size
-  }
-
-  pub(crate) fn page_label(&self) -> &PageLabel {
-    &self.page_label
   }
 
   pub(crate) fn annotations(&self) -> &[(Ref, OnceCell<Ref>)] {
@@ -404,7 +399,6 @@ impl SerializeContext {
 
     // Serialize all objects that can only be written in the end.
     self.serialize_destination_profiles(&mut chunk_container);
-    self.serialize_page_label_tree(&mut chunk_container);
     self.serialize_outline(&mut chunk_container);
     self.serialize_fonts(&mut chunk_container)?;
     self.serialize_pages(&mut chunk_container)?;
@@ -504,7 +498,6 @@ impl SerializeContext {
       surface_size: page.page_settings.surface_size(),
       // Will be populated when the page is serialized.
       annotations: vec![],
-      page_label: page.page_settings.page_label().clone(),
     });
     self.global_objects.pages.push((ref_, page));
   }
@@ -564,16 +557,6 @@ impl SerializeContext {
     self.register_cached(dest, |sc, dest, root_ref| {
       sc.global_objects.xyz_destinations.push((root_ref, dest));
     })
-  }
-
-  pub(crate) fn register_page_label(
-    &mut self,
-    chunk_container: &mut ChunkContainer,
-    page_label: PageLabel,
-  ) -> Ref {
-    let ref_ = self.new_ref();
-    page_label.serialize(chunk_container, ref_);
-    ref_
   }
 
   pub(crate) fn register_font_identifier(&mut self, f: FontIdentifier) -> resource::Font {
@@ -654,19 +637,6 @@ impl SerializeContext {
     });
   }
 
-  fn serialize_page_label_tree(&mut self, chunk_container: &mut ChunkContainer) {
-    if let Some(container) = PageLabelContainer::new(
-      &self
-        .page_infos
-        .iter()
-        .map(|page| page.page_label().clone())
-        .collect::<Vec<_>>(),
-    ) {
-      let page_label_tree_ref = self.new_ref();
-      container.serialize(self, chunk_container, page_label_tree_ref);
-    }
-  }
-
   fn serialize_outline(&mut self, chunk_container: &mut ChunkContainer) {
     let outline = self.global_objects.outline.take();
     if let Some(outline) = &outline {
@@ -745,7 +715,6 @@ impl SerializeContext {
         struct_tree_root_ref,
       )?;
 
-      root.validate(&id_tree_map)?;
       self.tag_refs = id_tree_map.clone();
 
       let mut chunk = self.new_chunk();

@@ -8,8 +8,6 @@ use std::num::NonZeroU64;
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::color::rgb;
-use crate::krilla::configure::ValidationError;
-use crate::krilla::configure::validate::VersionedFeature;
 use crate::krilla::content::ContentBuilder;
 use crate::krilla::geom::Path;
 #[cfg(feature = "raster-images")]
@@ -26,7 +24,6 @@ use crate::krilla::num::NormalizedF32;
 use crate::krilla::paint::{InnerPaint, Paint};
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::stream::{Stream, StreamBuilder};
-use crate::krilla::tagging::ArtifactType;
 use crate::krilla::text::Font;
 use crate::krilla::text::{Glyph, draw_glyph};
 
@@ -168,7 +165,6 @@ impl<'a> Surface<'a> {
   ///
   /// # Panics
   /// Panics if a tagged section has already been started.
-  /// Panics if an artifact with a required bbox has none.
   pub fn start_tagged(&mut self, tag: ContentTag) -> Identifier {
     if let Some(id) = &mut self.page_identifier {
       match tag {
@@ -177,33 +173,8 @@ impl<'a> Surface<'a> {
         // the API of krilla that conflates artifacts with tagged content,
         // for the sake of simplicity. But the user of the library does not need to know
         // about this.
-        ContentTag::Artifact(artifact) => {
-          if matches!(artifact.kind, ArtifactType::Header | ArtifactType::Footer)
-            && self.sc.serialize_settings().pdf_version()
-              < VersionedFeature::HeaderFooterArtifactSubtypes.minimum_pdf_version()
-          {
-            self
-              .sc
-              .register_validation_error(ValidationError::RequiresNewerPdfVersion(
-                VersionedFeature::HeaderFooterArtifactSubtypes,
-                self.sc.location,
-              ));
-          }
-
-          if artifact.requires_bbox(self.sc.serialize_settings().pdf_version())
-            && artifact.bbox.is_none()
-          {
-            panic!("Background artifact must have a bounding box in PDF 1.7");
-          }
-
-          if artifact.requires_properties(self.sc.serialize_settings().pdf_version()) {
-            self
-              .bd
-              .get_mut()
-              .start_marked_content_with_properties(self.sc, None, tag);
-          } else {
-            self.bd.get_mut().start_marked_content(tag.name());
-          }
+        ContentTag::Artifact => {
+          self.bd.get_mut().start_marked_content(tag.name());
 
           Identifier::dummy()
         }
@@ -211,7 +182,7 @@ impl<'a> Surface<'a> {
           self
             .bd
             .get_mut()
-            .start_marked_content_with_properties(self.sc, Some(id.mcid), tag);
+            .start_marked_content_with_properties(id.mcid, tag);
           id.bump().into()
         }
       }

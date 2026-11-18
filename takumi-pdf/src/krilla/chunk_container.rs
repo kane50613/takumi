@@ -39,11 +39,9 @@ pub(crate) struct MixedChunks {
 pub(crate) struct NonStreamChunks {
   pub(crate) page_tree: Option<(Ref, Chunk)>,
   pub(crate) outline: Option<(Ref, Chunk)>,
-  pub(crate) page_label_tree: Option<(Ref, Chunk)>,
   pub(crate) destination_profiles: Option<(Ref, Chunk)>,
   pub(crate) struct_tree_root: Option<(Ref, Chunk)>,
   pub(crate) struct_elements: Option<Chunk>,
-  pub(crate) page_labels: Chunk,
   pub(crate) annotations: Chunk,
   pub(crate) color_spaces: Chunk,
   pub(crate) destinations: Chunk,
@@ -77,11 +75,9 @@ impl ChunkContainer {
       non_stream: NonStreamChunks {
         page_tree: None,
         outline: None,
-        page_label_tree: None,
         destination_profiles: None,
         struct_tree_root: None,
         struct_elements: None,
-        page_labels: sc.new_chunk(),
         annotations: sc.new_chunk(),
         color_spaces: sc.new_chunk(),
         destinations: sc.new_chunk(),
@@ -230,7 +226,6 @@ impl ChunkContainer {
     // useful to not write a document catalog if we don't actually need it for the test.
     if self.non_stream.page_tree.is_some()
       || self.non_stream.outline.is_some()
-      || self.non_stream.page_label_tree.is_some()
       || self.non_stream.destination_profiles.is_some()
       || self.non_stream.struct_tree_root.is_some()
     {
@@ -256,10 +251,6 @@ impl ChunkContainer {
 
       if let Some(meta_ref) = meta_ref {
         catalog.metadata(meta_ref);
-      }
-
-      if let Some(pl) = &self.non_stream.page_label_tree {
-        catalog.pair(Name(b"PageLabels"), remapper[&pl.0]);
       }
 
       if let Some(oi) = &self.non_stream.destination_profiles {
@@ -401,11 +392,9 @@ impl Visit for NonStreamChunks {
   fn visit(&self, sc: &mut SerializeContext, f: &mut impl FnMut(&Chunk)) -> KrillaResult<()> {
     self.page_tree.visit(sc, f)?;
     self.outline.visit(sc, f)?;
-    self.page_label_tree.visit(sc, f)?;
     self.destination_profiles.visit(sc, f)?;
     self.struct_tree_root.visit(sc, f)?;
     self.struct_elements.visit(sc, f)?;
-    self.page_labels.visit(sc, f)?;
     self.annotations.visit(sc, f)?;
     self.color_spaces.visit(sc, f)?;
     self.destinations.visit(sc, f)?;
