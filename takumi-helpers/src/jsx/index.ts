@@ -160,13 +160,13 @@ class NodeBuilder implements RenderEnv {
       }
 
       return nodeResult(
-        image({ src: element.props.src, ...dimensions(element.props), ...metadata }),
+        image({ src: element.props.src, ...pixelDimensions(element.props), ...metadata }),
       );
     }
 
     if (isHtmlElement(element, "svg")) {
       return nodeResult(
-        image({ src: serializeSvg(element), ...dimensions(element.props), ...metadata }),
+        image({ src: serializeSvg(element), ...pixelDimensions(element.props), ...metadata }),
       );
     }
 
@@ -302,15 +302,19 @@ class NodeBuilder implements RenderEnv {
   }
 }
 
-/** Width and height props as numbers; non-numeric strings become `NaN`. */
-function dimensions({ width, height }: { width?: number | string; height?: number | string }): {
-  width?: number;
-  height?: number;
-} {
-  return {
-    width: width !== undefined ? Number(width) : undefined,
-    height: height !== undefined ? Number(height) : undefined,
-  };
+/** `width` and `height` given in pixels. The renderer reads every other length from the attributes. */
+function pixelDimensions({
+  width,
+  height,
+}: {
+  width?: number | string;
+  height?: number | string;
+}): { width?: number; height?: number } {
+  return { width: pixels(width), height: pixels(height) };
+}
+
+function pixels(value: number | string | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {

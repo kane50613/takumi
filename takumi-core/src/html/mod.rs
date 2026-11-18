@@ -36,12 +36,11 @@ use std::{
 use crate::resources::image::SvgSource;
 use crate::{
   form_control::InputType,
-  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind},
-  resources::{image::ImageSource, image_buffer::ImageBuffer},
-  style::{
-    Direction, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
-    TailwindValues,
+  layout::node::{
+    ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, size_attribute,
   },
+  resources::{image::ImageSource, image_buffer::ImageBuffer},
+  style::{Direction, FromCssStr, Lang, Length, Style, StyleDeclarationBlock, TailwindValues},
 };
 use typed_builder::TypedBuilder;
 
@@ -822,28 +821,11 @@ impl NodeBuilder<'_> {
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(self.names.get(tag));
 
-    let mut preset = if matches!(tag, "input" | "textarea") {
+    let preset = if matches!(tag, "input" | "textarea") {
       self.form_control_preset(handle, tag)
     } else {
       self.presets.get(tag).cloned()
     };
-
-    // A size in other units than pixels, which `ImageData` cannot hold, styles the image.
-    if matches!(node.kind, NodeKind::Image(_)) {
-      for (name, declaration) in [
-        (
-          "width",
-          StyleDeclaration::width as fn(Length) -> StyleDeclaration,
-        ),
-        ("height", StyleDeclaration::height),
-      ] {
-        if let Some(length) =
-          dimension(handle, tag, name).filter(|length| !matches!(length, Length::Px(_)))
-        {
-          Arc::make_mut(preset.get_or_insert_default()).push(declaration(length), false);
-        }
-      }
-    }
 
     if let Some(preset) = preset {
       node = node.with_preset(preset);
@@ -880,10 +862,9 @@ impl NodeBuilder<'_> {
           }
         }
         "style" => node = node.with_style(self.style(value)),
-        // Consumed into `ImageData`; re-emitted by serialization, so keep them out
+        // Consumed into `ImageData`; re-emitted by serialization, so keep it out
         // of the passthrough attributes to avoid duplicating on round-trip.
         "src" if tag == "img" => {}
-        "width" | "height" if matches!(tag, "img" | "svg") => {}
         // Consumed above; keep out of the passthrough attributes.
         _ if name == self.tw_property => {}
         _ => {
@@ -983,53 +964,9 @@ fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
     .then_some(text)
 }
 
-/// The `width` or `height` attribute of an `<img>` or `<svg>` as Blink maps it to style: an
-/// `<img>` takes HTML's rules for parsing dimension values, a number of pixels or a percentage,
-/// and an `<svg>` a CSS length, a number counting as pixels.
-/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-dimension-values>
-fn dimension(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<Length> {
-  let value = handle.attribute(name)?.trim();
-
-  if tag == "svg" {
-    return Length::from_css_str(value)
-      .ok()
-      .or_else(|| value.parse().ok().map(Length::Px));
-  }
-
-  let digits_len = |text: &str| {
-    text
-      .find(|character: char| !character.is_ascii_digit())
-      .unwrap_or(text.len())
-  };
-  let integer_end = digits_len(value);
-
-  if integer_end == 0 {
-    return None;
-  }
-  // A fraction needs a digit after its point; anything past the number is ignored.
-  let number_end = match value
-    .get(integer_end..)
-    .unwrap_or_default()
-    .strip_prefix('.')
-  {
-    Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
-      integer_end + 1 + digits_len(fraction)
-    }
-    _ => integer_end,
-  };
-  let (number, unit) = value.split_at_checked(number_end)?;
-  let number: f32 = number.parse().ok()?;
-
-  Some(if unit.starts_with('%') {
-    Length::Percentage(number)
-  } else {
-    Length::Px(number)
-  })
-}
-
-/// [`dimension`] when it is a number of pixels, which `ImageData` holds.
+/// The [`size_attribute`] when it is a number of pixels, which `ImageData` holds.
 fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
-  match dimension(handle, tag, name)? {
+  match size_attribute(tag, handle.attribute(name)?)? {
     Length::Px(pixels) => Some(pixels),
     _ => None,
   }
@@ -1052,6 +989,7 @@ fn qualified_name(attr: &Attribute) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::StyleDeclaration;
 
   fn parse(source: &str) -> Node {
     from_html(source, FromHtmlOptions::default()).unwrap()
@@ -1077,8 +1015,29 @@ mod tests {
       fraction_only.kind,
       NodeKind::Image(ImageData { width: None, .. })
     ));
-    assert!(image.to_html().contains("width: 50%"));
-    assert!(svg.to_html().contains("width: 100%; height: 2em"));
+    assert!(image.to_html().contains(r#"width="50%""#));
+    assert_eq!(
+      size_preset(image),
+      [
+        StyleDeclaration::width(Length::Percentage(50.0)),
+        StyleDeclaration::height(Length::Px(20.0)),
+      ]
+    );
+    assert_eq!(
+      size_preset(svg),
+      [
+        StyleDeclaration::width(Length::Percentage(100.0)),
+        StyleDeclaration::height(Length::Em(2.0)),
+      ]
+    );
+  }
+
+  fn size_preset(mut node: Node) -> Vec<StyleDeclaration> {
+    node
+      .take_style_layers()
+      .preset
+      .map(|preset| preset.declarations.iter().cloned().collect())
+      .unwrap_or_default()
   }
 
   #[cfg(feature = "html-svg-nodes")]

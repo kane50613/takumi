@@ -4,14 +4,14 @@ use crate::{
   context::RenderContext,
   layout::{
     length_utils::NaturalSize,
-    node::{ImageData, ImageSourceInput},
+    node::{ImageData, ImageSourceInput, Node, NodeKind},
   },
   layout_unit::LayoutUnit,
   resources::image::{
     ImageCacheMode, ImageError, ImageResult, ImageSource, ResourceCache, decode_data_uri,
     is_svg_like,
   },
-  style::{Length, Style, StyleDeclaration},
+  style::{FromCssStr, Length, Style, StyleDeclaration},
 };
 
 /// Whether `src` names an image the render looks up in its `images`.
@@ -25,22 +25,6 @@ impl ImageData {
     match &self.src {
       ImageSourceInput::Url(src) if is_image_reference(src) => Some(src.as_ref()),
       _ => None,
-    }
-  }
-
-  /// Pushes the element's `width` and `height` attributes into its preset style.
-  pub(super) fn push_size_preset(&self, preset: &mut Option<Arc<Style>>) {
-    if self.width.is_none() && self.height.is_none() {
-      return;
-    }
-
-    let preset = Arc::make_mut(preset.get_or_insert_default());
-
-    if let Some(width) = self.width {
-      preset.push(StyleDeclaration::width(Length::Px(width)), false);
-    }
-    if let Some(height) = self.height {
-      preset.push(StyleDeclaration::height(Length::Px(height)), false);
     }
   }
 
@@ -70,6 +54,96 @@ impl ImageData {
       ..NaturalSize::default()
     }
   }
+}
+
+impl Node {
+  /// Pushes the image's `width` and `height` into its preset, its pixels before its attributes.
+  pub(super) fn push_image_size_preset(&self, preset: &mut Option<Arc<Style>>) {
+    let NodeKind::Image(image) = &self.kind else {
+      return;
+    };
+
+    for (name, pixels, declaration) in [
+      (
+        "width",
+        image.width,
+        StyleDeclaration::width as fn(Length) -> StyleDeclaration,
+      ),
+      ("height", image.height, StyleDeclaration::height),
+    ] {
+      let length = pixels.map(Length::Px).or_else(|| {
+        self
+          .tag_name()
+          .zip(self.attribute(name))
+          .and_then(|(tag, value)| size_attribute(tag, value))
+      });
+
+      if let Some(length) = length {
+        Arc::make_mut(preset.get_or_insert_default()).push(declaration(length), false);
+      }
+    }
+  }
+}
+
+/// The `width` or `height` attribute of an `<img>` or `<svg>` as Blink maps it to style: an
+/// `<img>` takes HTML's rules for parsing dimension values, a number of pixels or a percentage,
+/// and an outermost `<svg>` a CSS length, a number counting as pixels. Blink's
+/// `HTMLImageElement::CollectStyleForPresentationAttribute` and
+/// `SVGSVGElement::CollectStyleForPresentationAttribute`.
+/// <https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-dimension-values>
+pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
+  let value = value.trim();
+
+  match tag {
+    // Blink maps no negative width or height to style.
+    "svg" => {
+      return Length::from_css_str(value)
+        .ok()
+        .or_else(|| {
+          value
+            .parse::<f32>()
+            .ok()
+            .filter(|number| number.is_finite())
+            .map(Length::Px)
+        })
+        .filter(|length| !length.is_negative());
+    }
+    "img" => {}
+    _ => return None,
+  }
+
+  let digits_len = |text: &str| {
+    text
+      .find(|character: char| !character.is_ascii_digit())
+      .unwrap_or(text.len())
+  };
+  let integer_end = digits_len(value);
+
+  if integer_end == 0 {
+    return None;
+  }
+  // A point is consumed even without a digit after it, and anything past the number is ignored.
+  let (number_end, unit_start) = match value
+    .get(integer_end..)
+    .unwrap_or_default()
+    .strip_prefix('.')
+  {
+    Some(fraction) if fraction.starts_with(|character: char| character.is_ascii_digit()) => {
+      let end = integer_end + 1 + digits_len(fraction);
+
+      (end, end)
+    }
+    Some(_) => (integer_end, integer_end + 1),
+    None => (integer_end, integer_end),
+  };
+  let number: f32 = value.get(..number_end)?.parse().ok()?;
+  let unit = value.get(unit_start..).unwrap_or_default();
+
+  Some(if unit.starts_with('%') {
+    Length::Percentage(number)
+  } else {
+    Length::Px(number)
+  })
 }
 
 const DATA_URI_PREFIX: &str = "data:";
@@ -124,6 +198,29 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 #[cfg(test)]
 mod tests {
   use std::assert_matches;
+
+  use super::size_attribute;
+  use crate::style::Length;
+
+  #[test]
+  fn size_attributes_map_as_blink_maps_them() {
+    assert_eq!(
+      size_attribute("img", "50.%"),
+      Some(Length::Percentage(50.0))
+    );
+    assert_eq!(
+      size_attribute("img", "50.5%"),
+      Some(Length::Percentage(50.5))
+    );
+    assert_eq!(size_attribute("img", "24px"), Some(Length::Px(24.0)));
+    assert_eq!(size_attribute("svg", "2em"), Some(Length::Em(2.0)));
+    assert_eq!(size_attribute("svg", "100"), Some(Length::Px(100.0)));
+    assert_eq!(size_attribute("svg", "-2em"), None);
+    assert_eq!(size_attribute("svg", "-20"), None);
+    assert_eq!(size_attribute("svg", "-0%"), Some(Length::Percentage(-0.0)));
+    assert_eq!(size_attribute("svg", "NaN"), None);
+    assert_eq!(size_attribute("svg", "inf"), None);
+  }
 
   use serde_json::from_value;
 

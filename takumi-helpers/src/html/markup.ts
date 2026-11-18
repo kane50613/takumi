@@ -92,7 +92,7 @@ class NodeBuilder {
         throw new Error("Image element must have a 'src' prop.");
       }
 
-      nodes.push(image({ src: decodeHtmlEntities(src), ...dimensions(element), ...metadata }));
+      nodes.push(image({ src: decodeHtmlEntities(src), ...metadata }));
       return;
     }
 
@@ -101,7 +101,7 @@ class NodeBuilder {
     }
 
     if (element.name === "svg") {
-      nodes.push(image({ src: renderSync(element), ...dimensions(element), ...metadata }));
+      nodes.push(image({ src: renderSync(element), ...metadata }));
       return;
     }
 
@@ -141,14 +141,6 @@ class NodeBuilder {
       typeof props.style === "string" ? parseInlineStyle(props.style) : undefined,
     );
   }
-}
-
-/** Width and height attributes; values that are not finite numbers are dropped. */
-function dimensions(element: UltraHtmlElementNode): { width?: number; height?: number } {
-  return {
-    width: parseDimension(element.attributes?.width),
-    height: parseDimension(element.attributes?.height),
-  };
 }
 
 function decodeAttributeMap(attributes: Record<string, string>): Record<string, string> {
@@ -238,13 +230,4 @@ function cssPropertyToJsProperty(property: string): string {
   }
 
   return property.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase());
-}
-
-function parseDimension(value: string | undefined): number | undefined {
-  if (!value) {
-    return;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
 }
