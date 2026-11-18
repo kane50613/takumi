@@ -1,11 +1,35 @@
 import { describe, expect, mock, test } from "bun:test";
+import { extractEmojis } from "../src/emoji";
+import { container, image, text } from "../src/helpers";
 import type { Node } from "../src/types";
 import { prepareImages } from "../src/images";
 import { imageTree } from "./image-tree";
 
 const ok = (url: string) => new Response(new TextEncoder().encode(url).buffer);
 
+const notFound = () => new Response(null, { status: 404 });
+
 describe("prepareImages", () => {
+  test("leaves out an emoji image extractEmojis made when it fails to fetch", async () => {
+    const fetchMock = mock(() => Promise.resolve(notFound()));
+    const node = extractEmojis(text("launch 🚀"), "twemoji");
+
+    expect(await prepareImages({ node, fetch: fetchMock })).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects when an image the markup names fails, beside an emoji that fails", async () => {
+    const fetchMock = mock(() => Promise.resolve(notFound()));
+    const node = container({
+      children: [
+        image({ src: "https://example.com/missing.png" }),
+        extractEmojis(text("launch 🚀"), "twemoji"),
+      ],
+    });
+
+    await expect(prepareImages({ node, fetch: fetchMock })).rejects.toThrow();
+  });
+
   test("fetches remote images and skips provided sources", async () => {
     const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
     const provided = { src: "https://example.com/a.png", data: new ArrayBuffer(0) };
