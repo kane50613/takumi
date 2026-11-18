@@ -4,6 +4,15 @@ packages:
   takumi-pdf: patch
 ---
 
-# A forced break after a box with an absolute box running on applies once
+# `break-after: page` breaks once when an absolute box inside runs onto the next page
 
-When an absolutely positioned box ran on past the page from inside a box with `break-after: page`, the forced break applied again on the next page, so a float after the box landed a page later than in Chromium. It now applies once, where the box's content ends.
+In a PDF, when an absolutely positioned box ran past the page from inside a box with `break-after: page`, the break applied again on the next page, so a float after the box landed a page later than in Chromium. The break now applies once, where the box's content ends.
+
+```html
+<!-- The absolute box starts past the bottom of the page -->
+<div style="position: relative; break-after: page">
+  The box
+  <div style="position: absolute; top: 110px">Runs onto the next page</div>
+</div>
+<div style="float: left">Starts the next page</div>
+```
