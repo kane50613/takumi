@@ -17,8 +17,15 @@ async function resolveWasm() {
       return readFile(new URL(path, import.meta.url));
     }
 
+    // The last candidate is dev SSR serving a package inside the Vite root by its root-relative path.
     const basename = path.slice(path.lastIndexOf("/") + 1);
-    const candidates = [`./${basename}`, `.${path}`, `../client${path}`, `../../client${path}`];
+    const candidates = [
+      `./${basename}`,
+      `.${path}`,
+      `../client${path}`,
+      `../../client${path}`,
+      `../pkg/${basename}`,
+    ];
 
     let lastError;
     for (const candidate of candidates) {
