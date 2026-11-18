@@ -1,4 +1,4 @@
-import type { GoogleFontFamily } from "takumi-js/helpers";
+import type { GoogleFontFamily } from "@takumi-rs/helpers";
 
 export const name = "home-usecase-blog-cover";
 

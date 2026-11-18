@@ -4,7 +4,7 @@
 
 [Documentation](https://takumi.kane.tw/docs/reference/helpers) · [GitHub](https://github.com/kane50613/takumi)
 
-`takumi-js`, `takumi-pdf`, and `takumi-paint` call these helpers for you. Install this package when you use the [`@takumi-rs/core`](https://www.npmjs.com/package/@takumi-rs/core) or [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm) bindings directly, or to load fonts for `takumi-pdf`. With `takumi-js`, import the same helpers from `takumi-js/helpers`.
+`takumi-js`, `takumi-pdf`, and `takumi-paint` call these helpers for you. Install this package when you use the [`@takumi-rs/core`](https://www.npmjs.com/package/@takumi-rs/core) or [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm) bindings directly, or to load fonts for `takumi-pdf`. The `takumi-js/helpers` entries are deprecated, so import from this package with `takumi-js` too.
 
 ## Install
 

@@ -84,13 +84,13 @@ export function GET() {
 }
 ```
 
-### 4. Parsing Helpers (`takumi-js/helpers/*`)
+### 4. Parsing Helpers (`@takumi-rs/helpers/*`)
 
 Low-level utilities for compiling layout elements without executing the full renderer.
 
 ```typescript
-import { fromHtml } from "takumi-js/helpers/html";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { fromHtml } from "@takumi-rs/helpers/html";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
 
 // Converts raw HTML template string into JSON layout node tree
 const htmlNodeTree = fromHtml(

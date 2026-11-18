@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { render } from "takumi-js";
-import { container, googleFonts, image, text } from "takumi-js/helpers";
+import { container, googleFonts, image, text } from "@takumi-rs/helpers";
 import { applyLiquidGlass } from "./liquid-glass.ts";
 import { applyLiquidGlassCpu } from "./liquid-glass-cpu.ts";
 

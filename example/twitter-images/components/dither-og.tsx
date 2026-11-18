@@ -1,5 +1,5 @@
-import type { GoogleFontFamily } from "takumi-js/helpers";
-import { Bitmap } from "takumi-js/helpers/jsx";
+import type { GoogleFontFamily } from "@takumi-rs/helpers";
+import { Bitmap } from "@takumi-rs/helpers/jsx";
 
 export const name = "dither-og";
 

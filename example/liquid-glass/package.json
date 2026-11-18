@@ -7,6 +7,7 @@
     "start": "node src/index.ts"
   },
   "dependencies": {
+    "@takumi-rs/helpers": "workspace:*",
     "takumi-js": "workspace:*",
     "webgpu": "^0.6.0"
   },

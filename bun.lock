@@ -131,6 +131,7 @@
     "example/ffplay": {
       "name": "ffplay",
       "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
         "takumi-js": "workspace:*",
       },
       "devDependencies": {
@@ -156,6 +157,7 @@
     "example/liquid-glass": {
       "name": "example-liquid-glass",
       "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
         "takumi-js": "workspace:*",
         "webgpu": "^0.6.0",
       },
@@ -246,6 +248,7 @@
       "name": "example-twitter-images",
       "dependencies": {
         "@icons-pack/react-simple-icons": "^13.15.1",
+        "@takumi-rs/helpers": "workspace:*",
         "lucide-react": "catalog:",
         "react": "catalog:",
         "shiki": "^4.4.3",

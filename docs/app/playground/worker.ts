@@ -1,7 +1,7 @@
-import { googleFonts, prepareImages } from "takumi-js/helpers";
-import { extractEmojis } from "takumi-js/helpers/emoji";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import type { FetchedImage, Node } from "takumi-js/helpers";
+import { googleFonts, prepareImages } from "@takumi-rs/helpers";
+import { extractEmojis } from "@takumi-rs/helpers/emoji";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
+import type { FetchedImage, Node } from "@takumi-rs/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
 // `no-init` over the entry that instantiates the module: the worker has the

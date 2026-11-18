@@ -28,6 +28,7 @@ export { measure, render, renderAnimation, renderSvg } from "./render";
 
 export type {
   AnimationScene,
+  DocumentInput,
   ImagesInput,
   RenderAnimationOptions,
   RenderInput,

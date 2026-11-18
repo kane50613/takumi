@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ReactNode } from "react";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Renderer } from "takumi-js/node";
 import { type AssetModule, loadFonts, loadImages } from "./assets";
 

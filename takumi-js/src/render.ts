@@ -83,7 +83,7 @@ export type RenderSvgOptions = Managed<InnerSvgRenderOptions>;
 /** A single animation scene whose content is any renderable input. */
 export type AnimationScene = Omit<napi.AnimationScene, "node"> & {
   /** The content to render for this scene: JSX, an HTML string, or a node tree. */
-  node: RenderInput;
+  node: DocumentInput;
 };
 
 export type RenderAnimationOptions = Managed<
@@ -102,7 +102,11 @@ type PipelineOptions = Partial<SharedRenderExtras> &
     stylesheets?: string[];
   };
 
-export type RenderInput = ReactNode | ReactElementLike | Node | string;
+/** A document to render: JSX, an HTML string, or a node tree. */
+export type DocumentInput = ReactNode | ReactElementLike | Node | string;
+
+/** @deprecated Use `DocumentInput` instead. Will be removed in v3. */
+export type RenderInput = DocumentInput;
 
 function isTakumiNode(element: unknown): element is Node {
   if (typeof element !== "object" || element === null || !("type" in element)) {
@@ -112,7 +116,7 @@ function isTakumiNode(element: unknown): element is Node {
   return element.type === "container" || element.type === "text" || element.type === "image";
 }
 
-async function transformElement(element: RenderInput, options?: PipelineOptions) {
+async function transformElement(element: DocumentInput, options?: PipelineOptions) {
   if (isTakumiNode(element)) {
     return {
       node: element,
@@ -138,7 +142,7 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
 
 /** Turns an input into what a renderer takes, splitting out its emoji unless the renderer's fonts draw them. */
 async function resolveContent(
-  element: RenderInput,
+  element: DocumentInput,
   options?: PipelineOptions,
 ): Promise<{ node: Node | string; css: string[] }> {
   if (typeof element === "string" && options?.emoji === "from-font") {
@@ -222,7 +226,7 @@ type PreparedRenderer = {
 
 /** Readies a single scene for its render, fetching what the renderer reads after the cascade. */
 async function prepareScene<T extends PipelineOptions>(
-  element: RenderInput,
+  element: DocumentInput,
   options?: T,
 ): Promise<{ renderer: PreparedRenderer; prepared: PreparedSource; output: SceneOutput }> {
   options?.signal?.throwIfAborted();
@@ -254,7 +258,7 @@ async function prepareScene<T extends PipelineOptions>(
  * ```
  */
 export async function render(
-  element: RenderInput,
+  element: DocumentInput,
   options?: RenderOptions,
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   const scene = await prepareScene(element, options);
@@ -273,7 +277,7 @@ export async function render(
  * ```
  */
 export async function measure(
-  element: RenderInput,
+  element: DocumentInput,
   options?: RenderOptions,
 ): Promise<napi.MeasuredNode> {
   const scene = await prepareScene(element, options);
@@ -294,7 +298,10 @@ export async function measure(
  * );
  * ```
  */
-export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
+export async function renderSvg(
+  element: DocumentInput,
+  options?: RenderSvgOptions,
+): Promise<string> {
   const scene = await prepareScene(element, options);
 
   return scene.renderer.renderSvg(scene.prepared, { signal: options?.signal });

@@ -1,5 +1,6 @@
-import { render, type RenderInput, type RenderOptions } from "../render";
+import { type DocumentInput, render, type RenderOptions } from "../render";
 
+/** @deprecated Use `ImageResponse` instead. Will be removed in v3. */
 export type ImageResponseResult = Response & {
   readonly ready: Promise<void>;
 };
@@ -23,7 +24,7 @@ function defaultErrorHandler(error: unknown) {
 }
 
 /** Streams the rendered image; `ready` settles once the render finishes or fails. */
-function renderStream(element: RenderInput, options?: ImageResponseOptions) {
+function renderStream(element: DocumentInput, options?: ImageResponseOptions) {
   let resolveReady: (value: void | PromiseLike<void>) => void;
   let rejectReady: (reason?: unknown) => void;
   const ready = new Promise<void>((resolve, reject) => {
@@ -77,7 +78,7 @@ export class ImageResponse extends Response {
   /** Settles when the render succeeds or fails. The body streams, so await this to send a fallback on failure. */
   readonly ready: Promise<void>;
 
-  constructor(component: RenderInput, options?: ImageResponseOptions) {
+  constructor(component: DocumentInput, options?: ImageResponseOptions) {
     const { stream, ready } = renderStream(component, options);
     const headers = new Headers(options?.headers);
 

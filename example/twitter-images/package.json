@@ -5,6 +5,7 @@
   "module": "index.ts",
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.15.1",
+    "@takumi-rs/helpers": "workspace:*",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "shiki": "^4.4.3",
