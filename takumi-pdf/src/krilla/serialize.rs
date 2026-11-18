@@ -12,8 +12,7 @@ use pdf_writer::{Chunk, Content, Finish, Limits, Name, Obj, Pdf, Ref, Settings, 
 use rustc_hash::FxHashMap;
 
 use crate::krilla::chunk_container::ChunkContainer;
-use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
-use crate::krilla::configure::validate::ValidationStore;
+use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace};
 use crate::krilla::configure::{Configuration, PdfVersion, ValidationError, Validators};
 use crate::krilla::error::{KrillaError, KrillaResult, LimitError};
 use crate::krilla::geom::Size;
@@ -21,7 +20,6 @@ use crate::krilla::graphics::color::{ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVIC
 use crate::krilla::graphics::icc::{ICCBasedColorSpace, ICCProfile};
 #[cfg(feature = "raster-images")]
 use crate::krilla::graphics::image::Image;
-use crate::krilla::graphics::separation::SeparationColorSpace;
 use crate::krilla::interactive::destination::XyzDestination;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
@@ -255,7 +253,6 @@ pub(crate) struct SerializeContext {
   limits: Limits,
   /// Additional information stored during serialization that allows us to
   /// raise standards errors later.
-  validation_store: ValidationStore,
   /// The current location, if set.
   pub(crate) location: Option<Location>,
 }
@@ -291,7 +288,6 @@ impl SerializeContext {
       serialize_settings: Arc::new(serialize_settings),
       chunk_settings,
       limits: Limits::new(),
-      validation_store: ValidationStore::new(),
     }
   }
 
@@ -383,10 +379,6 @@ impl SerializeContext {
       .entry(font.clone())
       .or_insert_with(|| Rc::new(RefCell::new(FontContainer::new(font.clone()))))
       .clone()
-  }
-
-  pub(crate) fn validation_store(&mut self) -> &mut ValidationStore {
-    &mut self.validation_store
   }
 
   pub(crate) fn finish(
@@ -594,9 +586,6 @@ impl SerializeContext {
       ColorSpace::Device(DeviceColorSpace::Gray) => MaybeDeviceColorSpace::DeviceGray,
       ColorSpace::Device(DeviceColorSpace::Rgb) => MaybeDeviceColorSpace::DeviceRgb,
       ColorSpace::Device(DeviceColorSpace::Cmyk) => MaybeDeviceColorSpace::DeviceCMYK,
-      ColorSpace::Special(SpecialColorSpace::Separation(s)) => MaybeDeviceColorSpace::ColorSpace(
-        self.register_resourceable(chunk_container, SeparationColorSpace::new(s)),
-      ),
     }
   }
 }
