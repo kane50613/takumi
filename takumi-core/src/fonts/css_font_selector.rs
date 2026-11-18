@@ -35,8 +35,6 @@ pub(crate) struct CssFontSelector {
   generic_font_family_settings: HashMap<String, Vec<Arc<str>>>,
   /// Registered families in registration order, which system fallback walks.
   fallback_families: Vec<Arc<str>>,
-  /// Families registered as a last resort, which fallback walks after every other.
-  last_resort_families: Vec<Arc<str>>,
 }
 
 /// A registered face, and whether it registered as a last resort.
@@ -115,13 +113,9 @@ impl CssFontSelector {
         last_resort,
       });
 
-      let order = if last_resort {
-        &mut self.last_resort_families
-      } else {
-        &mut self.fallback_families
-      };
-
-      insert_family(order, &family);
+      if !last_resort {
+        insert_family(&mut self.fallback_families, &family);
+      }
 
       if let Some(generic_family) = generic_family {
         insert_family(
@@ -247,9 +241,6 @@ impl CssFontSelector {
     self
       .fallback_families
       .retain(|family| has_faces(family, Some(false)));
-    self
-      .last_resort_families
-      .retain(|family| has_faces(family, Some(true)));
     self.generic_font_family_settings.retain(|_, families| {
       families.retain(|family| has_faces(family, None));
       !families.is_empty()
@@ -319,10 +310,25 @@ impl CssFontSelector {
     Some(font_face)
   }
 
-  /// The families registered as a last resort, which fallback walks after every other.
-  #[cfg(test)]
+  /// The families registered as a last resort, each once, in the order it first registered.
   pub(crate) fn last_resort_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
-    self.last_resort_families.iter()
+    let mut seen = Vec::new();
+
+    self
+      .font_faces
+      .iter()
+      .filter(|registered| registered.last_resort)
+      .map(|registered| &registered.font_face.family)
+      .filter(move |family| {
+        let key = fold_family_name(family);
+        let first = !seen.contains(&key);
+
+        if first {
+          seen.push(key);
+        }
+
+        first
+      })
   }
 
   /// The families system fallback walks before the last-resort ones, in registration order.
@@ -379,8 +385,7 @@ impl CssFontSelector {
     font_description: &'a FontSelectionDescription,
   ) -> impl Iterator<Item = Vec<FaceData<FontPlatformDataForRangeSet>>> + 'a {
     self
-      .last_resort_families
-      .iter()
+      .last_resort_families()
       .filter_map(|family| self.last_resort_font_data(font_description, family))
   }
 
