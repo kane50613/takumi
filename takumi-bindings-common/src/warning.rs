@@ -1,9 +1,6 @@
-//! The warnings takumi logs, handed to a binding's console once each per process.
+//! The warnings takumi logs, which a binding prints once each on its JS thread.
 
-use std::{
-  collections::HashSet,
-  sync::{Mutex, OnceLock},
-};
+use std::{cell::RefCell, collections::HashSet, sync::Once};
 
 use log::{Level, LevelFilter, Log, Metadata, Record, kv::Key};
 
@@ -14,31 +11,38 @@ const TARGET_PREFIX: &str = "takumi::";
 /// line, count as one.
 const PROPERTY_KEY: &str = "property";
 
-/// Hands each new takumi warning to a sink, such as `console.warn`.
-pub struct WarningLog {
-  sink: fn(String),
-  /// The warnings already handed on, by property name or else by message.
-  seen: Mutex<HashSet<String>>,
+thread_local! {
+  /// The keys of the warnings already printed on this thread.
+  static PRINTED: RefCell<HashSet<String>> = RefCell::default();
 }
 
-static WARNING_LOG: OnceLock<WarningLog> = OnceLock::new();
+/// A takumi warning, and the key a repeat of it shares.
+pub struct Warning {
+  pub key: String,
+  pub message: String,
+}
+
+impl Warning {
+  /// Whether no warning with this key printed on this thread before, the JS thread a binding prints
+  /// on.
+  pub fn is_first(&self) -> bool {
+    PRINTED.with_borrow_mut(|printed| printed.insert(self.key.clone()))
+  }
+}
+
+/// Hands each takumi warning to a binding's sink, on the thread that logs it.
+pub struct WarningLog(fn(Warning));
 
 impl WarningLog {
   /// Sends takumi's warnings to `sink` from now on, unless the process already has a logger.
-  pub fn install(sink: fn(String)) {
-    let log = WARNING_LOG.get_or_init(|| Self {
-      sink,
-      seen: Mutex::default(),
+  pub fn install(sink: fn(Warning)) {
+    static INSTALL: Once = Once::new();
+
+    INSTALL.call_once(|| {
+      if log::set_logger(Box::leak(Box::new(Self(sink)))).is_ok() {
+        log::set_max_level(LevelFilter::Warn);
+      }
     });
-
-    if log::set_logger(log).is_ok() {
-      log::set_max_level(LevelFilter::Warn);
-    }
-  }
-
-  /// Whether no warning has had `key` before.
-  fn is_new(&self, key: String) -> bool {
-    self.seen.lock().is_ok_and(|mut seen| seen.insert(key))
   }
 }
 
@@ -52,15 +56,16 @@ impl Log for WarningLog {
       return;
     }
 
-    let message = record.args().to_string();
+    let message = format!("takumi: {}", record.args());
     let key = match record.key_values().get(Key::from_str(PROPERTY_KEY)) {
-      Some(property) => format!("{PROPERTY_KEY}:{property}"),
+      Some(property) => format!(
+        "{PROPERTY_KEY}:{}",
+        property.to_string().to_ascii_lowercase()
+      ),
       None => message.clone(),
     };
 
-    if self.is_new(key) {
-      (self.sink)(format!("takumi: {message}"));
-    }
+    (self.0)(Warning { key, message });
   }
 
   fn flush(&self) {}

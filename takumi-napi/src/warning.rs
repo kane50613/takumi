@@ -1,66 +1,62 @@
-//! Takumi's warnings, printed with `console.warn` on the JS thread once a task settles.
+//! Takumi's warnings, printed with `console.warn` on the JS thread, once each.
 
-use std::{mem::take, sync::Mutex};
+use std::sync::OnceLock;
 
-use napi::{Env, bindgen_prelude::*};
-use takumi_bindings_common::warning::WarningLog;
+use napi::{
+  Env,
+  bindgen_prelude::*,
+  threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
+};
+use takumi_bindings_common::warning::{Warning, WarningLog};
 
-/// The warnings logged on worker threads that no task has printed yet.
-static PENDING: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Calls into the JS thread with a warning's key and message, without keeping its event loop alive.
+type PrintWarning = ThreadsafeFunction<(String, String), (), (String, String), Status, false, true>;
 
-fn queue(message: String) {
-  if let Ok(mut pending) = PENDING.lock() {
-    pending.push(message);
-  }
-}
+/// The function warnings logged on any thread reach the JS thread of the first renderer through.
+static PRINT: OnceLock<PrintWarning> = OnceLock::new();
 
-/// Queues takumi's warnings, such as an unsupported CSS property, for the next task to print.
-pub(crate) fn forward_warnings() {
-  WarningLog::install(queue);
-}
-
-/// Prints the queued warnings with `console.warn`.
-fn print_warnings(env: &Env) -> Result<()> {
-  let pending = PENDING
-    .lock()
-    .map(|mut pending| take(&mut *pending))
-    .unwrap_or_default();
-
-  if pending.is_empty() {
+/// Prints takumi's warnings, such as an unsupported CSS property, with `console.warn`.
+pub(crate) fn forward_warnings(env: &Env) -> Result<()> {
+  if PRINT.get().is_some() {
     return Ok(());
   }
 
-  let console: Object = env.get_global()?.get_named_property("console")?;
-  let warn: Function<String, Unknown> = console.get_named_property("warn")?;
+  let print = env
+    .create_function_from_closure("printTakumiWarning", |ctx| {
+      let (key, message) = ctx.first_arg::<(String, String)>()?;
+      let warning = Warning { key, message };
 
-  for message in pending {
-    warn.apply(console, message)?;
+      // A `console.warn` that throws must not fail the render that logged the warning.
+      if warning.is_first() {
+        let _ = console_warn(ctx.env, warning.message);
+      }
+
+      Ok(())
+    })?
+    .build_threadsafe_function()
+    .weak::<true>()
+    .callee_handled::<false>()
+    .build()?;
+
+  if PRINT.set(print).is_ok() {
+    WarningLog::install(send);
   }
 
   Ok(())
 }
 
-/// A task that prints the warnings takumi logged once it settles.
-pub struct Warned<T>(pub(crate) T);
-
-impl<T: Task> Task for Warned<T> {
-  type Output = T::Output;
-  type JsValue = T::JsValue;
-
-  fn compute(&mut self) -> Result<Self::Output> {
-    self.0.compute()
+fn send(warning: Warning) {
+  if let Some(print) = PRINT.get() {
+    print.call(
+      (warning.key, warning.message),
+      ThreadsafeFunctionCallMode::NonBlocking,
+    );
   }
+}
 
-  fn resolve(&mut self, env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    self.0.resolve(env, output)
-  }
+fn console_warn(env: &Env, message: String) -> Result<()> {
+  let console: Object = env.get_global()?.get_named_property("console")?;
+  let warn: Function<String, Unknown> = console.get_named_property("warn")?;
 
-  fn reject(&mut self, env: Env, error: Error) -> Result<Self::JsValue> {
-    self.0.reject(env, error)
-  }
-
-  fn finally(self, env: Env) -> Result<()> {
-    print_warnings(&env)?;
-    self.0.finally(env)
-  }
+  warn.apply(console, message).map(drop)
 }

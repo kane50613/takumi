@@ -24,7 +24,7 @@ use crate::{
   render_job::RenderJob,
   render_task::RenderTask,
   svg_render_task::SvgRenderTask,
-  warning::{Warned, forward_warnings},
+  warning::forward_warnings,
 };
 
 /// Represents a single run of text in a measured node.
@@ -198,7 +198,7 @@ impl Renderer {
   )]
   pub fn new(env: Env, options: Option<Object>) -> Result<Self> {
     crate::pool::register_cleanup(&env);
-    forward_warnings();
+    forward_warnings(&env)?;
 
     let options: RendererOptions = read_options(options)?;
 
@@ -341,9 +341,9 @@ impl Renderer {
     source: Either<String, Object>,
     options: Option<Object>,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<RenderTask>>> {
+  ) -> Result<AsyncTask<RenderTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(RenderTask(self.job(source, options)?)),
+      RenderTask(self.job(source, options)?),
       signal,
     ))
   }
@@ -358,13 +358,13 @@ impl Renderer {
     source: Either<String, Object>,
     options: Option<Object>,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<SvgRenderTask>>> {
+  ) -> Result<AsyncTask<SvgRenderTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(SvgRenderTask::new(
+      SvgRenderTask::new(
         NodeSource::from_js(source)?,
         read_options(options)?,
         Arc::clone(&self.state),
-      )),
+      ),
       signal,
     ))
   }
@@ -379,9 +379,9 @@ impl Renderer {
     source: Either<String, Object>,
     options: Option<Object>,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<MeasureTask>>> {
+  ) -> Result<AsyncTask<MeasureTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(MeasureTask(self.job(source, options)?)),
+      MeasureTask(self.job(source, options)?),
       signal,
     ))
   }
@@ -397,14 +397,14 @@ impl Renderer {
     options: Option<Object>,
     fonts: Option<Object>,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<NeedsTask>>> {
+  ) -> Result<AsyncTask<NeedsTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(NeedsTask::new(
+      NeedsTask::new(
         NodeSource::from_js(source)?,
         read_options(options)?,
         fonts.map(deserialize_with_tracing).transpose()?,
         Arc::clone(&self.state),
-      )),
+      ),
       signal,
     ))
   }
@@ -420,13 +420,13 @@ impl Renderer {
     options: Object,
     fonts: Option<Object>,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<AnimationNeedsTask>>> {
+  ) -> Result<AsyncTask<AnimationNeedsTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(AnimationNeedsTask::read(
+      AnimationNeedsTask::read(
         options,
         fonts.map(deserialize_with_tracing).transpose()?,
         Arc::clone(&self.state),
-      )?),
+      )?,
       signal,
     ))
   }
@@ -440,13 +440,13 @@ impl Renderer {
     &self,
     options: Object,
     signal: Option<AbortSignal>,
-  ) -> Result<AsyncTask<Warned<RenderAnimationTask>>> {
+  ) -> Result<AsyncTask<RenderAnimationTask>> {
     Ok(AsyncTask::with_optional_signal(
-      Warned(RenderAnimationTask(AnimationInput::read(
+      RenderAnimationTask(AnimationInput::read(
         options,
         |_| {},
         Arc::clone(&self.state),
-      )?)),
+      )?),
       signal,
     ))
   }
