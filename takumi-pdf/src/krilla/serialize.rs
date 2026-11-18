@@ -221,8 +221,8 @@ impl MaybeDeviceColorSpace {
 pub(crate) struct SerializeContext {
   /// The ref of the page tree.
   page_tree_ref: Ref,
-  /// PDF 2.0 namespaces.
-  pub(crate) pdf2_ns: Pdf2Namespaces,
+  /// The PDF 2.0 standard structure namespace (`http://iso.org/pdf2/ssn`).
+  pub(crate) ssn_ref: Ref,
   /// All global objects, such as PDF fonts, that are populated over time.
   pub(crate) global_objects: GlobalObjects,
   /// Information for each page written so far, index by the page index.
@@ -266,10 +266,7 @@ impl SerializeContext {
 
     let mut cur_ref = Ref::new(1);
     let page_tree_ref = cur_ref.bump();
-    let pdf2_ns = Pdf2Namespaces {
-      ssn_ref: cur_ref.bump(),
-      krilla_ref: cur_ref.bump(),
-    };
+    let ssn_ref = cur_ref.bump();
 
     let chunk_settings = Settings {
       pretty: serialize_settings.pretty,
@@ -277,7 +274,7 @@ impl SerializeContext {
 
     Self {
       cached_mappings: FxHashMap::default(),
-      pdf2_ns,
+      ssn_ref,
       global_objects: GlobalObjects::default(),
       cur_ref,
       page_tree_ref,
@@ -715,12 +712,7 @@ impl SerializeContext {
 
       if self.serialize_settings.pdf_version() < PdfVersion::Pdf20 {
         let mut role_map = tree.role_map();
-        // Custom structure elements.
-        role_map.insert(Name(b"Datetime"), StructRole::Span);
-        role_map.insert(Name(b"Terms"), StructRole::Part);
-
         // PDF 2.0 exclusive structure elements.
-        role_map.insert(Name(b"Title"), StructRole::P);
         role_map.insert(Name(b"Strong"), StructRole::Span);
         role_map.insert(Name(b"Em"), StructRole::Span);
         for level in self.global_objects.custom_heading_roles.iter() {
@@ -731,29 +723,15 @@ impl SerializeContext {
         let mut namespaces = tree.namespaces();
 
         // PDF 2.0 standard structure namespace
-        namespaces.item(self.pdf2_ns.ssn_ref);
+        namespaces.item(self.ssn_ref);
         let mut ns_chunk = self.new_chunk();
         // TODO: restore `pdf_2_ns()` once pdf-writer > 0.15.0 ships the fix. It
         // writes `https://www.iso.org/pdf2/ssn`, while ISO 32000-2:2020, 14.8.6
         // defines the identifier below.
         // https://github.com/typst/pdf-writer/pull/85
         ns_chunk
-          .namespace(self.pdf2_ns.ssn_ref)
+          .namespace(self.ssn_ref)
           .ns(TextStr("http://iso.org/pdf2/ssn"));
-        sub_chunks.push(ns_chunk);
-
-        // Custom krilla namspace
-        namespaces.item(self.pdf2_ns.krilla_ref);
-        let mut ns_chunk = self.new_chunk();
-        let mut ns = ns_chunk.namespace(self.pdf2_ns.krilla_ref);
-        ns.ns(TextStr("https://github.com/LaurenzV/krilla"));
-
-        // Custom structure elements.
-        ns.role_map_ns()
-          .to_pdf_2_0(Name(b"Datetime"), StructRole2::Span, self.pdf2_ns.ssn_ref)
-          .to_pdf_2_0(Name(b"Terms"), StructRole2::Part, self.pdf2_ns.ssn_ref);
-
-        ns.finish();
         sub_chunks.push(ns_chunk);
       }
       tree.children().item(document_ref);
@@ -924,13 +902,6 @@ impl<T> DerefMut for MaybeTaken<T> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     self.0.as_mut().expect("value was taken")
   }
-}
-
-pub(crate) struct Pdf2Namespaces {
-  /// The ref of the PDF 2.0 standard structure namspace (`https://www.iso.org/pdf2/ssn`).
-  pub(crate) ssn_ref: Ref,
-  /// The ref of the custom krilla namespace used for role mapping.
-  pub(crate) krilla_ref: Ref,
 }
 
 #[derive(Default)]
