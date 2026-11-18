@@ -78,6 +78,8 @@ export type PaintOptions = {
   fontFamilies?: string[];
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: string[];
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
 };

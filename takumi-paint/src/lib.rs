@@ -88,6 +88,8 @@ struct RenderOptions {
   font_families: Option<Vec<String>>,
   /// The `@font-face` files the paint's `prepare` failed to download.
   failed_font_files: Option<Vec<String>>,
+  /// The keys of the paint's `fonts` list, which scope it to the fonts it lists.
+  font_keys: Option<Vec<String>>,
   lang: Option<String>,
 }
 
@@ -139,6 +141,7 @@ impl Painter {
       &mut options.font_families,
       listed,
       options.failed_font_files.as_deref(),
+      options.font_keys.as_deref(),
     );
     Ok(run(
       PaintTreeOptions::builder()
@@ -263,13 +266,6 @@ impl Painter {
   #[wasm_bindgen(js_name = dropFonts)]
   pub fn drop_fonts(&self, keys: Vec<String>) -> Vec<String> {
     self.fonts.drop_fonts(&keys)
-  }
-
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[wasm_bindgen(js_name = orderFonts)]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.fonts.order_fonts(&keys);
   }
 
   /// What the renderer's caches hold and how their lookups went since it was created.

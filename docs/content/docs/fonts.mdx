@@ -250,6 +250,8 @@ Before a subset downloads, font matching knows only the weight and style declare
 
 To load fonts before the first request, register them on a renderer. Then pass that renderer to each render. `registerFont` takes the same entries as `fonts` and returns the families it added.
 
+Every render on the renderer draws with the fonts `registerFont` registered. A render's own `fonts` list reaches only that render, as a page sees only its own `@font-face` rules, so renders that list different fonts never change each other's output.
+
 ```tsx twoslash title="Preload a local font"
 import { readFile } from "node:fs/promises";
 import { Renderer } from "takumi-js/node";

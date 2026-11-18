@@ -117,12 +117,28 @@ describe("FontRegistry", () => {
     expect(new Set(leased).size).toBe(2);
   });
 
-  test("orders a render's fonts as it lists them", async () => {
-    const { backend, fonts } = fontBackend();
+  test("scopes a render to the fonts it lists, in list order", async () => {
+    const { fonts } = fontBackend();
+    const keys = await fonts.resolveResources(
+      [font("Inter"), font("Geist")],
+      undefined,
+      undefined,
+      (resources) => resources.fontKeys,
+    );
 
-    await families(fonts, [font("Inter"), font("Geist")]);
+    expect(keys).toEqual(["Inter::::", "Geist::::"]);
+  });
 
-    expect(backend.orderFonts).toHaveBeenCalledWith(["Inter::::", "Geist::::"]);
+  test("scopes a render that lists no fonts to none, so another render's list does not reach it", async () => {
+    const { fonts } = fontBackend();
+    const keys = await fonts.resolveResources(
+      [],
+      undefined,
+      undefined,
+      (resources) => resources.fontKeys,
+    );
+
+    expect(keys).toEqual([]);
   });
 
   test("keys a buffer by its bytes", async () => {

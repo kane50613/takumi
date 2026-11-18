@@ -204,6 +204,7 @@ impl PdfRenderer {
         &mut options.font_families,
         listed,
         options.failed_font_files.as_deref(),
+        options.font_keys.as_deref(),
       ),
       stylesheet: stylesheet(&self.cache, options.css.take(), Vec::new()).map_err(map_error)?,
       cache: self.cache.clone(),
@@ -317,13 +318,6 @@ impl PdfRenderer {
     self.fonts.drop_fonts(&keys)
   }
 
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[wasm_bindgen(js_name = orderFonts)]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.fonts.order_fonts(&keys);
-  }
-
   /// What the renderer's caches hold and how their lookups went since it was created.
   #[wasm_bindgen(js_name = cacheStats)]
   pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
@@ -358,7 +352,10 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(
+      options.failed_font_files.as_deref(),
+      options.font_keys.as_deref(),
+    );
 
     takumi_pdf::render(PdfOptions {
       viewport,

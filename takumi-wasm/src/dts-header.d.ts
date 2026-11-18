@@ -128,6 +128,8 @@ export type RenderOptions = {
   fontFamilies?: string[];
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: string[];
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };
@@ -190,6 +192,8 @@ export type RenderAnimationOptions = {
   fontFamilies?: string[];
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: string[];
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };

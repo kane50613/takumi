@@ -296,8 +296,6 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   leaseFonts(): number;
   /** Releases the leases `leaseFonts` opened, so the backend can evict their files. */
   releaseFonts(lease: number): void;
-  /** Gives the faces registered under `keys` precedence in their families, a later key over an earlier one. */
-  orderFonts(keys: string[]): void;
   /** Forgets the fonts registered under `keys` that no render leases, returning those keys and the ones nothing is under. */
   dropFonts(keys: string[]): string[];
 };
@@ -327,6 +325,8 @@ type ResolvedResources = {
   fontFamilies?: string[];
   /** The held `@font-face` files that failed to load again, and the optional fonts that failed. */
   failedFontFiles?: string[];
+  /** The keys of the render's `fonts` list, which scope the render to the fonts it lists, as a document sees only its own `@font-face` rules. */
+  fontKeys: string[];
 };
 
 /**
@@ -575,6 +575,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return failed.length > 0 ? fonts.filter((font) => !failed.includes(this.key(font))) : fonts;
   }
 
+  /** The keys the backend keeps `fonts` under. */
+  keys(fonts: FontLoader[]): string[] {
+    return fonts.map((font) => this.key(font));
+  }
+
   /** Removes from `failed` the keys of `fonts`, which load again. */
   clearFailures(fonts: FontLoader[], failed: string[]): void {
     const keys = new Set(fonts.map((font) => this.key(font)));
@@ -686,14 +691,10 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
           ? [...new Set(families.flat().map((family) => family.name))]
           : undefined;
 
-      // Nothing yields from here into `use`, so the order stands when the render takes its fonts.
-      if (loaders.length > 0) {
-        this.backend.orderFonts(loaders.map((loader) => this.keyOf(loader)));
-      }
-
       return use({
         images: resolvedImages,
         fontFamilies: fontFamilies ?? registered,
+        fontKeys: loaders.map((loader) => this.keyOf(loader)),
         ...(failedFontFiles.length > 0 ? { failedFontFiles } : {}),
       });
     });

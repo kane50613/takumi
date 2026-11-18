@@ -163,6 +163,8 @@ export interface RenderAnimationOptions {
   fontFamilies?: Array<string>;
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: Array<string>;
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: Array<string>;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }
@@ -214,6 +216,8 @@ export interface RenderOptions {
   fontFamilies?: Array<string>;
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: Array<string>;
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: Array<string>;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }
@@ -248,6 +252,8 @@ export interface SvgRenderOptions {
   fontFamilies?: Array<string>;
   /** @internal The `@font-face` files `prepare` failed to download. */
   failedFontFiles?: Array<string>;
+  /** @internal The keys of the render's `fonts` list, which scope it to the fonts it lists. */
+  fontKeys?: Array<string>;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }

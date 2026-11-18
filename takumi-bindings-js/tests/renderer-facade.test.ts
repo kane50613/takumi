@@ -249,7 +249,11 @@ describe("shared Renderer body", () => {
     await backend.measure(node, { fonts: [font] });
 
     for (const call of [backend.inner.render, backend.inner.renderSvg, backend.inner.measure]) {
-      expect(call).toHaveBeenCalledWith(node, { fontFamilies: ["Fam"], images: [] }, undefined);
+      expect(call).toHaveBeenCalledWith(
+        node,
+        { fontFamilies: ["Fam"], fontKeys: ["Fam:::65-90:"], images: [] },
+        undefined,
+      );
     }
   });
 
@@ -269,7 +273,7 @@ describe("shared Renderer body", () => {
     await backend.renderAnimation({ scenes, fonts: [fontA, fontB] });
 
     expect(backend.inner.renderAnimation).toHaveBeenCalledWith(
-      { scenes, fontFamilies: ["A", "B"], images: [] },
+      { scenes, fontFamilies: ["A", "B"], fontKeys: ["A:::65-65:", "B:::66-66:"], images: [] },
       undefined,
     );
   });
@@ -687,6 +691,7 @@ describe("optional fonts", () => {
 
     expect(call.mock.calls[0]?.[1]).toEqual({
       fontFamilies: ["Inter"],
+      fontKeys: [expect.stringMatching(/^Inter/), expect.stringMatching(/^Missing/)],
       images: [],
       failedFontFiles: [expect.stringMatching(/^Missing/)],
     });
@@ -839,7 +844,7 @@ describe("the warnings of a prepare", () => {
 
     expect(missingOf(warnings())).toEqual([]);
     expect(reads.mock.calls.at(-1)).toEqual([
-      { images: [], fontFamilies: ["CJK"], failedFontFiles: [] },
+      { images: [], fontFamilies: ["CJK"], failedFontFiles: [], fontKeys: ["CJK::::"] },
     ]);
   });
 
@@ -917,9 +922,11 @@ describe("the warnings of a prepare", () => {
   });
 
   test("onMissingGlyphs fonts join the registered chain when the render names no fonts", async () => {
-    const { fonts, held, backend } = fontBackend();
+    const { fonts, held } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
-    const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
+    const call = mock(
+      (_source: unknown, _options: { fontFamilies?: string[]; fontKeys?: string[] }) => undefined,
+    );
     const prepared = await prepareSource(
       fonts,
       textNode("中"),
@@ -932,7 +939,7 @@ describe("the warnings of a prepare", () => {
 
     expect(held.has("cjk")).toBe(true);
     expect(call.mock.calls[0]?.[1].fontFamilies).toBeUndefined();
-    expect(backend.orderFonts).toHaveBeenLastCalledWith(["cjk"]);
+    expect(call.mock.calls[0]?.[1].fontKeys).toEqual(["cjk"]);
   });
 
   test("onMissingGlyphs adds its fonts to the render and reads once more", async () => {

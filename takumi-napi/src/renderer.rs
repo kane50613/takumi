@@ -150,9 +150,14 @@ impl RendererState {
     Some(listed)
   }
 
-  /// The fonts for a render, with the `@font-face` files its document `failed` to download.
-  pub(crate) fn fonts_for_render(&self, failed: Option<&[String]>) -> Arc<Fonts> {
-    self.fonts.for_render(failed)
+  /// The fonts for a render that lists the fonts under `keys`, with the `@font-face` files its
+  /// document `failed` to download.
+  pub(crate) fn fonts_for_render(
+    &self,
+    failed: Option<&[String]>,
+    keys: Option<&[String]>,
+  ) -> Arc<Fonts> {
+    self.fonts.for_render(failed, keys)
   }
 }
 
@@ -290,13 +295,6 @@ impl Renderer {
   #[napi(js_name = "dropFonts")]
   pub fn drop_fonts(&self, keys: Vec<String>) -> Vec<String> {
     self.state.fonts.drop_fonts(&keys)
-  }
-
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[napi(js_name = "orderFonts")]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.state.fonts.order_fonts(&keys);
   }
 
   fn load_font(

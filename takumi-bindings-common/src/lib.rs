@@ -96,9 +96,6 @@ pub struct FontStore {
 struct FontBook {
   fonts: Arc<Fonts>,
   registrations: FontRegistrations,
-  /// The keys the render that ordered its fonts last listed, whose fonts every registry handed to a
-  /// render adds again last, a later key over an earlier one.
-  listed: Vec<String>,
   leases: RenderLeases,
 }
 
@@ -109,7 +106,6 @@ impl FontStore {
       book: Mutex::new(FontBook {
         fonts: Arc::new(default_fonts()?),
         registrations: FontRegistrations::default(),
-        listed: Vec::new(),
         leases: RenderLeases::default(),
       }),
       cache,
@@ -121,15 +117,19 @@ impl FontStore {
     Arc::clone(&self.book().fonts)
   }
 
-  /// The registry for a render, with the `@font-face` files its document `failed` to download.
-  pub fn for_render(&self, failed: Option<&[String]>) -> Arc<Fonts> {
+  /// The registry for a render whose `fonts` list names the fonts registered under `keys`, with
+  /// those fonts added as [`FontRegistrations::listing`] adds them and the `@font-face` files its
+  /// document `failed` to download.
+  pub fn for_render(&self, failed: Option<&[String]>, keys: Option<&[String]>) -> Arc<Fonts> {
     self.release_evicted();
 
     let failed = failed.unwrap_or_default();
     let fonts = {
       let book = self.book();
 
-      book.registrations.listing(&book.fonts, &book.listed)
+      book
+        .registrations
+        .listing(&book.fonts, keys.unwrap_or_default())
     };
 
     if failed.is_empty() {
@@ -145,16 +145,17 @@ impl FontStore {
     families: &mut Option<Vec<String>>,
     listed: Option<&ListedFonts>,
     failed: Option<&[String]>,
+    keys: Option<&[String]>,
   ) -> Arc<Fonts> {
     let Some(listed) = listed else {
-      return self.for_render(failed);
+      return self.for_render(failed, keys);
     };
 
     if families.is_none() {
       families.clone_from(&listed.families);
     }
 
-    Arc::new(listed.fonts(&self.for_render(failed)))
+    Arc::new(listed.fonts(&self.for_render(failed, keys)))
   }
 
   /// A render's `fonts` list read against the fonts this store holds.
@@ -261,7 +262,7 @@ impl FontStore {
 
     if pin {
       return self
-        .update(|_, registrations| Ok(registrations.pin(&self.cache, key)))
+        .update(|fonts, registrations| Ok(registrations.pin(fonts, &self.cache, key)))
         .unwrap_or_default();
     }
 
@@ -395,12 +396,6 @@ impl FontStore {
     self
       .update(|fonts, registrations| Ok(registrations.forget_unleased(fonts, &self.cache, keys)))
       .unwrap_or_default()
-  }
-
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, in every registry handed to a render from now on.
-  pub fn order_fonts(&self, keys: &[String]) {
-    self.book().listed = keys.to_vec();
   }
 
   /// Goes back to the embedded system fonts alone.

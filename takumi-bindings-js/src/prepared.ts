@@ -142,6 +142,8 @@ export type NeedsRequest = {
   fontFamilies?: string[];
   /** The `@font-face` files this document failed to download, so their rules move on to their next `src`. */
   failedFontFiles?: string[];
+  /** The keys of the render's `fonts` list, which scope the read to the fonts it lists. */
+  fontKeys?: string[];
 };
 
 /**
@@ -158,12 +160,17 @@ export type SourceReader = (request: NeedsRequest) => Awaitable<SourceNeeds>;
  */
 export function needsArgs<TLayout>(
   layout: TLayout,
-  { images, fonts, fontFamilies, failedFontFiles }: NeedsRequest,
+  { images, fonts, fontFamilies, failedFontFiles, fontKeys }: NeedsRequest,
 ): [
-  TLayout & { images?: ImageSource[]; fontFamilies?: string[]; failedFontFiles?: string[] },
+  TLayout & {
+    images?: ImageSource[];
+    fontFamilies?: string[];
+    failedFontFiles?: string[];
+    fontKeys?: string[];
+  },
   ListedFont[] | undefined,
 ] {
-  return [{ ...layout, images, fontFamilies, failedFontFiles }, fonts];
+  return [{ ...layout, images, fontFamilies, failedFontFiles, fontKeys }, fonts];
 }
 
 type PreparedState<TSource, TLayout> = {
@@ -341,7 +348,11 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   signal?.throwIfAborted();
 
   const listed = resolvedFonts && registry.listed(resolvedFonts);
-  const request: NeedsRequest = { fonts: listed, fontFamilies };
+  const request: NeedsRequest = {
+    fonts: listed,
+    fontFamilies,
+    fontKeys: resolvedFonts && registry.keys(resolvedFonts),
+  };
   let first: Promise<SourceNeeds> | undefined;
   const read = () => (first ??= Promise.resolve(needs(request)));
   const {
@@ -396,17 +407,17 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   const resolveFonts = <T>(
     fonts: FontLoader[] | undefined,
     families: string[] | undefined,
-    use: (fontFamilies: string[] | undefined) => Awaitable<T>,
+    use: (fontFamilies: string[] | undefined, fontKeys: string[]) => Awaitable<T>,
     implicitFamilies = false,
   ) =>
     registry.resolveResources(
       fonts && registry.loaders(fonts, fetch),
       undefined,
       families,
-      ({ fontFamilies: resolved, failedFontFiles: failed = [] }) => {
+      ({ fontFamilies: resolved, fontKeys, failedFontFiles: failed = [] }) => {
         failedFontFiles.push(...failed);
 
-        return use(resolved);
+        return use(resolved, fontKeys);
       },
       { implicitFamilies },
     );
@@ -419,7 +430,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
     resolveFonts(
       fonts,
       families,
-      (resolved) => needs({ images: entries, fontFamilies: resolved, failedFontFiles }),
+      (resolved, fontKeys) =>
+        needs({ images: entries, fontFamilies: resolved, failedFontFiles, fontKeys }),
       implicitFamilies,
     );
 
@@ -573,6 +585,7 @@ export function renderPrepared<
       Omit<TOutput, "signal"> & {
         images?: ImageSource[];
         fontFamilies?: string[];
+        fontKeys?: string[];
         failedFontFiles?: string[];
       },
     signal: AbortSignal | undefined,
@@ -613,7 +626,7 @@ export function renderPrepared<
       state.fonts && registry.loaders(state.fonts, fetch),
       state.images,
       state.fontFamilies,
-      ({ images, fontFamilies, failedFontFiles: failedAgain = [] }) => {
+      ({ images, fontFamilies, fontKeys, failedFontFiles: failedAgain = [] }) => {
         signal?.throwIfAborted();
 
         const failedFontFiles = [...state.failedFontFiles, ...failedAgain];
@@ -621,7 +634,7 @@ export function renderPrepared<
 
         return call(
           state.source,
-          { ...encoding, ...state.layout, images, fontFamilies, ...failed },
+          { ...encoding, ...state.layout, images, fontFamilies, fontKeys, ...failed },
           signal,
         );
       },
