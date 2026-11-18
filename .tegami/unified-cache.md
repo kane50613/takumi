@@ -7,14 +7,14 @@ packages:
   takumi: minor
 ---
 
-# One `Cache` holds what renders reuse, with a budget for each kind of data
+# One `Cache` holds what renders reuse, in one pool of bytes
 
-`Cache` replaces `ResourceCache` in the Rust crates. Pass one as `cache` to `RenderOptions`, `SvgOptions`, `PdfOptions`, `MeasureOptions`, or `PaintTreeOptions`, or leave it out to share `Cache::shared()`.
+`Cache` replaces `ResourceCache` in the Rust crates. Everything it keeps shares `max_bytes`, 128 MiB by default. Setting `images` or `glyphs` to `ImageCacheMode::None` keeps none of that kind.
 
 ```rust
 let cache = CacheOptions::builder()
-  .images(64 << 20)
-  .stylesheets(4 << 20)
+  .max_bytes(256 << 20)
+  .images(ImageCacheMode::None)
   .build();
 
 let options = RenderOptions::builder()
@@ -24,21 +24,17 @@ let options = RenderOptions::builder()
   .build();
 ```
 
-Renders reuse more of what they decode:
-
-- PDF renders reuse decoded images, where each call used to start empty.
-- SVG and paint renders cache `data:` images, as raster renders do.
-- A downscaled bitmap or SVG raster stays in the cache of the render that draws it.
+`RenderOptions`, `SvgOptions`, `PdfOptions`, `MeasureOptions`, and `PaintTreeOptions` take it as `cache`. A render without one shares `Cache::shared()`. PDF renders now reuse decoded images, and SVG and paint renders cache `data:` images.
 
 #### Migration
 
-`ResourceCache` and its `new`, `get_or_decode`, and `get_or_parse_stylesheet` methods are removed, and so is the `resource_cache` setter of `RenderOptions` and of the `takumi-pdf` options. Pass the cache as `cache`.
+`ResourceCache` and the `resource_cache` setter of `RenderOptions` and of the `takumi-pdf` options are removed. Pass the cache as `cache`.
 
 ```diff
-- let cache = ResourceCache::new(64 << 20);
+- let cache = ResourceCache::new(256 << 20);
 - let image = cache.get_or_decode(&bytes, ImageCacheMode::Auto)?;
 - let sheet = cache.get_or_parse_stylesheet(sources);
-+ let cache = CacheOptions::builder().images(64 << 20).build();
++ let cache = CacheOptions::builder().max_bytes(256 << 20).build();
 + let image = cache.decode_image(&bytes, ImageCacheMode::Auto)?;
 + let sheet = cache.parse_stylesheet(sources);
 ```

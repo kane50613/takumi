@@ -293,7 +293,7 @@ pub struct Fonts {
 
 /// What registration builds, shared by a [`Fonts`] and every snapshot taken from it since.
 #[derive(Clone, Default)]
-struct FontRegistry {
+pub(crate) struct FontRegistry {
   selector: CssFontSelector,
   /// The fonts installed with the registry, which no registration changes.
   system_fonts: Arc<SystemFonts>,
@@ -374,9 +374,9 @@ pub struct FontsSnapshot(Fonts);
 #[cfg(feature = "font-face")]
 mod font_face_set;
 #[cfg(feature = "font-face")]
-pub(crate) use font_face_set::DocumentRegistries;
-#[cfg(feature = "font-face")]
 use font_face_set::FontFile;
+#[cfg(feature = "font-face")]
+pub(crate) use font_face_set::{DocumentKey, DocumentRegistries};
 
 impl Deref for FontsSnapshot {
   type Target = Fonts;

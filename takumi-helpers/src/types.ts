@@ -114,3 +114,86 @@ export type ImageNode = NodeMetadata & {
   width?: number;
   height?: number;
 };
+
+/** Whether a renderer keeps a kind of data for later renders. `"none"` keeps none of it. */
+export type CacheMode = "auto" | "none";
+
+/** The memory a renderer keeps across renders, one pool of bytes every kind of data shares. */
+export interface CacheOptions {
+  /**
+   * The bytes the renderer keeps for later renders, shared by every kind of data except fonts.
+   * When it is full, the entries used least recently go first, whatever their kind. `0` keeps
+   * nothing. Sizes are estimates, and the process uses memory this does not count.
+   * @default 128 MiB
+   */
+  maxBytes?: number;
+  /**
+   * Whether to keep decoded images, and the SVG rasters and downscaled bitmaps drawn from them.
+   * @default "auto"
+   */
+  images?: CacheMode;
+  /**
+   * Whether to keep resolved glyphs, and the masks rasterized from glyphs and shapes.
+   * @default "auto", or `"none"` after `setGlyphCacheMaxBytes(0)` where the package exports it
+   */
+  glyphs?: CacheMode;
+  /**
+   * Whether to keep the decoded fonts that renders' `fonts` lists load. `"none"` releases each
+   * font once the renderer loads another, and loads it again when a later render lists it. Fonts
+   * from `registerFont` stay either way. A running render keeps the fonts it started with.
+   * @default "auto"
+   */
+  fonts?: CacheMode;
+}
+
+/**
+ * What a renderer's caches hold and how their lookups went since the renderer was created, under
+ * the keys `CacheOptions` uses. Sizes are the same estimates `maxBytes` counts, not process
+ * memory.
+ */
+export interface CacheStats {
+  /** The pool that every kind of data except fonts shares. */
+  memory: CacheMemoryStats;
+  /** Decoded images and the bitmaps drawn from them. */
+  images: CacheKindStats;
+  /** Resolved glyphs and their masks. */
+  glyphs: CacheKindStats;
+  /** The fonts that renders' `fonts` lists loaded. */
+  fonts: CacheKindStats;
+}
+
+/** The bytes the pool holds, every kind of data except fonts together. */
+export interface CacheMemoryStats {
+  /** The bytes held now. */
+  current: number;
+  /** The most bytes held at once since the renderer was created. */
+  high: number;
+}
+
+/** What one kind of data holds and how lookups for it went. */
+export interface CacheKindStats {
+  /** The bytes held now. For `fonts`, the fonts that renders' `fonts` lists loaded. */
+  current: number;
+  /** Lookups that found what they looked for. */
+  hits: number;
+  /** Lookups that found nothing and did the work again. */
+  misses: number;
+  /** Entries released to stay within `maxBytes`. */
+  evictions: number;
+}
+
+/** Options for constructing a renderer. */
+export interface RendererOptions {
+  /** The memory the renderer keeps across renders. */
+  cache?: CacheOptions;
+  /** @deprecated Use `cache.maxBytes`. */
+  cacheMaxBytes?: number;
+  /**
+   * The most bytes of fonts that renders' `fonts` lists keep, unless `cache.fonts` is `"none"`.
+   * @deprecated Use `cache.fonts`.
+   */
+  fontCacheMaxBytes?: number;
+}
+
+/** @deprecated Use `RendererOptions`. */
+export type FontCacheOptions = RendererOptions;

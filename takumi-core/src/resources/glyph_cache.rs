@@ -1,43 +1,49 @@
-//! Resolved glyphs and the masks rasterized from them and from shapes, sharing one byte budget so
-//! the split follows the workload.
+//! Resolved glyphs and the masks rasterized from them and from shapes, as one kind of data in a
+//! [`Cache`](crate::Cache)'s pool.
 
 use std::sync::{
   Arc,
-  atomic::{AtomicU64, Ordering},
+  atomic::{AtomicBool, Ordering},
 };
-
-use quick_cache::sync::{Cache as Store, DefaultLifecycle};
-use rustc_hash::FxBuildHasher;
 
 use crate::{
   geometry::Placement,
   resources::{
-    cache::{ByBytes, CacheOptions, ENTRY_OVERHEAD, Weighed},
+    cache::{ENTRY_OVERHEAD, KindStore, Weighed},
     glyph::ResolvedGlyph,
+    image::ImageCacheMode,
   },
 };
 
-/// The glyph budget of caches built without one of their own.
-static DEFAULT_MAX_BYTES: AtomicU64 = AtomicU64::new(CacheOptions::DEFAULT_GLYPHS);
+/// Whether caches built without a glyph mode of their own keep glyphs.
+static KEEPS_GLYPHS: AtomicBool = AtomicBool::new(true);
 
-/// Sets the glyph budget of the caches built after this call without one of their own, which
-/// includes [`Cache::shared`](crate::Cache::shared) when nothing used it yet. `0` stops caching.
-#[deprecated(note = "use `CacheOptions::builder().glyphs(bytes)`")]
+/// Keeps no glyphs in the caches built after this call without a glyph mode of their own when
+/// `bytes` is `0`, which includes [`Cache::shared`](crate::Cache::shared) when nothing used it
+/// yet. Any other value keeps them, in the pool every kind shares.
+#[deprecated(note = "use `CacheOptions::builder().glyphs(ImageCacheMode::None)`")]
 pub fn set_glyph_cache_max_bytes(bytes: usize) {
-  DEFAULT_MAX_BYTES.store(bytes as u64, Ordering::Relaxed);
+  KEEPS_GLYPHS.store(bytes > 0, Ordering::Relaxed);
 }
 
-/// The glyph budget of a cache built without one of its own.
-pub(crate) fn default_max_bytes() -> u64 {
-  DEFAULT_MAX_BYTES.load(Ordering::Relaxed)
+/// The glyph mode of a cache built without one of its own.
+pub(crate) fn default_mode() -> ImageCacheMode {
+  if KEEPS_GLYPHS.load(Ordering::Relaxed) {
+    ImageCacheMode::Auto
+  } else {
+    ImageCacheMode::None
+  }
 }
 
-/// The share of the budget one entry may take: a 32nd, what one shard of the cache holds on an
-/// eight-core machine, so a single raster cannot crowd out the glyphs.
+/// The share of the glyph bytes one entry may take: a 32nd, what one shard of the cache holds on
+/// an eight-core machine, so a single raster cannot crowd out the glyphs.
 const ENTRY_SHARE: u64 = 32;
 
+/// The glyph bytes an entry's share is taken from, the old default glyph budget.
+const GLYPH_BYTES: u64 = 8 << 20;
+
 #[derive(Clone)]
-enum CachedGlyph {
+pub(crate) enum CachedGlyph {
   Resolved(Arc<ResolvedGlyph>),
   Mask(Arc<Vec<u8>>, Placement),
 }
@@ -45,50 +51,37 @@ enum CachedGlyph {
 /// Which stage a slot holds. Part of the key rather than a bit folded into it,
 /// so a caller keeps its full 64 bits and the two stages cannot alias.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum GlyphKind {
+pub(crate) enum GlyphKind {
   Resolved,
   Mask,
 }
 
-type Key = (u64, GlyphKind);
+pub(crate) type GlyphKey = (u64, GlyphKind);
 
 /// The glyphs and masks a [`Cache`](crate::Cache) keeps.
 #[doc(hidden)]
 pub struct GlyphCache {
-  store: Store<Key, Weighed<CachedGlyph>, ByBytes, FxBuildHasher>,
+  store: KindStore<CachedGlyph>,
 }
 
 impl GlyphCache {
-  /// A cache holding at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    // ~4 KiB average entry ⇒ item-count hint for the budget.
-    let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
-
-    Self {
-      store: Store::with(
-        estimated_items,
-        max_bytes,
-        ByBytes,
-        FxBuildHasher,
-        DefaultLifecycle::default(),
-      ),
-    }
+  pub(crate) fn new(store: KindStore<CachedGlyph>) -> Self {
+    Self { store }
   }
 
   fn get_or_insert(
     &self,
-    key: Key,
+    key: GlyphKey,
     f: impl FnOnce() -> Option<(CachedGlyph, usize)>,
   ) -> Option<CachedGlyph> {
     self
       .store
-      .get_or_insert_with(&key, || {
+      .get_or_insert_with(key, || {
         f()
           .map(|(value, bytes)| Weighed::new(value, bytes))
           .ok_or(())
       })
       .ok()
-      .map(|entry| entry.value)
   }
 
   /// The resolved outline or bitmap for `key`, resolved once across concurrent misses.
@@ -111,9 +104,10 @@ impl GlyphCache {
     }
   }
 
-  /// The most bytes one cached mask should take, a fixed share of the budget.
+  /// The most bytes one cached mask should take, a fixed share of the pool up to
+  /// [`GLYPH_BYTES`].
   pub fn max_entry_bytes(&self) -> u64 {
-    self.store.capacity() / ENTRY_SHARE
+    self.store.max_bytes().min(GLYPH_BYTES) / ENTRY_SHARE
   }
 
   /// The rasterized mask for `key`, rendered once across concurrent misses.
@@ -144,7 +138,7 @@ impl GlyphCache {
 #[allow(clippy::unwrap_used)]
 mod tests {
   use super::*;
-  use crate::resources::glyph::ResolvedOutlineGlyph;
+  use crate::{Cache, resources::glyph::ResolvedOutlineGlyph};
 
   fn outline(cache_signature: u64) -> ResolvedGlyph {
     ResolvedGlyph::Outline(ResolvedOutlineGlyph::Plain {
@@ -171,13 +165,14 @@ mod tests {
     }
   }
 
-  fn cache() -> GlyphCache {
-    GlyphCache::new(8 << 20)
+  fn cache() -> Cache {
+    Cache::default()
   }
 
   #[test]
   fn the_two_kinds_do_not_alias_on_the_same_key() {
     let cache = cache();
+    let cache = cache.glyphs();
     let key = 0x5eed_1234_5678_9abc;
 
     let mask = cache.glyph_mask(key, || (vec![7; 4], placement()));
@@ -196,6 +191,7 @@ mod tests {
   #[test]
   fn the_whole_key_is_kept() {
     let cache = cache();
+    let cache = cache.glyphs();
     // Two keys that differ only in the top bit, which a key packed into a shifted
     // u64 would have dropped.
     let low = cache.resolved_glyph(0, || Some(outline(1))).unwrap();
@@ -208,6 +204,7 @@ mod tests {
   #[test]
   fn a_failed_resolve_caches_nothing_and_retries() {
     let cache = cache();
+    let cache = cache.glyphs();
     let key = 0xfa11_0000_0000_0001;
 
     assert!(cache.resolved_glyph(key, || None).is_none());

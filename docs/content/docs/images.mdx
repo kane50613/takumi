@@ -1,9 +1,9 @@
 ---
 title: Image loading & emoji
-description: Load remote, pre-fetched, and raw-pixel images, render emoji, and tune fetch limits and caches in Takumi.
+description: Load remote, pre-fetched, and raw-pixel images, render emoji, and tune fetch and decode limits in Takumi.
 ---
 
-Takumi fetches the remote images your markup references, accepts images you fetch or decode yourself, and turns emoji into images. Fetch limits, retries, caches, and decode limits come after these, at the end of the page.
+Takumi fetches the remote images your markup references, accepts images you fetch or decode yourself, and turns emoji into images. Fetch limits, retries, and decode limits come after these, at the end of the page. [Caching](/docs/caching) covers how Takumi keeps downloaded and decoded images between renders.
 
 ## External images
 
@@ -17,30 +17,7 @@ An image under `display: none` is not fetched. A relative URL such as `/logo.png
 
 When user input can reach the markup, set `allowUrl`, as [URLs from user input](#urls-from-user-input) describes.
 
-Share a `fetchCache` across renders to reuse downloaded bytes and pending requests:
-
-```tsx twoslash title="Share downloaded image bytes"
-import { render } from "takumi-js";
-
-const element = <img src="https://example.com/image.png" />;
-
-const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-
-const image = await render(element, {
-  images: {
-    fetchCache, // [!code highlight]
-  },
-});
-```
-
-`fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. Values are promises, not raw buffers.
-
-Emoji images from the [`emoji`](/docs/reference/image-response) option are cached across renders without a `fetchCache`, up to 8 MB per `fetch` function.
-
-<Callout type="warn">
-  A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
-  as an LRU, or leave `fetchCache` out.
-</Callout>
+To reuse downloaded bytes across renders, pass a [`fetchCache`](/docs/caching#downloaded-image-bytes).
 
 ## Pre-fetched images
 
@@ -257,74 +234,8 @@ const image = await render(element, {
 </Callout>
 
 - `allowUrl` checks each redirect destination, up to five hops. Each hop shares the same deadline and gets its own attempts.
-- A `fetchCache` hit checks only the requested URL, because cached bytes keep no redirect history. Do not share one `fetchCache` across different URL policies.
+- A `fetchCache` hit checks only the requested URL, because cached bytes keep no redirect history. Do not share one [`fetchCache`](/docs/caching#downloaded-image-bytes) across different URL policies.
 - `allowUrl` sees URLs, not IP addresses. To filter by resolved address, pass a custom `fetch`.
-
-## Decode caching
-
-Takumi caches each decoded image, so repeated content decodes once. There are two caches:
-
-| Cache        | Stores         | Keyed by            | Set with                           |
-| ------------ | -------------- | ------------------- | ---------------------------------- |
-| Byte cache   | Fetched bytes  | URL                 | `images.fetchCache`                |
-| Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache` |
-
-A `data:` URI in an `<img>` or a CSS `url()` uses the same decode cache, keyed by the bytes it holds. A template that inlines its logo decodes it once. `data:` URIs always cache in `auto` mode, because `images.cache` applies only to `sources` and to URLs Takumi fetches.
-
-The decode cache belongs to the renderer and has a byte budget, 64 MiB by default. Each entry counts its decoded size. When the cache is full, it evicts the least recently used entry. SVG sources, their rasterized pixels, and parsed stylesheets share the same budget. A workload with a different image every render does not grow memory. It misses the cache and decodes each time.
-
-Set the budget when you create the renderer. `0` turns caching off.
-
-```ts twoslash title="Set the decode cache budget"
-import { Renderer } from "takumi-js/node";
-
-const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
-```
-
-The per-image `cache` mode takes two values.
-
-- `auto` is the default and caches the decoded image within the budget.
-- `none` reads the cache but never adds to it. Use it for a one-off image, so it does not push out images worth keeping.
-
-```tsx twoslash title="Skip caching one image"
-import { ImageResponse } from "takumi-js/response";
-
-export function GET(request: Request) {
-  return new ImageResponse(<img src="banner" />, {
-    images: [
-      {
-        src: "banner",
-        data: () => fetch(new URL("/banner.png", request.url)).then((res) => res.arrayBuffer()),
-        cache: "none", // [!code ++]
-      },
-    ],
-  });
-}
-```
-
-To set the mode for every image in a render, pass `images` as an object instead of an array. This includes images Takumi fetches itself. A source's own `cache` still wins. For a route that renders a different image on every request, `cache: "none"` keeps one-off decodes out of the cache:
-
-```tsx twoslash title="Skip caching all images"
-import { ImageResponse } from "takumi-js/response";
-
-export function GET(request: Request) {
-  return new ImageResponse(<OgImage />, {
-    images: {
-      cache: "none", // [!code ++]
-      sources: [
-        {
-          src: "logo",
-          data: () => fetch(new URL("/logo.png", request.url)).then((res) => res.arrayBuffer()),
-        },
-      ],
-    },
-  });
-}
-
-function OgImage() {
-  return <img src="logo" />;
-}
-```
 
 ## Decode limits
 

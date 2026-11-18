@@ -7,7 +7,7 @@ use takumi_bindings_common::{
   default_fonts,
   font_cache::FontCache,
   input::{ListedFont, ListedFonts},
-  options::RendererOptions,
+  renderer::{CacheStats, RendererOptions},
   source_cache::SourceCache,
 };
 use takumi_core::{Cache, Fonts};
@@ -303,6 +303,15 @@ impl Renderer {
         pinned,
       },
       signal,
+    ))
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[napi(js_name = "cacheStats", ts_return_type = "CacheStats")]
+  pub fn cache_stats<'env>(&self, env: &'env Env) -> Result<Unknown<'env>> {
+    env.to_js_value(&CacheStats::new(
+      &self.state.cache,
+      self.state.font_state.load().cache.stats(),
     ))
   }
 

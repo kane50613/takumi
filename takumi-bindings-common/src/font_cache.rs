@@ -4,13 +4,18 @@
 
 use std::{
   collections::HashMap,
-  sync::atomic::{AtomicU64, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
 };
 
 use takumi_core::{
   Fonts,
   resources::font::{FontError, FontSource, RegisteredFamily},
 };
+
+use crate::renderer::CacheKindStats;
 
 /// A family as the registry matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
@@ -57,6 +62,31 @@ struct CachedFile {
   last_used: LastUsed,
 }
 
+/// How lookups went and how many fonts were released, shared by every copy of a cache.
+#[derive(Default)]
+struct FontCounts {
+  hits: AtomicU64,
+  misses: AtomicU64,
+  evictions: AtomicU64,
+}
+
+impl FontCounts {
+  fn looked_up(&self, found: bool) {
+    let counter = if found { &self.hits } else { &self.misses };
+
+    counter.fetch_add(1, Ordering::Relaxed);
+  }
+
+  fn stats(&self, current: f64) -> CacheKindStats {
+    CacheKindStats {
+      current,
+      hits: self.hits.load(Ordering::Relaxed) as f64,
+      misses: self.misses.load(Ordering::Relaxed) as f64,
+      evictions: self.evictions.load(Ordering::Relaxed) as f64,
+    }
+  }
+}
+
 /// What the least recently used entry past the budget is.
 enum Oldest {
   Family(String),
@@ -74,6 +104,7 @@ pub struct FontCache {
   families: HashMap<String, CachedFamily>,
   files: HashMap<String, CachedFile>,
   clock: AtomicU64,
+  counts: Arc<FontCounts>,
 }
 
 impl Clone for FontCache {
@@ -84,6 +115,7 @@ impl Clone for FontCache {
       families: self.families.clone(),
       files: self.files.clone(),
       clock: AtomicU64::new(self.clock.load(Ordering::Relaxed)),
+      counts: Arc::clone(&self.counts),
     }
   }
 }
@@ -98,11 +130,25 @@ impl FontCache {
       families: HashMap::new(),
       files: HashMap::new(),
       clock: AtomicU64::new(0),
+      counts: Arc::default(),
     }
+  }
+
+  /// The bytes of unpinned fonts the cache holds, and how its lookups went.
+  pub fn stats(&self) -> CacheKindStats {
+    self.counts.stats(self.unpinned_bytes() as f64)
   }
 
   /// The families `key` registered, marked used; `None` once any of them was released.
   pub fn lookup(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
+    let registered = self.find(key);
+
+    self.counts.looked_up(registered.is_some());
+
+    registered
+  }
+
+  fn find(&self, key: &str) -> Option<Vec<RegisteredFamily>> {
     let registered = self.by_key.get(key)?.clone();
     let now = self.tick();
 
@@ -251,6 +297,7 @@ impl FontCache {
         Oldest::File(url) => {
           fonts.forget_font_file(&url);
           self.files.remove(&url);
+          self.counts.evictions.fetch_add(1, Ordering::Relaxed);
 
           continue;
         }
@@ -268,6 +315,7 @@ impl FontCache {
 
         fonts.unregister_family(&family);
         self.forget(&family);
+        self.counts.evictions.fetch_add(1, Ordering::Relaxed);
       }
     }
   }
@@ -456,5 +504,22 @@ mod tests {
     cache.forget("alpha");
 
     assert!(cache.lookup("Alpha").is_none());
+  }
+
+  #[test]
+  fn stats_count_lookups_across_copies() {
+    let (mut fonts, mut cache) = fitting(2);
+
+    register(&mut fonts, &mut cache, "A", false);
+
+    let copy = cache.clone();
+
+    copy.lookup("A");
+    cache.lookup("missing");
+
+    let stats = cache.stats();
+
+    assert_eq!((stats.hits, stats.misses), (1.0, 1.0));
+    assert!(stats.current > 0.0);
   }
 }

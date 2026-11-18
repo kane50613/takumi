@@ -1,4 +1,5 @@
 import type {
+  CacheStats,
   MeasuredNode,
   Node,
   RegisteredFamily,
@@ -199,6 +200,11 @@ export class Renderer {
    */
   unregisterFont(family: RegisteredFamilyLike): boolean {
     return this.inner.unregisterFont(family.name);
+  }
+
+  /** What the renderer's caches hold and how their lookups went since it was created. */
+  cacheStats(): CacheStats {
+    return this.inner.cacheStats();
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */

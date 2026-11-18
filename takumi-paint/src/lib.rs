@@ -16,8 +16,9 @@ use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore, NeedsOutput, append_css,
+  FontStore, NeedsOutput, append_css,
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
+  renderer::RendererOptions,
   source::read_source,
   source_cache::SourceCache,
   stylesheet,
@@ -51,9 +52,12 @@ extern "C" {
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
-  /// JavaScript object holding the font cache budget.
-  #[wasm_bindgen(typescript_type = "FontCacheOptions")]
-  pub type FontCacheOptionsType;
+  /// JavaScript object holding the renderer options.
+  #[wasm_bindgen(typescript_type = "RendererOptions")]
+  pub type RendererOptionsType;
+  /// JavaScript object reporting what a renderer's caches hold.
+  #[wasm_bindgen(typescript_type = "CacheStats")]
+  pub type CacheStatsType;
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
@@ -160,17 +164,17 @@ impl Painter {
 impl Painter {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new(options: Option<FontCacheOptionsType>) -> Result<Painter, js_sys::Error> {
+  pub fn new(options: Option<RendererOptionsType>) -> Result<Painter, js_sys::Error> {
     WarningLog::print_to_console();
 
-    let options: FontCacheOptions = options
+    let options: RendererOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
     Ok(Painter {
-      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
-      cache: Cache::default(),
+      fonts: FontStore::new(options.font_cache_bytes()).map_err(map_error)?,
+      cache: options.cache(),
       sources: SourceCache::default(),
     })
   }
@@ -213,6 +217,12 @@ impl Painter {
   #[wasm_bindgen(js_name = cacheFontFile)]
   pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
     self.fonts.cache_font_file(url, data).map_err(map_error)
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[wasm_bindgen(js_name = cacheStats)]
+  pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
+    self.fonts.cache_stats_value(&self.cache)
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

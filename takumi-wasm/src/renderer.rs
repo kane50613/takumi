@@ -127,6 +127,12 @@ impl Renderer {
     self.fonts.cache_font_file(url, data).map_err(map_error)
   }
 
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[wasm_bindgen(js_name = cacheStats)]
+  pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
+    self.fonts.cache_stats_value(&self.cache)
+  }
+
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]

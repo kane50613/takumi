@@ -1,3 +1,4 @@
+import type { CacheStats } from "@takumi-rs/core";
 import { loadBackend } from "#backend";
 import { applyGlyphCacheMaxBytes } from "../glyph-cache";
 import { SharedLoad } from "./shared-load";
@@ -13,6 +14,11 @@ export class RendererProvider {
 
   constructor(load: LoadBackend) {
     this.load = load;
+  }
+
+  /** What the renderer's cache holds, none before the renderer exists. */
+  cacheStats(): CacheStats | undefined {
+    return this.renderer?.cacheStats();
   }
 
   async get(module?: BackendModule): Promise<Renderer> {

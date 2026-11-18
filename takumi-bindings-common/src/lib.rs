@@ -35,6 +35,7 @@ pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
+pub mod renderer;
 #[cfg(feature = "wasm")]
 pub mod source;
 pub mod source_cache;
@@ -46,9 +47,10 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use font_cache::FontCache;
 use input::{Font, ListedFonts, register_font};
-use serde::{Deserialize, Serialize};
+use renderer::CacheStats;
+use serde::Serialize;
 #[cfg(feature = "wasm")]
-use serde_wasm_bindgen::{from_value, to_value};
+use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use source_cache::{ParsedSource, SourceCache};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsCast, JsValue};
@@ -166,8 +168,37 @@ impl FontStore {
       .transpose()
   }
 
+  /// [`Self::cache_stats`] as the binding's JavaScript type `T`.
+  #[cfg(feature = "wasm")]
+  pub fn cache_stats_value<T: JsCast>(&self, cache: &Cache) -> Result<T, js_sys::Error> {
+    let stats = self
+      .cache_stats(cache)
+      .serialize(&Serializer::new().serialize_missing_as_null(true))
+      .map_err(js_error)?;
+
+    Ok(stats.unchecked_into())
+  }
+
+  /// What `cache` holds, with the fonts this store holds.
+  pub fn cache_stats(&self, cache: &Cache) -> CacheStats {
+    CacheStats::new(cache, self.cache.borrow().stats())
+  }
+
   fn current(&self) -> Rc<Fonts> {
     self.fonts.borrow().clone()
+  }
+
+  /// Publishes the registry `change` makes of a copy of the current one, unless it fails.
+  fn update_fonts<T>(
+    &self,
+    change: impl FnOnce(&mut Fonts) -> Result<T, FontError>,
+  ) -> Result<T, FontError> {
+    let mut fonts = Fonts::clone(&self.current());
+    let changed = change(&mut fonts)?;
+
+    *self.fonts.borrow_mut() = Rc::new(fonts);
+
+    Ok(changed)
   }
 
   /// The families a registration under `key` added, marked used and pinned when `pin` is set; see
@@ -187,16 +218,16 @@ impl FontStore {
     key: Option<&str>,
     pinned: bool,
   ) -> Result<Vec<RegisteredFamily>, FontError> {
-    let mut fonts = Fonts::clone(&self.current());
-    let (registered, bytes) = register_font(&mut fonts, font)?;
+    self.update_fonts(|fonts| {
+      let (registered, bytes) = register_font(fonts, font)?;
 
-    self
-      .cache
-      .borrow_mut()
-      .admit(&mut fonts, key, &registered, bytes, pinned);
-    *self.fonts.borrow_mut() = Rc::new(fonts);
+      self
+        .cache
+        .borrow_mut()
+        .admit(fonts, key, &registered, bytes, pinned);
 
-    Ok(registered)
+      Ok(registered)
+    })
   }
 
   /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
@@ -217,15 +248,13 @@ impl FontStore {
   /// space.
   pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), FontError> {
     let (source, bytes) = FontSource::from(data).into_decoded()?;
-    let mut fonts = Fonts::clone(&self.current());
 
-    self
-      .cache
-      .borrow_mut()
-      .admit_file(&mut fonts, url, source, bytes as u64)?;
-    *self.fonts.borrow_mut() = Rc::new(fonts);
-
-    Ok(())
+    self.update_fonts(|fonts| {
+      self
+        .cache
+        .borrow_mut()
+        .admit_file(fonts, url, source, bytes as u64)
+    })
   }
 
   /// Goes back to the embedded system fonts alone.
@@ -241,14 +270,6 @@ impl FontStore {
 #[cfg(feature = "wasm")]
 fn js_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
-}
-
-/// Options for a renderer whose only option is its font cache budget.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct FontCacheOptions {
-  /// Bytes of fonts from renders' `fonts` lists to keep registered.
-  pub font_cache_max_bytes: Option<u64>,
 }
 
 /// A render's default language, parsed from its BCP-47 tag.
