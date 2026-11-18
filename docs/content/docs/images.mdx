@@ -235,7 +235,7 @@ A custom `fetch` must honor the abort signal it receives.
 
 ### Failed fetches
 
-By default, one image that fails to fetch rejects the whole render. Set `throwOnError: false` to leave that image out and draw the rest. An emoji image that `extractEmojis` made never rejects the render, whatever `throwOnError` says. When one fails to fetch, such as an emoji Twemoji does not draw, the render leaves it out and its space stays empty.
+By default, one image that fails to fetch rejects the whole render. Set `throwOnError: false` to leave that image out and draw the rest. An image from an emoji CDN never rejects the render, whatever `throwOnError` says. When one fails to fetch, such as an emoji Twemoji does not draw, the render leaves it out and its space stays empty.
 
 ```tsx twoslash title="Render without the images that failed"
 import { render } from "takumi-js";

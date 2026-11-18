@@ -1,6 +1,5 @@
 import { defaultMaxFetchBytes, type FetchOptions } from "../fetch";
 import { isEmojiImageUrl } from "../emoji";
-import { extractedEmojiUrls } from "../extracted-emoji";
 import type { FetchedImage, ImageFetchCache, PrepareImagesOptions } from "../images";
 import { fetchBytes } from "./bytes";
 import { BoundedCache, perFetch } from "./cache";
@@ -103,9 +102,9 @@ export async function fetchImages<T extends { src: string } = FetchedImage>({
         ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
         : await fetchImageData(src, fetchOptions, fetchCache),
   });
-  // An emoji `extractEmojis` made never rejects the render. One that fails to fetch is left out.
-  const emoji = fulfilled(missing.filter((url) => extractedEmojiUrls.has(url)).map(fetchImage));
-  const markup = missing.filter((url) => !extractedEmojiUrls.has(url)).map(fetchImage);
+  // An emoji image never rejects the render. One that fails to fetch is left out.
+  const emoji = fulfilled(missing.filter(isEmojiImageUrl).map(fetchImage));
+  const markup = missing.filter((url) => !isEmojiImageUrl(url)).map(fetchImage);
   const fetched = throwOnError ? await Promise.all(markup) : await fulfilled(markup);
   const emojiFetched = await emoji;
 

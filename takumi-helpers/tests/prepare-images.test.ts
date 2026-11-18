@@ -10,7 +10,7 @@ const ok = (url: string) => new Response(new TextEncoder().encode(url).buffer);
 const notFound = () => new Response(null, { status: 404 });
 
 describe("prepareImages", () => {
-  test("leaves out an emoji image extractEmojis made when it fails to fetch", async () => {
+  test("leaves out an emoji image that fails to fetch", async () => {
     const fetchMock = mock(() => Promise.resolve(notFound()));
     const node = extractEmojis(text("launch 🚀"), "twemoji");
 
@@ -110,7 +110,7 @@ describe("prepareImages", () => {
     );
 
     for (let call = 0; call < 2; call++) {
-      await expect(prepareImages({ node, fetch: fetchMock })).rejects.toThrow();
+      expect(await prepareImages({ node, fetch: fetchMock })).toEqual([]);
     }
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

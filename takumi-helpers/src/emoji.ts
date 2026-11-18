@@ -1,5 +1,4 @@
 import { container, image, text } from "./helpers";
-import { extractedEmojiUrls } from "./extracted-emoji";
 import type { Node, TextNode } from "./types";
 
 export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat";
@@ -99,12 +98,9 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
         nodes.push(text({ text: currentText }));
         currentText = "";
       }
-      const src = getEmojiUrl(segment, emojiType);
-
-      extractedEmojiUrls.add(src);
       nodes.push(
         image({
-          src,
+          src: getEmojiUrl(segment, emojiType),
           style: {
             display: "inline-block",
             width: "1em",
