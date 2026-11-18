@@ -19,6 +19,7 @@
     "fmt": "cargo fmt --all && oxfmt --write",
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
+    "api": "bun scripts/api.mts",
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
@@ -27,7 +28,9 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
+    "@microsoft/api-extractor": "7.60.1",
     "@types/bun": "^1.4.1",
+    "@types/node": "catalog:",
     "knip": "^6.34.0",
     "lefthook": "^2.1.12",
     "oxfmt": "^0.73.0",

@@ -51,6 +51,13 @@ reviews:
     - path: "takumi/tests/fixtures-html/**"
       instructions: |
         Each fixture pins one behavior that no other fixture pins. For a fixture that matches browser behavior, check what Chromium renders for the same HTML, and flag a fixture whose expected output Chromium would not produce.
+    - path: "api/**"
+      instructions: |
+        These snapshots list the public API of the published packages and crates. A pull request that grows one adds public API, which needs a reason.
+
+        - Flag a new option that a better default would make unnecessary.
+        - When an addition supersedes an existing export, check that at least one superseded export is marked `@deprecated … Will be removed in v3`.
+        - Flag experimental API that lacks an `unstable_` prefix or an `/experimental` subpath.
     - path: ".tegami/*.md"
       instructions: |
         A changeset entry is earned only when a published package's output, public API, or errors change. Refactors, performance work, tests, CI, and docs take no entry. The entry has one `#` heading written as the outcome a user gets, then at most one short paragraph.
@@ -64,6 +71,10 @@ reviews:
         mode: "warning"
         instructions: |
           Pass when the pull request does not change rendered or serialized output. Otherwise pass only when it adds or updates a golden file under `takumi/tests/fixtures-generated/`, `takumi-pdf/tests/fixtures-generated/`, or `takumi-cli/tests/fixtures-generated/` that shows the change.
+      - name: "Public API growth"
+        mode: "warning"
+        instructions: |
+          Pass when the pull request adds no lines to a file under `api/`. Otherwise pass only when the pull request description says what the new API replaces, or why an existing entry point, option, or default cannot do the job.
       - name: "Refactor stays separate"
         mode: "warning"
         instructions: |
