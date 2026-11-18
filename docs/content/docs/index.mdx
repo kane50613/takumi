@@ -125,7 +125,7 @@ export function GET() {
 
 ```tsx twoslash title="Load a variable font"
 import { render } from "takumi-js";
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 const png = await render(
   <div
@@ -154,7 +154,7 @@ const png = await render(
 );
 ```
 
-`fonts` also takes a font URL, raw bytes, or a descriptor. To load fonts before the first request, [register them on a `Renderer`](/docs/fonts#preloading-with-registerfont).
+`googleFonts` comes from `@takumi-rs/helpers`. `fonts` also takes a font URL, raw bytes, or a descriptor. Every render in the process shares one renderer, so define the list once and later renders reuse its fonts. See [Reusing fonts across renders](/docs/fonts#reusing-fonts-across-renders).
 
 ## Coming from satori
 

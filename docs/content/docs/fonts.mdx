@@ -83,9 +83,15 @@ export function GET() {
 
 ### From Google Fonts
 
+`googleFonts` comes from `@takumi-rs/helpers`. Install it next to `takumi-js`:
+
+```bash
+npm install @takumi-rs/helpers
+```
+
 ```tsx twoslash title="Load multilingual fonts"
 import { render } from "takumi-js";
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>, {
   width: 1200,
@@ -100,7 +106,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
 ```tsx twoslash title="Choose font weights and axes"
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 await googleFonts([
   {
@@ -140,7 +146,7 @@ it.
 Pass an object instead of an array for request options:
 
 ```ts twoslash title="Limit font requests"
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 const fonts = await googleFonts({
   families: ["Inter"],
@@ -215,32 +221,44 @@ Takumi reads the text after styles apply, so generated content and `text-transfo
 
 Before a subset downloads, font matching knows only the weight and style declared for it. A subset declared without them counts as normal, so a variable font's other weights only match it after it loads.
 
-### Preloading with `registerFont`
+### Reusing fonts across renders
 
-To load fonts before the first request, register them on a renderer. Then pass that renderer to each render. `registerFont` takes the same entries as `fonts` and returns the families it added.
+<span id="preloading-with-registerfont" />
 
-```tsx twoslash title="Preload a local font"
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` share one renderer per process. The first render that lists a font loads it, and later renders that list the same entry reuse it. Define the `fonts` list once and pass it to every render:
+
+```tsx twoslash title="Share one fonts list"
 import { readFile } from "node:fs/promises";
-import { Renderer } from "takumi-js/node";
 import { ImageResponse } from "takumi-js/response";
 
-const inter = await readFile(new URL("./fonts/Inter.woff2", import.meta.url));
-const renderer = new Renderer();
-
-await renderer.registerFont({ name: "Inter", data: inter }); // [!code highlight]
+const fonts = [
+  "https://example.com/Inter.woff2",
+  { name: "Brand", data: await readFile(new URL("./fonts/Brand.woff2", import.meta.url)) },
+];
 
 export function GET() {
   return new ImageResponse(<div style={{ fontFamily: "Inter" }}>Hello Takumi</div>, {
     width: 1200,
     height: 630,
-    renderer, // [!code highlight]
+    fonts, // [!code highlight]
   });
 }
 ```
 
+The renderer recognizes an entry it already holds by a key:
+
+| Entry                      | Key                                                |
+| -------------------------- | -------------------------------------------------- |
+| URL string                 | The URL.                                           |
+| Raw bytes                  | The buffer object.                                 |
+| Descriptor with bytes      | The buffer object and the descriptor's fields.     |
+| Descriptor with a `data()` | Its `name`, `weight`, `style`, and `unicodeRange`. |
+
+A list defined at module level passes the same buffers on every render, so each file decodes once. A buffer read again inside the handler is a new key and decodes again.
+
 ### Releasing fonts
 
-A renderer keeps every font it loads. Release the ones you no longer need:
+A renderer keeps every font it loads. On a [renderer you create](/docs/images#prepare-on-your-own-renderer), release the ones you no longer need:
 
 ```ts
 renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
@@ -263,7 +281,7 @@ An element's own `font-family` comes first. When none of its families covers a c
 
 ```tsx twoslash title="Choose font fallback order"
 import { render } from "takumi-js";
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 const image = await render(<div>Hello こんにちは</div>, {
   fonts: googleFonts(["Inter", "Noto Sans JP"]),
@@ -291,14 +309,26 @@ Set font axes with `font-variation-settings` and OpenType features with `font-fe
 </div>
 ```
 
-Register a variable font once, with no `weight`, to keep its axes live:
+List a variable font once, as one entry with no `weight`. That entry serves every weight and keeps the font's axes live:
 
-```tsx title="Register a variable font"
-// a `weight` here pins the file to that instance instead
-await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
+```tsx twoslash title="Load a variable font"
+import { render } from "takumi-js";
+
+const image = await render(
+  <div style={{ fontFamily: "Fraunces", fontWeight: 650 }}>Variable</div>,
+  {
+    // a `weight` here pins the file to that instance instead
+    fonts: [
+      {
+        name: "Fraunces",
+        data: () => fetch("https://example.com/Fraunces.woff2").then((res) => res.arrayBuffer()),
+      },
+    ],
+  },
+);
 ```
 
-`googleFonts` does this for you. A weight range or an `axes` entry fetches the variable file and leaves its axes free.
+Do not list the same file once per weight. Each entry is its own key, so the file decodes again for each one. `googleFonts` loads a variable font this way. A weight range or an `axes` entry fetches the variable file once and leaves its axes free.
 
 <Callout>
   Which axes a file exposes depends on the build. Google Fonts fixes the axes you did not request at

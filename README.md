@@ -160,7 +160,7 @@ for (const node of tree.nodes) {
 
 ```tsx
 import { render } from "takumi-js";
-import { googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "@takumi-rs/helpers";
 
 const image = await render(
   <div
@@ -181,7 +181,7 @@ const image = await render(
 );
 ```
 
-`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Fonts](https://takumi.kane.tw/docs/fonts#preloading-with-registerfont).
+`googleFonts` comes from `@takumi-rs/helpers`. `render()` registers only the font subsets the content uses, and every render in the process shares the fonts it loaded. See [Fonts](https://takumi.kane.tw/docs/fonts#reusing-fonts-across-renders).
 
 ### API route (`next/og`-compatible)
 
