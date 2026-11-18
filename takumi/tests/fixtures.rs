@@ -26,6 +26,8 @@ pub mod png_output;
 pub mod png_palette_output;
 #[path = "fixtures/style_background_image.rs"]
 pub mod style_background_image;
+#[path = "fixtures/style_invalid_declaration.rs"]
+pub mod style_invalid_declaration;
 #[path = "fixtures/style_opacity.rs"]
 pub mod style_opacity;
 #[path = "fixtures/text.rs"]

@@ -24,6 +24,7 @@ use takumi_bindings_common::{
   source::read_source,
   source_cache::SourceCache,
   stylesheet,
+  warning::WarningLog,
 };
 use takumi_core::{
   Fonts,
@@ -214,6 +215,8 @@ impl PdfRenderer {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<FontCacheOptionsType>) -> Result<PdfRenderer, js_sys::Error> {
+    WarningLog::print_to_console();
+
     let options: FontCacheOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?

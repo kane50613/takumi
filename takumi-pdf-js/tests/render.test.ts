@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PageNumber, PdfRenderer, TotalPages } from "takumi-pdf";
 
@@ -458,4 +458,21 @@ test("a using block frees the renderer", () => {
   }
 
   expect(() => local.clearFonts()).toThrow();
+});
+
+test("a header's invalid style value warns and the PDF still renders", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+  try {
+    const pdf = await renderer.render(container({ children: [text("Body")] }), {
+      header: container({ children: [text("Header")], style: { justifyContent: "star" } }),
+    });
+
+    expect(pdfHeader(pdf)).toBe("%PDF-");
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      expect.stringContaining('takumi: ignoring invalid value for justifyContent near "star"'),
+    ]);
+  } finally {
+    warn.mockRestore();
+  }
 });

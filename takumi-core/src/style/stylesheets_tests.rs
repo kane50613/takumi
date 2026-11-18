@@ -36,16 +36,14 @@ fn parse_declarations_is_err(name: &str, css: &str) -> bool {
   StyleDeclarationBlock::parse(name, &mut parser).is_err()
 }
 
-/// `flex-basis` accepts everything `width` does, so its diagnostics must list
-/// the sizing keywords too.
+/// An invalid value drops its declaration, as a browser drops one in a `style` attribute, and the
+/// rest of the object still applies.
 #[test]
-fn flex_basis_diagnostics_list_the_sizing_keywords() {
-  let error = from_value::<Style>(json!({ "flexBasis": "nope" }))
-    .unwrap_err()
-    .to_string();
-
-  assert!(error.contains("'min-content'"), "{error}");
-  assert!(error.contains("'content'"), "{error}");
+fn an_invalid_value_drops_only_its_declaration() {
+  assert_eq!(
+    from_value::<Style>(json!({ "width": "10px", "height": "-1.5%" })).ok(),
+    Some(Style::default().width(Length::Px(10.0)))
+  );
 }
 
 fn inherited_style_from_pairs(
@@ -131,13 +129,21 @@ fn importance_split(value: serde_json::Value) -> Result<(usize, usize), serde_js
   Ok((normal.declarations.len(), important.declarations.len()))
 }
 
-/// A `style` object is hand-written, so a value the parser cannot read to its
-/// end is an error rather than a truncated declaration.
+/// A value the parser cannot read to its end drops its declaration rather than truncating it.
 #[test]
 fn an_inline_value_parses_entirely() {
-  assert!(from_value::<Style>(json!({ "width": "55px" })).is_ok());
-  assert!(from_value::<Style>(json!({ "width": "55px zzz" })).is_err());
-  assert!(from_value::<Style>(json!({ "width": "55px 99px" })).is_err());
+  assert_eq!(
+    from_value::<Style>(json!({ "width": "55px" })).ok(),
+    Some(Style::default().width(Length::Px(55.0)))
+  );
+  assert_eq!(
+    from_value::<Style>(json!({ "width": "55px zzz" })).ok(),
+    Some(Style::default())
+  );
+  assert_eq!(
+    from_value::<Style>(json!({ "width": "55px 99px" })).ok(),
+    Some(Style::default())
+  );
 }
 
 #[test]
@@ -194,7 +200,10 @@ fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
     importance_split(json!({ "content": "\"a\" !important" }))?,
     (0, 1)
   );
-  assert!(from_value::<Style>(json!({ "width": "55px !nope" })).is_err());
+  assert_eq!(
+    from_value::<Style>(json!({ "width": "55px !nope" })).ok(),
+    Some(Style::default())
+  );
   Ok(())
 }
 

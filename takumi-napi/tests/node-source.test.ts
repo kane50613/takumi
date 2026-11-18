@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { container, type Declarations, image, text } from "@takumi-rs/helpers";
@@ -103,6 +103,27 @@ describe("a JSON source", () => {
   test.each([
     ["an unreadable value", text("x", { width: "wider" })],
     ["a value of the wrong type", text("x", { justifyContent: 123 as unknown as "center" })],
+  ])("warns about %s as the tree does", async (_, node) => {
+    const warnings = async (source: Node | string | { json: string }) => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+      try {
+        await renderer.render(source, options);
+        // A warning logged on a worker thread prints on the JS thread's next turn.
+        await new Promise((resolve) => setImmediate(resolve));
+
+        return warn.mock.calls.map(([message]) => String(message));
+      } finally {
+        warn.mockRestore();
+      }
+    };
+    const fromTree = await warnings(node);
+
+    expect(fromTree).toHaveLength(1);
+    expect(await warnings(toNativeSource(node))).toEqual(fromTree);
+  });
+
+  test.each([
     ["no type", { text: "x" } as unknown as Node],
     ["nesting past the limit", nested(513)],
   ])("fails on %s with the tree's message", async (_, node) => {

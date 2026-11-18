@@ -67,6 +67,12 @@ takumi: ignored the property `widht` at line 1, column 8 of its style sheet or `
 
 A vendor-prefixed property, or one that cannot change a static image, such as `cursor`, drops without a warning.
 
+Takumi also ignores a declaration in a `style` object whose value it cannot read, as a browser ignores one in a `style` attribute. The rest of the style still applies, and `console.warn` reports the declaration it dropped:
+
+```txt title="A negative height"
+takumi: ignoring invalid value for height: string "-5%"; Unexpected token: -5%, expected a value of <length>, 'min-content', 'max-content', 'fit-content' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.
+```
+
 ### Registered custom properties
 
 `@property` gives a custom property a type, as in a browser. A registered property computes to that type, inherits the computed value, and animates through it. This rule spins a conic gradient, which an unregistered `--angle` cannot do, because it would switch from `0deg` to `360deg` halfway through:

@@ -818,13 +818,16 @@ macro_rules! define_style {
                     );
                   }
                 } else {
-                  style
-                    .declarations
-                    .append_parsed_declarations(
-                      ParsedValues::parse(property, css_input)
-                        .map_err(|error| error.into_serde_error(&key))?,
-                      important,
-                    );
+                  // An invalid value drops only its declaration, as CSS 2.2 4.2 rules for illegal values:
+                  // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
+                  match ParsedValues::parse(property, css_input) {
+                    Ok(declarations) => {
+                      style.declarations.append_parsed_declarations(declarations, important);
+                    }
+                    Err(error) => {
+                      log::warn!(target: "takumi::style", "ignoring {}", error.message(&key));
+                    }
+                  }
                 }
               }
 
