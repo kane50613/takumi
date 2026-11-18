@@ -207,9 +207,8 @@ impl Image {
     })))
   }
 
-  /// Create a new bitmap image from a `.webp` file.
-  ///
-  /// Returns `None` if the writer was unable to parse the file.
+  /// Create a new bitmap image from a `.webp` file, or the parse error when its header does not
+  /// read.
   pub fn from_webp(data: Data, interpolate: bool) -> Result<Image, String> {
     let hash = data.as_ref().sip_hash();
     let metadata = webp_metadata(data.as_ref())?;
