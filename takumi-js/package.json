@@ -236,7 +236,8 @@
     "test": "bun test",
     "test:bundlers": "bun test tests/bundlers.test.ts",
     "publish-lint": "attw --pack . && publint --strict .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:published": "tsc --noEmit -p tests/types"
   },
   "dependencies": {
     "@takumi-rs/core": "workspace:*",

@@ -35,7 +35,7 @@
       "entry": ["tests/**/*.test.{ts,tsx}"]
     },
     "takumi-js": {
-      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "entry": ["tests/**/*.test.{ts,tsx}", "tests/types/published.ts"],
       "ignoreUnresolved": ["#backend"]
     },
     "takumi-napi": {

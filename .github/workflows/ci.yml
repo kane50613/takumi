@@ -687,6 +687,11 @@ jobs:
       - name: Type-check the packages
         run: bun run typecheck
 
+      # The built declarations above are what users install, so their return types must not be `any`.
+      - name: Check the published declarations
+        working-directory: takumi-js
+        run: bun run typecheck:published
+
   build-wasm:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
