@@ -175,14 +175,24 @@ struct RuleSource<'r> {
 enum SourceData<'r> {
   /// The file the host loaded for a `url()`.
   File(&'r SharedBytes, u64),
-  /// The registered face a `local()` names.
+  /// The system or registered face a `local()` names.
   Local(&'r Arc<FontCustomPlatformData>),
   /// A `url()` the host has not loaded yet.
   Pending(&'r Arc<str>),
 }
 
 impl FontRegistry {
-  /// The source `rule` reaches, none when every source has failed or names no registered face.
+  /// The face `local()` names, Blink's `LocalFontFaceSource` among takumi's stand-in for platform
+  /// fonts: the system fonts, then the faces registered through [`crate::Fonts`].
+  fn local_face(&self, name: &str) -> Option<&Arc<FontCustomPlatformData>> {
+    self
+      .font_faces()
+      .filter(|font_face| !font_face.css_connected)
+      .filter_map(|font_face| font_face.custom_platform_data())
+      .find(|typeface| typeface.has_unique_name(name))
+  }
+
+  /// The source `rule` reaches, none when every source has failed or names no face.
   fn source_of<'r>(&'r self, rule: &'r FontFaceRule) -> Option<RuleSource<'r>> {
     rule.sources.iter().find_map(|src| {
       let data = match src {
@@ -191,7 +201,7 @@ impl FontRegistry {
           Some(FontFile::Failed) => return None,
           None => SourceData::Pending(url),
         },
-        FontFaceSrc::Local(name) => SourceData::Local(self.selector.local_face(name)?),
+        FontFaceSrc::Local(name) => SourceData::Local(self.local_face(name)?),
       };
 
       Some(RuleSource { rule, src, data })
@@ -205,9 +215,9 @@ impl RuleSource<'_> {
   fn font_face(&self, selector: &CssFontSelector) -> Option<FontFace> {
     let family = self.rule.descriptors.family.clone()?;
     let descriptors = self.rule.descriptors.clone();
-    let (data, id, index) = match self.data {
-      SourceData::File(data, id) => (data, id, 0),
-      SourceData::Local(typeface) => (&typeface.data, typeface.id, typeface.index),
+    let platform_data = match self.data {
+      SourceData::File(data, id) => selector.platform_data(data, id, 0)?,
+      SourceData::Local(typeface) => Arc::clone(typeface),
       SourceData::Pending(url) => {
         return Some(FontFace::pending(
           family,
@@ -216,7 +226,6 @@ impl RuleSource<'_> {
         ));
       }
     };
-    let platform_data = selector.platform_data(data, id, index)?;
 
     Some(FontFace::new(family, descriptors, platform_data))
   }

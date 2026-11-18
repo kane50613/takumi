@@ -63,30 +63,20 @@ use takumi_core::{
   viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 
-/// Last-resort only: no generic family claim, so `sans-serif` and friends
-/// resolve to caller-registered fonts via the fallback bucket instead of this
-/// face.
+/// The system fonts every renderer starts with, by family name.
 const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
   include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
   "Geist",
 )];
 
-/// The default font set holding the embedded last-resort fonts.
+/// The default font set, with the embedded fonts as its system fonts.
 pub fn default_fonts() -> Result<Fonts, FontError> {
-  let mut fonts = Fonts::default();
-
-  for (bytes, name) in EMBEDDED_FONTS {
-    let resource = FontResource::new(FontSource::from_static(bytes))
-      .override_info(FontOverride {
-        family_name: Some((*name).into()),
-        ..Default::default()
-      })
-      .last_resort();
-
-    drop(fonts.register(resource)?);
-  }
-
-  Ok(fonts)
+  Fonts::with_system_fonts(EMBEDDED_FONTS.iter().map(|(bytes, name)| {
+    FontResource::new(FontSource::from_static(bytes)).override_info(FontOverride {
+      family_name: Some((*name).into()),
+      ..Default::default()
+    })
+  }))
 }
 
 /// Registered fonts for the single-threaded wasm bindings, copy-on-write like the napi
@@ -99,7 +89,7 @@ pub struct FontStore {
 }
 
 impl FontStore {
-  /// A store holding the embedded last-resort fonts, keeping at most `cache_max_bytes` of fonts
+  /// A store holding the embedded system fonts, keeping at most `cache_max_bytes` of fonts
   /// that are not pinned.
   pub fn new(cache_max_bytes: Option<u64>) -> Result<Self, FontError> {
     Ok(Self {
@@ -237,7 +227,7 @@ impl FontStore {
     Ok(())
   }
 
-  /// Goes back to the embedded last-resort fonts alone.
+  /// Goes back to the embedded system fonts alone.
   pub fn reset(&self) -> Result<(), FontError> {
     *self.fonts.borrow_mut() = Rc::new(default_fonts()?);
     self.cache.borrow_mut().clear();

@@ -1,25 +1,25 @@
 //! Blink's [`CSSFontSelector`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/css_font_selector.cc):
 //! the registry of faces a renderer draws text with, and the font data a family gives a request.
+//! It holds only registered faces, Blink's document fonts. A family no registered face has
+//! resolves among [`SystemFonts`](super::system_fonts::SystemFonts), as Blink's `GetFontData`
+//! falls through to `FontCache`.
 //!
-//! Approximate: Blink resolves a generic family to one platform family per script through
-//! `GenericFontFamilySettings` and looks it up among system fonts. takumi has no system fonts,
-//! so a generic family lists registered families, in registration order, looked up among the
-//! registered faces. System font fallback becomes [`CssFontSelector::fallback_families`]: every
-//! registered family in registration order, then the faces registered as a last resort, for every
-//! script. A family name reaches its last-resort faces only when no other face has it.
+//! Approximate: Blink's `FamilyNameFromSettings` maps a generic family to one platform family per
+//! script. takumi lists registered families for a generic family instead, in registration order,
+//! so a generic family resolves to registered families first and reaches system fonts only through
+//! fallback. System font fallback becomes [`CssFontSelector::fallback_families`]: every registered
+//! family in registration order, for every script, before the system fonts.
 //! A clone is a render's snapshot, keeping every face it holds, and the bytes behind it, alive
 //! after the registry lets go.
 
 use std::{collections::HashMap, sync::Arc};
-
-use skrifa::raw::FileRef;
 
 use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
   font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
   font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
-  font_face_cache::{FontFaceCache, fold_family_name},
+  font_face_cache::{FontFaceCache, fold_family_name, insert_family},
 };
 use crate::resources::font::SharedBytes;
 
@@ -27,104 +27,46 @@ use crate::resources::font::SharedBytes;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CssFontSelector {
   font_face_cache: FontFaceCache,
-  /// The faces registered as a last resort, which a family matches only when no other face has it.
-  last_resort_font_face_cache: FontFaceCache,
   /// Every registered face, in registration order.
-  font_faces: Vec<RegisteredFontFace>,
+  font_faces: Vec<Arc<FontFace>>,
   /// The families each generic keyword lists, by folded keyword.
   generic_font_family_settings: HashMap<String, Vec<Arc<str>>>,
   /// Registered families in registration order, which system fallback walks.
   fallback_families: Vec<Arc<str>>,
 }
 
-/// A registered face, and whether it registered as a last resort.
-#[derive(Clone, Debug)]
-struct RegisteredFontFace {
-  font_face: Arc<FontFace>,
-  last_resort: bool,
-}
-
-/// Adds `family` to `families` unless it is there under any case.
-fn insert_family(families: &mut Vec<Arc<str>>, family: &Arc<str>) {
-  let key = fold_family_name(family);
-
-  if !families
-    .iter()
-    .any(|existing| fold_family_name(existing) == key)
-  {
-    families.push(Arc::clone(family));
-  }
-}
-
 impl CssFontSelector {
   /// Registers each usable face of `data` under `descriptors`, and returns them.
   pub(crate) fn register(
     &mut self,
-    data: SharedBytes,
+    data: &SharedBytes,
     id: u64,
     descriptors: &FontFaceDescriptors,
     generic_family: Option<&str>,
-    last_resort: bool,
   ) -> Vec<Arc<FontFace>> {
-    let count = FileRef::new((*data).as_ref()).map_or(0, |file| file.fonts().count());
     let mut faces = Vec::new();
 
-    for index in 0..count {
-      let Ok(index) = u32::try_from(index) else {
-        continue;
-      };
-      let Some(platform_data) = self
-        .typeface(id, index)
-        .or_else(|| FontCustomPlatformData::create(Arc::clone(&data), id, index).map(Arc::new))
-      else {
-        continue;
-      };
-      let Some(family) = descriptors
-        .family
-        .clone()
-        .or_else(|| platform_data.family_name_for_inspector().map(Arc::from))
-      else {
-        continue;
-      };
-
-      if family.is_empty() {
-        continue;
-      }
-
-      if let Some(font_face) =
-        self.promote(&family, id, platform_data.index, descriptors, last_resort)
-      {
+    for font_face in FontFace::from_data(data, id, descriptors, |index| self.typeface(id, index)) {
+      if let Some(font_face) = self.promote(&font_face) {
         faces.push(font_face);
 
         continue;
       }
 
-      let font_face = Arc::new(FontFace::new(
-        Arc::clone(&family),
-        descriptors.clone(),
-        platform_data,
-      ));
+      let font_face = Arc::new(font_face);
 
-      self
-        .font_face_cache_mut(last_resort)
-        .add_font_face(Arc::clone(&font_face));
-      self.font_faces.push(RegisteredFontFace {
-        font_face: Arc::clone(&font_face),
-        last_resort,
-      });
+      self.font_face_cache.add_font_face(Arc::clone(&font_face));
+      self.font_faces.push(Arc::clone(&font_face));
+      insert_family(&mut self.fallback_families, &font_face.family);
 
-      if !last_resort {
-        insert_family(&mut self.fallback_families, &family);
-
-        if let Some(generic_family) = generic_family {
-          insert_family(
-            self
-              .generic_font_family_settings
-              .entry(fold_family_name(generic_family))
-              .or_default(),
-            &family,
-          );
-        }
+      if let Some(generic_family) = generic_family {
+        insert_family(
+          self
+            .generic_font_family_settings
+            .entry(fold_family_name(generic_family))
+            .or_default(),
+          &font_face.family,
+        );
       }
 
       faces.push(font_face);
@@ -144,10 +86,7 @@ impl CssFontSelector {
     let font_face = Arc::new(FontFace::pending(Arc::clone(&family), descriptors, source));
 
     self.font_face_cache.add_font_face(Arc::clone(&font_face));
-    self.font_faces.push(RegisteredFontFace {
-      font_face,
-      last_resort: false,
-    });
+    self.font_faces.push(font_face);
     insert_family(&mut self.fallback_families, &family);
   }
 
@@ -165,18 +104,6 @@ impl CssFontSelector {
       .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, index).map(Arc::new))
   }
 
-  /// The registered face `local()` names, Blink's `LocalFontFaceSource` among takumi's stand-in
-  /// for system fonts: the faces registered through [`crate::Fonts`].
-  #[cfg(feature = "font-face")]
-  pub(crate) fn local_face(&self, name: &str) -> Option<&Arc<FontCustomPlatformData>> {
-    self
-      .font_faces
-      .iter()
-      .filter(|registered| !registered.font_face.css_connected)
-      .filter_map(|registered| registered.font_face.custom_platform_data())
-      .find(|typeface| typeface.has_unique_name(name))
-  }
-
   /// Adds the face an `@font-face` rule makes, after the CSS-connected faces before it in cascade
   /// order. Fallback does not walk its family, as Blink's system fallback skips web fonts.
   #[cfg(feature = "font-face")]
@@ -187,10 +114,7 @@ impl CssFontSelector {
     });
 
     self.font_face_cache.add_font_face(Arc::clone(&font_face));
-    self.font_faces.push(RegisteredFontFace {
-      font_face,
-      last_resort: false,
-    });
+    self.font_faces.push(font_face);
   }
 
   /// Whether a pending face is registered.
@@ -198,22 +122,19 @@ impl CssFontSelector {
     self
       .font_faces
       .iter()
-      .any(|registered| registered.font_face.custom_platform_data().is_none())
+      .any(|font_face| font_face.custom_platform_data().is_none())
   }
 
-  /// Removes every face of `family` not registered as a last resort, so it falls back as an
-  /// unknown family; false when it has none.
+  /// Removes every face of `family`, so it falls back as an unknown family; false when it has none.
   pub(crate) fn unregister_family(&mut self, family: &str) -> bool {
     let key = fold_family_name(family);
 
-    self.remove_font_faces(|registered| {
-      !registered.last_resort && fold_family_name(&registered.font_face.family) == key
-    })
+    self.remove_font_faces(|font_face| fold_family_name(&font_face.family) == key)
   }
 
   /// Removes the faces `is_removed` picks, and from each family list the families left without a
-  /// face it lists them for; false when it picks none.
-  fn remove_font_faces(&mut self, is_removed: impl Fn(&RegisteredFontFace) -> bool) -> bool {
+  /// face; false when it picks none.
+  fn remove_font_faces(&mut self, is_removed: impl Fn(&Arc<FontFace>) -> bool) -> bool {
     let (removed, kept): (Vec<_>, Vec<_>) = self.font_faces.drain(..).partition(is_removed);
 
     self.font_faces = kept;
@@ -222,19 +143,17 @@ impl CssFontSelector {
       return false;
     }
 
-    for registered in &removed {
-      self
-        .font_face_cache_mut(registered.last_resort)
-        .remove_font_face(&registered.font_face);
+    for font_face in &removed {
+      self.font_face_cache.remove_font_face(font_face);
     }
 
     let font_faces = &self.font_faces;
     let has_faces = |family: &Arc<str>| {
       let key = fold_family_name(family);
 
-      font_faces.iter().any(|registered| {
-        !registered.last_resort && fold_family_name(&registered.font_face.family) == key
-      })
+      font_faces
+        .iter()
+        .any(|font_face| fold_family_name(&font_face.family) == key)
     };
 
     self.fallback_families.retain(has_faces);
@@ -248,10 +167,7 @@ impl CssFontSelector {
 
   /// Every registered face, in registration order.
   pub(crate) fn font_faces(&self) -> impl Iterator<Item = &Arc<FontFace>> + '_ {
-    self
-      .font_faces
-      .iter()
-      .map(|registered| &registered.font_face)
+    self.font_faces.iter()
   }
 
   /// Blink's `FamilyNameFromSettings`: the families the generic keyword `generic_family` lists.
@@ -268,82 +184,38 @@ impl CssFontSelector {
     self
       .font_faces
       .iter()
-      .filter_map(|registered| registered.font_face.custom_platform_data())
+      .filter_map(|font_face| font_face.custom_platform_data())
       .find(|typeface| typeface.id == id && typeface.index == index)
       .map(Arc::clone)
   }
 
-  /// Moves the face `family` already lists at `index` of the data `id` names, under `descriptors`
-  /// and `last_resort`, after every other face, as registering it anew would place it.
-  fn promote(
-    &mut self,
-    family: &str,
-    id: u64,
-    index: u32,
-    descriptors: &FontFaceDescriptors,
-    last_resort: bool,
-  ) -> Option<Arc<FontFace>> {
-    let family = fold_family_name(family);
+  /// Moves the face registered with `font_face`'s family, data, and descriptors after every other
+  /// face, as registering it anew would place it.
+  fn promote(&mut self, font_face: &FontFace) -> Option<Arc<FontFace>> {
+    let typeface = font_face.custom_platform_data()?;
+    let family = fold_family_name(&font_face.family);
     let position = self.font_faces.iter().position(|registered| {
-      let font_face = &registered.font_face;
-
-      font_face
-        .custom_platform_data()
-        .is_some_and(|custom_platform_data| {
-          custom_platform_data.id == id && custom_platform_data.index == index
-        })
-        && fold_family_name(&font_face.family) == family
-        && font_face.descriptors == *descriptors
-        && registered.last_resort == last_resort
+      registered.custom_platform_data().is_some_and(|registered| {
+        registered.id == typeface.id && registered.index == typeface.index
+      }) && fold_family_name(&registered.family) == family
+        && registered.descriptors == font_face.descriptors
     })?;
     let registered = self.font_faces.remove(position);
-    let font_face = Arc::clone(&registered.font_face);
-    let font_face_cache = self.font_face_cache_mut(registered.last_resort);
 
-    font_face_cache.remove_font_face(&font_face);
-    font_face_cache.add_font_face(Arc::clone(&font_face));
-    self.font_faces.push(registered);
+    self.font_face_cache.remove_font_face(&registered);
+    self.font_face_cache.add_font_face(Arc::clone(&registered));
+    self.font_faces.push(Arc::clone(&registered));
 
-    Some(font_face)
+    Some(registered)
   }
 
-  /// The families registered as a last resort, each once, in the order it first registered.
-  pub(crate) fn last_resort_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
-    let mut seen = Vec::new();
-
-    self
-      .font_faces
-      .iter()
-      .filter(|registered| registered.last_resort)
-      .map(|registered| &registered.font_face.family)
-      .filter(move |family| {
-        let key = fold_family_name(family);
-        let first = !seen.contains(&key);
-
-        if first {
-          seen.push(key);
-        }
-
-        first
-      })
-  }
-
-  /// The families system fallback walks before the last-resort ones, in registration order.
+  /// The families system fallback walks before the system fonts, in registration order.
   pub(crate) fn fallback_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
     self.fallback_families.iter()
   }
 
-  /// The cache that holds the faces registered with `last_resort`.
-  fn font_face_cache_mut(&mut self, last_resort: bool) -> &mut FontFaceCache {
-    if last_resort {
-      &mut self.last_resort_font_face_cache
-    } else {
-      &mut self.font_face_cache
-    }
-  }
-
-  /// Blink's `GetFontData`: the faces of `family` matching `font_description`, or of the first
-  /// family a generic keyword lists that has faces.
+  /// Blink's `GetFontData` over document fonts: the registered faces of `family` matching
+  /// `font_description`, or of the first family a generic keyword lists that has faces.
   pub(crate) fn get_font_data(
     &self,
     font_description: &FontSelectionDescription,
@@ -351,50 +223,17 @@ impl CssFontSelector {
     family_is_generic: bool,
   ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
     if !family_is_generic {
-      return self.font_data_for_family(font_description, family);
+      return self.font_face_cache.get_font_data(font_description, family);
     }
 
     self
       .family_names_from_settings(family)
       .iter()
       .find_map(|settings_family_name| {
-        self.font_data_for_family(font_description, settings_family_name)
+        self
+          .font_face_cache
+          .get_font_data(font_description, settings_family_name)
       })
-  }
-
-  /// The faces of `family` matching `font_description`, its last-resort faces only when it has no
-  /// other face.
-  fn font_data_for_family(
-    &self,
-    font_description: &FontSelectionDescription,
-    family: &str,
-  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
-    self
-      .font_face_cache
-      .get_font_data(font_description, family)
-      .or_else(|| self.last_resort_font_data(font_description, family))
-  }
-
-  /// The faces registered as a last resort that match `font_description`, family by family, which
-  /// system fallback tries after every other family.
-  pub(crate) fn last_resort_fallback<'a>(
-    &'a self,
-    font_description: &'a FontSelectionDescription,
-  ) -> impl Iterator<Item = Vec<FaceData<FontPlatformDataForRangeSet>>> + 'a {
-    self
-      .last_resort_families()
-      .filter_map(|family| self.last_resort_font_data(font_description, family))
-  }
-
-  /// The faces of `family` registered as a last resort that match `font_description`.
-  fn last_resort_font_data(
-    &self,
-    font_description: &FontSelectionDescription,
-    family: &str,
-  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
-    self
-      .last_resort_font_face_cache
-      .get_font_data(font_description, family)
   }
 }
 
@@ -412,7 +251,6 @@ mod tests {
   };
 
   const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
-  const GEIST_LATIN: &str = "../assets/fonts/geist/geist-latin-wght-300-800.ttf";
   const GEIST_MONO: &str = "../assets/fonts/geist/GeistMono[wght].woff2";
   const GEIST_DUO: &str = "../assets/fonts/geist/GeistDuo.ttc";
   const POPPINS_REGULAR: &str =
@@ -432,7 +270,7 @@ mod tests {
   ) -> Vec<Arc<FontFace>> {
     let (data, id) = FontCustomPlatformData::read_asset(path);
 
-    selector.register(data, id, descriptors, None, false)
+    selector.register(&data, id, descriptors, None)
   }
 
   fn named(family: &str) -> FontFaceDescriptors {
@@ -629,7 +467,7 @@ mod tests {
     let mut selector = CssFontSelector::default();
     let (data, id) = FontCustomPlatformData::read_asset(GEIST_MONO);
 
-    selector.register(data, id, &named("Code"), Some("monospace"), false);
+    selector.register(&data, id, &named("Code"), Some("monospace"));
 
     let description = request(400.0, NORMAL_SLOPE_VALUE);
 
@@ -644,106 +482,6 @@ mod tests {
         .is_none()
     );
     assert_eq!(selector.family_names_from_settings("Monospace").len(), 1);
-  }
-
-  #[test]
-  fn last_resort_families_fall_back_last() {
-    let mut selector = CssFontSelector::default();
-    let (data, id) = FontCustomPlatformData::read_asset(GEIST);
-
-    selector.register(data, id, &named("Embedded"), None, true);
-    register(&mut selector, GEIST_MONO, &named("User Font"));
-
-    assert_eq!(
-      selector
-        .fallback_families()
-        .map(|family| &**family)
-        .collect::<Vec<_>>(),
-      ["User Font"]
-    );
-    assert_eq!(
-      selector
-        .last_resort_families()
-        .map(|family| &**family)
-        .collect::<Vec<_>>(),
-      ["Embedded"]
-    );
-  }
-
-  #[test]
-  fn a_family_matches_its_last_resort_faces_only_without_other_faces() {
-    let mut selector = CssFontSelector::default();
-    let (data, last_resort) = FontCustomPlatformData::read_asset(GEIST_LATIN);
-    let description = request(400.0, NORMAL_SLOPE_VALUE);
-    let matched = |selector: &CssFontSelector| {
-      face(selector, &description, "Geist")
-        .font_platform_data
-        .typeface
-        .id
-    };
-
-    selector.register(data, last_resort, &named("Geist"), None, true);
-
-    assert_eq!(matched(&selector), last_resort);
-
-    let registered = register(&mut selector, GEIST, &named("Geist"))[0]
-      .custom_platform_data()
-      .unwrap()
-      .id;
-
-    assert_eq!(matched(&selector), registered);
-    assert!(selector.unregister_family("Geist"));
-    assert_eq!(matched(&selector), last_resort);
-    assert!(!selector.unregister_family("Geist"));
-  }
-
-  #[test]
-  fn a_generic_family_lists_no_last_resort_family() {
-    let mut selector = CssFontSelector::default();
-    let (data, id) = FontCustomPlatformData::read_asset(GEIST_LATIN);
-    let description = request(400.0, NORMAL_SLOPE_VALUE);
-
-    selector.register(data, id, &named("Geist"), Some("monospace"), true);
-
-    assert!(selector.family_names_from_settings("monospace").is_empty());
-
-    let (data, id) = FontCustomPlatformData::read_asset(GEIST);
-
-    selector.register(data, id, &named("Geist"), Some("sans-serif"), false);
-
-    assert!(
-      selector
-        .get_font_data(&description, "sans-serif", true)
-        .is_some()
-    );
-    assert!(selector.unregister_family("Geist"));
-    assert!(
-      selector
-        .get_font_data(&description, "sans-serif", true)
-        .is_none()
-    );
-  }
-
-  #[test]
-  fn a_last_resort_face_registered_again_as_a_normal_face_takes_precedence() {
-    let mut selector = CssFontSelector::default();
-    let (data, id) = FontCustomPlatformData::read_asset(GEIST);
-
-    selector.register(Arc::clone(&data), id, &named("Family"), None, true);
-    register(&mut selector, GEIST_MONO, &named("Family"));
-    selector.register(data, id, &named("Family"), None, false);
-
-    let faces = selector
-      .get_font_data(&request(400.0, NORMAL_SLOPE_VALUE), "Family", false)
-      .unwrap();
-    let ids: Vec<u64> = faces
-      .iter()
-      .filter_map(FaceData::loaded)
-      .map(|face| face.font_platform_data.typeface.id)
-      .collect();
-
-    assert_eq!(ids.len(), 2);
-    assert_eq!(ids.first(), Some(&id));
   }
 
   #[test]
@@ -793,7 +531,7 @@ mod tests {
     for _ in 0..3 {
       let (data, id) = FontCustomPlatformData::read_asset(GEIST);
 
-      selector.register(Arc::clone(&data), id, &named("Cycle"), None, false);
+      selector.register(&data, id, &named("Cycle"), None);
 
       assert!(Arc::strong_count(&data) > 1);
       assert!(selector.unregister_family("cycle"));

@@ -22,6 +22,18 @@ pub(crate) fn fold_family_name(family: &str) -> String {
   family.chars().flat_map(char::to_lowercase).collect()
 }
 
+/// Adds `family` to `families` unless it is there under any case.
+pub(crate) fn insert_family(families: &mut Vec<Arc<str>>, family: &Arc<str>) {
+  let key = fold_family_name(family);
+
+  if !families
+    .iter()
+    .any(|existing| fold_family_name(existing) == key)
+  {
+    families.push(Arc::clone(family));
+  }
+}
+
 /// Blink's `FontFaceCache`.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FontFaceCache {

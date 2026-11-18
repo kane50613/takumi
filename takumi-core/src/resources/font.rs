@@ -39,8 +39,9 @@ use crate::{
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
     font_description::FontSelectionDescription,
-    font_face::{FaceData, FontFaceDescriptors, FontMetricsOverride, PendingSource},
+    font_face::{FaceData, FontFace, FontFaceDescriptors, FontMetricsOverride, PendingSource},
     font_height::FontHeight,
+    system_fonts::SystemFonts,
   },
   layout_unit::LayoutUnit,
   resources::{
@@ -280,12 +281,12 @@ impl MatchedFace {
   }
 }
 
-/// The fonts a renderer draws with, Blink's `CSSFontSelector`, whose snapshots share one
-/// copy-on-write registry.
+/// The fonts a renderer draws with, Blink's `CSSFontSelector` over its `FontCache`, whose
+/// snapshots share one copy-on-write registry.
 #[derive(Clone, Default)]
 pub struct Fonts {
   registry: Arc<FontRegistry>,
-  /// The families a snapshot's fallback walks before the last-resort ones, in place of every
+  /// The families a snapshot's fallback walks before the system fonts, in place of every
   /// registered family.
   fallback_families: Option<Vec<Arc<str>>>,
 }
@@ -294,6 +295,8 @@ pub struct Fonts {
 #[derive(Clone, Default)]
 struct FontRegistry {
   selector: CssFontSelector,
+  /// The fonts installed with the registry, which no registration changes.
+  system_fonts: Arc<SystemFonts>,
   /// A process-wide stamp of every change, which font-dependent caches key on.
   revision: u64,
   /// What fonts resolved to, by their byte length before resolving, while a face holds it.
@@ -335,6 +338,32 @@ impl FontRegistry {
     static REVISION: AtomicU64 = AtomicU64::new(1);
 
     self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
+  }
+
+  /// Blink's `CSSFontSelector::GetFontData`: the registered faces `family` resolves to, or the
+  /// system fonts of a named family no face is registered under.
+  fn get_font_data(
+    &self,
+    font_description: &FontSelectionDescription,
+    family: &str,
+    family_is_generic: bool,
+  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
+    if family_is_generic {
+      return self.selector.get_font_data(font_description, family, true);
+    }
+
+    self
+      .selector
+      .get_font_data(font_description, family, false)
+      .or_else(|| self.system_fonts.get_font_data(font_description, family))
+  }
+
+  /// Every face, the system fonts before the registered ones.
+  fn font_faces(&self) -> impl Iterator<Item = &Arc<FontFace>> + '_ {
+    self
+      .system_fonts
+      .font_faces()
+      .chain(self.selector.font_faces())
   }
 }
 
@@ -384,16 +413,10 @@ impl Fonts {
     families
       .iter()
       .filter_map(|family| match family {
-        FontFamilyToken::Owned(name) => {
-          self
-            .registry
-            .selector
-            .get_font_data(description, name, false)
-        }
+        FontFamilyToken::Owned(name) => self.registry.get_font_data(description, name, false),
         FontFamilyToken::Generic(generic) => {
           self
             .registry
-            .selector
             .get_font_data(description, generic.keyword(), true)
         }
       })
@@ -406,8 +429,8 @@ impl Fonts {
       .collect()
   }
 
-  /// The faces system font fallback picks from: the fallback families, then the faces registered
-  /// as a last resort, each by its best match for `description`.
+  /// The faces system font fallback picks from: the fallback families, then the system fonts, each
+  /// by its best match for `description`.
   pub(crate) fn fallback_bucket(
     &self,
     description: &FontSelectionDescription,
@@ -419,13 +442,8 @@ impl Fonts {
 
     families
       .into_iter()
-      .filter_map(|family| {
-        self
-          .registry
-          .selector
-          .get_font_data(description, family, false)
-      })
-      .chain(self.registry.selector.last_resort_fallback(description))
+      .filter_map(|family| self.registry.get_font_data(description, family, false))
+      .chain(self.registry.system_fonts.fallback(description))
       .flatten()
       .map(|face| face.map(MatchedFace::of))
       .collect()
@@ -447,7 +465,6 @@ impl Fonts {
   pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
       .registry
-      .selector
       .font_faces()
       .find(|face| {
         face
@@ -458,7 +475,7 @@ impl Fonts {
   }
 
   /// Render-local snapshot whose fallback walks the families of `fallbacks`, a generic one as the
-  /// families registered for it, then the last-resort ones.
+  /// families registered for it, then the system fonts.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let fallback_families = fallbacks.map(|fallbacks| {
       fallbacks
@@ -558,8 +575,34 @@ impl Fonts {
       info_override: font.info_override.clone(),
       generic_family: font.generic_family,
       unicode_range: font.unicode_range.clone(),
-      last_resort: font.last_resort,
       origin: None,
+    })
+  }
+
+  /// A registry with `fonts` as its system fonts, which a family reaches only when no registered
+  /// face has it and fallback tries last. A system font joins no generic family.
+  pub fn with_system_fonts<'a>(
+    fonts: impl IntoIterator<Item = FontResource<'a>>,
+  ) -> Result<Self, FontError> {
+    let mut system_fonts = SystemFonts::default();
+
+    for font in fonts {
+      let descriptors = font.descriptors();
+      let (data, id) = font.source.into_sfnt_with_id()?;
+
+      system_fonts.install(&data, id, &descriptors);
+    }
+
+    let mut registry = FontRegistry {
+      system_fonts: Arc::new(system_fonts),
+      ..FontRegistry::default()
+    };
+
+    registry.revise();
+
+    Ok(Self {
+      registry: Arc::new(registry),
+      fallback_families: None,
     })
   }
 
@@ -570,13 +613,12 @@ impl Fonts {
 
     registry.revise();
 
+    let descriptors = font.descriptors();
     let FontResource {
       source,
-      info_override,
       generic_family,
-      unicode_range,
-      last_resort,
       origin,
+      ..
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
 
@@ -596,19 +638,11 @@ impl Fonts {
         });
     }
 
-    let descriptors = FontFaceDescriptors {
-      unicode_range,
-      ..info_override
-        .as_ref()
-        .map(FontOverride::descriptors)
-        .unwrap_or_default()
-    };
     let faces = registry.selector.register(
-      data,
+      &data,
       id,
       &descriptors,
       generic_family.map(|generic| generic.0.keyword()),
-      last_resort,
     );
     let mut families: Vec<RegisteredFamily> = Vec::new();
 
@@ -1145,9 +1179,6 @@ pub struct FontResource<'a> {
   info_override: Option<FontOverride>,
   generic_family: Option<GenericFamily>,
   unicode_range: UnicodeRangeSet,
-  /// Sorts after every normal family in default fallback selection (see
-  /// [`FontResource::last_resort`]).
-  last_resort: bool,
   /// What [`Self::into_resolved`] replaced, so the same bytes registering again can reuse it.
   origin: Option<SourceOrigin>,
 }
@@ -1168,7 +1199,6 @@ impl<'a> FontResource<'a> {
       info_override: None,
       generic_family: None,
       unicode_range: UnicodeRangeSet::default(),
-      last_resort: false,
       origin: None,
     }
   }
@@ -1216,12 +1246,15 @@ impl<'a> FontResource<'a> {
     self
   }
 
-  /// Sorts this font's families after every normal family in default fallback selection, so they
-  /// only serve text no registered font covers.
-  pub fn last_resort(self) -> Self {
-    Self {
-      last_resort: true,
+  /// The `@font-face` descriptors the font's faces take.
+  fn descriptors(&self) -> FontFaceDescriptors {
+    FontFaceDescriptors {
+      unicode_range: self.unicode_range.clone(),
       ..self
+        .info_override
+        .as_ref()
+        .map(FontOverride::descriptors)
+        .unwrap_or_default()
     }
   }
 
@@ -1265,7 +1298,13 @@ mod tests {
   use std::{fs::File, io::Read, path::Path};
 
   use super::*;
-  use crate::{resources::unicode_range::UnicodeRange, style::FromCssStr};
+  use crate::{
+    fonts::font_selection_types::{
+      FontSelectionRequest, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE,
+    },
+    resources::unicode_range::UnicodeRange,
+    style::FromCssStr,
+  };
 
   fn read_font_asset(relative: &str) -> Vec<u8> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
@@ -1290,17 +1329,43 @@ mod tests {
     FontResource::new(source).into_resolved().unwrap().source
   }
 
-  /// The families fallback walks before the last-resort ones.
+  /// The families fallback walks before the system fonts.
   fn order(fonts: &Fonts) -> Vec<String> {
-    let last_resort: Vec<&Arc<str>> = fonts.registry.selector.last_resort_families().collect();
-
     fonts
       .registry
       .selector
       .fallback_families()
-      .filter(|family| !last_resort.contains(family))
       .map(ToString::to_string)
       .collect()
+  }
+
+  fn regular() -> FontSelectionDescription {
+    FontSelectionDescription::for_request(FontSelectionRequest::new(
+      NORMAL_WEIGHT_VALUE,
+      NORMAL_WIDTH_VALUE,
+      NORMAL_SLOPE_VALUE,
+    ))
+  }
+
+  /// The id of the data the first face `family` resolves to draws with.
+  fn matched_id(fonts: &Fonts, family: FontFamilyToken) -> Option<u64> {
+    let group = fonts.font_group(&[family], &regular());
+    let face = group.first()?.first()?.loaded()?;
+
+    Some(face.typeface.id)
+  }
+
+  /// Fonts whose one system font is the Latin Geist under `family`, and its data's id.
+  fn with_system_geist(family: &str) -> (Fonts, u64) {
+    let bytes = read_font_asset("../assets/fonts/geist/geist-latin-wght-300-800.ttf");
+    let (_, id) = FontSource::from(bytes.clone()).into_sfnt_with_id().unwrap();
+    let fonts = Fonts::with_system_fonts([FontResource::new(bytes).override_info(FontOverride {
+      family_name: Some(family.into()),
+      ..Default::default()
+    })])
+    .unwrap();
+
+    (fonts, id)
   }
 
   fn geist_bytes() -> Vec<u8> {
@@ -1693,31 +1758,63 @@ mod tests {
   }
 
   #[test]
-  fn last_resort_families_sort_after_normal_registrations() {
-    let mut fonts = Fonts::default();
+  fn system_fonts_fall_back_after_registered_families() {
+    let (mut fonts, system) = with_system_geist("Embedded");
+
+    register_named(&mut fonts, geist_mono_bytes(), "User Font");
+
+    // Installed first, but selected last: a system font never shadows caller fonts.
+    assert_eq!(order(&fonts), vec!["User Font".to_string()]);
+
+    let ids: Vec<u64> = fonts
+      .fallback_bucket(&regular())
+      .iter()
+      .filter_map(FaceData::loaded)
+      .map(|face| face.typeface.id)
+      .collect();
+
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.last(), Some(&system));
+  }
+
+  #[test]
+  fn a_family_resolves_to_system_fonts_only_without_registered_faces() {
+    let (mut fonts, system) = with_system_geist("Geist");
+    let geist = || FontFamilyToken::Owned("Geist".into());
+
+    assert_eq!(matched_id(&fonts, geist()), Some(system));
+
+    register_named(&mut fonts, geist_bytes(), "Geist");
+
+    let registered = matched_id(&fonts, geist());
+
+    assert!(registered.is_some_and(|id| id != system));
+    assert!(fonts.unregister_family("Geist"));
+    assert_eq!(matched_id(&fonts, geist()), Some(system));
+    assert!(!fonts.unregister_family("Geist"));
+  }
+
+  #[test]
+  fn a_generic_family_lists_no_system_family() {
+    let (mut fonts, _) = with_system_geist("Geist");
+    let sans_serif = || FontFamilyToken::Generic(GenericFamilyType::SansSerif);
+
+    assert_eq!(matched_id(&fonts, sans_serif()), None);
+
     fonts
       .register(
         FontResource::new(geist_bytes())
           .override_info(FontOverride {
-            family_name: Some("Embedded".into()),
+            family_name: Some("Geist".into()),
             ..Default::default()
           })
-          .last_resort(),
+          .generic_family(GenericFamily::SANS_SERIF),
       )
       .unwrap();
-    register_named(&mut fonts, geist_mono_bytes(), "User Font");
 
-    // Registered first, but selected last: a last-resort family never shadows caller fonts.
-    assert_eq!(order(&fonts), vec!["User Font".to_string()]);
-    assert_eq!(
-      fonts
-        .registry
-        .selector
-        .last_resort_families()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>(),
-      vec!["Embedded".to_string()]
-    );
+    assert!(matched_id(&fonts, sans_serif()).is_some());
+    assert!(fonts.unregister_family("Geist"));
+    assert_eq!(matched_id(&fonts, sans_serif()), None);
   }
 
   #[test]
