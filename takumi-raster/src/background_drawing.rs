@@ -16,16 +16,12 @@ use tiny_skia::{
 
 use crate::resources::image::RenderedImage;
 #[cfg(feature = "svg")]
-use crate::resources::image::SvgRaster;
+use crate::resources::image::{ImageSource, SvgRaster};
 use crate::{
   BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
-  interpolate_with_footprint,
-  layout::node::resolve_image,
-  overlay_image,
-  resources::{image::ImageSource, image_buffer::ImageBuffer},
-  style::*,
-  try_overlay_gradient_tile,
+  interpolate_with_footprint, layout::node::resolve_image, overlay_image,
+  resources::image_buffer::ImageBuffer, style::*, try_overlay_gradient_tile,
 };
 
 /// One layer's rendered tile and where its copies land, relative to the border box.
@@ -614,25 +610,20 @@ pub(crate) fn render_tile(
       }
 
       match &source {
-        ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
-          source: bitmap.clone(),
-          width: tile_w,
-          height: tile_h,
-          algo: context.style.misc_inherited_data.image_rendering,
-        }),
-        #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
-        ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
-          source: animated.frame_at_time_covering(
-            context.time_ms(),
-            tile_w,
-            tile_h,
+        // An SVG lays out at the tile size, Blink's container size, and fills the tile's pixels.
+        #[cfg(feature = "svg")]
+        ImageSource::Svg(svg) => {
+          let buffer = svg.rasterize_cached(
+            SvgRaster::whole(image_size, tile_w, tile_h),
             context.style.misc_inherited_data.image_rendering,
-          ),
-          width: tile_w,
-          height: tile_h,
-          algo: context.style.misc_inherited_data.image_rendering,
-        }),
-        ImageSource::Encoded(..) => match source.render_for_layout(
+            context,
+          )?;
+
+          Pixmap::try_from(buffer.as_ref())
+            .ok()
+            .map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+        }
+        _ => match source.render_for_layout(
           tile_w,
           tile_h,
           context.style.misc_inherited_data.image_rendering,
@@ -647,20 +638,6 @@ pub(crate) fn render_tile(
           }),
           RenderedImage::Rasterized(..) => None,
         },
-        // An SVG lays out at the tile size, Blink's container size, and fills the tile's pixels.
-        #[cfg(feature = "svg")]
-        ImageSource::Svg(svg) => {
-          let buffer = svg.rasterize_cached(
-            SvgRaster::whole(image_size, tile_w, tile_h),
-            context.style.misc_inherited_data.image_rendering,
-            context,
-          )?;
-
-          Pixmap::try_from(buffer.as_ref())
-            .ok()
-            .map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
-        }
-        _ => None,
       }
     }
   })

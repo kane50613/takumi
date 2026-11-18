@@ -30,22 +30,7 @@ fn process_image_for_object_fit(
   crop_origin: Point<f32>,
   crop: Size<f32>,
 ) -> Result<Option<PreparedImage>> {
-  let (image_width, image_height) = image.size(&context.sizing);
-  let (source_width, source_height) = match image {
-    ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
-    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
-    ImageSource::Animated(animated) => {
-      let (width, height) = animated.dimensions();
-      (width as f32, height as f32)
-    }
-    ImageSource::Encoded(encoded) => {
-      let (width, height) = encoded.dimensions();
-      (width as f32, height as f32)
-    }
-    #[cfg(feature = "svg")]
-    ImageSource::Svg(svg) => svg.dimensions(),
-    _ => (image_width, image_height),
-  };
+  let (source_width, source_height) = image.dimensions();
   let clipped = ReplacedPlacement {
     offset: placement.offset - crop_origin,
     size: placement.size,
