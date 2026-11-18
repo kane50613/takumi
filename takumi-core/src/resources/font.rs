@@ -1330,6 +1330,43 @@ mod tests {
     assert!(!families[0].faces.is_empty());
   }
 
+  /// `bytes`, a single-face sfnt, with its `head` table's `unitsPerEm` set to `units_per_em`.
+  fn with_units_per_em(mut bytes: Vec<u8>, units_per_em: u16) -> Vec<u8> {
+    let table_count = usize::from(u16::from_be_bytes([bytes[4], bytes[5]]));
+    let head = (0..table_count)
+      .map(|table| 12 + table * 16)
+      .find(|&record| &bytes[record..record + 4] == b"head")
+      .map(|record| u32::from_be_bytes(bytes[record + 8..record + 12].try_into().unwrap()))
+      .unwrap() as usize;
+
+    bytes[head + 18..head + 20].copy_from_slice(&units_per_em.to_be_bytes());
+    bytes
+  }
+
+  /// A `unitsPerEm` outside the range OTS accepts would scale each glyph to a mask of hundreds of
+  /// millions of pixels, so the face does not register.
+  #[test]
+  fn a_font_with_units_per_em_out_of_range_registers_no_face() {
+    let bytes = read_font_asset("../assets/fonts/geist/geist-latin-wght-300-800.ttf");
+
+    for (units_per_em, registers) in [
+      (1, false),
+      (15, false),
+      (16, true),
+      (16384, true),
+      (16385, false),
+    ] {
+      let mut fonts = Fonts::default();
+      let families = register_named(
+        &mut fonts,
+        with_units_per_em(bytes.clone(), units_per_em),
+        "Geist",
+      );
+
+      assert_eq!(!families.is_empty(), registers, "unitsPerEm {units_per_em}");
+    }
+  }
+
   /// The same bytes under another family share one decoded face, so one set of shaping tables.
   #[test]
   fn a_font_registered_under_two_families_shares_its_face() {
