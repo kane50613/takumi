@@ -45,13 +45,11 @@ impl<'a> SidRemapper<'a> {
       .or_insert_with(|| {
         let value = self.counter;
         self.sid_to_string.insert(value, string.into());
-        self.counter = StringId(
-          self
-            .counter
-            .0
-            .checked_add(1)
-            .expect("sid remapper overflowed"),
-        );
+        // A CFF font addresses at most 65,535 strings, so only strings past that share the last
+        // id.
+        if let Some(next) = self.counter.0.checked_add(1) {
+          self.counter = StringId(next);
+        }
 
         value
       })

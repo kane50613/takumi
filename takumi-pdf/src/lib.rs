@@ -165,23 +165,9 @@ mod test_support;
 mod tree;
 mod window;
 
-#[allow(
-  missing_docs,
-  clippy::all,
-  clippy::redundant_closure_for_method_calls,
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic
-)]
+#[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
 mod krilla;
-#[allow(
-  missing_docs,
-  clippy::all,
-  clippy::redundant_closure_for_method_calls,
-  clippy::unwrap_used,
-  clippy::expect_used,
-  clippy::panic
-)]
+#[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
 mod subsetter;
 
 use takumi_core::{

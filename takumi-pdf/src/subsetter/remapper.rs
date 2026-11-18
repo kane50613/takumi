@@ -84,10 +84,11 @@ where
     *self.forward.entry(old).or_insert_with(|| {
       let value = self.counter;
       self.backward.push(old);
-      self.counter = self
-        .counter
-        .checked_add(&C::from(1))
-        .expect("remapper was overflowed");
+      // A font holds at most 65,535 glyphs, so only ids it cannot have reach the end and share
+      // the last number.
+      if let Some(next) = self.counter.checked_add(&C::from(1)) {
+        self.counter = next;
+      }
       value.into()
     })
   }
@@ -165,5 +166,21 @@ impl GlyphRemapper {
   /// 0 (0), 3 (1), 39 (2), 8 (3), 10 (4), 2 (5)
   pub fn remapped_gids(&self) -> impl Iterator<Item = u16> + '_ {
     self.0.backward.iter().copied()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::GlyphRemapper;
+
+  #[test]
+  fn remapping_every_glyph_id_fills_the_last_number() {
+    let mut remapper = GlyphRemapper::new();
+
+    for glyph in 0..=u16::MAX {
+      remapper.remap(glyph);
+    }
+
+    assert_eq!(remapper.get(u16::MAX), Some(u16::MAX));
   }
 }

@@ -202,35 +202,37 @@ impl GraphicsState {
   }
 }
 
-/// A collection of graphics states, simulates the stack-like
-/// structure used.
+/// The current graphics state and the ones `q` saved beneath it.
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct GraphicsStates {
-  graphics_states: Vec<GraphicsState>,
+  current: GraphicsState,
+  saved: Vec<GraphicsState>,
 }
 
 impl GraphicsStates {
   pub(crate) fn new() -> Self {
     GraphicsStates {
-      graphics_states: vec![GraphicsState::default()],
+      current: GraphicsState::default(),
+      saved: Vec::new(),
     }
   }
 
   pub(crate) fn cur(&self) -> &GraphicsState {
-    self.graphics_states.last().unwrap()
+    &self.current
   }
 
   pub(crate) fn cur_mut(&mut self) -> &mut GraphicsState {
-    self.graphics_states.last_mut().unwrap()
+    &mut self.current
   }
 
   pub(crate) fn save_state(&mut self) {
-    let state = self.cur();
-    self.graphics_states.push(state.clone())
+    self.saved.push(self.current.clone());
   }
 
   pub(crate) fn restore_state(&mut self) {
-    self.graphics_states.pop();
+    if let Some(state) = self.saved.pop() {
+      self.current = state;
+    }
   }
 
   pub(crate) fn combine(&mut self, other: &ExtGState) {
@@ -246,6 +248,6 @@ impl GraphicsStates {
     // corresponding ContentBuilder into account, because we
     // want it to be in krilla coordinates, not in PDF
     // coordinates.
-    bbox.transform(self.cur().transform()).unwrap()
+    bbox.transform(self.cur().transform()).unwrap_or(bbox)
   }
 }

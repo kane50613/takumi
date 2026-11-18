@@ -343,27 +343,32 @@ impl Image {
         .map_err(|e| KrillaError::Image(self.clone(), location, e.clone()))?;
 
       let alpha_mask = match repr {
-        Repr::Sampled(sampled) => sampled.alpha_channel.as_ref().map(|mask_data| {
-          let soft_mask_id = soft_mask_id.unwrap();
-          let mask_stream =
-            FilterStreamBuilder::new_from_deflated(mask_data).finish(&serialize_settings);
-          let mut s_mask = chunk.image_xobject(soft_mask_id, mask_stream.encoded_data());
-          mask_stream.write_filters(s_mask.deref_mut().deref_mut());
-          s_mask.width(self.size().0 as i32);
-          s_mask.height(self.size().1 as i32);
-          s_mask.pair(
-            Name(b"ColorSpace"),
-            // Mask color space must be device gray -- see Table 145.
-            DEVICE_GRAY.to_pdf_name(),
-          );
+        Repr::Sampled(sampled) => {
+          sampled
+            .alpha_channel
+            .as_ref()
+            .zip(soft_mask_id)
+            .map(|(mask_data, soft_mask_id)| {
+              let mask_stream =
+                FilterStreamBuilder::new_from_deflated(mask_data).finish(&serialize_settings);
+              let mut s_mask = chunk.image_xobject(soft_mask_id, mask_stream.encoded_data());
+              mask_stream.write_filters(s_mask.deref_mut().deref_mut());
+              s_mask.width(self.size().0 as i32);
+              s_mask.height(self.size().1 as i32);
+              s_mask.pair(
+                Name(b"ColorSpace"),
+                // Mask color space must be device gray -- see Table 145.
+                DEVICE_GRAY.to_pdf_name(),
+              );
 
-          if self.0.interpolate {
-            s_mask.interpolate(true);
-          }
+              if self.0.interpolate {
+                s_mask.interpolate(true);
+              }
 
-          s_mask.bits_per_component(repr.bits_per_component() as i32);
-          soft_mask_id
-        }),
+              s_mask.bits_per_component(repr.bits_per_component() as i32);
+              soft_mask_id
+            })
+        }
         Repr::Jpeg(_) | Repr::Png(_) => None,
       };
 

@@ -90,7 +90,7 @@ impl SerializedChildren {
     outlineable.first(self.first);
     outlineable.last(self.last);
 
-    let mut count = i32::try_from(self.visible_count).unwrap();
+    let mut count = i32::try_from(self.visible_count).unwrap_or(i32::MAX);
     if negate_count {
       count = -count;
     }
@@ -215,37 +215,28 @@ fn serialize_children(
   chunk: &mut Chunk,
   sc: &mut SerializeContext,
 ) -> Option<SerializedChildren> {
+  if children.is_empty() {
+    return None;
+  }
+
+  let first = sc.new_ref();
+  let mut cur = first;
+  let mut prev = None;
   let mut visible_count = 0;
 
-  if !children.is_empty() {
-    let first = sc.new_ref();
-    let mut last = first;
+  for (index, child) in children.iter().enumerate() {
+    let next = (index + 1 < children.len()).then(|| sc.new_ref());
 
-    let mut prev = None;
-    let mut cur = Some(first);
-
-    for i in 0..children.len() {
-      let next = if i < children.len() - 1 {
-        Some(sc.new_ref())
-      } else {
-        None
-      };
-
-      last = cur.unwrap();
-
-      let child_visible_count = children[i].serialize(sc, parent, last, next, prev, chunk);
-      visible_count += child_visible_count;
-
-      prev = cur;
+    visible_count += child.serialize(sc, parent, cur, next, prev, chunk);
+    prev = Some(cur);
+    if let Some(next) = next {
       cur = next;
     }
-
-    Some(SerializedChildren {
-      first,
-      last,
-      visible_count,
-    })
-  } else {
-    None
   }
+
+  Some(SerializedChildren {
+    first,
+    last: cur,
+    visible_count,
+  })
 }

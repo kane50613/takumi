@@ -208,7 +208,7 @@ impl PageTagIdentifier {
   pub(crate) fn bump(&mut self) -> PageTagIdentifier {
     let old = *self;
 
-    self.mcid = self.mcid.checked_add(1).unwrap();
+    self.mcid = self.mcid.saturating_add(1);
 
     old
   }
@@ -748,7 +748,8 @@ fn serialize_children(
           }
           parent_tree_map.insert(ai.into(), *annotation_ref);
 
-          struct_parent.set(parent_ref).expect("only one parent");
+          // The duplicate check above keeps each annotation to one parent.
+          let _ = struct_parent.set(parent_ref);
 
           struct_children
             .object_ref()

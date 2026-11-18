@@ -219,7 +219,7 @@ impl ChunkContainer {
     xmp.rendition_class(RenditionClass::Proof);
     sc.serialize_settings().pdf_version().write_xmp(&mut xmp);
 
-    let embedded_files = sc.global_objects.embedded_files.take();
+    let embedded_files = std::mem::take(&mut sc.global_objects.embedded_files);
 
     // We only write a catalog if a page tree exists. Every valid PDF must have one
     // and krilla ensures that there always is one, but for snapshot tests, it can be

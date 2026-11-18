@@ -41,7 +41,7 @@ impl PageSettings {
       self.surface_size.width(),
       self.surface_size.height(),
     )
-    .unwrap()
+    .unwrap_or_else(Rect::unit)
   }
 
   /// The current surface size.
@@ -52,6 +52,7 @@ impl PageSettings {
 
 impl Default for PageSettings {
   /// An A4 page.
+  #[expect(clippy::unwrap_used, reason = "A4 is a valid size")]
   fn default() -> Self {
     Self::new(Size::from_wh(595.0, 842.0).unwrap())
   }
@@ -260,7 +261,7 @@ impl InternalPage {
         .transform(page_root_transform(
           self.page_settings.surface_size().height(),
         ))
-        .unwrap()
+        .unwrap_or(rect)
     };
 
     let media_box = transform_rect(self.page_settings.media_box());
