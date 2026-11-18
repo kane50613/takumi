@@ -1,4 +1,4 @@
-import initBindings, { Renderer, setGlyphCacheMaxBytes } from "@takumi-rs/wasm";
+import { init as initBindings, Renderer, setGlyphCacheMaxBytes } from "@takumi-rs/wasm";
 import type { Backend, BackendModule } from "./types";
 
 /** Initializes the WASM bindings from `module`, else the binary the import condition picks. */
