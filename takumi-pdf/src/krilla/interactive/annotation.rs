@@ -10,10 +10,9 @@ use pdf_writer::types::AnnotationFlags;
 use pdf_writer::{Finish, Name, Ref, TextStr};
 
 use crate::krilla::chunk_container::ChunkContainer;
-use crate::krilla::color::Color;
-use crate::krilla::configure::{PdfVersion, ValidationError};
+use crate::krilla::configure::ValidationError;
 use crate::krilla::error::KrillaResult;
-use crate::krilla::geom::{Quadrilateral, Rect};
+use crate::krilla::geom::Rect;
 use crate::krilla::interactive::action::LinkAction;
 use crate::krilla::interactive::destination::Destination;
 use crate::krilla::page::page_root_transform;
@@ -71,21 +70,7 @@ impl Annotation {
       .annotation_type
       .serialize_type(sc, &mut annotation, page_height)?;
 
-    let AnnotationType::Link(l) = &self.annotation_type;
-    // Only set the print flag when really necessary (only PDF/A). Don't
-    // set it by default, so annotations with color borders will be shown
-    // on a screen but not printed.
-    // TODO: No need to write the print flag even if it is `None`,
-    // only for PDF/A.
-    if l.border.is_none()
-      || sc
-        .serialize_settings()
-        .configuration
-        .validators()
-        .requires_annotation_flags()
-    {
-      annotation.flags(AnnotationFlags::PRINT);
-    }
+    annotation.flags(AnnotationFlags::PRINT);
 
     if let Some(struct_parent) = self.struct_parent {
       annotation.struct_parent(struct_parent);
@@ -132,20 +117,10 @@ pub enum Target {
   Action(LinkAction),
 }
 
-/// Border of a link annotation.
-pub struct LinkBorder {
-  pub(crate) width: f32,
-  pub(crate) color: Color,
-}
-
-impl LinkBorder {}
-
 /// A link annotation.
 pub struct LinkAnnotation {
   pub(crate) rect: Rect,
-  pub(crate) quad_points: Option<Vec<Quadrilateral>>,
   pub(crate) target: Target,
-  pub(crate) border: Option<LinkBorder>,
 }
 
 impl LinkAnnotation {
@@ -154,12 +129,7 @@ impl LinkAnnotation {
   /// `rect`: The bounding box of the link annotation that it should cover on the page.
   /// `target`: The target of the link annotation.
   pub fn new(rect: Rect, target: Target) -> Self {
-    Self {
-      rect,
-      quad_points: None,
-      target,
-      border: None,
-    }
+    Self { rect, target }
   }
 
   fn serialize_type(
@@ -175,38 +145,7 @@ impl LinkAnnotation {
       .transform(page_root_transform(page_height))
       .unwrap();
     annotation.rect(actual_rect.to_pdf_rect());
-    annotation.border(
-      0.0,
-      0.0,
-      self.border.as_ref().map_or(0.0, |x| x.width),
-      None,
-    );
-
-    if let Some(border) = &self.border {
-      match border.color.to_regular() {
-        crate::krilla::color::RegularColor::Rgb(rgb) => {
-          let [r, g, b] = rgb.to_pdf_color();
-          annotation.color_rgb(r, g, b);
-        }
-        crate::krilla::color::RegularColor::Cmyk(cmyk) => {
-          let [c, m, y, k] = cmyk.to_pdf_color();
-          annotation.color_cmyk(c, m, y, k);
-        }
-        crate::krilla::color::RegularColor::Luma(gray) => {
-          annotation.color_gray(gray.to_pdf_color());
-        }
-      }
-    }
-
-    if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf16 {
-      self.quad_points.as_ref().map(|p| {
-        annotation.quad_points(p.iter().flat_map(|q| q.0).flat_map(|p| {
-          let mut p = p.to_tsp();
-          page_root_transform(page_height).to_tsp().map_point(&mut p);
-          [p.x, p.y]
-        }))
-      });
-    }
+    annotation.border(0.0, 0.0, 0.0, None);
 
     match &self.target {
       Target::Destination(destination) => {

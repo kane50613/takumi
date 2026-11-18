@@ -23,16 +23,12 @@
 //!
 //! [`Configuration`]: crate::krilla::configure::Configuration
 
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 use pdf_writer::types::OutputIntentSubtype;
 use xmp_writer::XmpWriter;
 use xmp_writer::pdfa::PdfAExtSchemasWriter;
 
-use crate::krilla::color::RegularColor;
-use crate::krilla::color::separation::SeparationColorant;
-use crate::krilla::color::separation::SeparationSpace;
 use crate::krilla::configure::PdfVersion;
 use crate::krilla::interchange::embed::EmbedError;
 use crate::krilla::interchange::metadata::write_custom_schemas;
@@ -81,12 +77,8 @@ pub enum ValidationError {
   /// No CMYK ICC profile was provided, even though one is necessary.
   ///
   /// Occurs if the export format requires a device-independent color representation,
-  /// and a CMYK color was used in the document.
+  /// and a CMYK image was used in the document.
   MissingCMYKProfile,
-  /// The same Separation colorant was used with multiple different fallback colors.
-  ///
-  /// Occurs if the user specified multiple Separation color spaces with the same colorant but a different fallback color.
-  InconsistentSeparationFallback(SeparationColorant),
   /// The `.notdef` glyph was used, which is forbidden by some export formats.
   ///
   /// Can occur if a glyph could not be found in the font for a corresponding codepoint
@@ -213,12 +205,6 @@ impl Validators {
   /// Force sRGB profiles for `DeviceGray` and `DeviceRgb` colorspaces.
   pub(crate) fn requires_no_device_cs(self) -> bool {
     self.a.is_some_and(Archival::requires_no_device_cs)
-  }
-
-  /// Force the `Print` flag set and the `Hidden`, `Invisible`,
-  /// `ToggleNoView`, and `NoView` flags unset.
-  pub(crate) fn requires_annotation_flags(self) -> bool {
-    self.a.is_some_and(Archival::requires_annotation_flags)
   }
 
   /// Whether Tagged PDF must be enabled.
@@ -537,8 +523,7 @@ impl Archival {
       // Allowed under all PDF/A-1 profiles.
       (
         Self::A1_A | Self::A1_B,
-        ValidationError::InconsistentSeparationFallback(_)
-        | ValidationError::InvalidCodepointMapping(_, _, _, _)
+        ValidationError::InvalidCodepointMapping(_, _, _, _)
         | ValidationError::UnicodePrivateArea(_, _, _, _)
         | ValidationError::NoDocumentTitle
         | ValidationError::MissingHeadingTitle
@@ -569,7 +554,6 @@ impl Archival {
         | ValidationError::TooHighQNestingLevel
         | ValidationError::ContainsPostScript(_)
         | ValidationError::MissingCMYKProfile
-        | ValidationError::InconsistentSeparationFallback(_)
         | ValidationError::ContainsNotDefGlyph(_, _, _)
         | ValidationError::RestrictedLicense(_)
         | ValidationError::MissingDocumentDate
@@ -624,7 +608,6 @@ impl Archival {
       (
         Self::A4 | Self::A4F | Self::A4E,
         ValidationError::MissingCMYKProfile
-        | ValidationError::InconsistentSeparationFallback(_)
         | ValidationError::ContainsNotDefGlyph(_, _, _)
         | ValidationError::NoCodepointMapping(_, _, _)
         | ValidationError::InvalidCodepointMapping(_, _, _, _)
@@ -673,22 +656,6 @@ impl Archival {
   }
 
   fn requires_no_device_cs(self) -> bool {
-    match self {
-      Self::A1_A
-      | Self::A1_B
-      | Self::A2_A
-      | Self::A2_B
-      | Self::A2_U
-      | Self::A3_A
-      | Self::A3_B
-      | Self::A3_U
-      | Self::A4
-      | Self::A4F
-      | Self::A4E => true,
-    }
-  }
-
-  fn requires_annotation_flags(self) -> bool {
     match self {
       Self::A1_A
       | Self::A1_B
@@ -1087,7 +1054,6 @@ impl Accessibility {
         | ValidationError::TooHighQNestingLevel
         | ValidationError::ContainsPostScript(_)
         | ValidationError::MissingCMYKProfile
-        | ValidationError::InconsistentSeparationFallback(_)
         | ValidationError::UnicodePrivateArea(_, _, _, _)
         | ValidationError::NoDocumentLanguage
         | ValidationError::Transparency(_)
@@ -1167,41 +1133,6 @@ impl Accessibility {
       // PDF/UA-1 is specified against PDF 1.7.
       Self::UA1 => PdfVersion::Pdf17,
       Self::UA2 => PdfVersion::Pdf20,
-    }
-  }
-}
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct ValidationStore {
-  /// Maps from the name of a Separation colorant to a hash of its fallback
-  /// color. Used to track that a name is only ever matched with a single
-  /// fallback color. Since Krilla manages the `tintTransform` functions,
-  /// those are always equivalent.
-  separation_fallback_map: HashMap<SeparationColorant, RegularColor>,
-}
-
-impl ValidationStore {
-  pub(crate) fn new() -> Self {
-    Default::default()
-  }
-
-  /// Register a colorant and its fallback and raise an error if it already
-  /// exists.
-  pub(crate) fn validate_separation(
-    &mut self,
-    separation: &SeparationSpace,
-  ) -> Result<(), ValidationError> {
-    if self
-      .separation_fallback_map
-      .entry(separation.colorant.clone())
-      .or_insert(separation.fallback)
-      == &separation.fallback
-    {
-      Ok(())
-    } else {
-      Err(ValidationError::InconsistentSeparationFallback(
-        separation.colorant.clone(),
-      ))
     }
   }
 }
