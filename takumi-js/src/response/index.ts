@@ -15,6 +15,7 @@ const contentTypeMap: Record<NonNullable<RenderOptions["format"]>, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   ico: "image/x-icon",
+  svg: "image/svg+xml",
   raw: "application/octet-stream",
 };
 

@@ -81,7 +81,19 @@ type InnerRenderAnimationOptions = DistributiveOmit<
 > &
   CssOptions;
 
-export type RenderOptions = Managed<InnerRenderOptions>;
+/** SVG output, which takes none of the raster-only options. */
+type InnerSvgFormatOptions = InnerSvgRenderOptions & {
+  format: "svg";
+  quality?: never;
+  lossless?: never;
+  drawDebugBorder?: never;
+  devicePixelRatio?: never;
+  dithering?: never;
+};
+
+export type RenderOptions = Managed<InnerRenderOptions | InnerSvgFormatOptions>;
+
+/** @deprecated Use `RenderOptions` with `format: "svg"` instead. Will be removed in v3. */
 export type RenderSvgOptions = Managed<InnerSvgRenderOptions>;
 
 /** A single animation scene whose content is any renderable input. */
@@ -219,7 +231,8 @@ async function prepareScene<T extends PipelineOptions>(
 
 /**
  * Renders a React element, HTML string, or node tree into an image, on the native renderer in
- * Node.js and WebAssembly elsewhere, fetching its fonts, images, and emoji.
+ * Node.js and WebAssembly elsewhere, fetching its fonts, images, and emoji. `format: "svg"`
+ * returns an SVG document as UTF-8 bytes.
  *
  * @example
  * ```tsx
@@ -235,6 +248,10 @@ export async function render(
   element: DocumentInput,
   options?: RenderOptions,
 ): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
+  if (options?.format === "svg") {
+    return new TextEncoder().encode(await drawSvg(element, withoutFormat(options)));
+  }
+
   const scene = await prepareScene(element, options);
 
   return scene.renderer.render(scene.prepared, scene.output);
@@ -254,7 +271,10 @@ export async function measure(
   element: DocumentInput,
   options?: RenderOptions,
 ): Promise<napi.MeasuredNode> {
-  const scene = await prepareScene(element, options);
+  const scene = await prepareScene(
+    element,
+    options?.format === "svg" ? withoutFormat(options) : options,
+  );
 
   return scene.renderer.measure(scene.prepared, { signal: options?.signal });
 }
@@ -262,20 +282,21 @@ export async function measure(
 /**
  * Renders a React element, HTML string, or node tree as {@link render} would, into an SVG document.
  *
- * @example
- * ```tsx
- * import { renderSvg } from "takumi-js";
- *
- * const svg = await renderSvg(
- *   <div tw="bg-blue-500 text-white p-4">Hello World</div>,
- *   { width: 1200, height: 630 }
- * );
- * ```
+ * @deprecated Call `render` with `format: "svg"`, which returns the SVG as UTF-8 bytes. Will be removed in v3.
  */
-export async function renderSvg(
-  element: DocumentInput,
-  options?: RenderSvgOptions,
-): Promise<string> {
+export function renderSvg(element: DocumentInput, options?: RenderSvgOptions): Promise<string> {
+  return drawSvg(element, options);
+}
+
+/** `options` without `format`, which the binding reads only for raster output. */
+function withoutFormat<T extends { format?: unknown }>(options: T): Omit<T, "format"> {
+  const { format: _format, ...rest } = options;
+
+  return rest;
+}
+
+/** Lays out and draws `element` as an SVG document. */
+async function drawSvg(element: DocumentInput, options?: RenderSvgOptions): Promise<string> {
   const scene = await prepareScene(element, options);
 
   return scene.renderer.renderSvg(scene.prepared, { signal: options?.signal });

@@ -9,18 +9,20 @@ To switch, follow [Migrate from satori](#migrate-from-satori) or [Migrate from `
 
 ## Migrate from satori
 
-`renderSvg` replaces `satori()`. It takes JSX and returns an SVG string. The built-in Latin font makes `fonts` optional.
+`render` with `format: "svg"` replaces `satori()`. It takes JSX and returns the SVG as UTF-8 bytes. The built-in Latin font makes `fonts` optional.
 
-```tsx title="Replace satori with renderSvg"
+```tsx title="Replace satori with render"
 import satori from "satori"; // [!code --]
-import { renderSvg } from "takumi-js"; // [!code ++]
+import { render } from "takumi-js"; // [!code ++]
 
 const svg = await satori(<div style={{ display: "flex" }}>Hello</div>, { // [!code --]
-const svg = await renderSvg(<div style={{ display: "flex" }}>Hello</div>, { // [!code ++]
+const bytes = await render(<div style={{ display: "flex" }}>Hello</div>, { // [!code ++]
   width: 1200,
   height: 630,
+  format: "svg", // [!code ++]
   fonts: [{ name: "Inter", data: interBytes, weight: 400, style: "normal" }], // [!code --]
 });
+const svg = new TextDecoder().decode(bytes); // [!code ++]
 ```
 
 For a bitmap, skip the SVG step. `render` returns encoded bytes in one call.

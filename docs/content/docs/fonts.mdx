@@ -29,7 +29,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 The native `@takumi-rs/core` reads WOFF2, WOFF, TTF, OTF, and TTC files. The WebAssembly packages read all of them except WOFF, so convert a WOFF font to WOFF2 for an edge runtime.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
+`render`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -225,7 +225,7 @@ Before a subset downloads, font matching knows only the weight and style declare
 
 <span id="preloading-with-registerfont" />
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` share one renderer per process. The first render that lists a font loads it, and later renders that list the same entry reuse it. Define the `fonts` list once and pass it to every render:
+`render`, `renderAnimation`, `measure`, and `ImageResponse` share one renderer per process. The first render that lists a font loads it, and later renders that list the same entry reuse it. Define the `fonts` list once and pass it to every render:
 
 ```tsx twoslash title="Share one fonts list"
 import { readFile } from "node:fs/promises";

@@ -89,20 +89,20 @@ const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 
 
 ## Vector SVG
 
-`renderSvg()` returns an SVG document string instead of a bitmap. It draws real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images from the same layout.
+`format: "svg"` returns an SVG document as UTF-8 bytes instead of a bitmap. It draws real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images from the same layout. `ImageResponse` sends it as `image/svg+xml`.
 
 ```tsx twoslash title="Render PNG and SVG"
-import { render, renderSvg } from "takumi-js";
+import { render } from "takumi-js";
 
 const card = <div>Hello Takumi</div>;
 
 const png = await render(card, { width: 1200, height: 630 });
-const svg = await renderSvg(card, { width: 1200, height: 630 }); // [!code highlight]
+const svg = await render(card, { width: 1200, height: 630, format: "svg" }); // [!code highlight]
+const markup = new TextDecoder().decode(svg);
 ```
 
 SVG is a vector format, so these raster options do not apply to it:
 
-- `format`
 - `quality`
 - `lossless`
 - `dithering`

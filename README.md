@@ -148,7 +148,7 @@ for (const node of tree.nodes) {
 
 | You are using                    | What changes                                                                                                                                                                                                   |
 | :------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `satori`                         | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/migration/satori).                                                      |
+| `satori`                         | Replace `satori()` with `render()` and `format: "svg"`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/migration/satori).                                     |
 | `next/og`                        | Swap the `ImageResponse` import. Keep explicit Flexbox styles and compare the rendered output. [Read the migration guide](https://takumi.kane.tw/docs/migration/satori#migrate-from-nextog).                   |
 | Puppeteer or Playwright for PDFs | Replace `page.pdf()` with `render()`. You must preload remote assets, and Takumi supports less CSS than Chrome. [Read the migration guide](https://takumi.kane.tw/docs/pdf/migration/puppeteer).               |
 | `@react-pdf/renderer`            | Replace `Document`, `View`, and `Text` with HTML elements and CSS. Browser viewers and some text controls have no equivalent. [Read the migration guide](https://takumi.kane.tw/docs/pdf/migration/react-pdf). |
@@ -227,14 +227,14 @@ await writeFile("./output.webp", animation);
 ### Vector SVG
 
 ```tsx
-import { renderSvg } from "takumi-js";
+import { render } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
-const svg = await renderSvg(
+const svg = await render(
   <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
     <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
   </div>,
-  { width: 1200, height: 630 },
+  { width: 1200, height: 630, format: "svg" },
 );
 
 await writeFile("./output.svg", svg);

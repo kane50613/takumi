@@ -9,12 +9,12 @@ All-in-one guide for rendering with Takumi. Built-in layout rules, advanced styl
 
 ## JS / TS API Reference
 
-### 1. Static Render (`render` & `renderSvg`)
+### 1. Static Render (`render`)
 
 Renders JSX templates, HTML strings, or JSON node trees to raster buffers (PNG/JPEG/WebP) or vector SVG markup.
 
 ```typescript
-import { render, renderSvg } from "takumi-js";
+import { render } from "takumi-js";
 
 // Renders dynamic JSX layout directly to PNG bytes
 const pngBuffer = await render(
@@ -29,12 +29,12 @@ const pngBuffer = await render(
   }
 );
 
-// Renders to responsive XML SVG string containing glyph path vector data
-const svgString = await renderSvg(
+// Renders to SVG markup, returned as UTF-8 bytes
+const svgBytes = await render(
   <div tw="w-full h-full bg-zinc-900">
     <span tw="text-white">Scalable Vector</span>
   </div>,
-  { width: 800, height: 400 }
+  { width: 800, height: 400, format: "svg" }
 );
 ```
 
