@@ -12,8 +12,6 @@ use takumi_core::{
   resources::font::{FontError, FontSource, RegisteredFamily},
 };
 
-use crate::register_embedded;
-
 /// A family as the registry matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
   family.chars().flat_map(char::to_lowercase).collect()
@@ -91,7 +89,8 @@ impl Clone for FontCache {
 }
 
 impl FontCache {
-  /// A cache keeping at most `max_bytes` of unpinned font data, unbounded without one.
+  /// A cache evicting unpinned font data past `max_bytes`, unbounded without one. The fonts an
+  /// admission adds stay even when they alone exceed it, and system fonts never count toward it.
   pub fn new(max_bytes: Option<u64>) -> Self {
     Self {
       max_bytes: max_bytes.unwrap_or(u64::MAX),
@@ -136,14 +135,12 @@ impl FontCache {
     registered: &[RegisteredFamily],
     bytes: u64,
     pinned: bool,
-  ) -> Result<(), FontError> {
+  ) {
     self.record(key, registered, bytes, pinned);
 
-    if pinned {
-      return Ok(());
+    if !pinned {
+      self.release_past_budget(fonts, registered);
     }
-
-    self.release_past_budget(fonts, registered)
   }
 
   /// Records what registering a font under `key` added to the registry, `bytes` of font data.
@@ -204,7 +201,9 @@ impl FontCache {
       },
     );
 
-    self.evict(fonts, &[], Some(url))
+    self.evict(fonts, &[], Some(url));
+
+    Ok(())
   }
 
   /// Marks `families` used now, as a render that names them starts.
@@ -219,26 +218,16 @@ impl FontCache {
   }
 
   /// Releases from `fonts` what the budget no longer fits, other than the families `kept`.
-  pub fn release_past_budget(
-    &mut self,
-    fonts: &mut Fonts,
-    kept: &[RegisteredFamily],
-  ) -> Result<(), FontError> {
+  pub fn release_past_budget(&mut self, fonts: &mut Fonts, kept: &[RegisteredFamily]) {
     let keep: Vec<String> = kept.iter().map(|family| fold(&family.name)).collect();
 
     self.evict(fonts, &keep, None)
   }
 
   /// Releases the least recently used unpinned families but `keep` from `fonts` until the rest fit
-  /// the budget, with every family the same registrations added. An embedded last-resort font
-  /// that goes with a family is registered again. Renders in progress keep the fonts they started
-  /// with.
-  fn evict(
-    &mut self,
-    fonts: &mut Fonts,
-    keep: &[String],
-    keep_file: Option<&str>,
-  ) -> Result<(), FontError> {
+  /// the budget, with every family the same registrations added. Renders in progress keep the
+  /// fonts they started with.
+  fn evict(&mut self, fonts: &mut Fonts, keep: &[String], keep_file: Option<&str>) {
     while self.unpinned_bytes() > self.max_bytes {
       let families = self
         .families
@@ -255,7 +244,7 @@ impl FontCache {
         .min_by_key(|(_, last_used)| last_used.get())
         .map(|(oldest, _)| oldest)
       else {
-        return Ok(());
+        return;
       };
       let oldest = match oldest {
         Oldest::Family(folded) => folded,
@@ -278,12 +267,9 @@ impl FontCache {
         }
 
         fonts.unregister_family(&family);
-        register_embedded(fonts, |name| fold(name) == family)?;
         self.forget(&family);
       }
     }
-
-    Ok(())
   }
 
   /// `family` and every family a registration that added to it also added.
@@ -374,9 +360,7 @@ mod tests {
     });
     let (registered, size) = register_resource(fonts, resource).unwrap();
 
-    cache
-      .admit(fonts, Some(key), &registered, size, pinned)
-      .unwrap();
+    cache.admit(fonts, Some(key), &registered, size, pinned);
 
     size
   }
@@ -439,7 +423,7 @@ mod tests {
   }
 
   #[test]
-  fn registers_the_embedded_font_again_after_releasing_its_family() {
+  fn keeps_the_embedded_font_after_releasing_its_family() {
     let (_, mut cache) = fitting(1);
     let mut fonts = default_fonts().unwrap();
 
@@ -448,8 +432,8 @@ mod tests {
 
     assert!(cache.lookup("Geist").is_none());
     assert!(
-      fonts.unregister_family("Geist"),
-      "the embedded Geist is back"
+      !fonts.unregister_family("Geist"),
+      "only the embedded Geist is left"
     );
   }
 

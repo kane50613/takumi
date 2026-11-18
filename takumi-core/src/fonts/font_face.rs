@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use harfrust::{Feature, font::Variation};
+use skrifa::raw::FileRef;
 
 use super::{
   font_custom_platform_data::{FontCustomPlatformData, FontPlatformData},
@@ -15,7 +16,7 @@ use super::{
     NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE, RangeType,
   },
 };
-use crate::resources::unicode_range::UnicodeRangeSet;
+use crate::resources::{font::SharedBytes, unicode_range::UnicodeRangeSet};
 
 /// The `@font-face` descriptors a face registers with; `None` is `auto`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -121,6 +122,32 @@ impl FontFace {
       source: FontFaceSource::Binary(custom_platform_data),
       css_connected: false,
     }
+  }
+
+  /// A face for each font of `data` that parses and has a family, under `descriptors`, reusing
+  /// the decoded font `typeface` gives for an index.
+  pub(crate) fn from_data(
+    data: &SharedBytes,
+    id: u64,
+    descriptors: &FontFaceDescriptors,
+    typeface: impl Fn(u32) -> Option<Arc<FontCustomPlatformData>>,
+  ) -> Vec<Self> {
+    let count = FileRef::new((**data).as_ref()).map_or(0, |file| file.fonts().count());
+
+    (0..count)
+      .filter_map(|index| u32::try_from(index).ok())
+      .filter_map(|index| {
+        let platform_data = typeface(index)
+          .or_else(|| FontCustomPlatformData::create(Arc::clone(data), id, index).map(Arc::new))?;
+        let family = descriptors
+          .family
+          .clone()
+          .or_else(|| platform_data.family_name_for_inspector().map(Arc::from))
+          .filter(|family| !family.is_empty())?;
+
+        Some(Self::new(family, descriptors.clone(), platform_data))
+      })
+      .collect()
   }
 
   /// A face of `family` with no data yet, which matching finds loading from `source`.

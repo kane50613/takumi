@@ -396,21 +396,19 @@ fn uncovered_characters_names_each_character_no_font_draws_once() {
   );
 }
 
-/// A family registered under the name of a last-resort font draws before it, and the last-resort
-/// font still draws what the family lacks.
+/// A family registered under the name of a system font draws before it, and the system font
+/// still draws what the family lacks.
 #[test]
 fn a_registered_family_draws_before_a_last_resort_font_of_its_name() {
-  let mut fonts = Fonts::default();
-
-  fonts
-    .register(
-      FontResource::new(read_font("geist/geist-latin-wght-300-800.ttf"))
-        .override_info(FontOverride {
+  let mut fonts =
+    Fonts::with_system_fonts([
+      FontResource::new(read_font("geist/geist-latin-wght-300-800.ttf")).override_info(
+        FontOverride {
           family_name: Some("Geist".into()),
           ..Default::default()
-        })
-        .last_resort(),
-    )
+        },
+      ),
+    ])
     .unwrap();
   register_subset(
     &mut fonts,

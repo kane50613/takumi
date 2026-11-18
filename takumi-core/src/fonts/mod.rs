@@ -25,3 +25,4 @@ pub(crate) mod shaping;
 pub(crate) mod simple_font_data;
 pub(crate) mod small_caps_iterator;
 pub(crate) mod symbols_iterator;
+pub(crate) mod system_fonts;

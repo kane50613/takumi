@@ -40,9 +40,7 @@ impl Task for LoadFontTask {
       if self.pinned {
         cache.record(self.key.as_deref(), &registered, bytes, true);
       } else {
-        cache
-          .admit(fonts, self.key.as_deref(), &registered, bytes, false)
-          .map_err(map_error)?;
+        cache.admit(fonts, self.key.as_deref(), &registered, bytes, false);
       }
 
       Ok(registered)
