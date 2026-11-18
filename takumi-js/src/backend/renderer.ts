@@ -1,5 +1,6 @@
 import { loadBackend } from "#backend";
 import { applyGlyphCacheMaxBytes } from "../glyph-cache";
+import { SharedLoad } from "./shared-load";
 import { initWasm } from "./wasm-init";
 import type { Backend, BackendModule, LoadBackend } from "./types";
 
@@ -7,7 +8,7 @@ export type Renderer = InstanceType<Backend["Renderer"]>;
 
 export class RendererProvider {
   private readonly load: LoadBackend;
-  private backend: Promise<Backend> | undefined;
+  private readonly backend = new SharedLoad<Backend>();
   private renderer: Renderer | undefined;
 
   constructor(load: LoadBackend) {
@@ -15,11 +16,7 @@ export class RendererProvider {
   }
 
   async get(module?: BackendModule): Promise<Renderer> {
-    this.backend ??= this.load(module).catch((error) => {
-      this.backend = undefined;
-      throw error;
-    });
-    const backend = await this.backend;
+    const backend = await this.backend.get(() => this.load(module));
     return (this.renderer ??= new backend.Renderer());
   }
 }

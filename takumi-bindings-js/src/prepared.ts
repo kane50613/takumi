@@ -236,6 +236,9 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   signal?.throwIfAborted();
 
   const resolvedFonts = await fonts;
+
+  signal?.throwIfAborted();
+
   const listed = resolvedFonts && registry.listed(resolvedFonts);
   const request: NeedsRequest = { fonts: listed, fontFamilies };
   let first: Promise<SourceNeeds> | undefined;
@@ -287,6 +290,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
         ...(await loadFontFiles(registry, missing, { ...fetchOptions, fetchCache, signal })),
       );
     }
+
+    signal?.throwIfAborted();
 
     const loadedListed = await registry.cache(uncached);
 

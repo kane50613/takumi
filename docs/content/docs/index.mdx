@@ -53,6 +53,24 @@ npm i takumi-js
 | Node.js, Bun                                      | native (`@takumi-rs/core`)      |
 | Cloudflare Workers, edge runtimes, Deno, browsers | WebAssembly (`@takumi-rs/wasm`) |
 
+### Use WebAssembly in Node.js
+
+Pass the WebAssembly binary as `module` to render on WebAssembly in Node.js and Bun too, such as when the native addon cannot ship with your server. Takumi then never loads the native addon.
+
+```ts twoslash title="Render on WebAssembly in Node.js"
+import { readFile } from "node:fs/promises";
+import { render } from "takumi-js";
+import wasmUrl from "takumi-js/wasm-url";
+
+const image = await render("<div>Hello</div>", {
+  width: 1200,
+  height: 630,
+  module: readFile(wasmUrl),
+});
+```
+
+The first call loads the binary, and later calls in the process reuse it, with or without `module`.
+
 ## Render an image
 
 `render` takes JSX and returns encoded image bytes. Save this as `image.tsx` and run `bun image.tsx`. In Node.js, compile the JSX first.
