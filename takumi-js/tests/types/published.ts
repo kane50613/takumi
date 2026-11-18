@@ -47,16 +47,29 @@ type ResolvesTo<Actual, Expected> =
           : false
       : false;
 
-/** The methods of `T` that return `any` or a promise of `any`. */
+/** The members of `T` typed `any`, and the methods that return `any` or a promise of `any`. */
 type AnyMethods<T> = {
-  [K in keyof T]: T[K] extends (...args: never[]) => infer Result
-    ? IsAny<Result> extends true
-      ? K
-      : IsAny<Awaited<Result>> extends true
+  [K in keyof T]: IsAny<T[K]> extends true
+    ? K
+    : T[K] extends (...args: never[]) => infer Result
+      ? IsAny<Result> extends true
         ? K
-        : never
-    : never;
+        : IsAny<Awaited<Result>> extends true
+          ? K
+          : never
+      : never;
 }[keyof T];
+
+/**
+ * What `render` of `R` returns for a prepared source and for a node, one per overload, since
+ * inferring from an overloaded method sees only its last signature.
+ */
+type RenderOverloads<R> = R extends {
+  render(source: infer _Prepared, options?: infer _PreparedOptions): infer FromPrepared;
+  render(source: infer _Node, options?: infer _NodeOptions): infer FromNode;
+}
+  ? [FromPrepared, FromNode]
+  : [never, never];
 
 /** `true` when every check in `Checks` holds, else the names of the ones that fail. */
 type Passes<Checks> = {
@@ -86,6 +99,8 @@ type RendererClass<R> = RenderFunctions<R> & {
   known: Known<R>;
   noMethodReturnsAny: [AnyMethods<R>] extends [never] ? true : false;
   prepare: ResolvesTo<ReturnOf<R, "prepare">, object>;
+  renderPrepared: ResolvesTo<RenderOverloads<R>[0], Uint8Array>;
+  renderNode: ResolvesTo<RenderOverloads<R>[1], Uint8Array>;
 };
 
 type WasmRendererClass<R> = RendererClass<R> & {
