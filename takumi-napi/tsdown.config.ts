@@ -4,8 +4,15 @@ import { defineConfig, type UserConfig } from "tsdown";
 const loaderOutputs = ["export.mjs", "export.cjs"];
 const patchedOutputs = new Set<string>();
 
-/** NAPI-RS's message for a missing binary, which blames an npm bug whatever the cause. */
-const npmBugMessage = /(["'`])Cannot find native binding\. npm has a bug.*?\1/;
+const stringLiteral = /"[^"\n]*"|'[^'\n]*'|`[^`]*`/.source;
+
+/**
+ * NAPI-RS's message for a missing binary, which blames an npm bug whatever the cause. Its template
+ * joins several literals with `+`, which the bundler may fold into one.
+ */
+const npmBugMessage = new RegExp(
+  `${/(?=["'`]Cannot find native binding\. )/.source}(?:${stringLiteral})(?:\\s*\\+\\s*(?:${stringLiteral}))*`,
+);
 
 const troubleshootingUrl = "https://takumi.kane.tw/docs/troubleshooting#cannot-find-native-binding";
 
@@ -16,14 +23,20 @@ const publishedTargets: string[] = JSON.parse(
 
 /**
  * The message the loader throws instead, naming the platform package it looked for. `isMusl` is
- * the generated loader's own libc check.
+ * the generated loader's own libc check, and the Windows ABI follows the loader's own choice.
  */
 const missingBindingMessage = `(() => {
+  const variables = process.config?.variables;
+  const windowsAbi =
+    process.arch === "x64" &&
+    (variables?.shlib_suffix === "dll.a" || variables?.node_target_type === "shared_library")
+      ? "gnu"
+      : "msvc";
   const target =
     process.platform === "linux"
       ? \`linux-\${process.arch}-\${isMusl() ? "musl" : "gnu"}\`
       : process.platform === "win32"
-        ? \`win32-\${process.arch}-msvc\`
+        ? \`win32-\${process.arch}-\${windowsAbi}\`
         : \`\${process.platform}-\${process.arch}\`;
 
   return ${JSON.stringify(publishedTargets)}.includes(target)
