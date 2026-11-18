@@ -11,7 +11,7 @@ rust-version = "1.91"
 [features]
 default = ["images", "svg", "font-face"]
 images = ["raster-images"]
-raster-images = ["dep:png", "dep:zune-jpeg", "dep:gif", "dep:image-webp", "dep:imagesize"]
+raster-images = ["dep:png", "dep:zune-jpeg", "dep:image-webp"]
 svg = ["takumi-core/svg"]
 # `@font-face` rules, whose files `needs` reports and `Fonts::load_font_file` takes.
 font-face = ["takumi-core/font-face"]
@@ -33,21 +33,12 @@ tiny-skia-path.workspace = true
 xmp-writer.workspace = true
 yoke.workspace = true
 
-[dependencies.gif]
-workspace = true
-optional = true
-
 [dependencies.icu_normalizer]
 workspace = true
 
 [dependencies.image-webp]
 workspace = true
 optional = true
-
-[dependencies.imagesize]
-workspace = true
-optional = true
-features = ["gif"]
 
 [dependencies.png]
 workspace = true
