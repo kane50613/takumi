@@ -12,7 +12,7 @@ use takumi_core::{
   style::{CaptionSide, Display, FlexDirection, ListStyleType},
 };
 
-use crate::krilla::tagging::{
+use crate::writer::tagging::{
   Identifier, ListNumbering, Node, TableHeaderScope, Tag, TagGroup, TagId, TagTree,
 };
 

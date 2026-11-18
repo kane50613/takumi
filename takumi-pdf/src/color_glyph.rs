@@ -1,4 +1,4 @@
-//! Draws the COLR glyphs takumi-core records onto a krilla surface.
+//! Draws the COLR glyphs takumi-core records onto a writer surface.
 
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
@@ -10,10 +10,10 @@ use takumi_core::resources::color_glyph::{
 };
 use tiny_skia_path::{Path, PathBuilder};
 
-use crate::krilla::{
+use crate::writer::{
   blend::BlendMode,
   color::rgb,
-  geom::{Path as KrillaPath, Transform},
+  geom::{Path as PdfPath, Transform},
   mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{Fill, FillRule, LinearGradient, RadialGradient, SpreadMethod, Stop, SweepGradient},
@@ -48,7 +48,7 @@ pub(crate) fn draw(
   Some(())
 }
 
-/// A [`ColorInstruction`] with its colors resolved into krilla fills.
+/// A [`ColorInstruction`] with its colors resolved into writer fills.
 enum Instruction {
   Layer(CompositeMode, Vec<Instruction>),
   Composite {
@@ -144,7 +144,7 @@ impl Colors<'_> {
           y2: p1.y,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: krilla_transform(transform),
+          transform: Transform::from_tsp(transform),
           anti_alias: false,
         }
         .into(),
@@ -168,13 +168,13 @@ impl Colors<'_> {
           cr: r1,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: krilla_transform(transform),
+          transform: Transform::from_tsp(transform),
           anti_alias: false,
         }
         .into(),
         NormalizedF32::ONE,
       ),
-      // krilla's sweep gradients turn the other way than COLR's, so the y-axis flips.
+      // The writer's sweep gradients turn the other way than COLR's, so the y-axis flips.
       ColorPaint::Sweep {
         center,
         start_angle,
@@ -190,7 +190,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: krilla_transform(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
+          transform: Transform::from_tsp(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
           anti_alias: false,
         }
         .into(),
@@ -204,17 +204,6 @@ impl Colors<'_> {
       rule: FillRule::default(),
     })
   }
-}
-
-fn krilla_transform(transform: tiny_skia_path::Transform) -> Transform {
-  Transform::from_row(
-    transform.sx,
-    transform.ky,
-    transform.kx,
-    transform.sy,
-    transform.tx,
-    transform.ty,
-  )
 }
 
 fn spread_method(extend: Extend) -> SpreadMethod {
@@ -269,7 +258,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         let clip_count = clips.len();
 
         for path in clips {
-          surface.push_clip_path(&KrillaPath(path), &FillRule::NonZero);
+          surface.push_clip_path(&PdfPath(path), &FillRule::NonZero);
         }
 
         let old_fill = surface.get_fill().cloned();
@@ -277,7 +266,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
 
         surface.set_fill(Some(*fill));
         surface.set_stroke(None);
-        surface.draw_path(&KrillaPath(filled));
+        surface.draw_path(&PdfPath(filled));
         surface.set_fill(old_fill);
         surface.set_stroke(old_stroke);
 

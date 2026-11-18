@@ -1,4 +1,4 @@
-//! Draws flattened SVG ops onto a krilla surface, leaving out a group's SVG filters.
+//! Draws flattened SVG ops onto a writer surface, leaving out a group's SVG filters.
 
 use takumi_core::{
   geometry::Point,
@@ -11,10 +11,12 @@ use takumi_core::{
 
 use crate::{
   filter::{ColorFilter, filtered},
-  krilla::{
+  paint::{bitmap_image, draw_stream, normalized, pdf_path},
+  raster::embedded_image,
+  writer::{
     color::rgb,
-    geom::{Size as KrillaSize, Transform},
-    image::Image as KrillaImage,
+    geom::{Size as PdfSize, Transform},
+    image::Image as PdfImage,
     mask::{Mask, MaskType},
     paint::{
       Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
@@ -22,8 +24,6 @@ use crate::{
     },
     surface::Surface,
   },
-  paint::{bitmap_image, draw_stream, krilla_path, normalized},
-  raster::embedded_image,
 };
 
 /// Draws SVG ops in the colors a CSS `filter` leaves them.
@@ -47,7 +47,7 @@ impl<'a> SvgPainter<'a> {
     for op in ops {
       match op {
         SvgOp::PushTransform(transform) => surface.push_transform(&transform.into()),
-        SvgOp::PushClip { path, evenodd, .. } => match krilla_path(&path, Point::ZERO) {
+        SvgOp::PushClip { path, evenodd, .. } => match pdf_path(&path, Point::ZERO) {
           Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
           // The matching `Pop` still comes; keep the layer stack balanced.
           None => surface.push_transform(&Transform::identity()),
@@ -71,7 +71,7 @@ impl<'a> SvgPainter<'a> {
         SvgOp::Draw {
           path, fill, stroke, ..
         } => {
-          let Some(path) = krilla_path(&path, Point::ZERO) else {
+          let Some(path) = pdf_path(&path, Point::ZERO) else {
             continue;
           };
           let fill = fill.map(|fill| self.fill(fill, surface));
@@ -87,7 +87,7 @@ impl<'a> SvgPainter<'a> {
           height,
           ..
         } => {
-          let Some(size) = KrillaSize::from_wh(width, height) else {
+          let Some(size) = PdfSize::from_wh(width, height) else {
             continue;
           };
           let Some(image) = self.image(&data) else {
@@ -101,7 +101,7 @@ impl<'a> SvgPainter<'a> {
   }
 
   /// An encoded bitmap embeds as it came, unless the filter recolors it or it does not embed.
-  fn image(&self, data: &SvgImageData) -> Option<KrillaImage> {
+  fn image(&self, data: &SvgImageData) -> Option<PdfImage> {
     if let (SvgImageData::Encoded(bytes), None) = (data, self.filter)
       && let Some(image) = embedded_image(bytes)
     {

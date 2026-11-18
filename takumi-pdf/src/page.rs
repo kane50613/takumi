@@ -22,19 +22,19 @@ use crate::{
   emitter::{DocumentState, Emitter},
   inline::{InlineCache, TextBox},
   interactive::{AnchorTarget, PageSummary, add_link_annotations, collect_links, xyz_destination},
-  krilla::{
-    Document,
-    destination::XyzDestination,
-    geom::{Point, Size as KrillaSize, Transform},
-    page::PageSettings,
-    surface::Surface,
-  },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   page_kinds::PerPage,
   pagination::{Counted, Counts, PageSlice, Paginated, Prepared, reads_layout, walk_pages},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
+  writer::{
+    Document,
+    destination::XyzDestination,
+    geom::{Point, Size as PdfSize, Transform},
+    page::PageSettings,
+    surface::Surface,
+  },
 };
 
 /// One page's geometry: everything derived from [`PageOptions`] and the measured band heights.
@@ -43,7 +43,7 @@ pub(crate) struct PageFrame {
   /// Page size in px.
   pub(crate) size: Size<f32>,
   /// Page size in pt, the unit pages are written in.
-  pub(crate) page_size: KrillaSize,
+  pub(crate) page_size: PdfSize,
   pub(crate) margin: Rect<f32>,
   pub(crate) content_width: f32,
   pub(crate) window_height: f32,
@@ -59,7 +59,7 @@ impl PageFrame {
     page: &PageOptions,
     (header_height, footer_height): (Option<f32>, Option<f32>),
   ) -> Result<Self, PdfError> {
-    let page_size = KrillaSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
+    let page_size = PdfSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
       .ok_or(PdfError::InvalidPageSize)?;
     let margin = page
       .margin

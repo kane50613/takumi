@@ -27,13 +27,13 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-  krilla::{
+  page_kinds::PerPage,
+  writer::{
     configure::{Accessibility, Archival},
     embed::{AssociationKind, EmbeddedFile, MimeType},
-    error::KrillaError,
+    error::WriterError,
     metadata::{DateTime, Metadata},
   },
-  page_kinds::PerPage,
 };
 
 /// Errors from [`crate::render`].
@@ -44,7 +44,7 @@ pub enum PdfError {
   /// Font data could not be interpreted.
   Font(FontError),
   /// PDF serialization failed.
-  Krilla(KrillaError),
+  Writer(WriterError),
   /// The computed page size is empty or non-finite.
   InvalidPageSize,
   /// Single-page output ([`PdfOptions::page`] unset) needs a viewport.
@@ -87,7 +87,7 @@ impl Display for PdfError {
     match self {
       Self::Render(error) => write!(f, "{error}"),
       Self::Font(error) => write!(f, "Font error: {error}"),
-      Self::Krilla(error) => write!(f, "Writing the PDF failed: {error}"),
+      Self::Writer(error) => write!(f, "Writing the PDF failed: {error}"),
       Self::InvalidPageSize => f.write_str("Page size must be finite and larger than zero"),
       Self::MissingViewport => {
         f.write_str("Single-page output needs a viewport. Pass `viewport` or `size`.")
@@ -138,7 +138,7 @@ impl Error for PdfError {
     match self {
       Self::Render(error) => Some(error),
       Self::Font(error) => Some(error),
-      Self::Krilla(error) => Some(error),
+      Self::Writer(error) => Some(error),
       _ => None,
     }
   }
@@ -613,7 +613,7 @@ pub struct Attachment {
 }
 
 impl Attachment {
-  /// The file as krilla embeds it, dated `fallback_date` when it carries no
+  /// The file as the writer embeds it, dated `fallback_date` when it carries no
   /// date of its own.
   pub(crate) fn embedded_file(
     self,
@@ -766,7 +766,7 @@ pub struct PdfDate {
 }
 
 impl PdfMetadata {
-  /// The metadata krilla writes, in document language `lang`, after checking
+  /// The metadata the writer writes, in document language `lang`, after checking
   /// the custom schemas can be written.
   pub(crate) fn metadata(&self, lang: Option<Lang>) -> Result<Metadata, PdfError> {
     let mut result = Metadata::new();

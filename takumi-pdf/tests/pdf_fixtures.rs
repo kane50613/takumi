@@ -4197,7 +4197,7 @@ fn uncovered_character_renders_under_an_uncovered_text_policy() {
 }
 
 /// The render names the standard itself, rather than failing as a generic
-/// write error once krilla validates the file.
+/// write error once the writer validates the file.
 #[test]
 fn a_forbidden_placeholder_names_the_standard() {
   let latin_only = latin_font();
@@ -4283,7 +4283,7 @@ fn an_uncovered_mark_survives_in_the_text_layer() {
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
 /// the file spec, association kind, and name tree all serialize, the
 /// modification date falls back to the metadata creation date, and a custom
-/// XMP fragment lands inside the packet krilla writes.
+/// XMP fragment lands inside the packet the writer writes.
 #[test]
 fn attachments() {
   let attachment = || Attachment {
@@ -4339,7 +4339,7 @@ fn attachments() {
     "custom property missing from the packet"
   );
   // A packet carries at most one schema bag, so the custom entry has to land in
-  // the one krilla writes: a second bag makes the whole packet unparseable.
+  // the one the writer writes: a second bag makes the whole packet unparseable.
   assert_eq!(
     packet.matches("<pdfaExtension:schemas>").count(),
     1,
@@ -4408,7 +4408,7 @@ fn attachments() {
   );
 
   assert!(
-    matches!(a2b, Err(PdfError::Krilla(_))),
+    matches!(a2b, Err(PdfError::Writer(_))),
     "A-2b must reject attachments"
   );
 
@@ -4434,7 +4434,7 @@ fn attachments() {
     );
 
     assert!(
-      matches!(incomplete, Err(PdfError::Krilla(_))),
+      matches!(incomplete, Err(PdfError::Writer(_))),
       "A-3b must require the field"
     );
   }
@@ -4450,7 +4450,7 @@ fn attachments() {
   );
 
   assert!(
-    matches!(dateless, Err(PdfError::Krilla(_))),
+    matches!(dateless, Err(PdfError::Writer(_))),
     "A-3b must require a date when the metadata fallback is absent"
   );
 }
@@ -5142,7 +5142,7 @@ fn inline_images() {
     <div style="display:block">Text before <img src="inline" alt="between words" style="width:20px;height:20px;opacity:0.5;" /> and after.</div>
   </main>"#;
   let pdf = run_pdf_fixture("inline-images", |fonts| {
-    // Distinct pixels: krilla dedups images by content, so one bitmap for both
+    // Distinct pixels: the writer dedups images by content, so one bitmap for both
     // would let a single painted box satisfy the assertion below.
     let wrapped = ImageBuffer::from_rgba_bytes(vec![64; 4 * 4 * 4], 4, 4).expect("image buffer");
     let inline = ImageBuffer::from_rgba_bytes(vec![192; 4 * 4 * 4], 4, 4).expect("image buffer");
