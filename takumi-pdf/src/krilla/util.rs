@@ -202,7 +202,7 @@ pub(crate) mod test_utils {
   use crate::krilla::Data;
 
   static FONT_PATH: LazyLock<PathBuf> =
-    LazyLock::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fonts"));
+    LazyLock::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/noto-sans"));
 
   macro_rules! lazy_font {
     ($name:ident, $path:expr) => {
