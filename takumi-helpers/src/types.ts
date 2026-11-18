@@ -115,7 +115,10 @@ export type ImageNode = NodeMetadata & {
   height?: number;
 };
 
-/** Whether a renderer keeps a kind of data for later renders. `"none"` keeps none of it. */
+/**
+ * Whether a renderer keeps data for later renders. `"none"` keeps none of it, though a render still
+ * uses what the renderer already holds.
+ */
 export type CacheMode = "auto" | "none";
 
 /** The memory a renderer keeps across renders, one pool of bytes every kind of data shares. */

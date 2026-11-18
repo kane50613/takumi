@@ -221,6 +221,34 @@ impl FontRegistrations {
     });
   }
 
+  /// Forgets the registrations under `keys` whose files no render leases and nothing pins, as a
+  /// font with `cache: "none"` asks once its render settles, unregistering their faces once no
+  /// other registration holds their file. Returns those keys and the keys nothing is under.
+  pub fn forget_unleased(
+    &mut self,
+    fonts: &mut Fonts,
+    cache: &Cache,
+    keys: &[String],
+  ) -> Vec<String> {
+    let mut forgotten = Vec::new();
+
+    for key in keys {
+      if let Some(registration) = self.by_key.get(key) {
+        if registration.pinned || cache.fonts().is_held(registration.id()) {
+          continue;
+        }
+
+        if let Some(registration) = self.by_key.remove(key) {
+          self.release_replaced(fonts, cache, &registration);
+        }
+      }
+
+      forgotten.push(key.clone());
+    }
+
+    forgotten
+  }
+
   /// `fonts` as a render whose `fonts` list names the registrations under `keys` sees them: their
   /// faces added again after every other face, a later key over an earlier one.
   pub fn listing(&self, fonts: &Arc<Fonts>, keys: &[String]) -> Arc<Fonts> {
@@ -525,6 +553,47 @@ mod tests {
     registrations.release(&mut fonts, &cache.fonts().take_evicted());
 
     assert!(registrations.families("k").is_none());
+    assert_eq!(cache.stats().fonts.current, 0);
+  }
+
+  #[test]
+  fn forgetting_unleased_keys_skips_a_leased_file() {
+    let cache = Cache::default();
+    let mut fonts = Fonts::default();
+    let mut registrations = FontRegistrations::default();
+
+    register(
+      &mut fonts,
+      &mut registrations,
+      &cache,
+      "free",
+      named("A", geist(0)),
+    );
+
+    let registered = load_resource(&mut fonts, FontResource::new(geist(1))).unwrap();
+    let (_, lease) = registrations.admit(
+      &mut fonts,
+      &cache,
+      Some("leased"),
+      registered,
+      Retention::Evictable,
+    );
+    let keys = ["free", "leased", "absent"].map(String::from);
+
+    assert_eq!(
+      registrations.forget_unleased(&mut fonts, &cache, &keys),
+      ["free", "absent"]
+    );
+    assert!(registrations.families("free").is_none());
+    assert!(!fonts.unregister_family("A"));
+    assert!(registrations.families("leased").is_some());
+
+    drop(lease);
+
+    assert_eq!(
+      registrations.forget_unleased(&mut fonts, &cache, &keys[1..2]),
+      ["leased"]
+    );
     assert_eq!(cache.stats().fonts.current, 0);
   }
 

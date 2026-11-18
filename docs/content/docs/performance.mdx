@@ -69,7 +69,7 @@ In [PR #2517](https://github.com/kane50613/takumi/pull/2517), mimalloc raised fo
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, use a bounded [fetch cache](/docs/caching#downloaded-image-bytes), since the renderer's decode cache does not replace a download cache.
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression, while TTF files skip that step. A reused renderer decodes a registered file once (see [Fonts in CI and offline renders](/docs/fonts#fonts-in-ci-and-offline-renders)). For repeated remote images, the [download store](/docs/caching#downloaded-bytes) keeps the bytes between renders.
 
 ## Reduce painting work
 

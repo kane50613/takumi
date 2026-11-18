@@ -50,7 +50,11 @@ function collectImageUrls(node: Node, urls: Set<string>) {
   }
 }
 
-/** Image fetches by URL, shared across renders to dedupe requests. Any `Map`-like object works. */
+/**
+ * Image fetches by URL, shared across renders to dedupe requests. Any `Map`-like object works.
+ *
+ * @deprecated A render without its own `fetch` keeps its downloads in a store the renderers share.
+ */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
   set(url: string, data: Promise<ArrayBuffer>): unknown;
@@ -70,7 +74,7 @@ export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = Fet
   node?: Node | Node[];
   /** Pre-fetched entries; their URLs are not re-fetched. */
   sources?: T[];
-  /** Single-flight byte cache shared across renders. */
+  /** @deprecated Use a renderer's `prepare`, which keeps downloads in a store the renderers share. */
   fetchCache?: ImageFetchCache;
   /** Throw on any fetch failure; if `false`, failed URLs are dropped. @default true */
   throwOnError?: boolean;

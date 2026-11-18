@@ -388,6 +388,15 @@ impl FontStore {
     self.release_evicted();
   }
 
+  /// Forgets the fonts registered under `keys` that no render leases; see
+  /// [`FontRegistrations::forget_unleased`].
+  pub fn drop_fonts(&self, keys: &[String]) -> Vec<String> {
+    self.release_evicted();
+    self
+      .update(|fonts, registrations| Ok(registrations.forget_unleased(fonts, &self.cache, keys)))
+      .unwrap_or_default()
+  }
+
   /// Gives the faces registered under `keys` precedence in their families, a later key over an
   /// earlier one, in every registry handed to a render from now on.
   pub fn order_fonts(&self, keys: &[String]) {

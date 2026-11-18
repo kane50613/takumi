@@ -1,94 +1,111 @@
-import { defaultMaxFetchBytes, type FetchOptions } from "../fetch";
+import { defaultMaxFetchBytes, fetchFollowed, type FetchOptions, readBodyLimited } from "../fetch";
 import { isEmojiImageUrl } from "../emoji";
 import type { FetchedImage, ImageFetchCache, PrepareImagesOptions } from "../images";
 import { fetchBytes } from "./bytes";
-import { BoundedCache, perFetch } from "./cache";
 import { FetchDeadline } from "./deadline";
+import { defaultStore, type MemoryStore } from "./store";
 
 /** Whether `value` is an `http:` or `https:` URL, the only kind fetched without a custom `fetch`. */
 export function isRemoteUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
-/** The most a shared emoji fetch downloads, whatever the caller allows; emoji SVGs run a few KB. */
-const maxSharedImageBytes = 1024 * 1024;
+/** The URL each download a `fetchCache` keeps came from after redirects. */
+const finalUrls = new WeakMap<Promise<ArrayBuffer>, string>();
 
-/** Emoji SVGs fetched without a `fetchCache`, which providers serve at stable URLs. */
-const emojiImageCache = perFetch(
-  () =>
-    new BoundedCache<ArrayBuffer>({
-      maxBytes: 8 * 1024 * 1024,
-      maxEntries: 1024,
-      sizeOf: (data) => data.byteLength,
-    }),
-);
-
-function withinMaxBytes(data: ArrayBuffer, maxBytes: number): ArrayBuffer {
-  if (data.byteLength > maxBytes) {
-    throw new Error(`Response exceeds ${maxBytes} bytes`);
-  }
-
-  return data;
-}
-
-/** Fetches `url` through a shared cache, so a caller's `signal` and `timeout` end only its own wait. */
-function fetchSharedImageData(
+/**
+ * Fetches `url` through a deprecated `fetchCache`, which keeps the pending download by URL. A kept
+ * download serves the request when its `allowUrl` accepts the URL the bytes came from, and a request
+ * it refuses fetches again without dropping it.
+ */
+async function fetchCached(
   url: string,
   options: FetchOptions,
-  cache: ImageFetchCache,
+  fetchCache: ImageFetchCache,
 ): Promise<ArrayBuffer> {
-  let pending = cache.get(url);
-
-  if (!pending) {
-    options.signal?.throwIfAborted();
-    pending = fetchBytes(url, { fetch: options.fetch, maxBytes: maxSharedImageBytes });
-    cache.set(url, pending);
+  if (options.allowUrl && !options.allowUrl(url)) {
+    throw new Error(`URL blocked by allowUrl policy: ${url}`);
   }
 
   const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+  const cached = fetchCache.get(url);
 
-  return new FetchDeadline(options).waitFor(pending).then((data) => withinMaxBytes(data, maxBytes));
-}
-
-function fetchImageData(
-  url: string,
-  options: FetchOptions,
-  fetchCache?: ImageFetchCache,
-): Promise<ArrayBuffer> {
-  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
-
-  const cached = fetchCache?.get(url);
   if (cached) {
-    return new FetchDeadline(options).waitFor(cached).then((data) => {
-      if (options.allowUrl && !options.allowUrl(url)) {
-        throw new Error(`URL blocked by allowUrl policy: ${url}`);
-      }
+    const data = await new FetchDeadline(options).waitFor(cached);
 
-      return withinMaxBytes(data, maxBytes);
-    });
+    if (options.allowUrl && !options.allowUrl(finalUrls.get(cached) ?? url)) {
+      return fetchBytes(url, options);
+    }
+
+    if (data.byteLength > maxBytes) {
+      throw new Error(`Response exceeds ${maxBytes} bytes`);
+    }
+
+    return data;
   }
 
-  const promise = fetchBytes(url, options).catch((error) => {
-    fetchCache?.delete(url);
-    throw error;
+  const download: Promise<ArrayBuffer> = fetchFollowed(url, options).then((followed) => {
+    finalUrls.set(download, followed.url);
+
+    return readBodyLimited(followed.response, maxBytes);
   });
 
-  fetchCache?.set(url, promise);
-  return promise;
+  fetchCache.set(url, download);
+
+  return download.catch((error) => {
+    fetchCache.delete(url);
+    throw error;
+  });
 }
 
-/** Fetches each of `urls` not already in `sources`, returning the entries with `sources` first. */
+/**
+ * The store that keeps `url`: `store` when the caller gives one, or else the default store for an
+ * emoji SVG, which providers serve at stable URLs.
+ */
+function storeFor(
+  url: string,
+  { store, fetch }: Pick<FetchImagesOptions, "store" | "fetch">,
+): MemoryStore | null {
+  if (store !== undefined) {
+    return store;
+  }
+
+  return isEmojiImageUrl(url) ? defaultStore(fetch ?? globalThis.fetch) : null;
+}
+
+/**
+ * How {@link fetchImages} fetches.
+ *
+ * @internal
+ */
+export type FetchImagesOptions<T extends { src: string } = FetchedImage> = Omit<
+  PrepareImagesOptions<T>,
+  "node"
+> & {
+  /**
+   * The store that keeps the downloaded bytes. `null` keeps none. Left out, emoji SVGs go to a
+   * store for each `fetch` function, 32 MiB at most, and other images to none.
+   */
+  store?: MemoryStore | null;
+};
+
+/**
+ * Fetches each of `urls` not already in `sources`, returning the entries with `sources` first.
+ *
+ * @internal
+ */
 export async function fetchImages<T extends { src: string } = FetchedImage>({
   urls = [],
   sources = [],
   fetchCache,
+  store,
   fetch,
   timeout,
   signal,
   maxBytes,
   allowUrl,
   throwOnError = true,
-}: Omit<PrepareImagesOptions<T>, "node">): Promise<(T | FetchedImage)[]> {
+}: FetchImagesOptions<T>): Promise<(T | FetchedImage)[]> {
   const provided = new Map(sources.map((image) => [image.src, image]));
   const missing = [...new Set(urls)].filter(
     (url) => !provided.has(url) && (fetch !== undefined || isRemoteUrl(url)),
@@ -97,10 +114,9 @@ export async function fetchImages<T extends { src: string } = FetchedImage>({
 
   const fetchImage = async (src: string): Promise<FetchedImage> => ({
     src,
-    data:
-      !fetchCache && !allowUrl && isEmojiImageUrl(src)
-        ? await fetchSharedImageData(src, fetchOptions, emojiImageCache(fetch ?? globalThis.fetch))
-        : await fetchImageData(src, fetchOptions, fetchCache),
+    data: fetchCache
+      ? await fetchCached(src, fetchOptions, fetchCache)
+      : await fetchBytes(src, { ...fetchOptions, store: storeFor(src, { store, fetch }) }),
   });
   // An emoji image never rejects the render. One that fails to fetch is left out.
   const emoji = fulfilled(missing.filter(isEmojiImageUrl).map(fetchImage));
