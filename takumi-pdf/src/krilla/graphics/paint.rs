@@ -262,7 +262,8 @@ pub enum LineCap {
   Butt,
   /// The round line cap.
   Round,
-  /// The square line cap.
+  /// The square line cap, which only SVG strokes ask for.
+  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
   Square,
 }
 
@@ -284,7 +285,8 @@ pub enum LineJoin {
   Miter,
   /// The round line join.
   Round,
-  /// The bevel line join.
+  /// The bevel line join, which only SVG strokes ask for.
+  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
   Bevel,
 }
 
