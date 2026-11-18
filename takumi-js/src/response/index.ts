@@ -74,6 +74,7 @@ function renderStream(element: RenderInput, options?: ImageResponseOptions) {
  * ```
  */
 export class ImageResponse extends Response {
+  /** Settles when the render succeeds or fails. The body streams, so await this to send a fallback on failure. */
   readonly ready: Promise<void>;
 
   constructor(component: RenderInput, options?: ImageResponseOptions) {
