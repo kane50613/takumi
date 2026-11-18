@@ -98,7 +98,8 @@ pub enum ColorPaint {
     /// The transform the gradient is defined under.
     transform: Transform,
   },
-  /// A gradient around `center`, in degrees counterclockwise from the positive x-axis.
+  /// A gradient around `center`, in degrees clockwise from the positive x-axis. skrifa swaps
+  /// COLR's counterclockwise angles, and may reverse the stops to do it.
   Sweep {
     /// The center.
     center: Point,

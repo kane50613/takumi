@@ -323,6 +323,8 @@ fn interpret_composite(
     CompositeMode::SrcIn => interpret_masked(source, backdrop, bounds, surface),
     CompositeMode::DestIn => interpret_masked(backdrop, source, bounds, surface),
     _ => {
+      // Approximate: `SrcOut`, `DestOut`, `SrcAtop`, `DestAtop`, `Xor`, `Plus`, and unknown modes
+      // have no PDF blend mode, so they draw as `SrcOver`, where Skia composites them exactly.
       let Some(blend) = blend_mode(mode) else {
         surface.push_isolated();
         interpret(backdrop, bounds, surface);
