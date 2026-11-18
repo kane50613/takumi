@@ -762,14 +762,16 @@ fn encode_stops_impl<'a>(
     let stops_max = min + length * stops[1].offset.get();
     // Write the if conditions to find the corresponding set of two stops.
 
-    let if_stops = bump.alloc(vec![]);
+    // `Bump` never drops what it holds, so each branch is built in a `Vec` and only its
+    // operations move into the arena.
+    let mut if_stops = vec![];
     if use_opacities {
       encode_two_stops(
         &[stops[0].opacity.get()],
         &[stops[1].opacity.get()],
         stops_min,
         stops_max,
-        if_stops,
+        &mut if_stops,
       )
     } else {
       encode_two_stops(
@@ -785,13 +787,21 @@ fn encode_stops_impl<'a>(
           .collect::<Vec<_>>(),
         stops_min,
         stops_max,
-        if_stops,
+        &mut if_stops,
       )
     };
-    let else_stops = bump.alloc(vec![]);
-    encode_stops_impl(&stops[1..], min, max, else_stops, bump, use_opacities);
+    let mut else_stops = vec![];
+    encode_stops_impl(&stops[1..], min, max, &mut else_stops, bump, use_opacities);
 
-    code.extend([Dup, Real(stops_max), Le, IfElse(if_stops, else_stops)]);
+    code.extend([
+      Dup,
+      Real(stops_max),
+      Le,
+      IfElse(
+        bump.alloc_slice_fill_iter(if_stops),
+        bump.alloc_slice_fill_iter(else_stops),
+      ),
+    ]);
   }
 }
 
