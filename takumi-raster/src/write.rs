@@ -194,8 +194,8 @@ impl Bitmap {
   }
 
   /// The pixels, row-major.
-  pub(crate) fn pixels(&self) -> impl Iterator<Item = &[u8; 4]> {
-    self.data.as_chunks().0.iter()
+  pub(crate) fn pixels(&self) -> &[[u8; 4]] {
+    self.data.as_chunks().0
   }
 
   /// The pixels with their coordinates, row-major.
@@ -205,6 +205,7 @@ impl Bitmap {
 
     self
       .pixels()
+      .iter()
       .enumerate()
       .map(move |(index, pixel)| (index as u32 % width, index as u32 / width, pixel))
   }

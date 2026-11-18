@@ -3,6 +3,8 @@
 //! The `style`, `tw` (Tailwind classes), `class`, `id`, `dir`, and `lang` attributes carry
 //! over. Elements get Chromium's default styles unless [`FromHtmlOptions`] sets other presets.
 //! `<style>` and `<script>` elements are dropped, so pass CSS to the renderer as a stylesheet.
+//! [`parse_html`] returns that CSS, along with each `<link rel="stylesheet">` for the host to
+//! fetch and the `<base>` URL to resolve it against.
 //!
 //! In the `takumi` crate, enable the `from-html` feature and call `takumi::from_html`.
 //!
@@ -34,7 +36,7 @@ use std::{
 use crate::resources::image::SvgSource;
 use crate::{
   form_control::InputType,
-  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
+  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind},
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::{
     Direction, FromCssStr, Lang, Length, Style, StyleDeclaration, StyleDeclarationBlock,
@@ -286,6 +288,9 @@ pub struct FromHtmlOptions {
   /// Defaults to [`MAXIMUM_DOM_TREE_DEPTH`].
   #[builder(default = MAXIMUM_DOM_TREE_DEPTH)]
   pub(crate) max_depth: usize,
+  /// Parses any source as a whole document, as a browser opens an HTML file. Off by default.
+  #[builder(default)]
+  pub(crate) document: bool,
 }
 
 impl Default for FromHtmlOptions {
@@ -313,18 +318,76 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   parse_html(source, options).map(|parsed| parsed.node)
 }
 
-/// A node tree and the CSS of its `<style>` elements.
+/// A node tree, the CSS of its `<style>` elements, and the style sheets it links.
 #[derive(Debug, Clone)]
 pub struct ParsedHtml {
   /// The node tree, as [`from_html`] returns it.
   pub node: Node,
-  /// The text of each CSS `<style>` element outside `<svg>` and `<math>`, in document order, inside an
-  /// `@media` rule when the element has a `media` attribute.
+  /// The [CSS](StyleElement::css) of each entry in [`styles`](Self::styles).
   pub css: Vec<String>,
+  /// Each non-empty `<style>` element the preferred style sheet set keeps, in document order.
+  pub styles: Vec<StyleElement>,
+  /// Each `<link rel="stylesheet">` the preferred style sheet set keeps, in document order.
+  pub links: Vec<StyleSheetLink>,
+  /// The `href` of the first `<base>` element that has one, which relative URLs resolve against.
+  pub base_href: Option<String>,
 }
 
-/// Parse HTML markup into a node tree and the CSS its `<style>` elements hold, as the JS
-/// `fromHtml` does. See [`from_html`].
+impl ParsedHtml {
+  /// Each [`css`](Self::css) entry and the text `fetch` loads for each link, in document order.
+  pub fn css_with_links(
+    &self,
+    mut fetch: impl FnMut(&StyleSheetLink) -> Option<String>,
+  ) -> Vec<String> {
+    let mut links = self.links.iter().peekable();
+    let mut css = Vec::with_capacity(self.css.len() + self.links.len());
+
+    for index in 0..=self.css.len() {
+      while let Some(link) = links.next_if(|link| link.css_index == index) {
+        if let Some(text) = fetch(link) {
+          css.push(in_media(link.media.as_deref(), text));
+        }
+      }
+
+      if let Some(text) = self.css.get(index) {
+        css.push(text.clone());
+      }
+    }
+
+    css
+  }
+}
+
+/// A CSS `<style>` element outside `<svg>` and `<math>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StyleElement {
+  /// The element's text.
+  pub text: String,
+  /// The `media` attribute, none when it is absent or empty.
+  pub media: Option<String>,
+}
+
+impl StyleElement {
+  /// The text, inside an `@media` rule when the element has a `media` attribute.
+  pub fn css(&self) -> String {
+    in_media(self.media.as_deref(), self.text.clone())
+  }
+}
+
+/// A `<link rel="stylesheet">`, which the document loads from `href`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StyleSheetLink {
+  /// The `href` as written, to resolve against [`ParsedHtml::base_href`] and the document's URL.
+  pub href: String,
+  /// The `media` attribute, none when it is absent or empty.
+  pub media: Option<String>,
+  /// How many [`ParsedHtml::css`] entries come before the link in document order.
+  pub css_index: usize,
+}
+
+/// Parse HTML markup into a node tree, its `<style>` elements, and the style sheets it links.
 pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, HtmlError> {
   // Decoding drops a leading byte order mark: https://encoding.spec.whatwg.org/#decode
   let source = source.strip_prefix('\u{feff}').unwrap_or(source);
@@ -333,60 +396,184 @@ pub fn parse_html(source: &str, options: FromHtmlOptions) -> Result<ParsedHtml, 
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
     max_depth: options.max_depth,
     styles: RefCell::default(),
+    names: Names::default(),
     disabling_fieldsets: Cell::new(0),
   };
-  let dom = markup::parse(source, is_document(source));
+  let dom = markup::parse(source, options.document || is_document(source));
   let mut nodes = Vec::new();
 
   builder.build_nodes(dom.document(), 0, &mut nodes)?;
 
-  Ok(ParsedHtml {
+  let mut parsed = ParsedHtml {
     node: collapse(nodes),
-    css: stylesheets(dom.document()),
-  })
+    css: Vec::new(),
+    styles: Vec::new(),
+    links: Vec::new(),
+    base_href: None,
+  };
+
+  parsed.read_style_sheets(dom.document());
+
+  Ok(parsed)
 }
 
-/// The non-empty text of every HTML `<style>` element with no type or `text/css` under `document`,
-/// in document order, inside an `@media` rule when the element has a `media` attribute.
-fn stylesheets(document: NodeRef<'_>) -> Vec<String> {
-  let mut css = Vec::new();
-  let mut pending: Vec<_> = document.children().rev().collect();
+impl ParsedHtml {
+  /// Reads the `<style>`, `<link rel="stylesheet">`, and `<base>` elements under `document`,
+  /// keeping the style sheets Blink's `CSSStyleSheet::CanBeActivated` would.
+  fn read_style_sheets(&mut self, document: NodeRef<'_>) {
+    let mut sheets = Vec::new();
+    let mut preferred_set: Option<&str> = None;
+    let mut pending: Vec<_> = document.children().rev().collect();
 
-  while let Some(node) = pending.pop() {
-    let NodeData::Element { name, .. } = node.data() else {
-      continue;
-    };
+    while let Some(node) = pending.pop() {
+      let NodeData::Element { name, .. } = node.data() else {
+        continue;
+      };
 
-    if name.ns == Namespace::Html && &*name.local == "style" {
-      if !node
-        .attribute("type")
-        .is_none_or(|kind| kind.is_empty() || kind.eq_ignore_ascii_case("text/css"))
-      {
+      if name.ns != Namespace::Html {
+        pending.extend(node.children().rev());
         continue;
       }
 
-      let text: String = node
-        .children()
-        .filter_map(|child| match child.data() {
-          NodeData::Text(text) => Some(&**text),
-          _ => None,
-        })
-        .collect();
+      let sheet = match &*name.local {
+        "style" => style_element(node).map(DocumentStyleSheet::Inline),
+        "link" => stylesheet_href(node).map(|href| {
+          DocumentStyleSheet::Link(StyleSheetLink {
+            href: href.to_owned(),
+            media: media_attribute(node).map(str::to_owned),
+            css_index: 0,
+          })
+        }),
+        "base" => {
+          if self.base_href.is_none() {
+            self.base_href = node.attribute("href").map(str::to_owned);
+          }
+          None
+        }
+        "meta" => {
+          if node
+            .attribute("http-equiv")
+            .is_some_and(|equiv| equiv.eq_ignore_ascii_case("default-style"))
+          {
+            preferred_set =
+              preferred_set.or(node.attribute("content").filter(|name| !name.is_empty()));
+          }
+          None
+        }
+        _ => {
+          pending.extend(node.children().rev());
+          None
+        }
+      };
 
-      if !text.is_empty() {
-        css.push(match node.attribute("media").map(str::trim) {
-          Some(media) if !media.is_empty() => format!("@media {media} {{{text}}}"),
-          _ => text,
-        });
+      if let Some(sheet) = sheet {
+        let title = node.attribute("title").filter(|title| !title.is_empty());
+        let is_alternate = &*name.local == "link" && has_rel(node, "alternate");
+
+        if !is_alternate {
+          preferred_set = preferred_set.or(title);
+        }
+        sheets.push((sheet, title, is_alternate));
       }
-
-      continue;
     }
 
-    pending.extend(node.children().rev());
+    for (sheet, title, is_alternate) in sheets {
+      let can_be_activated = match title {
+        Some(title) => preferred_set == Some(title),
+        None => !is_alternate,
+      };
+
+      if !can_be_activated {
+        continue;
+      }
+
+      match sheet {
+        DocumentStyleSheet::Inline(style) if style.text.is_empty() => {}
+        DocumentStyleSheet::Inline(style) => {
+          self.css.push(style.css());
+          self.styles.push(style);
+        }
+        DocumentStyleSheet::Link(link) => self.links.push(StyleSheetLink {
+          css_index: self.css.len(),
+          ..link
+        }),
+      }
+    }
+  }
+}
+
+/// A style sheet an element holds or links, before the document picks the ones it applies.
+enum DocumentStyleSheet {
+  Inline(StyleElement),
+  Link(StyleSheetLink),
+}
+
+/// A `<style>` element with no type or `text/css`. An empty one still takes part in picking the
+/// preferred style sheet set, as in Blink.
+fn style_element(style: NodeRef<'_>) -> Option<StyleElement> {
+  if !is_css_type(style.attribute("type")) {
+    return None;
   }
 
-  css
+  let text: String = style
+    .children()
+    .filter_map(|child| match child.data() {
+      NodeData::Text(text) => Some(&**text),
+      _ => None,
+    })
+    .collect();
+
+  Some(StyleElement {
+    text,
+    media: media_attribute(style).map(str::to_owned),
+  })
+}
+
+/// The `href` a `<link>` loads a style sheet from, as Blink's
+/// `LinkStyle::LoadStylesheetIfNeeded` gates it: a `stylesheet` relation, not `disabled`, and of
+/// no type or `text/css` apart from its parameters.
+fn stylesheet_href(link: NodeRef<'_>) -> Option<&str> {
+  let essence = link
+    .attribute("type")
+    .map(|kind| kind.split(';').next().unwrap_or_default().trim());
+
+  if !has_rel(link, "stylesheet") || link.attribute("disabled").is_some() || !is_css_type(essence) {
+    return None;
+  }
+
+  link
+    .attribute("href")
+    .filter(|href| !href.trim().is_empty())
+}
+
+/// Whether the element's `rel` attribute holds `token`, in any case.
+fn has_rel(element: NodeRef<'_>, token: &str) -> bool {
+  element.attribute("rel").is_some_and(|rel| {
+    rel
+      .split_ascii_whitespace()
+      .any(|word| word.eq_ignore_ascii_case(token))
+  })
+}
+
+/// Whether a `type` attribute names CSS: absent, empty, or `text/css` in any case.
+fn is_css_type(kind: Option<&str>) -> bool {
+  kind.is_none_or(|kind| kind.is_empty() || kind.eq_ignore_ascii_case("text/css"))
+}
+
+/// The trimmed `media` attribute, none when it is absent or empty.
+fn media_attribute(element: NodeRef<'_>) -> Option<&str> {
+  element
+    .attribute("media")
+    .map(str::trim)
+    .filter(|media| !media.is_empty())
+}
+
+/// `css` inside an `@media` rule for `media`, or as it is without one.
+fn in_media(media: Option<&str>, css: String) -> String {
+  match media {
+    Some(media) => format!("@media {media} {{{css}}}"),
+    None => css,
+  }
 }
 
 /// Whether the source opens with a doctype or an `<html>` tag, after white space and comments.
@@ -460,6 +647,8 @@ struct NodeBuilder<'a> {
   max_depth: usize,
   /// Parsed `style` attributes, by source text.
   styles: RefCell<HashMap<Box<str>, Style>>,
+  /// The element and attribute names built so far.
+  names: Names,
   /// How many `<fieldset disabled>` hold the element being built outside their first `<legend>`.
   disabling_fieldsets: Cell<usize>,
 }
@@ -623,7 +812,7 @@ impl NodeBuilder<'_> {
   }
 
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
-    node = node.with_tag_name(tag);
+    node = node.with_tag_name(self.names.get(tag));
 
     let mut preset = if matches!(tag, "input" | "textarea") {
       self.form_control_preset(handle, tag)
@@ -690,13 +879,13 @@ impl NodeBuilder<'_> {
         // Consumed above; keep out of the passthrough attributes.
         _ if name == self.tw_property => {}
         _ => {
-          attributes.insert(name.into(), value.into());
+          attributes.insert(self.names.get(name), value.into());
         }
       }
     }
 
     if !attributes.is_empty() {
-      node = node.with_attributes(attributes);
+      node = node.with_named_attributes(attributes);
     }
 
     node
@@ -734,9 +923,9 @@ impl NodeBuilder<'_> {
     Ok(match handle.data() {
       NodeData::Text(contents) => Some(Node::text(contents.clone())),
       NodeData::Element { name, attrs, .. } => {
-        let attributes: BTreeMap<Box<str>, Box<str>> = attrs
+        let attributes = attrs
           .iter()
-          .map(|attr| (qualified_name(attr), attr.value.clone()))
+          .map(|attr| (self.names.get(&qualified_name(attr)), attr.value.clone()))
           .collect();
         let mut children = Vec::new();
 
@@ -746,8 +935,8 @@ impl NodeBuilder<'_> {
 
         Some(
           Node::container(children)
-            .with_tag_name(&*name.local)
-            .with_attributes(attributes),
+            .with_tag_name(self.names.get(&name.local))
+            .with_named_attributes(attributes),
         )
       }
       _ => None,
@@ -841,7 +1030,7 @@ fn pixels(handle: NodeRef<'_>, tag: &str, name: &str) -> Option<f32> {
 /// An attribute's name as SVG markup writes it, its namespace prefix included, as fragment
 /// serialization names it. <https://html.spec.whatwg.org/multipage/parsing.html#attribute's-serialized-name>
 #[cfg(feature = "html-svg-nodes")]
-fn qualified_name(attr: &Attribute) -> Box<str> {
+fn qualified_name(attr: &Attribute) -> Cow<'_, str> {
   let local = &*attr.local;
 
   match attr.ns {
@@ -1000,6 +1189,22 @@ mod tests {
     assert_eq!(parse("<div>hi</div>").tag_name(), Some("div"));
     assert_eq!(parse("<body><div>hi</div></body>").tag_name(), Some("div"));
     assert_eq!(parse("text <html> in content").tag_name(), None);
+  }
+
+  #[test]
+  fn the_document_option_wraps_a_fragment_in_html_and_body() {
+    let options = FromHtmlOptions::builder().document(true).build();
+    let node = parse_html("<style>p{}</style><p>hi</p>", options)
+      .unwrap()
+      .node;
+
+    assert_eq!(node.tag_name(), Some("html"));
+    let html = node.to_html();
+
+    assert!(
+      html.contains("<body ") && html.contains(">hi</p></body>"),
+      "{html}"
+    );
   }
 
   /// Tag names are ASCII case-insensitive, so a document is a document however
@@ -1209,6 +1414,14 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["@media print {a{}}", "b{}"]);
+    assert_eq!(
+      parsed
+        .styles
+        .iter()
+        .map(|style| (&*style.text, style.media.as_deref()))
+        .collect::<Vec<_>>(),
+      [("a{}", Some("print")), ("b{}", None)]
+    );
   }
 
   #[test]
@@ -1231,6 +1444,105 @@ mod tests {
     .unwrap();
 
     assert_eq!(parsed.css, ["b{}", "c{}"]);
+  }
+
+  #[test]
+  fn stylesheet_links_keep_their_place_among_the_style_elements() {
+    let parsed = parse_html(
+      r#"<!doctype html><head><link rel="stylesheet" href="a.css"><style>b{}</style><link rel="Preload StyleSheet" href="c.css" media=" print "></head><body><style>d{}</style><link rel=stylesheet href="e.css"></body>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+    let css =
+      parsed.css_with_links(|link| (link.href != "c.css").then(|| format!("{}{{}}", link.href)));
+
+    assert_eq!(
+      parsed
+        .links
+        .iter()
+        .map(|link| (&*link.href, link.media.as_deref(), link.css_index))
+        .collect::<Vec<_>>(),
+      [
+        ("a.css", None, 0),
+        ("c.css", Some("print"), 1),
+        ("e.css", None, 2)
+      ]
+    );
+    assert_eq!(css, ["a.css{}", "b{}", "d{}", "e.css{}"]);
+    assert_eq!(
+      parsed.css_with_links(|link| Some(link.href.clone()))[2],
+      "@media print {c.css}"
+    );
+  }
+
+  #[test]
+  fn a_link_that_loads_no_style_sheet_is_left_out() {
+    let parsed = parse_html(
+      r#"<link rel="icon" href="a.css"><link rel="alternate stylesheet" href="b.css"><link rel="stylesheet" href="c.css" disabled><link rel="stylesheet" href="d.css" type="text/less"><link rel="stylesheet" href=" "><link rel="stylesheet"><link rel="stylesheet" href="e.css" type=" TEXT/CSS; charset=utf-8">"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(
+      parsed
+        .links
+        .iter()
+        .map(|link| &*link.href)
+        .collect::<Vec<_>>(),
+      ["e.css"]
+    );
+  }
+
+  #[test]
+  fn only_the_preferred_style_sheet_set_applies() {
+    let parsed = parse_html(
+      r#"<style>a{}</style><style title="dark">b{}</style><style title="light">c{}</style><link rel="alternate stylesheet" title="dark" href="d.css"><link rel="alternate stylesheet" title="light" href="e.css"><link rel="stylesheet" title="light" href="f.css">"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["a{}", "b{}"]);
+    assert_eq!(
+      parsed
+        .links
+        .iter()
+        .map(|link| &*link.href)
+        .collect::<Vec<_>>(),
+      ["d.css"]
+    );
+  }
+
+  #[test]
+  fn an_empty_titled_style_still_picks_the_style_sheet_set() {
+    let parsed = parse_html(
+      r#"<style title="dark"></style><style title="light">a{}</style><style>b{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}"]);
+  }
+
+  #[test]
+  fn a_default_style_meta_picks_the_style_sheet_set() {
+    let parsed = parse_html(
+      r#"<meta http-equiv="Default-Style" content="light"><style title="dark">a{}</style><style title="light">b{}</style>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.css, ["b{}"]);
+  }
+
+  #[test]
+  fn the_first_base_with_an_href_sets_the_base() {
+    let parsed = parse_html(
+      r#"<!doctype html><head><base target="_top"><base href="https://example.com/a/"><base href="/b/"></head>"#,
+      FromHtmlOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.base_href.as_deref(), Some("https://example.com/a/"));
   }
 
   #[test]

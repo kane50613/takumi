@@ -423,9 +423,23 @@ fn recover<'i, T>(
 ) -> impl Iterator<Item = Result<T, ParseError<StyleSheetParseError>>> {
   items.filter_map(move |item| match item {
     Ok(item) => Some(Ok(item)),
-    Err(_) if lossy => None,
+    Err((_, source, location)) if lossy => {
+      log_ignored(source, location);
+      None
+    }
     Err((error, ..)) => Some(Err(error)),
   })
+}
+
+/// Logs the CSS a lossy parse dropped, `source` cut to its first line.
+pub(crate) fn log_ignored(source: &str, location: SourceLocation) {
+  log::debug!(
+    target: "takumi::style",
+    "ignored `{}` at line {}, column {} of its style sheet or `style` attribute",
+    source.trim().lines().next().unwrap_or_default(),
+    location.line + 1,
+    location.column
+  );
 }
 
 macro_rules! impl_parser_traits {
@@ -1632,7 +1646,7 @@ impl StyleSheet {
     for parsed in StyleSheetParser::new(&mut parser, &mut rule_parser) {
       match parsed {
         Ok(parsed) => fragment.extend(parsed),
-        Err(_) if lossy => {}
+        Err((_, source, location)) if lossy => log_ignored(source, location),
         Err((error, context, _)) => {
           return Err(StyleSheetParseError::from_parse_error(context, error));
         }

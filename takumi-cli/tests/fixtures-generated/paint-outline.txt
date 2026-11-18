@@ -1,0 +1,31 @@
+canvas 300x100
+box html 0,0 300x100
+  box body 0,0 300x100
+    box div#card 0,0 300x100 background #0f172a clips-overflow
+      - fill background rect 0,0 300x100 #0f172a
+      box h1.title.big 0,21.44 300x41
+        text h1.title.big 0,21.44 300x41 "Hello" Geist 700 32px #ffffff
+          - glyphs text #ffffff "Hello" at 0,32 line 0 Geist 700 32px
+      box div.ghost 900,0 20x20 background #ff0000 offscreen past the right edge
+        - fill background rect 0,0 20x20 #ff0000
+      box p 0,83.88 300x0 empty
+      box (anonymous) 0,83.88 300x21
+        text (anonymous) 0,83.88 300x21 "shown" Geist 16px #ffffff
+          - glyphs text #ffffff "shown" at 0,16 line 0 Geist 16px
+        box p.unseen 0,0 53.41x21
+          text p.unseen 0,0 53.41x21 "unseen" Geist 16px draws nothing
+not painted
+  section opacity: 0
+  em opacity: 0
+paint order
+  0 draw box div#card
+  1 begin clip box div#card
+  2 end clip box div#card
+  3 begin clip box div#card
+  4 draw text h1.title.big
+  5 draw text (anonymous)
+  6 end clip box div#card
+  7 draw box div.ghost
+  8 draw text p.unseen
+  9 begin clip box div#card
+  10 end clip box div#card

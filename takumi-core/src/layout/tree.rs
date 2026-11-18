@@ -289,6 +289,9 @@ pub struct LayoutTree<'r> {
   runs: u32,
   #[cfg(feature = "fragmentation")]
   running: Vec<PlacedBy>,
+  /// How many measures or provisional layouts run now, whose placements no page shows.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) provisional: usize,
   /// The layout styles the latest table parts took, which an equal part's shares.
   table_part_styles: RecentStyles<LayoutStyle>,
   /// The node each atomic inline, float, list marker, and block-in-inline of an inline formatting
@@ -388,7 +391,7 @@ pub(crate) struct LayoutNodeState {
   pub(crate) layout_style: Rc<LayoutStyle>,
   /// Whether the styles are the same whatever query container they resolve against, so repeated
   /// layouts can reuse them.
-  container_independent: bool,
+  pub(crate) container_independent: bool,
   pub(crate) cache: LayoutCache,
   /// Blink's `LayoutBox::layout_results_`: where each of its fragments went, by fragment index.
   pub(crate) fragments: Fragments,
@@ -622,12 +625,19 @@ impl<T> Default for RecentStyles<T> {
 }
 
 impl<T: PartialEq> RecentStyles<T> {
-  const LEN: usize = 8;
+  const LEN: usize = 32;
 
   /// `style`, or an equal one a recent node laid out with.
   fn share(&mut self, style: T) -> Rc<T> {
-    if let Some(shared) = self.0.iter().find(|shared| ***shared == style) {
-      return Rc::clone(shared);
+    // A hit moves to the back, so a style every row repeats stays while rarer ones age out.
+    if let Some(shared) = self
+      .0
+      .iter()
+      .position(|shared| **shared == style)
+      .and_then(|index| self.0.remove(index))
+    {
+      self.0.push_back(Rc::clone(&shared));
+      return shared;
     }
 
     let style = Rc::new(style);
@@ -709,6 +719,9 @@ pub struct RenderNode {
   /// Whether it is a flex or grid item, which does not float whatever its `float`, as Blink's
   /// `IsInsideDisplayIgnoringFloatingChildren` has it.
   pub(crate) is_flex_or_grid_item: bool,
+  /// Whether it is a run of text and no element's box, so a flex or grid container wraps it and
+  /// the runs beside it in one anonymous item.
+  pub(crate) is_text_run: bool,
   /// The part it plays in a text control, if any.
   pub(crate) text_control: Option<TextControlBox>,
   /// The fragment items its inline content last laid out to.
@@ -899,7 +912,9 @@ impl LayoutTree<'_> {
     let holder = (0..self.running.len())
       .filter_map(|index| Some((running(index)?, running(index + 1).unwrap_or(node))))
       .find(|&(container, child)| {
-        container != node && self.relays_out_ended_child(container, child)
+        container != node
+          && self.relays_out_ended_child(container, child)
+          && (child == node || self.relays_out_ended_descendants(container))
       })
       .map(|(container, _)| container);
 
@@ -939,6 +954,9 @@ impl LayoutTree<'_> {
     let Some(releases) = &self.releases else {
       return;
     };
+    if self.provisional > 0 {
+      return;
+    }
 
     self.nodes[usize::from(node)].ended_by = NonZeroUsize::new(releases.laid()).filter(|_| ends);
     if ends {
@@ -1062,6 +1080,8 @@ impl<'r> LayoutTree<'r> {
       runs: 0,
       #[cfg(feature = "fragmentation")]
       running: Vec::new(),
+      #[cfg(feature = "fragmentation")]
+      provisional: 0,
       table_part_styles: RecentStyles::default(),
       atomic_inlines: FxHashMap::default(),
       inline_contents: FxHashMap::default(),
@@ -1825,7 +1845,7 @@ impl RenderNode {
 
   /// Blink's `DependsOnPercentageBlockSize` of the box's fragment laid out with `style`: its block
   /// size resolves a percentage, or the content of an inline or anonymous box does.
-  fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
+  pub(crate) fn depends_on_percentage_block_size(&self, style: &LayoutStyle) -> bool {
     if self.is_inline_span() {
       return self.has_descendant_that_depends_on_percentage_block_size();
     }
@@ -1880,6 +1900,7 @@ impl RenderNode {
       is_block_in_inline: false,
       is_root_element: false,
       is_flex_or_grid_item: false,
+      is_text_run: false,
       text_control: None,
       fragment_items: FragmentItemsCache::default(),
       item_shapes: ItemShapes::default(),
@@ -1977,6 +1998,7 @@ impl RenderNode {
 
     item.anonymous_text_content = Some(text);
     item.force_inline_layout = true;
+    item.is_text_run = true;
     item
   }
 
@@ -2107,7 +2129,7 @@ impl RenderNode {
     pseudo: PendingPseudo,
     originating_node: &Node,
     counters: &mut CountersAttachmentContext,
-  ) -> Self {
+  ) -> Box<[Self]> {
     let PendingPseudo {
       context: mut pseudo_context,
       items,
@@ -2119,6 +2141,10 @@ impl RenderNode {
       Self::pseudo_content_children(originating_node, &pseudo_context, items, counters);
 
     counters.leave_object(&pseudo_context.style, ListItemCounter::None);
+
+    if pseudo_context.style.base_data.display == Display::Contents {
+      return children;
+    }
 
     // A flex or grid pseudo-element lays its content out as items, as a table one fixes up its
     // parts.
@@ -2132,12 +2158,12 @@ impl RenderNode {
       children = Self::normalize_children(&mut pseudo_context, children, false);
     }
 
-    Self::new(
+    Box::from([Self::new(
       pseudo_context,
       NodeOrigin::Pseudo,
       Some(Node::container([])),
       Some(children),
-    )
+    )])
   }
 
   /// The marker as the item's first child, as Blink's `::marker` is.
@@ -2408,6 +2434,10 @@ impl RenderNode {
       true,
     )];
 
+    if let Some(root) = stack.first_mut() {
+      root.make_root_element();
+    }
+
     loop {
       let at_root = stack.len() == 1;
       let Some(current) = stack.last_mut() else {
@@ -2415,20 +2445,24 @@ impl RenderNode {
       };
 
       if let Some(child) = current.pending_children.next() {
-        let child_pending = PendingRenderNode::build(
+        let display = current.context.style.base_data.display;
+        let mut child_pending = PendingRenderNode::build(
           &current.context,
           child,
           &mut walk,
           &mut current.list_ordinals,
           current.inside_list,
           (root_blockifies_children && at_root)
-            || current
-              .context
-              .style
-              .base_data
-              .display
-              .should_blockify_children(),
+            || if display == Display::Contents {
+              current.blockifies
+            } else {
+              display.should_blockify_children()
+            },
         );
+
+        if root_blockifies_children && at_root {
+          child_pending.make_root_element();
+        }
 
         // Blink's `Element::LayoutObjectIsNeeded`: a `display: none` element gets no box, so its
         // descendants are never styled or counted, though their source order is still passed.
@@ -2458,13 +2492,16 @@ impl RenderNode {
         parent.list_ordinals = finished.list_ordinals;
       }
 
-      let render_node = finished.finish(&mut walk.counters);
+      let boxes = finished.finish(&mut walk.counters);
 
       let Some(parent) = stack.last_mut() else {
-        return render_node;
+        return boxes
+          .into_iter()
+          .next()
+          .unwrap_or_else(|| RenderNode::empty(parent_context));
       };
 
-      parent.rendered_children.push(render_node);
+      parent.rendered_children.extend(boxes);
     }
   }
 
@@ -2484,6 +2521,27 @@ impl RenderNode {
     blockifies: bool,
   ) -> Box<[RenderNode]> {
     let makes_items = context.style.base_data.display.should_blockify_children();
+
+    // CSS Flexbox L1 §4 and Grid L1 §6: each contiguous sequence of child text runs is one
+    // anonymous item. Only `display: contents` leaves runs beside each other.
+    if makes_items {
+      children = wrap_runs(
+        children,
+        |child| child.is_text_run,
+        |run| {
+          if run.len() == 1 {
+            run
+          } else if run
+            .iter()
+            .all(RenderNode::is_collapsible_whitespace_only_text_node)
+          {
+            Vec::new()
+          } else {
+            vec![RenderNode::anonymous_block_container(context, run)]
+          }
+        },
+      );
+    }
 
     for child in &mut children {
       child.is_flex_or_grid_item = makes_items;
@@ -2564,7 +2622,7 @@ impl RenderNode {
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
-  pub(super) fn padding_px(&self) -> Rect<f32> {
+  pub(crate) fn padding_px(&self) -> Rect<f32> {
     self.padding_px_against(0.0)
   }
 
@@ -2578,7 +2636,12 @@ impl RenderNode {
       bottom: style.box_data.padding_bottom,
       left: style.box_data.padding_left,
     }
-    .map(|length| length.to_px(&self.context.sizing, containing_block_width))
+    // Blink's `MinimumValueForLength`.
+    .map(|length| {
+      length
+        .to_px(&self.context.sizing, containing_block_width)
+        .max(0.0)
+    })
   }
 
   /// The child-index path to `node` in this tree, `self` included.
@@ -2620,7 +2683,7 @@ impl RenderNode {
   }
 
   /// Used border widths in pixels.
-  pub(super) fn border_px(&self) -> Rect<f32> {
+  pub(crate) fn border_px(&self) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
@@ -2767,9 +2830,18 @@ struct PendingRenderNode {
   owns_list_ordinals: bool,
   /// Whether its parent blockifies it, as a flex or grid item or the tree's root.
   blockifies: bool,
+  is_text_run: bool,
 }
 
 impl PendingRenderNode {
+  /// Blink's `AdjustStyleForDisplay` for the document element, whose `display: contents` computes
+  /// to `block`.
+  fn make_root_element(&mut self) {
+    if self.context.style.base_data.display == Display::Contents {
+      self.context.blockify();
+    }
+  }
+
   fn build(
     parent_context: &RenderContext,
     mut node: Node,
@@ -2779,6 +2851,8 @@ impl PendingRenderNode {
     blockifies: bool,
   ) -> Self {
     let source_order = walk.source_cursor;
+    let is_text_run = node.is_text_run();
+
     walk.source_cursor += 1;
     let (style, sizing, current_color) =
       parent_context.resolve_child_style(&mut node, source_order, walk.matched_declarations);
@@ -2793,7 +2867,11 @@ impl PendingRenderNode {
     let children = node.take_children();
     let children_is_some = children.is_some();
     let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
-    let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+    let mut context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+    if context.style.base_data.display == Display::Contents && !node.unboxes() {
+      context.style_mut().base_data_mut().display = Display::None;
+    }
 
     let display = context.style.base_data.display;
     let marker_ordinal =
@@ -2831,7 +2909,7 @@ impl PendingRenderNode {
     let has_generated_children =
       marker_ordinal.is_some() || pseudo_before.is_some() || pseudo_after.is_some();
     let mut rendered_children = Vec::with_capacity(children.len() + 3);
-    rendered_children.extend(pseudo_before);
+    rendered_children.extend(pseudo_before.into_iter().flatten());
 
     // As Blink's `CanHaveWhitespaceChildren` does, a flex or grid container drops white-space-only
     // text that no text precedes, whatever its `white-space`. The element's own text comes first.
@@ -2854,6 +2932,7 @@ impl PendingRenderNode {
       inside_list: inside_list || is_list_owner(&node, &context.style),
       owns_list_ordinals,
       blockifies,
+      is_text_run,
       context,
       node,
       rendered_children,
@@ -2864,8 +2943,9 @@ impl PendingRenderNode {
     }
   }
 
-  /// Closes the node once every child is rendered, leaving it in `counters`.
-  fn finish(mut self, counters: &mut CountersAttachmentContext) -> RenderNode {
+  /// Closes the node once every child is rendered, leaving it in `counters`. It gives the boxes
+  /// that take its place in its parent: itself, or its children when it is `display: contents`.
+  fn finish(mut self, counters: &mut CountersAttachmentContext) -> Vec<RenderNode> {
     let control = TextControl::of(&self.node);
 
     if control.is_none()
@@ -2873,15 +2953,19 @@ impl PendingRenderNode {
     {
       self
         .rendered_children
-        .push(RenderNode::from_pseudo(after, &self.node, counters));
+        .extend(RenderNode::from_pseudo(after, &self.node, counters));
     }
 
     if let Some(list_item) = self.entered_counters {
       counters.leave_object(&self.context.style, list_item);
     }
 
+    if self.context.style.base_data.display == Display::Contents {
+      return self.finish_contents();
+    }
+
     if let Some(control) = control {
-      return self.finish_text_control(control);
+      return vec![self.finish_text_control(control)];
     }
 
     // Text a table part holds itself goes into an anonymous child, as a run of text would. White
@@ -2915,13 +2999,27 @@ impl PendingRenderNode {
       children,
     );
 
+    render_node.is_text_run = self.is_text_run;
+
     if let Some(ordinal) = self.marker_ordinal
       && let Some(marker) = list_marker(&render_node.context, ordinal)
     {
       render_node.attach_marker(marker);
     }
 
-    render_node
+    vec![render_node]
+  }
+
+  /// Closes a `display: contents` element, whose own text becomes an anonymous inline of its
+  /// parent. Generated content took that text already.
+  fn finish_contents(mut self) -> Vec<RenderNode> {
+    if let Some(text) = self.node.take_text() {
+      self
+        .rendered_children
+        .insert(0, RenderNode::generated_sibling_text(&self.context, text));
+    }
+
+    self.rendered_children
   }
 
   /// Closes a text control, which Blink lays out as a block container whatever its `display`, and
@@ -3426,11 +3524,11 @@ impl PageContext {
 
 #[cfg(test)]
 mod tests {
-  use std::{str::FromStr, sync::Arc};
+  use std::{rc::Rc, str::FromStr, sync::Arc};
 
   use super::{
-    NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
-    sort_children_by_order,
+    NodeId, NodeOrigin, RecentStyles, RenderNode, active_registrations,
+    registered_custom_property_parent_style, sort_children_by_order,
   };
   use crate::layout::floats_utils::Float as LayoutFloat;
   use crate::{
@@ -3438,7 +3536,7 @@ mod tests {
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Float, Length, PageName, PropertyRule, PropertySyntax,
+      ComputedStyle, Direction, Display, Float, Length, PageName, PropertyRule, PropertySyntax,
       SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
       page_rule::{PageContext, PageKind},
     },
@@ -3449,6 +3547,21 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  /// A style every row repeats stays shared while the rows' other styles come and go.
+  #[test]
+  fn a_style_repeated_among_many_others_stays_shared() {
+    let mut styles = RecentStyles::default();
+    let first = styles.share(0);
+
+    for row in 1..=40 {
+      for other in 0..12 {
+        styles.share(row * 100 + other);
+      }
+
+      assert!(Rc::ptr_eq(&first, &styles.share(0)), "row {row}");
+    }
   }
 
   #[test]
@@ -3623,6 +3736,90 @@ mod tests {
     assert_eq!(margin(child.context.style.box_data.margin_top), 10.0);
     assert_eq!(margin(child.context.style.box_data.margin_bottom), 3.0);
     assert_eq!(margin(child.context.style.box_data.margin_left), 20.0);
+  }
+
+  #[test]
+  fn a_display_contents_element_gives_its_children_to_its_parent() {
+    let stylesheet = parse_stylesheet(
+      ".flex { display: flex } .contents { display: contents; color: red; float: left } \
+       .abs { position: absolute }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let ids = |node: &RenderNode| -> Vec<String> {
+      node
+        .children
+        .iter()
+        .flatten()
+        .filter_map(|child| child.node.as_ref()?.id().map(str::to_owned))
+        .collect()
+    };
+
+    let nested = Node::container([Node::container([]).with_id("b")]).with_class_name("contents");
+    let unboxed = Node::container([
+      Node::container([]).with_id("a"),
+      nested,
+      Node::image("missing.png")
+        .with_id("image")
+        .with_class_name("contents"),
+    ])
+    .with_class_name("contents abs");
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([unboxed, Node::container([]).with_id("c")]).with_class_name("flex"),
+    );
+
+    assert_eq!(ids(&tree), ["a", "b", "c"]);
+
+    for item in tree.children.iter().flatten() {
+      assert!(item.is_flex_or_grid_item);
+      assert_eq!(item.context.style.base_data.display, Display::Block);
+    }
+
+    let colors: Vec<_> = tree
+      .children
+      .iter()
+      .flatten()
+      .map(|item| item.context.current_color)
+      .collect();
+
+    assert_eq!(colors[0], colors[1]);
+    assert_ne!(colors[1], colors[2]);
+
+    let root = RenderNode::from_node(
+      &context,
+      Node::container([Node::container([]).with_id("child")]).with_class_name("contents"),
+    );
+
+    assert_eq!(root.context.style.base_data.display, Display::Block);
+    assert_eq!(ids(&root), ["child"]);
+
+    let runs = RenderNode::from_node(
+      &context,
+      Node::container([
+        Node::text("a"),
+        Node::container([Node::text("b")]).with_class_name("contents"),
+        Node::text("c").with_class_name("element"),
+        Node::container([Node::text(" ")]).with_class_name("contents"),
+        Node::text(" "),
+      ])
+      .with_class_name("flex"),
+    );
+    let items = runs.children.as_deref().expect("items");
+
+    assert_eq!(items.len(), 2);
+    assert_eq!(
+      items[0].children.as_deref().map(<[RenderNode]>::len),
+      Some(2)
+    );
+    assert!(matches!(items[0].origin, NodeOrigin::Anonymous));
   }
 
   #[test]

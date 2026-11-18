@@ -10,6 +10,7 @@ use crate::{
   layout::{
     block_layout_algorithm::{BlockLayoutAlgorithm, block_min_max_sizes},
     constraint_space::{AutoSizeBehavior, CacheSlot, ConstraintSpace},
+    content_alignment::BlockContentAlignment,
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
     grid::grid_layout_algorithm::GridLayoutAlgorithm,
@@ -43,7 +44,7 @@ use crate::{
     releases::Finished,
     tree::FragmentBreak,
   },
-  style::Overflow,
+  style::{FlexDirection, FlexWrap, Overflow},
 };
 
 /// The layouts a box keeps: Blink's layout result cache, a layout of each fragment that placed its
@@ -157,6 +158,21 @@ impl LayoutCache {
       measures.remove(0);
     }
     push_tight(measures, (space.clone(), Rc::clone(result)));
+  }
+
+  /// The measures kept from a space that differs from `space` only in its sizes, the latest first.
+  fn measures_sized_apart(
+    &self,
+    space: &ConstraintSpace,
+  ) -> Vec<(ConstraintSpace, Rc<LayoutResult>)> {
+    self
+      .entries
+      .as_deref()
+      .into_iter()
+      .flat_map(|entries| entries.measures.iter().rev())
+      .filter(|(cached, _)| cached.differs_only_in_size(space))
+      .cloned()
+      .collect()
   }
 
   fn store_min_max_sizes(&mut self, key: (MinMaxKey, SizeType), sizes: MinMaxSizesResult) {
@@ -292,7 +308,9 @@ impl<'r> LayoutTree<'r> {
       },
     );
 
-    if let Some(result) = self.node_state(node).cache.get(space, input) {
+    if let Some(result) = self.node_state(node).cache.get(space, input)
+      && !self.ends_nothing_it_placed(space, &result)
+    {
       return result;
     }
 
@@ -303,12 +321,16 @@ impl<'r> LayoutTree<'r> {
     // Blink's `BoxFragmentBuilder` takes the flags from the space whatever algorithm runs.
     #[cfg(feature = "fragmentation")]
     let run = self.begin_run(node);
-    let result = Rc::new(LayoutResult {
-      is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
-      is_hidden_due_to_layout: space.is_hidden_due_to_layout,
-      #[cfg(feature = "fragmentation")]
-      run,
-      ..self.run_algorithm(node, space, input)
+    let result = self.provisionally(space.cache_slot == CacheSlot::Measure, |tree| {
+      Rc::new(LayoutResult {
+        is_line_clamp_clipped_float: space.is_line_clamp_clipped_float,
+        is_hidden_due_to_layout: space.is_hidden_due_to_layout,
+        #[cfg(feature = "fragmentation")]
+        run,
+        #[cfg(feature = "fragmentation")]
+        is_provisional: tree.provisional > 0,
+        ..tree.run_algorithm(node, space, input)
+      })
     });
     #[cfg(feature = "fragmentation")]
     self.end_run();
@@ -329,6 +351,192 @@ impl<'r> LayoutTree<'r> {
       }
     }
     result
+  }
+
+  /// Whether a page that shows the kept layout `result` for `space` would leave the boxes under it
+  /// unended, as a measure or a provisional layout placed them.
+  fn ends_nothing_it_placed(&self, space: &ConstraintSpace, result: &LayoutResult) -> bool {
+    #[cfg(feature = "fragmentation")]
+    {
+      space.cache_slot == CacheSlot::Layout && result.is_provisional && self.provisional == 0
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      let _ = (space, result);
+
+      false
+    }
+  }
+
+  /// [`Self::layout`] for a layout whose fragments no page shows, so its boxes end nowhere.
+  pub(crate) fn layout_provisionally(
+    &mut self,
+    node: NodeId,
+    space: &ConstraintSpace,
+  ) -> Rc<LayoutResult> {
+    self.provisionally(true, |tree| tree.layout(node, space))
+  }
+
+  /// Runs `layout` as a measure or a provisional layout when `provisional`, so the boxes it places
+  /// end nowhere.
+  fn provisionally<T>(&mut self, provisional: bool, layout: impl FnOnce(&mut Self) -> T) -> T {
+    #[cfg(feature = "fragmentation")]
+    {
+      self.provisional += usize::from(provisional);
+
+      let result = layout(self);
+
+      self.provisional -= usize::from(provisional);
+      result
+    }
+    #[cfg(not(feature = "fragmentation"))]
+    {
+      let _ = provisional;
+
+      layout(self)
+    }
+  }
+
+  /// A measure of `node` that gives the box the border box `space` lays it out at, which serves a
+  /// layout whose fragments nothing places, as Blink's `CachedLayoutResult` serves a first layout
+  /// from the measures.
+  ///
+  /// Approximate: a measure keeps no record of the style it resolved, so a box whose style reads
+  /// its query container never reuses one, where Blink reuses it while the style is unchanged.
+  pub(crate) fn measure_for_layout(
+    &mut self,
+    node: NodeId,
+    space: &ConstraintSpace,
+  ) -> Option<Rc<LayoutResult>> {
+    if space.table_part.is_some() || !self.node_state(node).container_independent {
+      return None;
+    }
+
+    let measure_space = ConstraintSpace {
+      cache_slot: CacheSlot::Measure,
+      ..space.clone()
+    };
+    let measures = self
+      .node_state(node)
+      .cache
+      .measures_sized_apart(&measure_space);
+
+    for (cached, result) in measures {
+      if self.size_matches(node, &cached, &result, &measure_space) {
+        return Some(result);
+      }
+    }
+    None
+  }
+
+  /// Blink's `CalculateSizeBasedLayoutCacheStatus` returning `kHit`: whether `space` gives `node`
+  /// the border box and padding `result` has from `cached`.
+  ///
+  /// Approximate: the %-block-size dependence comes from the styles of the box and its children,
+  /// where Blink records it on the fragments they laid out, so a child that lays out no fragment
+  /// can make a box miss where Blink hits.
+  fn size_matches(
+    &mut self,
+    node: NodeId,
+    cached: &ConstraintSpace,
+    result: &LayoutResult,
+    space: &ConstraintSpace,
+  ) -> bool {
+    let algorithm = self.algorithm(node);
+
+    if matches!(algorithm, Algorithm::Hidden)
+      || cached.available_inline_size.is_none() != space.available_inline_size.is_none()
+    {
+      return false;
+    }
+
+    let style = Rc::clone(self.layout_style_rc(node));
+    let resolver = LengthResolver::new(space, &style);
+    let cached_resolver = LengthResolver::new(cached, &style);
+
+    if resolver.border_padding != cached_resolver.border_padding {
+      return false;
+    }
+
+    let inline_size = resolver
+      .inline_size_for_fragment(&mut |size_type| self.min_max_sizes(node, space, size_type));
+
+    if inline_size != result.size.inline_size {
+      return false;
+    }
+
+    let render_node = self.render_node(node);
+    let depends_on_percentage_block_size = render_node.depends_on_percentage_block_size(&style);
+    let percentage_block_size_changed =
+      cached.percentage_resolution_block_size != space.percentage_resolution_block_size;
+
+    // A table's block size is known only after layout, so it hits only on equal constraints.
+    if matches!(algorithm, Algorithm::Table) {
+      return space.are_block_size_constraints_equal(cached)
+        && !space.block_size_may_change(cached, &style, depends_on_percentage_block_size);
+    }
+
+    let is_flex_or_grid = matches!(algorithm, Algorithm::Flex | Algorithm::Grid);
+    let initial_block_size = resolver.initial_block_size_for_fragment(None, Some(inline_size));
+    let block_size = match initial_block_size {
+      Some(block_size) => Some(block_size),
+      None => {
+        #[cfg(feature = "fragmentation")]
+        if !result.break_info.is_first_for_node || result.break_info.break_token.is_some() {
+          return false;
+        }
+
+        // Flex and grid items can size against the final block size of a box that stretched or
+        // had a fixed one, or resolve the %-block-size, so its intrinsic block size no longer
+        // predicts it.
+        if is_flex_or_grid
+          && (cached.is_fixed_block_size
+            || (cached.is_block_auto_behavior_stretch() && style.size.height.is_auto())
+            || (depends_on_percentage_block_size && percentage_block_size_changed))
+        {
+          return false;
+        }
+        resolver.block_size_for_fragment(Some(result.intrinsic_block_size), Some(inline_size), None)
+      }
+    };
+
+    if block_size != Some(result.size.block_size) {
+      return false;
+    }
+
+    let has_descendant_that_depends_on_percentage_block_size =
+      render_node.has_descendant_that_depends_on_percentage_block_size();
+    let was_initial_block_size_indefinite = cached_resolver
+      .initial_block_size_for_fragment(None, Some(result.size.inline_size))
+      .is_none();
+    let is_initial_block_size_indefinite = initial_block_size.is_none();
+
+    if was_initial_block_size_indefinite != is_initial_block_size_indefinite
+      && (is_flex_or_grid || has_descendant_that_depends_on_percentage_block_size)
+    {
+      return false;
+    }
+
+    if has_descendant_that_depends_on_percentage_block_size
+      && is_initial_block_size_indefinite
+      && depends_on_percentage_block_size
+      && percentage_block_size_changed
+    {
+      return false;
+    }
+
+    !space.is_table_cell
+      || BlockContentAlignment::for_table_cell(&render_node.context.style)
+        != BlockContentAlignment::Baseline
+      || match (
+        space.table_cell_alignment_baseline,
+        cached.table_cell_alignment_baseline,
+      ) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(baseline), None) => Some(baseline) == result.first_baseline,
+        (Some(baseline), Some(cached_baseline)) => baseline == cached_baseline,
+      }
   }
 
   /// Blink's `DetermineAlgorithmAndRun`.
@@ -367,6 +575,25 @@ impl<'r> LayoutTree<'r> {
       Algorithm::Flex | Algorithm::Grid => true,
       Algorithm::Table => self.layout_style(child).display == Display::TableCaption,
       Algorithm::Hidden | Algorithm::Replaced | Algorithm::Block => false,
+    }
+  }
+
+  /// Whether laying `node` out again also rereads the content of an ended item: a single-line
+  /// column flexbox resumes each item from its break token, while a row flexbox or a grid lays the
+  /// items of a line or track out again together.
+  #[cfg(feature = "fragmentation")]
+  pub(crate) fn relays_out_ended_descendants(&self, node: NodeId) -> bool {
+    let style = self.layout_style(node);
+
+    match self.algorithm(node) {
+      Algorithm::Flex => {
+        !matches!(
+          style.flex_direction,
+          FlexDirection::Column | FlexDirection::ColumnReverse
+        ) || style.flex_wrap != FlexWrap::NoWrap
+      }
+      Algorithm::Grid => true,
+      Algorithm::Table | Algorithm::Hidden | Algorithm::Replaced | Algorithm::Block => false,
     }
   }
 

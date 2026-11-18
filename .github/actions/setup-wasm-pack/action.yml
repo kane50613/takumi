@@ -13,7 +13,7 @@ runs:
       run: |
         set -euo pipefail
         archive="wasm-pack-$VERSION-$TARGET.tar.gz"
-        curl -sSfL -o "$RUNNER_TEMP/$archive" \
+        curl -sSfL --connect-timeout 30 --speed-limit 1 --speed-time 60 --max-time 600 --retry-max-time 900 --retry 6 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/$archive" \
           "https://github.com/rustwasm/wasm-pack/releases/download/$VERSION/$archive"
         echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
         tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" \

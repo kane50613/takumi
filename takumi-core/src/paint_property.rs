@@ -116,13 +116,14 @@ pub struct NodeProperties {
 }
 
 impl NodeProperties {
-  /// Adds the box's clip and effect stages in Blink's self and children order.
+  /// Adds the box's clip and effect stages in Blink's self and children order; an inline layer's,
+  /// whose `display: inline` box has no overflow to clip, with `clips_overflow` false.
   pub(crate) fn build(
     trees: &mut PropertyTrees,
     state: PropertyState,
     path: &[usize],
     context: &RenderContext,
-    fragment: StitchedFragment,
+    (fragment, clips_overflow): (StitchedFragment, bool),
     transform: Affine,
     paint_offset: Point<f32>,
   ) -> Self {
@@ -181,6 +182,7 @@ impl NodeProperties {
     // `UpdateInnerBorderRadiusClip`, clip a fragment to the stitched box.
     let stitched_offset = Point::new(0.0, fragment.block_offset);
     let clip = OverflowClip::of(context, fragment.stitched, paint_offset - stitched_offset)
+      .filter(|_| clips_overflow)
       .map(|clip| {
         let (shape, origin) = clip.shape();
         let origin = origin - stitched_offset;

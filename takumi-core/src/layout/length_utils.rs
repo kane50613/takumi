@@ -206,12 +206,14 @@ pub(crate) fn borders(style: &LayoutStyle) -> LogicalBoxStrut {
 }
 
 /// Blink's `ComputePadding`: percentages against the space's inline percentage size, zero where
-/// indefinite.
+/// indefinite. A `calc()` that comes out negative is clamped to zero.
 pub(crate) fn padding(space: &ConstraintSpace, style: &LayoutStyle) -> LogicalBoxStrut {
   LogicalBoxStrut::from_physical(
-    style
-      .padding
-      .map(|padding| padding.resolve_or_zero(space.percentage_resolution_inline_size)),
+    style.padding.map(|padding| {
+      padding
+        .resolve_or_zero(space.percentage_resolution_inline_size)
+        .max(LayoutUnit::ZERO)
+    }),
     style.direction,
   )
 }

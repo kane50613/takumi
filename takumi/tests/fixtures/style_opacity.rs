@@ -58,3 +58,38 @@ fn test_inline_text_span_opacity() {
 
   assert!(translucent_text > opaque_text.saturating_add(48));
 }
+
+#[test]
+fn test_inline_span_opacity_groups_nested_text() {
+  let inline = || Style::default().with(StyleDeclaration::display(Display::Inline));
+  let root = Node::container([
+    Node::container([Node::container([Node::text("H".to_string())]).with_style(inline())])
+      .with_style(inline().with(StyleDeclaration::opacity(PercentageNumber(0.5)))),
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::InlineBlock))
+        .with(StyleDeclaration::width(Length::Px(80.0)))
+        .with(StyleDeclaration::height(Length::Px(1.0))),
+    ),
+    Node::text("H".to_string()).with_style(inline()),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Length::Px(320.0)))
+      .with(StyleDeclaration::height(Length::Px(120.0)))
+      .with(StyleDeclaration::font_size(Length::Px(96.0).into()))
+      .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+      .with(StyleDeclaration::color(ColorInput::Value(Color::black())))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  let image = render_node(root, Viewport::new((320, 120)));
+
+  let nested_text = darkest_pixel_in_range(&image, 0..80);
+  let opaque_text = darkest_pixel_in_range(&image, 140..240);
+
+  assert!(nested_text > opaque_text.saturating_add(48));
+}

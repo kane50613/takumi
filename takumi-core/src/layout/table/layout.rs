@@ -1316,6 +1316,8 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
         if is_repeated_section {
           self.repeat_section_fragments(node, &token);
         }
+      } else {
+        self.measure_table_child(node, &result);
       }
       out_of_flow.extend(result.out_of_flow_moved_by(location));
       offset += result.size.block_size + margins.bottom;
@@ -1694,7 +1696,7 @@ impl LayoutTree<'_> {
     self
       .layout_style(node)
       .padding
-      .map(|padding| padding.resolve_or_zero(basis))
+      .map(|padding| padding.resolve_or_zero(basis).max(LayoutUnit::ZERO))
       .into()
   }
 

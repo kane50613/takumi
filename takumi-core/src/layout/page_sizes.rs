@@ -164,6 +164,15 @@ impl PageSizes {
   /// Adds the next page, a page `name`.
   pub(crate) fn push(&mut self, size: Size<f32>, name: PageName) {
     let page = self.sizes.len();
+
+    log::debug!(
+      target: "takumi::layout",
+      "page {} has a {}x{}px page area",
+      page + 1,
+      size.width,
+      size.height
+    );
+
     let uniform_height = match self.uniform_height {
       None if page == 0 => Some(size.height),
       Some(height) if height == size.height => Some(height),

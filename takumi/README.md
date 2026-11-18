@@ -46,6 +46,7 @@ write_image(&image, &mut png, OutputFormat::Png)?;
 - [`render_animation`] renders every frame of a scene timeline at a fixed frame rate.
   [`write_animation`] streams the frames into animated WebP, APNG, or GIF instead.
 - [`measure`] lays out the tree and returns box sizes and text runs without drawing.
+- [`uncovered_characters`] lists the characters no registered font draws.
 - [`needs`] reports the images and `@font-face` files a tree loads, for the host to fetch
   before it renders.
 - `render_svg` writes vector SVG. It needs the `svg-backend` feature.

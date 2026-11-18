@@ -74,15 +74,16 @@ fn page_chunks(contexts: &[StackingContextNode], page: usize, page_height: f32) 
     .collect()
 }
 
-/// Paints every page of `name` from its window as the layout and the windows allow.
-fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
+/// Paints every page of `name` from its window as the layout and the windows allow, and returns
+/// the pages each page's window reaches.
+fn assert_windows_match(name: &str, page_size: Size<f32>) -> Vec<Vec<usize>> {
   let root = document(name, page_size);
   let whole = PagedScene::lay_out(root.clone(), page_size.into(), 1000, true)
     .expect("pages lay out")
     .into_scene();
   let mut layout = PagedLayout::new(&root, page_size.into(), 1000);
   let mut windows = PageWindows::default();
-  let mut emitted = 0;
+  let mut reached = Vec::new();
 
   loop {
     let stepped = layout.next_page().expect("page lays out");
@@ -98,7 +99,7 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
 
     let ready = layout.settled_pages();
 
-    for page in emitted..ready {
+    for page in reached.len()..ready {
       let pages = windows.pages_reaching(layout.sizes(), page);
       let window = SceneRef::window(&root, layout.view(), layout.sizes(), &pages, true)
         .expect("window builds");
@@ -121,10 +122,10 @@ fn assert_windows_match(name: &str, page_size: Size<f32>) -> usize {
           actual.len() == expected.len()
         );
       }
+      reached.push(pages);
     }
-    emitted = emitted.max(ready);
     if !stepped {
-      return emitted;
+      return reached;
     }
   }
 }
@@ -145,5 +146,24 @@ fn html_fixtures_paint_from_their_windows() {
     ] {
       assert_windows_match(name, Size { width, height });
     }
+  }
+}
+
+/// A box positioned in a parent broken across every page paints from the window of its own page,
+/// not from one of every page the parent visits.
+#[test]
+fn positioned_box_of_a_parent_on_every_page_paints_from_its_page() {
+  let page_size = Size {
+    width: 400.0,
+    height: 300.0,
+  };
+  let reached = assert_windows_match("positioned-in-fragmented-parent.html", page_size);
+
+  assert!(reached.len() > 3);
+  for (page, pages) in reached.iter().enumerate() {
+    assert!(
+      pages.iter().all(|&other| other.abs_diff(page) <= 1),
+      "page {page} paints from the window of pages {pages:?}"
+    );
   }
 }

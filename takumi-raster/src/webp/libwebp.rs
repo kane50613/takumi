@@ -425,6 +425,7 @@ mod tests {
     let decoded = decode_rgba(&encoded);
     let differing = decoded
       .pixels()
+      .iter()
       .zip(image.pixels())
       .filter(|(decoded, source)| decoded != source)
       .count();
@@ -566,6 +567,7 @@ mod tests {
     a.dimensions() == b.dimensions()
       && a
         .pixels()
+        .iter()
         .zip(b.pixels())
         .all(|(a, b)| a == b || (a[3] == 0 && b[3] == 0))
   }
@@ -738,7 +740,7 @@ mod tests {
     let mut worst = 0u8;
 
     for (decoded, source) in composited.iter().zip(frames) {
-      for (decoded_pixel, source_pixel) in decoded.pixels().zip(source.image.pixels()) {
+      for (decoded_pixel, source_pixel) in decoded.pixels().iter().zip(source.image.pixels()) {
         for channel in 0..3 {
           worst = worst.max(decoded_pixel[channel].abs_diff(source_pixel[channel]));
         }

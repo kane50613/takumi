@@ -994,6 +994,8 @@ pub enum Display {
   TableColumnGroup,
   /// The element describes a table column
   TableColumn,
+  /// The element generates no box, and its children and pseudo-elements take its place
+  Contents,
   /// The legacy `-webkit-box`: a flex container whose axis `-webkit-box-orient` sets
   WebkitBox,
   /// The legacy `-webkit-inline-box`: an inline-level `-webkit-box`
@@ -1013,6 +1015,7 @@ impl_css_enum!(
   "block" => Display::Block,
   "inline-block" => Display::InlineBlock,
   "flow-root" => Display::FlowRoot,
+  "contents" => Display::Contents,
   "list-item" => Display::ListItem,
   "table" => Display::Table,
   "inline-table" => Display::InlineTable,
@@ -1104,7 +1107,8 @@ impl Display {
   /// `EquivalentBlockDisplay`.
   pub(crate) fn as_blockified(self) -> Self {
     match self {
-      Display::Inline
+      Display::Contents
+      | Display::Inline
       | Display::InlineBlock
       | Display::TableRowGroup
       | Display::TableHeaderGroup

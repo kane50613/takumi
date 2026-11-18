@@ -52,6 +52,7 @@
 //! - [`render_animation`] renders every frame of a scene timeline at a fixed frame rate.
 //!   [`write_animation`] streams the frames into animated WebP, APNG, or GIF instead.
 //! - [`measure`] lays out the tree and returns box sizes and text runs without drawing.
+//! - [`uncovered_characters`] lists the characters no registered font draws.
 //! - [`needs`] reports the images and `@font-face` files a tree loads, for the host to fetch
 //!   before it renders.
 //! - `render_svg` writes vector SVG. It needs the `svg-backend` feature.
@@ -81,7 +82,9 @@
 /// that breadth is intentional for a prelude.
 pub mod prelude {
   #[cfg(feature = "from-html")]
-  pub use takumi_core::html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
+  pub use takumi_core::html::{
+    FromHtml, FromHtmlOptions, HtmlError, ParsedHtml, StyleElement, StylePresets, StyleSheetLink,
+  };
   #[cfg(feature = "from-html")]
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
@@ -106,11 +109,11 @@ pub mod prelude {
 }
 
 #[cfg(feature = "from-html")]
-pub use takumi_core::html::from_html;
+pub use takumi_core::html::{from_html, parse_html};
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
-  measure, needs, render, render_animation, write_animated_gif, write_animated_png,
-  write_animated_webp, write_animation, write_image,
+  measure, needs, render, render_animation, uncovered_characters, write_animated_gif,
+  write_animated_png, write_animated_webp, write_animation, write_image,
 };
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;

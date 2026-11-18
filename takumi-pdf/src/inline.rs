@@ -54,7 +54,11 @@ impl<'t> TextBox<'t> {
     let Ok(layout) = scene.enter(paint) else {
       return;
     };
-    if matches!(OwnContent::of(node), OwnContent::Inline(_)) {
+    // An inline layer shares its block's key, and lays out on its own when it paints.
+    if matches!(
+      OwnContent::of_paint(scene.root, node, paint),
+      OwnContent::Inline(_)
+    ) {
       boxes.push(Self {
         node,
         key: (paint.node_id, paint.fragment_index),
@@ -99,23 +103,25 @@ impl<'c> InlineCache<'c> {
   }
 }
 
-/// Visits a text box's inline layout: the one `cache` holds, or one laid out
-/// now. `None` when the box lays out no runs.
+/// Visits the inline layout of `content`, the text the box of `node` at `layout` paints: the one
+/// `cache` holds, or one laid out now. `None` when the box lays out no runs.
 pub(crate) fn visit_inline_layout<R>(
   cache: Option<&InlineCache<'_>>,
-  node: &RenderNode,
+  (node, content): (&RenderNode, OwnContent<'_>),
   node_id: NodeId,
   layout: Layout,
   visit: impl FnOnce(&PaintedInline<'_>, &SizedFontStyle<'_>) -> R,
 ) -> Result<Option<R>, PdfError> {
   let key = (node_id, node.context.fragment_index());
 
-  if let Some(prepared) = cache.map(|cache| cache.get(key)).transpose()?.flatten() {
+  if let OwnContent::Inline(_) = content
+    && let Some(prepared) = cache.map(|cache| cache.get(key)).transpose()?.flatten()
+  {
     return Ok(Some(visit(&prepared.painted, prepared.font_style)));
   }
-  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+  let font_style = content.font_style(&node.context);
 
-  OwnContent::of(node)
+  content
     .lay_out_inline(&font_style, layout)
     .map(|painted| Ok(visit(&painted.map_err(PdfError::Font)?, &font_style)))
     .transpose()

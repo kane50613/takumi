@@ -369,3 +369,27 @@ fn a_font_registered_again_under_other_descriptors_keeps_each_face() {
   )
   .unwrap();
 }
+
+#[test]
+fn uncovered_characters_names_each_character_no_font_draws_once() {
+  let uncovered = |text: &str| {
+    takumi::uncovered_characters(
+      RenderOptions::builder()
+        .viewport(Viewport::new((400, 200)))
+        .node(Node::container([
+          Node::text(text.to_string()),
+          Node::text(text.to_string()),
+        ]))
+        .fonts(&crate::test_utils::CONTEXT)
+        .build(),
+    )
+    .unwrap()
+  };
+
+  assert!(uncovered("Plain Latin text, with punctuation.").is_empty());
+  // Tibetan, which no test font draws.
+  assert_eq!(
+    uncovered("Hi \u{0F40}\u{0F41}\u{0F40}"),
+    ['\u{0F40}', '\u{0F41}']
+  );
+}

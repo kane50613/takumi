@@ -1250,7 +1250,7 @@ mod tests {
     let image = canvas
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
-    assert!(image.pixels().all(|pixel| pixel[3] == 0));
+    assert!(image.pixels().iter().all(|pixel| pixel[3] == 0));
   }
 
   #[test]

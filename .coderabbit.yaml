@@ -10,6 +10,7 @@ reviews:
   path_filters:
     - "!takumi/tests/fixtures-generated/**"
     - "!takumi-pdf/tests/fixtures-generated/**"
+    - "!takumi-cli/tests/fixtures-generated/**"
   path_instructions:
     - path: "**/*.rs"
       instructions: |
@@ -62,7 +63,7 @@ reviews:
       - name: "Golden fixture"
         mode: "warning"
         instructions: |
-          Pass when the pull request does not change rendered or serialized output. Otherwise pass only when it adds or updates a golden file under `takumi/tests/fixtures-generated/` or `takumi-pdf/tests/fixtures-generated/` that shows the change.
+          Pass when the pull request does not change rendered or serialized output. Otherwise pass only when it adds or updates a golden file under `takumi/tests/fixtures-generated/`, `takumi-pdf/tests/fixtures-generated/`, or `takumi-cli/tests/fixtures-generated/` that shows the change.
       - name: "Refactor stays separate"
         mode: "warning"
         instructions: |

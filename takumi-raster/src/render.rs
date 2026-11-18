@@ -152,6 +152,19 @@ pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
 }
 
+/// The characters of a node's text that no registered font it can use draws, each once. They
+/// render as the font's missing-glyph box.
+pub fn uncovered_characters<'g>(mut options: RenderOptions<'g>) -> Result<Vec<char>> {
+  let render_context = options.take_render_context();
+  let root = RenderNode::from_node(&render_context, options.node);
+
+  Ok(
+    Scene::lay_out(root, options.viewport, false)?
+      .view()
+      .uncovered_characters(),
+  )
+}
+
 /// What a node needs before it renders: the images it looks up by URL and the pending fonts its text loads.
 pub fn needs(mut options: RenderOptions<'_>) -> RenderNeeds {
   let render_context = options.take_render_context();

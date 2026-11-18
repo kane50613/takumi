@@ -1346,6 +1346,20 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
     }
   }
 
+  /// An item's layout in `GiveItemsFinalPositionAndSize`. A container that breaks lays its items
+  /// out again on each page and places none of these, so a measure of the same size serves, and a
+  /// layout is provisional.
+  fn final_item_layout(&mut self, node: NodeId, space: &ConstraintSpace) -> Rc<LayoutResult> {
+    if !self.is_involved_in_block_fragmentation() {
+      return self.tree.layout(node, space);
+    }
+    if let Some(result) = self.tree.measure_for_layout(node, space) {
+      return result;
+    }
+
+    self.tree.layout_provisionally(node, space)
+  }
+
   /// Blink's `GiveItemsFinalPositionAndSize`.
   fn give_items_final_position_and_size(&mut self, flex_lines: &mut [FlexLine]) {
     self.reset_row_break_between(flex_lines.len());
@@ -1449,7 +1463,7 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
           Some(item.flexed_border_box_size()),
           Some(line.line_cross_size),
         );
-        let result = self.tree.layout(item.node, &child_space);
+        let result = self.final_item_layout(item.node, &child_space);
 
         self.join_row_break_between(&line, line_index, item_index, &item_style, &result);
 

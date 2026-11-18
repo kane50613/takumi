@@ -529,6 +529,17 @@ impl TableLayoutAlgorithm<'_, '_> {
       .add_result(self.space, &style, result, location.y);
   }
 
+  /// Takes in the break values of `child` measured as `result`, which a measure places nowhere.
+  pub(super) fn measure_table_child(&mut self, child: NodeId, result: &LayoutResult) {
+    if self.space.has_block_fragmentation() || !self.space.should_propagate_child_break_values() {
+      return;
+    }
+
+    let style = Rc::clone(self.tree.layout_style_rc(child));
+
+    self.builder.propagate_child_break_values(result, &style);
+  }
+
   /// The fragment index `child` resumed at `token` lays out.
   pub(super) fn child_fragment_index(token: &ChildBreakToken) -> usize {
     fragment_index(token.as_deref())
@@ -788,6 +799,8 @@ impl TableLayoutAlgorithm<'_, '_> {
   ) {
     self.tree.place_child(child, 0, 0, location, result);
   }
+
+  pub(super) fn measure_table_child(&mut self, _child: NodeId, _result: &LayoutResult) {}
 
   pub(super) fn child_fragment_index(_token: &ChildBreakToken) -> usize {
     0

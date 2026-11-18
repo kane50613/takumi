@@ -116,6 +116,8 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     return Ok(img.clone());
   }
 
+  log::debug!(target: "takumi::image", "no image is loaded for {src:?}");
+
   Err(ImageError::Unknown)
 }
 

@@ -1,0 +1,53 @@
+---
+title: Render images
+description: Set the size, pixel density, format, and quality of the images takumi image writes.
+---
+
+`takumi image` renders an HTML file to a PNG, JPEG, WebP, or SVG:
+
+```sh
+takumi image card.html -o card.png --width 1200 --height 630
+```
+
+## Set the size
+
+`--width` and `--height` set the viewport in CSS pixels, the size the page lays out in. The width defaults to 1200. Without `--height`, the image is as tall as the content, which suits a page whose length you do not know ahead of time.
+
+`--dpr` sets the device pixel ratio. `--dpr 2` lays the page out at the same CSS size and writes twice as many pixels in each direction, for high-density screens:
+
+```sh
+takumi image card.html -o card@2x.png --width 1200 --height 630 --dpr 2
+```
+
+This writes a 2400×1260 image of the same layout. The ratio does not have to be a whole number. `--dpr 1.5` writes 1800×945, rounded to whole pixels.
+
+## Choose the format
+
+The output's extension picks the format:
+
+| Extension         | Format |
+| ----------------- | ------ |
+| `.png`            | PNG    |
+| `.jpg` or `.jpeg` | JPEG   |
+| `.webp`           | WebP   |
+| `.svg`            | SVG    |
+
+`--format` overrides the extension, with the values `png`, `jpeg` (or `jpg`), `webp`, and `svg`. Writing to standard output has no extension, so it needs `--format`. See [Use takumi in scripts](/docs/cli/scripting).
+
+Without `--format`, an output with any other extension stops before rendering, with exit code `2`. With `--format`, takumi writes that format whatever the file is named. Use `takumi pdf` for a PDF.
+
+## Set the quality
+
+`--quality` takes a number from 0 to 100:
+
+- JPEG defaults to 75.
+- WebP is lossless unless you pass `--quality`, which switches it to lossy at that quality.
+- PNG and SVG ignore it.
+
+```sh
+takumi image photo.html -o photo.webp --quality 80
+```
+
+## Fonts and images in the page
+
+The page loads the fonts and images it references, within the directories you allow. [Use your fonts](/docs/cli/fonts) covers fonts, and [Control file access](/docs/cli/file-access) covers which files a page can read.

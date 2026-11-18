@@ -3,6 +3,7 @@ mod image;
 mod input;
 
 use std::{
+  cell::RefCell,
   collections::BTreeMap,
   mem::take,
   sync::{Arc, Weak},
@@ -28,17 +29,42 @@ use crate::{
 /// recurse once per level. Blink's `HTMLConstructionSite::kMaximumHTMLParserDOMTreeDepth`.
 pub const MAXIMUM_DOM_TREE_DEPTH: usize = 512;
 
+/// An element or attribute name, which the elements of a parsed document carrying it share.
+pub(crate) type Name = Arc<str>;
+
+/// An element's attributes as name and value pairs, in name order: a slice, since a `BTreeMap`
+/// leaf takes 368 bytes for even one attribute.
+pub(crate) type Attributes = Box<[(Name, Box<str>)]>;
+
+/// The names a document's elements carry so far, each stored once.
+#[derive(Default)]
+pub(crate) struct Names(RefCell<Xxh3HashSet<Name>>);
+
+impl Names {
+  /// `name`, shared with each element before it that carried the same name.
+  pub(crate) fn get(&self, name: &str) -> Name {
+    if let Some(shared) = self.0.borrow().get(name) {
+      return shared.clone();
+    }
+
+    let shared = Name::from(name);
+
+    self.0.borrow_mut().insert(shared.clone());
+    shared
+  }
+}
+
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {
   /// The element's tag name.
-  pub tag_name: Option<Box<str>>,
+  pub tag_name: Option<Name>,
   /// The element's class name.
   pub class_name: Option<Box<str>>,
   /// The element's id.
   pub id: Option<Box<str>>,
   /// Additional element attributes for selector matching and serialization.
-  pub attributes: Option<BTreeMap<Box<str>, Box<str>>>,
+  pub attributes: Option<Attributes>,
   /// Default style presets from HTML element type (lowest priority).
   pub preset: Option<Arc<Style>>,
   /// Presentation attributes as declarations, which the cascade places between the preset and
@@ -374,6 +400,47 @@ impl Node {
         .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
   }
 
+  /// Whether `display: contents` leaves the node out and renders its children, where the
+  /// [elements CSS Display §2.5 lists](https://drafts.csswg.org/css-display-3/#unbox-html) render
+  /// nothing. Blink's `AdjustStyleForHTMLElement`.
+  pub(crate) fn unboxes(&self) -> bool {
+    const BOXED: [&str; 15] = [
+      "audio", "br", "canvas", "embed", "iframe", "img", "input", "meter", "object", "progress",
+      "select", "svg", "textarea", "video", "wbr",
+    ];
+
+    !matches!(self.kind, NodeKind::Image(_))
+      && !self
+        .tag_name()
+        .is_some_and(|name| BOXED.into_iter().any(|tag| name.eq_ignore_ascii_case(tag)))
+  }
+
+  /// Whether the node is text alone, as a DOM text node is, and no element holding text.
+  pub(crate) fn is_text_run(&self) -> bool {
+    let NodeMetadata {
+      tag_name,
+      class_name,
+      id,
+      attributes,
+      preset,
+      presentation,
+      style,
+      tw,
+      dir: _,
+      lang: _,
+    } = &self.metadata;
+
+    matches!(self.kind, NodeKind::Text(_))
+      && tag_name.is_none()
+      && class_name.is_none()
+      && id.is_none()
+      && attributes.is_none()
+      && preset.is_none()
+      && presentation.is_none()
+      && style.is_none()
+      && tw.is_none()
+  }
+
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
@@ -389,7 +456,7 @@ impl Node {
   }
 
   /// Sets the tag name and returns the updated node.
-  pub fn with_tag_name(mut self, tag_name: impl Into<Box<str>>) -> Self {
+  pub fn with_tag_name(mut self, tag_name: impl Into<Arc<str>>) -> Self {
     self.metadata.tag_name = Some(tag_name.into());
     self
   }
@@ -408,7 +475,19 @@ impl Node {
 
   /// Sets the element attributes and returns the updated node.
   pub fn with_attributes(mut self, attributes: BTreeMap<Box<str>, Box<str>>) -> Self {
-    self.metadata.attributes = Some(attributes);
+    self.metadata.attributes = Some(
+      attributes
+        .into_iter()
+        .map(|(name, value)| (Name::from(name), value))
+        .collect(),
+    );
+    self
+  }
+
+  /// Sets the element attributes under names the document's elements share.
+  #[cfg(any(feature = "html", feature = "svg"))]
+  pub(crate) fn with_named_attributes(mut self, attributes: BTreeMap<Name, Box<str>>) -> Self {
+    self.metadata.attributes = Some(attributes.into_iter().collect());
     self
   }
 
@@ -480,7 +559,7 @@ impl Node {
     };
 
     if let Some(attributes) = &self.metadata.attributes {
-      for (k, v) in attributes {
+      for (k, v) in attributes.iter() {
         // An image's own width and height win over an attribute of the same name.
         let is_image_size = image.is_some_and(|image| match k.as_ref() {
           "width" => image.width.is_some(),
@@ -751,7 +830,7 @@ impl Node {
       .metadata
       .attributes
       .iter()
-      .flat_map(|attributes| attributes.keys().map(AsRef::as_ref))
+      .flat_map(|attributes| attributes.iter().map(|(name, _)| name.as_ref()))
   }
 
   /// The rules the element's `tw` utilities compile to, in the order they were written.

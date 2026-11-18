@@ -362,31 +362,6 @@ pub trait PaintDevice {
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine);
 }
 
-/// Opacity layers for every device, trait objects included.
-pub(crate) trait OpacityLayer: PaintDevice {
-  /// Runs `paint` into a layer at `opacity` reaching no further than `bounds`, without the layer
-  /// when the paint is opaque and not at all when it is invisible.
-  fn with_opacity(
-    &mut self,
-    opacity: f32,
-    bounds: Option<LayerBounds>,
-    paint: impl FnOnce(&mut Self),
-  ) {
-    if opacity <= 0.0 {
-      return;
-    }
-    if opacity >= 1.0 {
-      return paint(self);
-    }
-
-    self.begin_layer(opacity, bounds);
-    paint(self);
-    self.end_layer();
-  }
-}
-
-impl<D: PaintDevice + ?Sized> OpacityLayer for D {}
-
 /// How to stroke a shape.
 pub struct StrokeStyle {
   /// The stroke colour.

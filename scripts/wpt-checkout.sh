@@ -14,11 +14,12 @@ paths="
   css/css-grid css/css-images css/css-masking css/css-position css/css-sizing css/css-tables
   css/css-transforms css/compositing css/filter-effects
   css/CSS2/backgrounds css/CSS2/borders css/CSS2/box css/CSS2/colors css/CSS2/floats
+  css/CSS2/floats-clear
   css/CSS2/generated-content css/CSS2/linebox css/CSS2/lists css/CSS2/margin-padding-clear
   css/CSS2/normal-flow css/CSS2/positioning css/CSS2/tables css/CSS2/text css/CSS2/visudet
   css/CSS2/visuren
   css/reference css/support css/CSS2/reference css/CSS2/support
-  svg common fonts images
+  svg common fonts images quirks/reference
 "
 stamp="$dir/.takumi-paths"
 

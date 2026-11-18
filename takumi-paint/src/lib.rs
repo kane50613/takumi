@@ -23,6 +23,11 @@ use takumi_core::{
 };
 use wasm_bindgen::prelude::*;
 
+/// The heap, grown a part of the memory at a time.
+#[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+#[global_allocator]
+static HEAP: takumi_bindings_common::heap::Heap = takumi_bindings_common::heap::Heap::new();
+
 fn map_error(error: impl core::fmt::Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
 }

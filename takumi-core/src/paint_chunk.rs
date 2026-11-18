@@ -38,6 +38,7 @@ impl<'s> PaintChunk<'s> {
     let mut chunks = Vec::new();
 
     push_context_chunks(contexts, 0, &mut chunks);
+    log::debug!(target: "takumi::paint", "painting {} chunks", chunks.len());
 
     chunks
   }
@@ -77,10 +78,12 @@ fn push_context_chunks<'s>(
     return;
   };
   let roots = context.roots();
+  // An inline layer's backgrounds, borders, and outlines are part of the inline content it paints.
+  let boxes = || roots.iter().filter(|root| root.inline_layer.is_none());
   let mut outlines = Vec::new();
   let chunk = |node, part| PaintChunk { node, part };
 
-  chunks.extend(roots.iter().map(|root| chunk(root, ChunkPart::Decorations)));
+  chunks.extend(boxes().map(|root| chunk(root, ChunkPart::Decorations)));
 
   for phase in context.paint_phases() {
     match phase {
@@ -114,7 +117,7 @@ fn push_context_chunks<'s>(
   }
 
   chunks.extend(outlines);
-  chunks.extend(roots.iter().map(|root| chunk(root, ChunkPart::Outline)));
+  chunks.extend(boxes().map(|root| chunk(root, ChunkPart::Outline)));
 }
 
 /// What a device does to enter and leave clips and effects.

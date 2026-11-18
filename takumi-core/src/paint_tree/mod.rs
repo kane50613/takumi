@@ -148,6 +148,7 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
       nodes: walker.nodes,
       fonts,
       steps: walker.steps,
+      unpainted: Unpainted::under(&scene.root),
     },
     fonts: data,
     outlines: walker.outlines,
