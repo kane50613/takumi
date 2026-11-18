@@ -19,7 +19,7 @@ takumi image card.html -o card.png --width 1200 --height 630
 takumi image card.html -o card@2x.png --width 1200 --height 630 --dpr 2
 ```
 
-This writes a 2400×1260 image of the same layout. The ratio does not have to be a whole number. `--dpr 1.5` writes 1800×945, rounded to whole pixels.
+This writes a 2400×1260 image of the same layout. The ratio does not have to be a whole number. `--dpr 1.5` writes 1800×945, rounded to whole pixels. An SVG has no pixels to scale, so `--dpr` is an error with `.svg`.
 
 ## Choose the format
 

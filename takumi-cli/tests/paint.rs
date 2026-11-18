@@ -1,10 +1,10 @@
 //! Runs `takumi paint` and reads what it says of a document.
 
-use std::{
-  env, fs,
-  path::Path,
-  process::{self, Command},
-};
+use std::{env, fs, path::Path, process::Command};
+
+mod common;
+
+use common::TempDir;
 
 const PAGE: &str = r#"<style>
   body { margin: 0 }
@@ -18,9 +18,8 @@ fn paint(name: &str, arguments: &[&str]) -> String {
 }
 
 fn paint_html(name: &str, html: &str, arguments: &[&str]) -> String {
-  let dir = env::temp_dir().join(format!("takumi-cli-paint-{name}-{}", process::id()));
+  let dir = TempDir::new(&format!("paint-{name}"));
 
-  fs::create_dir_all(&dir).unwrap();
   fs::write(dir.join("page.html"), html).unwrap();
 
   let output = Command::new(env!("CARGO_BIN_EXE_takumi"))

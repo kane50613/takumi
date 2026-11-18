@@ -125,6 +125,13 @@ impl ImageArgs {
       }
     };
 
+    if matches!(format, ImageFormat::Svg) && self.viewport.dpr != 1.0 {
+      return Err(usage(
+        "`--dpr` scales pixels, which an SVG has none of. Drop `--dpr`, or write png, jpg, or webp."
+          .into(),
+      ));
+    }
+
     Ok(Image {
       format,
       quality: self.quality.map(Quality::new),

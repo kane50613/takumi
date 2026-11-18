@@ -1,9 +1,10 @@
 //! Runs `takumi` with `--log` and reads the steps it prints to standard error.
 
-use std::{
-  env, fs,
-  process::{self, Command},
-};
+use std::{env, fs, process::Command};
+
+mod common;
+
+use common::TempDir;
 
 const PAGE: &str = r#"<style>
   body { margin: 0; font-family: Nowhere, sans-serif; colr: red; cursor: pointer; -webkit-font-smoothing: antialiased }
@@ -12,9 +13,8 @@ const PAGE: &str = r#"<style>
 <h1 style="widht: 1px" tw="flex bogus-utility">First</h1><img src="missing.png" width="10" height="10"><p>Second</p>"#;
 
 fn steps(name: &str, arguments: &[&str]) -> String {
-  let dir = env::temp_dir().join(format!("takumi-cli-log-{name}-{}", process::id()));
+  let dir = TempDir::new(&format!("log-{name}"));
 
-  fs::create_dir_all(&dir).unwrap();
   fs::write(dir.join("page.html"), PAGE).unwrap();
 
   let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
@@ -62,7 +62,10 @@ fn debug_names_the_font_family_and_image_the_render_found_missing() {
     "{steps}"
   );
   assert!(
-    steps.contains("image: no image is loaded for \"missing.png\""),
+    steps.lines().any(
+      |line| line.contains("image: no image is loaded for \"file://")
+        && line.ends_with("/missing.png\"")
+    ),
     "{steps}"
   );
   assert!(steps.contains("layout: laid out "), "{steps}");

@@ -287,10 +287,11 @@ fn write_url(url: &str, base: &Url, out: &mut String) {
   out.push(')');
 }
 
-/// `url` resolved against `base`, or as written when it does not resolve, as a fragment-only
-/// reference into an SVG document does not.
+/// `url` resolved against `base`, or as written when it does not resolve: a fragment-only
+/// reference into an SVG document, or an empty `url()`, which names no resource.
+/// <https://drafts.csswg.org/css-values-4/#url-empty>
 fn resolve(url: &str, base: &Url) -> String {
-  if url.starts_with('#') {
+  if url.is_empty() || url.starts_with('#') {
     return url.to_owned();
   }
 
@@ -461,7 +462,7 @@ mod tests {
 
     fs::write(
       root.join("css/a.css"),
-      r#"a { background: url(img/a.png), url("/b.png") } @font-face { src: url('../f.woff2') } .m { mask: url(#m) } b { background: image-set("c.png" 1x) }"#,
+      r#"a { background: url(img/a.png), url("/b.png") } @font-face { src: url('../f.woff2') } .m { mask: url(#m) } b { background: image-set("c.png" 1x) } i { background: url("") }"#,
     )
     .unwrap();
 
@@ -479,6 +480,7 @@ mod tests {
     assert!(css.contains(r#"url("file:///b.png")"#), "{css}");
     assert!(css.contains(&format!(r#"url("{base}f.woff2")"#)), "{css}");
     assert!(css.contains(r##"url("#m")"##), "{css}");
+    assert!(css.contains(r#"url("")"#), "{css}");
     assert!(
       css.contains(&format!(r#"image-set("{base}css/c.png" 1x)"#)),
       "{css}"
