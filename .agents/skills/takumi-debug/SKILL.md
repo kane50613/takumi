@@ -1,6 +1,6 @@
 ---
 name: takumi-debug
-description: Find why a Takumi render differs from a browser or from what the template intends, such as a missing or misplaced element, an ignored style, a wrong color, or clipped text. Use when the output looks wrong and the cause is not a missing font or a load error.
+description: Use when a Takumi render differs from Chromium or from what the template intends, such as a missing or misplaced element, an ignored style, a wrong color, or clipped text. For missing characters, use takumi-fonts. For load errors, use takumi-deploy.
 ---
 
 # Debug a Takumi render

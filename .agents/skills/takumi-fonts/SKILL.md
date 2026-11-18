@@ -1,6 +1,6 @@
 ---
 name: takumi-fonts
-description: Load fonts so every character of a Takumi image or PDF draws in the intended family, including Google Fonts, brand and variable fonts, CJK, Arabic, Devanagari, and emoji. Use when text shows empty boxes or the wrong font or weight, an emoji breaks a render, or a template adds a script beyond Latin.
+description: Use when a Takumi image or PDF needs font coverage beyond the built-in Latin Geist, such as Google Fonts, brand or variable fonts, CJK, Arabic, Devanagari, or emoji. Typical signs are empty boxes, the wrong font or weight, or an emoji that breaks a render.
 ---
 
 # Font coverage in Takumi
@@ -20,6 +20,6 @@ A render has coverage when every character it can receive draws in a font you ch
 
 3. **Name the families in CSS.** Write each loaded family into the `font-family` stack of the text it draws, in the fallback order described in the "Fallback chain" section. A Tailwind `font-mono` or `font-serif` reaches a font only through its `generic` field. Done when each family name in the CSS matches the name of a loaded font.
 
-4. **Choose the emoji source.** This step applies to `takumi-js`. By default, it fetches each emoji's image from a CDN during the render. The "Failed fetches" section of [images.md](https://takumi.kane.tw/docs/images.md) says what a failed fetch does to the render. To keep the CDN out of the render, load a color emoji font through `fonts` and set `emoji: "from-font"`, as the "COLR / bitmap fonts" section shows. Done when every template that draws user text sets `emoji` on purpose, and no code fetches emoji images or calls `extractEmojis` before `render`.
+4. **Choose the emoji source.** This step applies to `takumi-js`. By default, it fetches each emoji's image from a CDN during the render. The "Failed fetches" section of [images.md](https://takumi.kane.tw/docs/images.md) says what a failed fetch does to the render. To keep the CDN out of the render, load a color emoji font through `fonts` and set `emoji: "from-font"`, as the "COLR / bitmap fonts" section of [images.md](https://takumi.kane.tw/docs/images.md) shows. Done when every template that draws user text sets `emoji` on purpose, and the `emoji` option is the only code that sources emoji.
 
 5. **Check coverage.** Render the template with the longest real strings in every script and weight from step 1, plus an emoji if the text can hold one, and open the image. For a PDF, `takumi-pdf` rejects the render and names each character no font draws. Done when no character shows as an empty box and each script draws in its family. Each `font-weight` the CSS asks for also maps to a loaded weight or a variable font's range.

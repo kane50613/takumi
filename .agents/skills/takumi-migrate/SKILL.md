@@ -1,6 +1,6 @@
 ---
 name: takumi-migrate
-description: Move image or PDF generation to Takumi from satori, `next/og`, `@vercel/og`, Puppeteer, Playwright, node-html-to-image, or `@react-pdf/renderer`. Use when code imports one of them to make an image or PDF, or the user asks to replace one.
+description: Use when moving image or PDF generation to Takumi from satori, `next/og`, `@vercel/og`, Puppeteer, Playwright, node-html-to-image, or `@react-pdf/renderer`, or when code imports one of them to make an image or PDF.
 ---
 
 # Migrate to Takumi
