@@ -1,46 +1,63 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { container, type Declarations } from "@takumi-rs/helpers";
 import { Renderer } from "../src/export";
 
 const renderer = new Renderer();
 
+/** The warnings rendering a box with `style` logs. */
 function renderStyle(style: Declarations) {
-  return () => renderer.render(container({ children: [], style }), { width: 100, height: 100 });
+  return async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await renderer.render(container({ children: [], style }), { width: 100, height: 100 });
+      // A warning logged on a worker thread prints on the JS thread's next turn.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      return warn.mock.calls.map(([message]) => String(message));
+    } finally {
+      warn.mockRestore();
+    }
+  };
 }
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function expectInvalidType(
-  action: () => unknown,
+async function expectInvalidType(
+  warnings: () => Promise<string[]>,
   property: string,
   actual: string,
   expected: string,
 ) {
-  expect(action).toThrowError(
-    new RegExp(
-      `^InvalidArg, invalid type for ${escapeRegex(property)}: ${escapeRegex(actual)}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
+  expect(await warnings()).toEqual([
+    expect.stringMatching(
+      new RegExp(
+        `^takumi: ignoring invalid type for ${escapeRegex(property)}: ${escapeRegex(actual)}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
+      ),
     ),
-  );
+  ]);
 }
 
-function expectInvalidValue(
-  action: () => unknown,
+async function expectInvalidValue(
+  warnings: () => Promise<string[]>,
   property: string,
   input: string,
   near: string,
   expected: string,
 ) {
-  expect(action).toThrowError(
-    new RegExp(
-      `^InvalidArg, invalid value for ${escapeRegex(property)} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
+  expect(await warnings()).toEqual([
+    expect.stringMatching(
+      new RegExp(
+        `^takumi: ignoring invalid value for ${escapeRegex(property)} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
+      ),
     ),
-  );
+  ]);
 }
 
-test("report deserialize error for justifyContent with wrong type", () => {
-  expectInvalidType(
+test("warn about justifyContent with wrong type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       justifyContent: 123,
@@ -51,8 +68,8 @@ test("report deserialize error for justifyContent with wrong type", () => {
   );
 });
 
-test("report deserialize error for justifyContent with invalid string value", () => {
-  expectInvalidValue(
+test("warn about justifyContent with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       justifyContent: "star",
     }),
@@ -63,8 +80,8 @@ test("report deserialize error for justifyContent with invalid string value", ()
   );
 });
 
-test("report deserialize error for color property with invalid type", () => {
-  expectInvalidType(
+test("warn about color property with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       color: 123,
@@ -75,8 +92,8 @@ test("report deserialize error for color property with invalid type", () => {
   );
 });
 
-test("report deserialize error for color property with invalid string value", () => {
-  expectInvalidValue(
+test("warn about color property with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       color: "notacolor",
     }),
@@ -87,8 +104,8 @@ test("report deserialize error for color property with invalid string value", ()
   );
 });
 
-test("report deserialize error for width property with invalid type", () => {
-  expectInvalidType(
+test("warn about width property with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       width: true,
@@ -99,8 +116,8 @@ test("report deserialize error for width property with invalid type", () => {
   );
 });
 
-test("report deserialize error for width property with invalid string value", () => {
-  expectInvalidValue(
+test("warn about width property with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       width: "invalid",
     }),
@@ -111,8 +128,8 @@ test("report deserialize error for width property with invalid string value", ()
   );
 });
 
-test("report deserialize error for alignItems property with invalid type", () => {
-  expectInvalidType(
+test("warn about alignItems property with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       alignItems: [],
@@ -123,8 +140,8 @@ test("report deserialize error for alignItems property with invalid type", () =>
   );
 });
 
-test("report deserialize error for alignItems property with invalid string value", () => {
-  expectInvalidValue(
+test("warn about alignItems property with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       alignItems: "invalid",
     }),
@@ -135,8 +152,8 @@ test("report deserialize error for alignItems property with invalid string value
   );
 });
 
-test("report deserialize error for borderRadius property with invalid type", () => {
-  expectInvalidType(
+test("warn about borderRadius property with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       borderRadius: true,
@@ -147,8 +164,8 @@ test("report deserialize error for borderRadius property with invalid type", () 
   );
 });
 
-test("report deserialize error for borderRadius property with invalid string value", () => {
-  expectInvalidValue(
+test("warn about borderRadius property with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       borderRadius: "invalid",
     }),
@@ -159,8 +176,8 @@ test("report deserialize error for borderRadius property with invalid string val
   );
 });
 
-test("report deserialize error for borderRadius property with invalid slash syntax", () => {
-  expectInvalidValue(
+test("warn about borderRadius property with invalid slash syntax", async () => {
+  await expectInvalidValue(
     renderStyle({
       borderRadius: "10px / invalid",
     }),
@@ -171,8 +188,8 @@ test("report deserialize error for borderRadius property with invalid slash synt
   );
 });
 
-test("report deserialize error for padding (Sides) with invalid type", () => {
-  expectInvalidType(
+test("warn about padding (Sides) with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       padding: { top: null },
@@ -183,8 +200,8 @@ test("report deserialize error for padding (Sides) with invalid type", () => {
   );
 });
 
-test("report deserialize error for padding (Sides) with invalid string value", () => {
-  expectInvalidValue(
+test("warn about padding (Sides) with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       padding: "invalid",
     }),
@@ -195,8 +212,8 @@ test("report deserialize error for padding (Sides) with invalid string value", (
   );
 });
 
-test("report deserialize error for gap (SpacePair) with invalid type", () => {
-  expectInvalidType(
+test("warn about gap (SpacePair) with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       gap: true,
@@ -207,8 +224,8 @@ test("report deserialize error for gap (SpacePair) with invalid type", () => {
   );
 });
 
-test("report deserialize error for gap (SpacePair) with invalid string value", () => {
-  expectInvalidValue(
+test("warn about gap (SpacePair) with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       gap: "invalid",
     }),
@@ -220,8 +237,8 @@ test("report deserialize error for gap (SpacePair) with invalid string value", (
 });
 
 // Tests fallback error messages when neither value_description() nor enum_values() is implemented
-test("report deserialize error for textDecorationLine with invalid type", () => {
-  expectInvalidType(
+test("warn about textDecorationLine with invalid type", async () => {
+  await expectInvalidType(
     renderStyle({
       // @ts-expect-error: invalid type test
       textDecorationLine: 123,
@@ -232,8 +249,8 @@ test("report deserialize error for textDecorationLine with invalid type", () => 
   );
 });
 
-test("report deserialize error for textDecorationLine with invalid string value", () => {
-  expectInvalidValue(
+test("warn about textDecorationLine with invalid string value", async () => {
+  await expectInvalidValue(
     renderStyle({
       textDecorationLine: "invalid",
     }),
@@ -242,4 +259,30 @@ test("report deserialize error for textDecorationLine with invalid string value"
     "invalid",
     "a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial', 'unset' or 'inherit'.",
   );
+});
+
+test("an invalid value drops only its declaration", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+  try {
+    const node = container({
+      children: [],
+      style: { width: 4, height: "-1.5%", backgroundColor: "rgb(255, 0, 0)" },
+    });
+    const image = await renderer.render(node, { width: 4, height: 4, format: "raw" });
+
+    expect(Array.from(image.subarray(0, 4))).toEqual([0, 0, 0, 0]);
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      expect.stringMatching(/^takumi: ignoring invalid value for height: string "-1\.5%"/),
+    ]);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test("lists the sizing keywords in a warning about flexBasis", async () => {
+  const [warning = ""] = await renderStyle({ flexBasis: "nope" })();
+
+  expect(warning).toContain("'min-content'");
+  expect(warning).toContain("'content'");
 });

@@ -11,6 +11,7 @@ use takumi_bindings_common::{
   source::read_source,
   source_cache::SourceCache,
   stylesheet,
+  warning::WarningLog,
 };
 use takumi_core::{
   Fonts,
@@ -20,10 +21,7 @@ use takumi_core::{
 use takumi_raster::{SequentialScene, measure, needs, render, write_animation, write_image};
 use wasm_bindgen::prelude::*;
 
-use crate::{
-  helper::{forward_warnings, map_error},
-  model::*,
-};
+use crate::{helper::map_error, model::*};
 
 /// The main renderer for Takumi image rendering engine.
 ///
@@ -76,7 +74,7 @@ impl Renderer {
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
   pub fn new(options: Option<RendererOptionsType>) -> Result<Renderer, js_sys::Error> {
-    forward_warnings();
+    WarningLog::print_to_console();
 
     let options: RendererOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))

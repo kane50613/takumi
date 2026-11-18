@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { toNativeSource } from "@takumi-rs/bindings-js";
 import { type Node, Renderer } from "../bundlers/node";
@@ -25,20 +25,40 @@ describe("a JSON source", () => {
   test.each([
     ["an unreadable value", text("x", { width: "wider" })],
     ["a value of the wrong type", text("x", { justifyContent: 123 as unknown as "center" })],
-    ["no type", { text: "x" } as unknown as Node],
-  ])("fails on %s with the tree's message", (_, node) => {
-    const message = (source: Parameters<typeof inner.render>[0]) => {
+  ])("warns about %s as the tree does", (_, node) => {
+    const warnings = (source: Parameters<typeof inner.render>[0]) => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+
       try {
         inner.render(source, options);
-        return "rendered";
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error);
+
+        return warn.mock.calls.map(([message]) => String(message));
+      } finally {
+        warn.mockRestore();
       }
     };
+    const fromTree = warnings(node);
 
-    const fromTree = message(node);
-
-    expect(fromTree).not.toBe("rendered");
-    expect(message(toNativeSource(node))).toBe(fromTree);
+    expect(fromTree).toHaveLength(1);
+    expect(warnings(toNativeSource(node))).toEqual(fromTree);
   });
+
+  test.each([["no type", { text: "x" } as unknown as Node]])(
+    "fails on %s with the tree's message",
+    (_, node) => {
+      const message = (source: Parameters<typeof inner.render>[0]) => {
+        try {
+          inner.render(source, options);
+          return "rendered";
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+
+      const fromTree = message(node);
+
+      expect(fromTree).not.toBe("rendered");
+      expect(message(toNativeSource(node))).toBe(fromTree);
+    },
+  );
 });

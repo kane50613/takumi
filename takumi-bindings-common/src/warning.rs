@@ -3,6 +3,15 @@
 use std::sync::Once;
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+#[cfg(feature = "wasm")]
+use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+extern "C" {
+  #[wasm_bindgen(catch, js_namespace = console, js_name = warn)]
+  fn console_warn(message: String) -> Result<(), JsValue>;
+}
 
 /// The prefix of every target takumi logs under.
 const TARGET_PREFIX: &str = "takumi::";
@@ -19,6 +28,15 @@ impl WarningLog {
       if log::set_logger(Box::leak(Box::new(Self(sink)))).is_ok() {
         log::set_max_level(LevelFilter::Warn);
       }
+    });
+  }
+
+  /// Prints takumi's warnings with `console.warn` from now on, in a single-threaded wasm module.
+  #[cfg(feature = "wasm")]
+  pub fn print_to_console() {
+    // A `console.warn` that throws must not fail the render that logged the warning.
+    Self::install(|message| {
+      let _ = console_warn(message);
     });
   }
 }

@@ -51,14 +51,7 @@ impl<'de> CssInputParseError<'de> {
     }
   }
 
-  pub(crate) fn into_serde_error<E>(self, property_name: &str) -> E
-  where
-    E: serde::de::Error,
-  {
-    E::custom(self.message(property_name))
-  }
-
-  fn message(&self, property_name: &str) -> String {
+  pub(crate) fn message(&self, property_name: &str) -> String {
     let mut message = String::new();
     let value_kind = match self {
       Self::Value { .. } => "value",
