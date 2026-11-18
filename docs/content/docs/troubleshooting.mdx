@@ -62,7 +62,23 @@ Add the `serverExternalPackages` entry above, then delete `.next` and start agai
 
 ### Cannot find native binding
 
-`@takumi-rs/core` loads a platform-specific native package, and the one for the current platform is missing. Check package hoisting and the deploy target.
+`@takumi-rs/core` loads a platform-specific native package, and the one for the current platform is missing. The error names that package, such as `@takumi-rs/core-linux-x64-gnu`. Check the bundler, package hoisting, and the deploy target.
+
+#### Keep the package out of the bundle
+
+A bundler that inlines `@takumi-rs/core` leaves its platform package behind. Mark it external so it loads from `node_modules` at runtime:
+
+```ts title="next.config.ts"
+const config: NextConfig = {
+  serverExternalPackages: ["@takumi-rs/core"], // [!code ++]
+};
+```
+
+```ts title="vite.config.ts"
+export default defineConfig({
+  ssr: { external: ["@takumi-rs/core"] }, // [!code ++]
+});
+```
 
 #### Hoist the native package
 
