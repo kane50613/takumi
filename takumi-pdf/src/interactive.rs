@@ -21,7 +21,7 @@ use takumi_core::{
 use crate::{
   counters::any_node,
   krilla::{
-    action::{Action, LinkAction},
+    action::LinkAction,
     annotation::{Annotation, LinkAnnotation, Target},
     destination::{Destination, XyzDestination},
     geom::{Point, Rect as KrillaRect},
@@ -578,7 +578,7 @@ pub(crate) fn add_link_annotations<'l>(
         Some(destination) => Target::Destination(Destination::Xyz(destination)),
         None => continue,
       },
-      None => Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
+      None => Target::Action(LinkAction::new(link.uri.clone())),
     };
     // A repeated fragment is an artifact, and its paths do not join the tag tree.
     let tags = tags.filter(|_| !link.repeated);

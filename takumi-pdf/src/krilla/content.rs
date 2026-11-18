@@ -132,12 +132,7 @@ impl ContentBuilder {
   }
 
   #[track_caller]
-  pub(crate) fn start_marked_content_with_properties(
-    &mut self,
-    sc: &mut SerializeContext,
-    mcid: Option<i32>,
-    tag: ContentTag,
-  ) {
+  pub(crate) fn start_marked_content_with_properties(&mut self, mcid: i32, tag: ContentTag) {
     self.start_marked_content_prelude();
 
     let mut mc = self
@@ -145,14 +140,8 @@ impl ContentBuilder {
       .begin_marked_content_with_properties(tag.name());
     let mut properties = mc.properties();
 
-    if let Some(mcid) = mcid {
-      properties.pairs([(Name(b"MCID"), mcid)]);
-    }
-
-    // Page height extracted from transform and passed to function to allow
-    // its dependants to flip the y-axis, mirroring Krilla conventions.
-    let page_height = self.root_transform.ty();
-    tag.write_properties(sc, properties, page_height);
+    properties.pairs([(Name(b"MCID"), mcid)]);
+    tag.write_properties(properties);
   }
 
   #[track_caller]
