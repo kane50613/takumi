@@ -18,5 +18,6 @@ The option types no longer list the internal `failedFontFiles` field, and `@taku
 
 - const url = await renderer.renderAsDataUrl(node, { format: "png" });
 + const bytes = await renderer.render(node, { format: "png" });
-+ const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
++ const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
++ const url = `data:image/png;base64,${btoa(binary)}`;
 ```
