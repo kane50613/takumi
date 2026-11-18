@@ -668,9 +668,9 @@ impl ImageSource {
     }
   }
 
-  /// Get the image size in device pixels for the current sizing context.
-  pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
-    let (width, height) = match self {
+  /// The image's natural size, in the pixels of its own source.
+  pub fn dimensions(&self) -> (f32, f32) {
+    match self {
       #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
@@ -683,7 +683,12 @@ impl ImageSource {
         let (width, height) = encoded.dimensions();
         (width as f32, height as f32)
       }
-    };
+    }
+  }
+
+  /// Get the image size in device pixels for the current sizing context.
+  pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
+    let (width, height) = self.dimensions();
 
     (sizing.to_device(width), sizing.to_device(height))
   }
