@@ -10,7 +10,11 @@ use takumi_bindings_common::{
   options::RendererOptions,
   source_cache::SourceCache,
 };
-use takumi_core::{Fonts, resources::image::ResourceCache};
+use takumi_core::{
+  Fonts,
+  layout::{measure, needs},
+  resources::image::ResourceCache,
+};
 
 use crate::{
   JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
@@ -41,8 +45,8 @@ pub struct MeasuredTextRun {
   pub height: f64,
 }
 
-impl From<takumi_raster::MeasuredTextRun> for MeasuredTextRun {
-  fn from(run: takumi_raster::MeasuredTextRun) -> Self {
+impl From<measure::MeasuredTextRun> for MeasuredTextRun {
+  fn from(run: measure::MeasuredTextRun) -> Self {
     Self {
       text: run.text,
       x: run.x as f64,
@@ -69,8 +73,8 @@ pub struct MeasuredNode {
   pub runs: Vec<MeasuredTextRun>,
 }
 
-impl From<takumi_raster::MeasuredNode> for MeasuredNode {
-  fn from(node: takumi_raster::MeasuredNode) -> Self {
+impl From<measure::MeasuredNode> for MeasuredNode {
+  fn from(node: measure::MeasuredNode) -> Self {
     Self {
       width: node.width as f64,
       height: node.height as f64,
@@ -94,7 +98,7 @@ pub struct RenderNeeds {
 
 impl RenderNeeds {
   /// What `needs` reports, with the ids of the `listed` fonts the render loads.
-  pub(crate) fn new(needs: takumi_raster::RenderNeeds, listed: Option<&ListedFonts>) -> Self {
+  pub(crate) fn new(needs: needs::RenderNeeds, listed: Option<&ListedFonts>) -> Self {
     Self {
       fonts: listed.map_or_else(Vec::new, |listed| {
         listed

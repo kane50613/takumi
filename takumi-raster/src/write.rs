@@ -16,8 +16,6 @@ use png::{
 use takumi_core::resources::image_buffer::rgba_len;
 use typed_builder::TypedBuilder;
 
-/// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub use crate::webp::write_animated_webp;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::webp::write_webp_lossy;
 use crate::{
@@ -26,7 +24,7 @@ use crate::{
   palette::Palette,
   render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
   scanline::{Pixels, Scanlines},
-  webp::{encode_animated_webp, has_any_alpha_pixel, write_webp_lossless},
+  webp::{self, encode_animated_webp, has_any_alpha_pixel, write_webp_lossless},
   zlib::compress_segmented,
 };
 
@@ -624,17 +622,23 @@ fn write_ico(image: &Bitmap, destination: &mut impl Write) -> Result<()> {
 }
 
 /// Encode a sequence of RGBA frames into an animated GIF and write to `destination`.
+#[deprecated(note = "use `write_animation_frames` with `AnimationFormat::Gif` instead")]
 pub fn write_animated_gif<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,
   destination: &mut W,
   options: AnimatedGifOptions,
 ) -> Result<()> {
-  ensure_uniform_frame_dimensions(&frames)?;
-  encode_animated_gif(
-    frames.into_owned().into_iter().map(Ok),
-    destination,
-    options,
-  )
+  write_animation_frames(frames, AnimationFormat::Gif(options), destination)
+}
+
+/// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
+#[deprecated(note = "use `write_animation_frames` with `AnimationFormat::WebP` instead")]
+pub fn write_animated_webp<W: Write>(
+  frames: Cow<'_, [AnimationFrame]>,
+  destination: &mut W,
+  options: AnimatedWebpOptions,
+) -> Result<()> {
+  write_animation_frames(frames, AnimationFormat::WebP(options), destination)
 }
 
 /// Rejects mismatched frame dimensions up front, so a slice-based encoder writes
@@ -733,21 +737,16 @@ where
 }
 
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
+#[deprecated(note = "use `write_animation_frames` with `AnimationFormat::Apng` instead")]
 pub fn write_animated_png<W: Write>(
   frames: &[AnimationFrame],
   destination: &mut W,
   options: AnimatedPngOptions,
 ) -> Result<()> {
-  if frames.is_empty() {
-    return Err(Error::EmptyAnimationFrames);
-  }
-  ensure_uniform_frame_dimensions(frames)?;
-
-  encode_animated_png(
-    frames.iter().map(Ok),
-    frames.len() as u32,
+  write_animation_frames(
+    Cow::Borrowed(frames),
+    AnimationFormat::Apng(options),
     destination,
-    options,
   )
 }
 
@@ -900,7 +899,7 @@ impl AnimationFormat {
 /// with [`AnimationFrameRateTooHigh`](Error::AnimationFrameRateTooHigh) before
 /// rendering anything.
 ///
-/// [`render_animation`](crate::render_animation) plus a `write_animated_*` call is
+/// [`render_animation`](crate::render_animation) plus [`write_animation_frames`] is
 /// the eager alternative. It holds every frame at once but rejects mismatched
 /// dimensions before writing.
 pub fn write_animation<W: Write>(
@@ -937,6 +936,38 @@ pub fn write_animation<W: Write>(
       format,
       destination,
     )
+  }
+}
+
+/// Encodes rendered frames into an animated WebP, APNG, or GIF and writes it to `destination`.
+pub fn write_animation_frames<W: Write>(
+  frames: Cow<'_, [AnimationFrame]>,
+  format: AnimationFormat,
+  destination: &mut W,
+) -> Result<()> {
+  match format {
+    AnimationFormat::WebP(options) => webp::write_animated_webp(frames, destination, options),
+    AnimationFormat::Gif(options) => {
+      ensure_uniform_frame_dimensions(&frames)?;
+      encode_animated_gif(
+        frames.into_owned().into_iter().map(Ok),
+        destination,
+        options,
+      )
+    }
+    AnimationFormat::Apng(options) => {
+      if frames.is_empty() {
+        return Err(Error::EmptyAnimationFrames);
+      }
+
+      ensure_uniform_frame_dimensions(&frames)?;
+      encode_animated_png(
+        frames.iter().map(Ok),
+        frames.len() as u32,
+        destination,
+        options,
+      )
+    }
   }
 }
 
@@ -1017,9 +1048,9 @@ mod tests {
   use takumi_core::Error;
 
   use super::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
-    MAX_SEGMENTS, OutputFormat, PngEncoding, Quality, write_animated_gif, write_animated_png,
-    write_animated_webp, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, AnimationFrame,
+    Bitmap, Filter, MAX_SEGMENTS, OutputFormat, PngEncoding, Quality, write_animation_frames,
+    write_image,
   };
 
   fn band(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
@@ -1104,8 +1135,11 @@ mod tests {
     ];
 
     let mut bytes = Vec::new();
-    let encode_result =
-      write_animated_png(&frames, &mut bytes, AnimatedPngOptions { loop_count: None });
+    let encode_result = write_animation_frames(
+      Cow::Borrowed(&frames),
+      AnimationFormat::Apng(AnimatedPngOptions { loop_count: None }),
+      &mut bytes,
+    );
     assert!(encode_result.is_ok(), "failed to encode animated png");
 
     let decode_result = png::Decoder::new(Cursor::new(&bytes)).read_info();
@@ -1152,12 +1186,12 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_gif(
+    let encode_result = write_animation_frames(
       Cow::Owned(vec![frame_a, frame_b]),
-      &mut bytes,
-      AnimatedGifOptions {
+      AnimationFormat::Gif(AnimatedGifOptions {
         loop_count: Some(7),
-      },
+      }),
+      &mut bytes,
     );
     assert!(encode_result.is_ok(), "failed to encode animated gif");
 
@@ -1221,10 +1255,10 @@ mod tests {
     let frame_b = mk_frame(Bitmap::from_fn(3, 2, |_, _| [0, 255, 0, 255]), 10);
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_gif(
+    let encode_result = write_animation_frames(
       Cow::Owned(vec![frame_a, frame_b]),
+      AnimationFormat::Gif(AnimatedGifOptions::default()),
       &mut bytes,
-      AnimatedGifOptions::default(),
     );
     assert!(encode_result.is_err(), "mismatched frames should error");
     assert!(
@@ -1272,10 +1306,10 @@ mod tests {
   #[test]
   fn write_animated_gif_rejects_empty_frames() {
     let mut bytes = Vec::new();
-    let result = write_animated_gif(
+    let result = write_animation_frames(
       Cow::Owned(Vec::new()),
+      AnimationFormat::Gif(AnimatedGifOptions::default()),
       &mut bytes,
-      AnimatedGifOptions::default(),
     );
 
     assert_matches!(result, Err(Error::EmptyAnimationFrames));
@@ -1284,7 +1318,11 @@ mod tests {
   #[test]
   fn write_animated_png_rejects_empty_frames() {
     let mut bytes = Vec::new();
-    let result = write_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
+    let result = write_animation_frames(
+      Cow::Borrowed(&[]),
+      AnimationFormat::Apng(AnimatedPngOptions::default()),
+      &mut bytes,
+    );
 
     assert_matches!(result, Err(Error::EmptyAnimationFrames));
   }
@@ -1297,7 +1335,11 @@ mod tests {
     ];
 
     let mut bytes = Vec::new();
-    let result = write_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
+    let result = write_animation_frames(
+      Cow::Borrowed(&frames),
+      AnimationFormat::Apng(AnimatedPngOptions::default()),
+      &mut bytes,
+    );
 
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
   }
@@ -1401,17 +1443,17 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_webp(
+    let encode_result = write_animation_frames(
       Cow::Owned(vec![frame_a, frame_b]),
-      &mut bytes,
-      AnimatedWebpOptions {
+      AnimationFormat::WebP(AnimatedWebpOptions {
         blend: true,
         dispose: true,
         loop_count: Some(7),
         lossless: true,
         quality: 75,
         speed: None,
-      },
+      }),
+      &mut bytes,
     );
     assert!(encode_result.is_ok(), "failed to encode animated webp");
 
@@ -1457,14 +1499,14 @@ mod tests {
     let frame = mk_frame(Bitmap::from_fn(2, 2, |_, _| [20, 80, 220, 255]), 100);
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_webp(
+    let encode_result = write_animation_frames(
       Cow::Owned(vec![frame]),
-      &mut bytes,
-      AnimatedWebpOptions {
+      AnimationFormat::WebP(AnimatedWebpOptions {
         lossless: false,
         quality: 70,
         ..Default::default()
-      },
+      }),
+      &mut bytes,
     );
     assert!(
       encode_result.is_ok(),
@@ -1501,10 +1543,10 @@ mod tests {
     let frame_c = mk_frame(image_b, 30);
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_webp(
+    let encode_result = write_animation_frames(
       Cow::Owned(vec![frame_a, frame_b, frame_c]),
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
       &mut bytes,
-      AnimatedWebpOptions::default(),
     );
     assert!(
       encode_result.is_ok(),
@@ -1551,10 +1593,10 @@ mod tests {
     let invalid = mk_frame(Bitmap::new(0, 1), 10);
 
     let mut bytes = Vec::new();
-    let result = write_animated_webp(
+    let result = write_animation_frames(
       Cow::Owned(vec![invalid]),
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
       &mut bytes,
-      AnimatedWebpOptions::default(),
     );
     let err = result.err();
     assert!(err.is_some(), "zero-sized frame should be rejected");
@@ -1579,10 +1621,10 @@ mod tests {
     ];
 
     let mut bytes = Vec::new();
-    let encode_result = write_animated_webp(
+    let encode_result = write_animation_frames(
       Cow::Owned(frames),
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
       &mut bytes,
-      AnimatedWebpOptions::default(),
     );
     assert!(
       encode_result.is_ok(),

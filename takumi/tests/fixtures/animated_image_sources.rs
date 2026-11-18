@@ -1,6 +1,8 @@
+use std::borrow::Cow;
+
 use takumi::{
   prelude::{Length::*, *},
-  render_animation, write_animated_png, write_animated_webp,
+  render_animation, write_animation_frames,
 };
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};
@@ -56,13 +58,15 @@ fn marker_frame(column: usize) -> AnimationFrame {
 /// binary asset of its own.
 fn animated_webp_bytes() -> Vec<u8> {
   let mut bytes = Vec::new();
-  write_animated_webp(
+  write_animation_frames(
     marker_frames().into(),
+    AnimationFormat::WebP(
+      AnimatedWebpOptions::builder()
+        .lossless(true)
+        .blend(false)
+        .build(),
+    ),
     &mut bytes,
-    AnimatedWebpOptions::builder()
-      .lossless(true)
-      .blend(false)
-      .build(),
   )
   .expect("animated webp");
 
@@ -72,10 +76,10 @@ fn animated_webp_bytes() -> Vec<u8> {
 /// The same frames as an APNG.
 fn animated_png_bytes() -> Vec<u8> {
   let mut bytes = Vec::new();
-  write_animated_png(
-    &marker_frames(),
+  write_animation_frames(
+    Cow::Borrowed(&marker_frames()),
+    AnimationFormat::Apng(AnimatedPngOptions::builder().build()),
     &mut bytes,
-    AnimatedPngOptions::builder().build(),
   )
   .expect("animated png");
 

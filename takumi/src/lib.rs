@@ -106,7 +106,11 @@ pub mod prelude {
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
     Error, Fonts, Result,
-    layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
+    layout::{
+      measure::{MeasuredNode, MeasuredTextRun},
+      needs::RenderNeeds,
+      node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
+    },
     resources::{
       font::{FontError, FontOverride, FontResource, FontSource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
@@ -118,8 +122,7 @@ pub mod prelude {
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, AnimationFrame,
-    Bitmap, DitheringAlgorithm, MeasuredNode, MeasuredTextRun, OutputFormat, Quality, RenderNeeds,
-    RenderOptions, SequentialScene,
+    Bitmap, DitheringAlgorithm, OutputFormat, Quality, RenderOptions, SequentialScene,
   };
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg::SvgOptions;
@@ -129,9 +132,13 @@ pub mod prelude {
 pub use takumi_core::html::{from_html, parse_html};
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
-  measure, needs, render, render_animation, uncovered_characters, write_animated_gif,
-  write_animated_png, write_animated_webp, write_animation, write_image,
+  measure, needs, render, render_animation, uncovered_characters, write_animation,
+  write_animation_frames, write_image,
 };
+// Each carries its deprecation to callers, so re-exporting it is not itself a use.
+#[cfg(feature = "raster-backend")]
+#[allow(deprecated)]
+pub use takumi_raster::{write_animated_gif, write_animated_png, write_animated_webp};
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;
 

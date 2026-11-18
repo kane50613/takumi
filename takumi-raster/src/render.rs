@@ -1,13 +1,12 @@
 use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
-pub use takumi_core::layout::measure::{MeasuredNode, MeasuredTextRun};
-pub use takumi_core::layout::needs::RenderNeeds;
 #[cfg(feature = "pages")]
 use takumi_core::{
   layout::page_sizes::PageSizer,
   page_stream::{PageStream, SETTLED_PAGES, Settle, Settled},
 };
 use takumi_core::{
+  layout::{measure::MeasuredNode, needs::RenderNeeds},
   scene::Scene,
   style::{ComputedStyle, Lang},
 };
@@ -570,7 +569,7 @@ mod tests {
 
     use crate::{
       AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat,
-      write_animated_gif, write_animated_png, write_animated_webp, write_animation,
+      write_animation, write_animation_frames,
     };
 
     let fonts = Fonts::default();
@@ -580,10 +579,10 @@ mod tests {
     assert!(!frames.is_empty());
 
     let mut eager = Vec::new();
-    write_animated_gif(
+    write_animation_frames(
       Cow::Owned(frames.clone()),
+      AnimationFormat::Gif(AnimatedGifOptions::default()),
       &mut eager,
-      AnimatedGifOptions::default(),
     )?;
     let mut streamed = Vec::new();
     write_animation(
@@ -595,7 +594,11 @@ mod tests {
     assert_eq!(eager, streamed, "gif");
 
     let mut eager = Vec::new();
-    write_animated_png(&frames, &mut eager, AnimatedPngOptions::default())?;
+    write_animation_frames(
+      Cow::Borrowed(&frames),
+      AnimationFormat::Apng(AnimatedPngOptions::default()),
+      &mut eager,
+    )?;
     let mut streamed = Vec::new();
     write_animation(
       &scenes,
@@ -606,10 +609,10 @@ mod tests {
     assert_eq!(eager, streamed, "apng");
 
     let mut eager = Vec::new();
-    write_animated_webp(
+    write_animation_frames(
       Cow::Owned(frames.clone()),
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
       &mut eager,
-      AnimatedWebpOptions::default(),
     )?;
     let mut streamed = Vec::new();
     write_animation(

@@ -5,7 +5,7 @@ use takumi_bindings_common::{
   input::{ListedFont, ListedFonts, retain_svg},
   options::RenderOptions,
 };
-use takumi_core::Fonts;
+use takumi_core::{Fonts, layout};
 use takumi_raster::needs;
 
 use crate::{
@@ -48,7 +48,7 @@ impl NeedsTask {
 }
 
 impl Task for NeedsTask {
-  type Output = takumi_raster::RenderNeeds;
+  type Output = layout::needs::RenderNeeds;
   type JsValue = RenderNeeds;
 
   fn compute(&mut self) -> Result<Self::Output> {
@@ -87,7 +87,7 @@ impl AnimationNeedsTask {
 }
 
 impl Task for AnimationNeedsTask {
-  type Output = takumi_raster::RenderNeeds;
+  type Output = layout::needs::RenderNeeds;
   type JsValue = RenderNeeds;
 
   fn compute(&mut self) -> Result<Self::Output> {

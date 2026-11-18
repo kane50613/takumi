@@ -1,4 +1,5 @@
 use napi::bindgen_prelude::*;
+use takumi_core::layout;
 use takumi_raster::measure;
 
 use crate::{map_error, render_job::RenderJob, renderer::MeasuredNode};
@@ -6,7 +7,7 @@ use crate::{map_error, render_job::RenderJob, renderer::MeasuredNode};
 pub struct MeasureTask(pub(crate) RenderJob);
 
 impl Task for MeasureTask {
-  type Output = takumi_raster::MeasuredNode;
+  type Output = layout::measure::MeasuredNode;
   type JsValue = MeasuredNode;
 
   fn compute(&mut self) -> Result<Self::Output> {

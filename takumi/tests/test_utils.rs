@@ -15,10 +15,7 @@ use std::{
 };
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use takumi::{
-  measure, prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp,
-  write_image,
-};
+use takumi::{measure, prelude::*, render, write_animation_frames, write_image};
 use takumi_core::resources::image::ResourceCache;
 use takumi_svg::{SvgOptions, render as svg_render};
 use zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions};
@@ -358,21 +355,26 @@ pub(crate) fn run_animation_fixture_test<Frames: IntoAnimationFixtureFrames>(
 
     match format {
       AnimationFixtureFormat::Webp => {
-        write_animated_webp(
+        write_animation_frames(
           Cow::Owned(frames.clone()),
+          AnimationFormat::WebP(AnimatedWebpOptions::default()),
           &mut file,
-          AnimatedWebpOptions::default(),
         )
         .unwrap();
       }
       AnimationFixtureFormat::Png => {
-        write_animated_png(&frames, &mut file, AnimatedPngOptions::default()).unwrap();
+        write_animation_frames(
+          Cow::Borrowed(&frames),
+          AnimationFormat::Apng(AnimatedPngOptions::default()),
+          &mut file,
+        )
+        .unwrap();
       }
       AnimationFixtureFormat::Gif => {
-        write_animated_gif(
+        write_animation_frames(
           Cow::Owned(frames.clone()),
+          AnimationFormat::Gif(AnimatedGifOptions::default()),
           &mut file,
-          AnimatedGifOptions::default(),
         )
         .unwrap();
       }
