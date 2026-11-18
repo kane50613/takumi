@@ -94,7 +94,18 @@ glibc raises its mmap threshold after a large block is freed, so later canvases 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
+These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first.
+
+### Alpine and other musl images
+
+The glibc settings above do nothing on musl, whose allocator maps and unmaps every large buffer a render frees. Preload [mimalloc](https://github.com/microsoft/mimalloc) to replace the allocator for the whole process, the Takumi binding included:
+
+```bash title="mimalloc on Alpine"
+apk add mimalloc2-insecure
+LD_PRELOAD=/usr/lib/libmimalloc-insecure.so.2 node server.js
+```
+
+The `mimalloc2` package installs the hardened build, which trades some speed for heap checks. In [PR #2517](https://github.com/kane50613/takumi/pull/2517), its author measured 259 renders a second with musl's allocator and 546 with mimalloc linked into the binding, four at a time on Node.js 24, Alpine 3.24, and Linux arm64. Peak RSS rose from 144 MiB to 178 MiB. Measure your own server, since a preloaded build has different settings.
 
 ## Keep network requests out of repeated work
 
