@@ -119,10 +119,26 @@ Prefer instance-owned mutable state. A shared default needs an explicit lifetime
 
 - Keep cache keys, admission, eviction, and failure cleanup with the owner. Group by resource and lifetime, not by storage type.
 - Include every dependency in the key, or keep those dependencies immutable for the cache's lifetime.
+- Key loaded data by its content or a caller-supplied key, so the same bytes loaded twice share one entry.
 - Bound long-lived retained data. Label approximate size accounting. A cache budget is not a process-memory limit.
+- Evict the unit that was admitted, such as one font file, so a group that keeps gaining entries cannot outgrow its budget.
 - Release locks and borrows before expensive work or caller callbacks. Share in-flight work only when request policies allow it.
 - Remove failed promises without deleting newer replacements. Test concurrent misses, retries, eviction, and independent owners.
 - Keep cancellation and authorization scoped to the caller. A URL-only key does not establish a shared trust boundary.
+
+### Cache configuration
+
+Callers configure caches by layer. One layer is the memory a renderer keeps, and the other is the store that holds downloaded bytes. Callers should not need to know which internal cache holds each kind of data. Follow these rules when you add or change a cache option:
+
+- Give each layer one byte budget, and accept a budget for one kind of data only as an override for a measured need.
+- Make a budget a real bound with one documented meaning for `0`, and protect the entries a render is using with a lease instead of an exception to the budget.
+- Route every download through one store interface keyed by URL, and leave eviction from that store to the store.
+- Give every default a bound, including the default store.
+- Use one cache policy vocabulary for every layer and every kind of resource.
+- Apply a configuration change to the caches that already exist, or reject it with an error instead of ignoring it.
+- Name a limit with its unit, such as `maxBytes`, and report usage, hits, misses, and evictions under the same keys the configuration uses.
+
+Document each layer by where it lives, who shares it, and when its entries go away. Say which memory a budget does not count.
 
 ### Library design
 
