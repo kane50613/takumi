@@ -1,0 +1,156 @@
+pub mod takumi_raster
+pub use takumi_raster::MeasuredNode
+pub use takumi_raster::MeasuredTextRun
+pub use takumi_raster::RenderNeeds
+#[non_exhaustive] pub enum takumi_raster::AnimationFormat
+pub takumi_raster::AnimationFormat::Apng(takumi_raster::AnimatedPngOptions)
+pub takumi_raster::AnimationFormat::Gif(takumi_raster::AnimatedGifOptions)
+pub takumi_raster::AnimationFormat::WebP(takumi_raster::AnimatedWebpOptions)
+impl takumi_raster::AnimationFormat
+pub const fn takumi_raster::AnimationFormat::max_fps(self) -> u32
+impl core::clone::Clone for takumi_raster::AnimationFormat
+pub fn takumi_raster::AnimationFormat::clone(&self) -> takumi_raster::AnimationFormat
+impl core::fmt::Debug for takumi_raster::AnimationFormat
+pub fn takumi_raster::AnimationFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::AnimationFormat
+#[non_exhaustive] pub enum takumi_raster::DitheringAlgorithm
+pub takumi_raster::DitheringAlgorithm::FloydSteinberg
+pub takumi_raster::DitheringAlgorithm::None
+pub takumi_raster::DitheringAlgorithm::OrderedBayer
+impl core::clone::Clone for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::clone(&self) -> takumi_raster::DitheringAlgorithm
+impl core::cmp::Eq for takumi_raster::DitheringAlgorithm
+impl core::cmp::PartialEq for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::eq(&self, &takumi_raster::DitheringAlgorithm) -> bool
+impl core::default::Default for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::default() -> takumi_raster::DitheringAlgorithm
+impl core::fmt::Debug for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::DitheringAlgorithm
+impl core::marker::StructuralPartialEq for takumi_raster::DitheringAlgorithm
+impl serde_core::ser::Serialize for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for takumi_raster::DitheringAlgorithm
+pub fn takumi_raster::DitheringAlgorithm::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+#[non_exhaustive] pub enum takumi_raster::OutputFormat
+pub takumi_raster::OutputFormat::Ico
+pub takumi_raster::OutputFormat::Jpeg
+pub takumi_raster::OutputFormat::Jpeg::quality: takumi_raster::Quality
+pub takumi_raster::OutputFormat::Png
+pub takumi_raster::OutputFormat::WebP
+pub takumi_raster::OutputFormat::WebP::quality: takumi_raster::Quality
+pub takumi_raster::OutputFormat::WebPLossless
+impl takumi_raster::OutputFormat
+pub fn takumi_raster::OutputFormat::content_type(&self) -> &'static str
+impl core::clone::Clone for takumi_raster::OutputFormat
+pub fn takumi_raster::OutputFormat::clone(&self) -> takumi_raster::OutputFormat
+impl core::cmp::Eq for takumi_raster::OutputFormat
+impl core::cmp::PartialEq for takumi_raster::OutputFormat
+pub fn takumi_raster::OutputFormat::eq(&self, &takumi_raster::OutputFormat) -> bool
+impl core::fmt::Debug for takumi_raster::OutputFormat
+pub fn takumi_raster::OutputFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::OutputFormat
+impl core::marker::StructuralPartialEq for takumi_raster::OutputFormat
+#[non_exhaustive] pub struct takumi_raster::AnimatedGifOptions
+pub takumi_raster::AnimatedGifOptions::loop_count: core::option::Option<u16>
+impl core::clone::Clone for takumi_raster::AnimatedGifOptions
+pub fn takumi_raster::AnimatedGifOptions::clone(&self) -> takumi_raster::AnimatedGifOptions
+impl core::default::Default for takumi_raster::AnimatedGifOptions
+pub fn takumi_raster::AnimatedGifOptions::default() -> takumi_raster::AnimatedGifOptions
+impl core::fmt::Debug for takumi_raster::AnimatedGifOptions
+pub fn takumi_raster::AnimatedGifOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::AnimatedGifOptions
+impl takumi_raster::AnimatedGifOptions
+pub fn takumi_raster::AnimatedGifOptions::builder() -> AnimatedGifOptionsBuilder<(())>
+#[non_exhaustive] pub struct takumi_raster::AnimatedPngOptions
+pub takumi_raster::AnimatedPngOptions::loop_count: core::option::Option<u16>
+impl core::clone::Clone for takumi_raster::AnimatedPngOptions
+pub fn takumi_raster::AnimatedPngOptions::clone(&self) -> takumi_raster::AnimatedPngOptions
+impl core::default::Default for takumi_raster::AnimatedPngOptions
+pub fn takumi_raster::AnimatedPngOptions::default() -> takumi_raster::AnimatedPngOptions
+impl core::fmt::Debug for takumi_raster::AnimatedPngOptions
+pub fn takumi_raster::AnimatedPngOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::AnimatedPngOptions
+impl takumi_raster::AnimatedPngOptions
+pub fn takumi_raster::AnimatedPngOptions::builder() -> AnimatedPngOptionsBuilder<(())>
+#[non_exhaustive] pub struct takumi_raster::AnimatedWebpOptions
+pub takumi_raster::AnimatedWebpOptions::blend: bool
+pub takumi_raster::AnimatedWebpOptions::dispose: bool
+pub takumi_raster::AnimatedWebpOptions::loop_count: core::option::Option<u16>
+pub takumi_raster::AnimatedWebpOptions::lossless: bool
+pub takumi_raster::AnimatedWebpOptions::quality: u8
+pub takumi_raster::AnimatedWebpOptions::speed: core::option::Option<u8>
+impl core::clone::Clone for takumi_raster::AnimatedWebpOptions
+pub fn takumi_raster::AnimatedWebpOptions::clone(&self) -> takumi_raster::AnimatedWebpOptions
+impl core::default::Default for takumi_raster::AnimatedWebpOptions
+pub fn takumi_raster::AnimatedWebpOptions::default() -> Self
+impl core::fmt::Debug for takumi_raster::AnimatedWebpOptions
+pub fn takumi_raster::AnimatedWebpOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::AnimatedWebpOptions
+impl takumi_raster::AnimatedWebpOptions
+pub fn takumi_raster::AnimatedWebpOptions::builder() -> AnimatedWebpOptionsBuilder<((), (), (), (), (), ())>
+#[non_exhaustive] pub struct takumi_raster::AnimationFrame
+pub takumi_raster::AnimationFrame::duration_ms: u32
+pub takumi_raster::AnimationFrame::image: takumi_raster::Bitmap
+impl takumi_raster::AnimationFrame
+pub fn takumi_raster::AnimationFrame::new(takumi_raster::Bitmap, u32) -> Self
+impl core::clone::Clone for takumi_raster::AnimationFrame
+pub fn takumi_raster::AnimationFrame::clone(&self) -> takumi_raster::AnimationFrame
+impl core::fmt::Debug for takumi_raster::AnimationFrame
+pub fn takumi_raster::AnimationFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct takumi_raster::Bitmap
+impl takumi_raster::Bitmap
+pub fn takumi_raster::Bitmap::as_raw(&self) -> &[u8]
+pub fn takumi_raster::Bitmap::from_raw(u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<Self>
+pub fn takumi_raster::Bitmap::height(&self) -> u32
+pub fn takumi_raster::Bitmap::into_raw(self) -> alloc::vec::Vec<u8>
+pub fn takumi_raster::Bitmap::width(&self) -> u32
+impl core::clone::Clone for takumi_raster::Bitmap
+pub fn takumi_raster::Bitmap::clone(&self) -> takumi_raster::Bitmap
+impl core::fmt::Debug for takumi_raster::Bitmap
+pub fn takumi_raster::Bitmap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct takumi_raster::Quality(_)
+impl takumi_raster::Quality
+pub const fn takumi_raster::Quality::get(self) -> u8
+pub const fn takumi_raster::Quality::new(u8) -> Self
+impl core::clone::Clone for takumi_raster::Quality
+pub fn takumi_raster::Quality::clone(&self) -> takumi_raster::Quality
+impl core::cmp::Eq for takumi_raster::Quality
+impl core::cmp::PartialEq for takumi_raster::Quality
+pub fn takumi_raster::Quality::eq(&self, &takumi_raster::Quality) -> bool
+impl core::default::Default for takumi_raster::Quality
+pub fn takumi_raster::Quality::default() -> Self
+impl core::fmt::Debug for takumi_raster::Quality
+pub fn takumi_raster::Quality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_raster::Quality
+impl core::marker::StructuralPartialEq for takumi_raster::Quality
+pub struct takumi_raster::RenderOptions<'g>
+impl takumi_raster::RenderOptions<'_>
+pub fn takumi_raster::RenderOptions<'_>::take_render_context(&mut self) -> takumi_core::context::RenderContext
+impl<'g> takumi_raster::RenderOptions<'g>
+pub fn takumi_raster::RenderOptions<'g>::fonts(&self) -> &'g takumi_core::resources::font::Fonts
+pub fn takumi_raster::RenderOptions<'g>::images(&self) -> &std::collections::hash::map::HashMap<alloc::sync::Arc<str>, takumi_core::resources::image::ImageSource>
+pub fn takumi_raster::RenderOptions<'g>::node(&self) -> &takumi_core::layout::node::Node
+pub fn takumi_raster::RenderOptions<'g>::stylesheet(&self) -> &alloc::sync::Arc<takumi_core::style::selector::StyleSheet>
+pub fn takumi_raster::RenderOptions<'g>::viewport(&self) -> &takumi_core::viewport::Viewport
+impl<'g> core::clone::Clone for takumi_raster::RenderOptions<'g>
+pub fn takumi_raster::RenderOptions<'g>::clone(&self) -> takumi_raster::RenderOptions<'g>
+impl<'g> takumi_raster::RenderOptions<'g>
+pub fn takumi_raster::RenderOptions<'g>::builder() -> RenderOptionsBuilder<'g, ((), (), (), (), (), (), (), (), (), (), ())>
+pub struct takumi_raster::SequentialScene<'g>
+impl<'g> core::clone::Clone for takumi_raster::SequentialScene<'g>
+pub fn takumi_raster::SequentialScene<'g>::clone(&self) -> takumi_raster::SequentialScene<'g>
+impl<'g> takumi_raster::SequentialScene<'g>
+pub fn takumi_raster::SequentialScene<'g>::builder() -> SequentialSceneBuilder<'g, ((), ())>
+pub fn takumi_raster::measure<'g>(takumi_raster::RenderOptions<'g>) -> takumi_core::error::Result<takumi_core::layout::measure::MeasuredNode>
+pub fn takumi_raster::needs(takumi_raster::RenderOptions<'_>) -> takumi_core::layout::needs::RenderNeeds
+pub fn takumi_raster::render<'g>(takumi_raster::RenderOptions<'g>) -> takumi_core::error::Result<takumi_raster::Bitmap>
+pub fn takumi_raster::render_animation<'g>(&[takumi_raster::SequentialScene<'g>], u32) -> takumi_core::error::Result<alloc::vec::Vec<takumi_raster::AnimationFrame>>
+pub fn takumi_raster::render_pages<'g>(takumi_raster::RenderOptions<'g>, impl core::convert::Into<takumi_core::layout::page_sizes::PageSizer>, usize, impl core::ops::function::FnMut(takumi_raster::Bitmap) -> takumi_core::error::Result<()>) -> takumi_core::error::Result<()>
+pub fn takumi_raster::render_scene(&takumi_core::scene::Scene) -> takumi_core::error::Result<takumi_raster::Bitmap>
+pub fn takumi_raster::uncovered_characters<'g>(takumi_raster::RenderOptions<'g>) -> takumi_core::error::Result<alloc::vec::Vec<char>>
+pub fn takumi_raster::write_animated_gif<W: core::io::write::Write>(alloc::borrow::Cow<'_, [takumi_raster::AnimationFrame]>, &mut W, takumi_raster::AnimatedGifOptions) -> takumi_core::error::Result<()>
+pub fn takumi_raster::write_animated_png<W: core::io::write::Write>(&[takumi_raster::AnimationFrame], &mut W, takumi_raster::AnimatedPngOptions) -> takumi_core::error::Result<()>
+pub fn takumi_raster::write_animated_webp<W: core::io::write::Write>(alloc::borrow::Cow<'_, [takumi_raster::AnimationFrame]>, &mut W, takumi_raster::AnimatedWebpOptions) -> takumi_core::error::Result<()>
+pub fn takumi_raster::write_animation<W: core::io::write::Write>(&[takumi_raster::SequentialScene<'_>], u32, takumi_raster::AnimationFormat, &mut W) -> takumi_core::error::Result<()>
+pub fn takumi_raster::write_image<T: core::io::write::Write>(&takumi_raster::Bitmap, &mut T, takumi_raster::OutputFormat) -> takumi_core::error::Result<()>

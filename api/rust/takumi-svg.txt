@@ -1,0 +1,5 @@
+pub mod takumi_svg
+pub struct takumi_svg::SvgOptions<'g>
+impl<'g> takumi_svg::SvgOptions<'g>
+pub fn takumi_svg::SvgOptions<'g>::builder() -> SvgOptionsBuilder<'g, ((), (), (), (), (), (), (), ())>
+pub fn takumi_svg::render(takumi_svg::SvgOptions<'_>) -> takumi_core::error::Result<alloc::string::String>

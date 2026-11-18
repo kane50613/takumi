@@ -1,0 +1,297 @@
+pub mod takumi_pdf
+pub enum takumi_pdf::AttachmentRelationship
+pub takumi_pdf::AttachmentRelationship::Alternative
+pub takumi_pdf::AttachmentRelationship::Data
+pub takumi_pdf::AttachmentRelationship::Source
+pub takumi_pdf::AttachmentRelationship::Supplement
+pub takumi_pdf::AttachmentRelationship::Unspecified
+impl core::clone::Clone for takumi_pdf::AttachmentRelationship
+pub fn takumi_pdf::AttachmentRelationship::clone(&self) -> takumi_pdf::AttachmentRelationship
+impl core::cmp::Eq for takumi_pdf::AttachmentRelationship
+impl core::cmp::PartialEq for takumi_pdf::AttachmentRelationship
+pub fn takumi_pdf::AttachmentRelationship::eq(&self, &takumi_pdf::AttachmentRelationship) -> bool
+impl core::default::Default for takumi_pdf::AttachmentRelationship
+pub fn takumi_pdf::AttachmentRelationship::default() -> takumi_pdf::AttachmentRelationship
+impl core::fmt::Debug for takumi_pdf::AttachmentRelationship
+pub fn takumi_pdf::AttachmentRelationship::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::AttachmentRelationship
+impl core::marker::StructuralPartialEq for takumi_pdf::AttachmentRelationship
+pub enum takumi_pdf::Band
+pub takumi_pdf::Band::Node(alloc::boxed::Box<takumi_core::layout::node::Node>)
+pub takumi_pdf::Band::Off
+impl takumi_pdf::Band
+pub fn takumi_pdf::Band::node(self) -> core::option::Option<takumi_core::layout::node::Node>
+impl core::clone::Clone for takumi_pdf::Band
+pub fn takumi_pdf::Band::clone(&self) -> takumi_pdf::Band
+impl core::convert::From<takumi_core::layout::node::Node> for takumi_pdf::Band
+pub fn takumi_pdf::Band::from(takumi_core::layout::node::Node) -> Self
+pub enum takumi_pdf::PageMargin
+pub takumi_pdf::PageMargin::Auto
+pub takumi_pdf::PageMargin::Px(f32)
+impl core::clone::Clone for takumi_pdf::PageMargin
+pub fn takumi_pdf::PageMargin::clone(&self) -> takumi_pdf::PageMargin
+impl core::default::Default for takumi_pdf::PageMargin
+pub fn takumi_pdf::PageMargin::default() -> takumi_pdf::PageMargin
+impl core::marker::Copy for takumi_pdf::PageMargin
+pub enum takumi_pdf::PdfError
+pub takumi_pdf::PdfError::DuplicateAttachment(alloc::string::String)
+pub takumi_pdf::PdfError::Font(takumi_core::resources::font::FontError)
+pub takumi_pdf::PdfError::InvalidMimeType(alloc::string::String)
+pub takumi_pdf::PdfError::InvalidPageRange(alloc::string::String)
+pub takumi_pdf::PdfError::InvalidPageSize
+pub takumi_pdf::PdfError::InvalidStandard
+pub takumi_pdf::PdfError::InvalidXmpSchema(alloc::string::String)
+pub takumi_pdf::PdfError::Krilla(takumi_pdf::krilla::error::KrillaError)
+pub takumi_pdf::PdfError::MissingViewport
+pub takumi_pdf::PdfError::PageRangesOutOfBounds(usize)
+pub takumi_pdf::PdfError::PlaceholderForbidden
+pub takumi_pdf::PdfError::PlaceholderForbidden::characters: alloc::string::String
+pub takumi_pdf::PdfError::PlaceholderForbidden::standard: &'static str
+pub takumi_pdf::PdfError::Render(takumi_core::error::Error)
+pub takumi_pdf::PdfError::TooManyPages(usize)
+pub takumi_pdf::PdfError::UncoveredCharacters(alloc::string::String)
+pub takumi_pdf::PdfError::UndrawableImage(alloc::string::String)
+pub takumi_pdf::PdfError::UnsupportedFilter(alloc::string::String)
+impl core::convert::From<takumi_core::error::Error> for takumi_pdf::PdfError
+pub fn takumi_pdf::PdfError::from(takumi_core::error::Error) -> Self
+impl core::error::Error for takumi_pdf::PdfError
+pub fn takumi_pdf::PdfError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for takumi_pdf::PdfError
+pub fn takumi_pdf::PdfError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for takumi_pdf::PdfError
+pub fn takumi_pdf::PdfError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum takumi_pdf::PdfStandard
+pub takumi_pdf::PdfStandard::A2a
+pub takumi_pdf::PdfStandard::A2b
+pub takumi_pdf::PdfStandard::A2u
+pub takumi_pdf::PdfStandard::A3a
+pub takumi_pdf::PdfStandard::A3b
+pub takumi_pdf::PdfStandard::A3u
+pub takumi_pdf::PdfStandard::A4
+pub takumi_pdf::PdfStandard::A4f
+pub takumi_pdf::PdfStandard::None
+impl core::clone::Clone for takumi_pdf::PdfStandard
+pub fn takumi_pdf::PdfStandard::clone(&self) -> takumi_pdf::PdfStandard
+impl core::cmp::Eq for takumi_pdf::PdfStandard
+impl core::cmp::PartialEq for takumi_pdf::PdfStandard
+pub fn takumi_pdf::PdfStandard::eq(&self, &takumi_pdf::PdfStandard) -> bool
+impl core::default::Default for takumi_pdf::PdfStandard
+pub fn takumi_pdf::PdfStandard::default() -> takumi_pdf::PdfStandard
+impl core::fmt::Debug for takumi_pdf::PdfStandard
+pub fn takumi_pdf::PdfStandard::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::PdfStandard
+impl core::marker::StructuralPartialEq for takumi_pdf::PdfStandard
+pub enum takumi_pdf::Tagging
+pub takumi_pdf::Tagging::Off
+pub takumi_pdf::Tagging::On
+pub takumi_pdf::Tagging::Ua1
+pub takumi_pdf::Tagging::Ua2
+impl core::clone::Clone for takumi_pdf::Tagging
+pub fn takumi_pdf::Tagging::clone(&self) -> takumi_pdf::Tagging
+impl core::cmp::Eq for takumi_pdf::Tagging
+impl core::cmp::PartialEq for takumi_pdf::Tagging
+pub fn takumi_pdf::Tagging::eq(&self, &takumi_pdf::Tagging) -> bool
+impl core::default::Default for takumi_pdf::Tagging
+pub fn takumi_pdf::Tagging::default() -> takumi_pdf::Tagging
+impl core::fmt::Debug for takumi_pdf::Tagging
+pub fn takumi_pdf::Tagging::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::Tagging
+impl core::marker::StructuralPartialEq for takumi_pdf::Tagging
+pub enum takumi_pdf::UncoveredText
+pub takumi_pdf::UncoveredText::Blank
+pub takumi_pdf::UncoveredText::Error
+pub takumi_pdf::UncoveredText::Placeholder
+impl core::clone::Clone for takumi_pdf::UncoveredText
+pub fn takumi_pdf::UncoveredText::clone(&self) -> takumi_pdf::UncoveredText
+impl core::cmp::Eq for takumi_pdf::UncoveredText
+impl core::cmp::PartialEq for takumi_pdf::UncoveredText
+pub fn takumi_pdf::UncoveredText::eq(&self, &takumi_pdf::UncoveredText) -> bool
+impl core::default::Default for takumi_pdf::UncoveredText
+pub fn takumi_pdf::UncoveredText::default() -> takumi_pdf::UncoveredText
+impl core::fmt::Debug for takumi_pdf::UncoveredText
+pub fn takumi_pdf::UncoveredText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::UncoveredText
+impl core::marker::StructuralPartialEq for takumi_pdf::UncoveredText
+pub struct takumi_pdf::Attachment
+pub takumi_pdf::Attachment::data: alloc::vec::Vec<u8>
+pub takumi_pdf::Attachment::description: core::option::Option<alloc::string::String>
+pub takumi_pdf::Attachment::mime_type: core::option::Option<alloc::string::String>
+pub takumi_pdf::Attachment::modification_date: core::option::Option<takumi_pdf::PdfDate>
+pub takumi_pdf::Attachment::name: alloc::string::String
+pub takumi_pdf::Attachment::relationship: takumi_pdf::AttachmentRelationship
+impl core::clone::Clone for takumi_pdf::Attachment
+pub fn takumi_pdf::Attachment::clone(&self) -> takumi_pdf::Attachment
+pub struct takumi_pdf::MeasureOptions<'g>
+pub takumi_pdf::MeasureOptions::font_families: core::option::Option<takumi_core::style::properties::font_family::FontFamily>
+pub takumi_pdf::MeasureOptions::fonts: &'g takumi_core::resources::font::Fonts
+pub takumi_pdf::MeasureOptions::images: std::collections::hash::map::HashMap<alloc::sync::Arc<str>, takumi_core::resources::image::ImageSource>
+pub takumi_pdf::MeasureOptions::lang: core::option::Option<takumi_core::style::stylesheets::Lang>
+pub takumi_pdf::MeasureOptions::node: takumi_core::layout::node::Node
+pub takumi_pdf::MeasureOptions::page: core::option::Option<takumi_pdf::PageOptions>
+pub takumi_pdf::MeasureOptions::resource_cache: core::option::Option<takumi_core::resources::image::ResourceCache>
+pub takumi_pdf::MeasureOptions::stylesheet: alloc::sync::Arc<takumi_core::style::selector::StyleSheet>
+pub takumi_pdf::MeasureOptions::viewport: core::option::Option<takumi_core::viewport::Viewport>
+impl<'g> takumi_pdf::MeasureOptions<'g>
+pub fn takumi_pdf::MeasureOptions<'g>::builder() -> MeasureOptionsBuilder<'g, ((), (), (), (), (), (), (), (), ())>
+pub struct takumi_pdf::MeasuredSize
+pub takumi_pdf::MeasuredSize::height: f32
+pub takumi_pdf::MeasuredSize::width: f32
+impl core::clone::Clone for takumi_pdf::MeasuredSize
+pub fn takumi_pdf::MeasuredSize::clone(&self) -> takumi_pdf::MeasuredSize
+impl core::cmp::PartialEq for takumi_pdf::MeasuredSize
+pub fn takumi_pdf::MeasuredSize::eq(&self, &takumi_pdf::MeasuredSize) -> bool
+impl core::fmt::Debug for takumi_pdf::MeasuredSize
+pub fn takumi_pdf::MeasuredSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::MeasuredSize
+impl core::marker::StructuralPartialEq for takumi_pdf::MeasuredSize
+pub struct takumi_pdf::PageBand
+impl takumi_pdf::PageBand
+pub fn takumi_pdf::PageBand::for_page(&self, usize, usize) -> core::option::Option<&takumi_core::layout::node::Node>
+impl core::clone::Clone for takumi_pdf::PageBand
+pub fn takumi_pdf::PageBand::clone(&self) -> takumi_pdf::PageBand
+pub struct takumi_pdf::PageMargins
+pub takumi_pdf::PageMargins::bottom: takumi_pdf::PageMargin
+pub takumi_pdf::PageMargins::left: takumi_pdf::PageMargin
+pub takumi_pdf::PageMargins::right: takumi_pdf::PageMargin
+pub takumi_pdf::PageMargins::top: takumi_pdf::PageMargin
+impl takumi_pdf::PageMargins
+pub const takumi_pdf::PageMargins::AUTO: Self
+pub const fn takumi_pdf::PageMargins::uniform(f32) -> Self
+impl core::clone::Clone for takumi_pdf::PageMargins
+pub fn takumi_pdf::PageMargins::clone(&self) -> takumi_pdf::PageMargins
+impl core::default::Default for takumi_pdf::PageMargins
+pub fn takumi_pdf::PageMargins::default() -> takumi_pdf::PageMargins
+impl core::marker::Copy for takumi_pdf::PageMargins
+pub struct takumi_pdf::PageOptions
+pub takumi_pdf::PageOptions::height: f32
+pub takumi_pdf::PageOptions::margin: takumi_pdf::PageMargins
+pub takumi_pdf::PageOptions::width: f32
+impl takumi_pdf::PageOptions
+pub const takumi_pdf::PageOptions::A3: Self
+pub const takumi_pdf::PageOptions::A4: Self
+pub const takumi_pdf::PageOptions::A5: Self
+pub const takumi_pdf::PageOptions::B4: Self
+pub const takumi_pdf::PageOptions::B5: Self
+pub const takumi_pdf::PageOptions::DEFAULT_MARGIN: f32
+pub const takumi_pdf::PageOptions::JIS_B4: Self
+pub const takumi_pdf::PageOptions::JIS_B5: Self
+pub const takumi_pdf::PageOptions::LEDGER: Self
+pub const takumi_pdf::PageOptions::LEGAL: Self
+pub const takumi_pdf::PageOptions::LETTER: Self
+pub const fn takumi_pdf::PageOptions::landscape(self) -> Self
+pub const fn takumi_pdf::PageOptions::with_margin(self, f32) -> Self
+impl core::clone::Clone for takumi_pdf::PageOptions
+pub fn takumi_pdf::PageOptions::clone(&self) -> takumi_pdf::PageOptions
+impl core::marker::Copy for takumi_pdf::PageOptions
+pub struct takumi_pdf::PageOverride
+pub takumi_pdf::PageOverride::footer: core::option::Option<takumi_pdf::Band>
+pub takumi_pdf::PageOverride::header: core::option::Option<takumi_pdf::Band>
+impl core::clone::Clone for takumi_pdf::PageOverride
+pub fn takumi_pdf::PageOverride::clone(&self) -> takumi_pdf::PageOverride
+impl core::default::Default for takumi_pdf::PageOverride
+pub fn takumi_pdf::PageOverride::default() -> takumi_pdf::PageOverride
+pub struct takumi_pdf::PageRange
+pub takumi_pdf::PageRange::from: core::option::Option<usize>
+pub takumi_pdf::PageRange::to: core::option::Option<usize>
+impl takumi_pdf::PageRange
+pub fn takumi_pdf::PageRange::single(usize) -> Self
+impl core::clone::Clone for takumi_pdf::PageRange
+pub fn takumi_pdf::PageRange::clone(&self) -> takumi_pdf::PageRange
+impl core::cmp::Eq for takumi_pdf::PageRange
+impl core::cmp::PartialEq for takumi_pdf::PageRange
+pub fn takumi_pdf::PageRange::eq(&self, &takumi_pdf::PageRange) -> bool
+impl core::fmt::Debug for takumi_pdf::PageRange
+pub fn takumi_pdf::PageRange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for takumi_pdf::PageRange
+pub fn takumi_pdf::PageRange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::PageRange
+impl core::marker::StructuralPartialEq for takumi_pdf::PageRange
+pub struct takumi_pdf::PageRules
+pub takumi_pdf::PageRules::even: takumi_pdf::PageOverride
+pub takumi_pdf::PageRules::first: takumi_pdf::PageOverride
+pub takumi_pdf::PageRules::last: takumi_pdf::PageOverride
+pub takumi_pdf::PageRules::odd: takumi_pdf::PageOverride
+impl takumi_pdf::PageRules
+pub fn takumi_pdf::PageRules::footer_band(&self, core::option::Option<&takumi_core::layout::node::Node>) -> core::option::Option<takumi_pdf::PageBand>
+pub fn takumi_pdf::PageRules::header_band(&self, core::option::Option<&takumi_core::layout::node::Node>) -> core::option::Option<takumi_pdf::PageBand>
+impl core::clone::Clone for takumi_pdf::PageRules
+pub fn takumi_pdf::PageRules::clone(&self) -> takumi_pdf::PageRules
+impl core::default::Default for takumi_pdf::PageRules
+pub fn takumi_pdf::PageRules::default() -> takumi_pdf::PageRules
+pub struct takumi_pdf::PdfDate
+pub takumi_pdf::PdfDate::day: u8
+pub takumi_pdf::PdfDate::hour: u8
+pub takumi_pdf::PdfDate::minute: u8
+pub takumi_pdf::PdfDate::month: u8
+pub takumi_pdf::PdfDate::second: u8
+pub takumi_pdf::PdfDate::year: u16
+impl core::clone::Clone for takumi_pdf::PdfDate
+pub fn takumi_pdf::PdfDate::clone(&self) -> takumi_pdf::PdfDate
+impl core::cmp::Eq for takumi_pdf::PdfDate
+impl core::cmp::PartialEq for takumi_pdf::PdfDate
+pub fn takumi_pdf::PdfDate::eq(&self, &takumi_pdf::PdfDate) -> bool
+impl core::fmt::Debug for takumi_pdf::PdfDate
+pub fn takumi_pdf::PdfDate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for takumi_pdf::PdfDate
+impl core::marker::StructuralPartialEq for takumi_pdf::PdfDate
+pub struct takumi_pdf::PdfMetadata
+pub takumi_pdf::PdfMetadata::authors: alloc::vec::Vec<alloc::string::String>
+pub takumi_pdf::PdfMetadata::creation_date: core::option::Option<takumi_pdf::PdfDate>
+pub takumi_pdf::PdfMetadata::creator: core::option::Option<alloc::string::String>
+pub takumi_pdf::PdfMetadata::description: core::option::Option<alloc::string::String>
+pub takumi_pdf::PdfMetadata::keywords: alloc::vec::Vec<alloc::string::String>
+pub takumi_pdf::PdfMetadata::title: core::option::Option<alloc::string::String>
+pub takumi_pdf::PdfMetadata::xmp: alloc::vec::Vec<takumi_pdf::XmpSchema>
+impl core::clone::Clone for takumi_pdf::PdfMetadata
+pub fn takumi_pdf::PdfMetadata::clone(&self) -> takumi_pdf::PdfMetadata
+impl core::default::Default for takumi_pdf::PdfMetadata
+pub fn takumi_pdf::PdfMetadata::default() -> takumi_pdf::PdfMetadata
+pub struct takumi_pdf::PdfOptions<'g>
+pub takumi_pdf::PdfOptions::attachments: alloc::vec::Vec<takumi_pdf::Attachment>
+pub takumi_pdf::PdfOptions::background_color: core::option::Option<takumi_core::style::properties::color::Color>
+pub takumi_pdf::PdfOptions::font_families: core::option::Option<takumi_core::style::properties::font_family::FontFamily>
+pub takumi_pdf::PdfOptions::fonts: &'g takumi_core::resources::font::Fonts
+pub takumi_pdf::PdfOptions::footer: core::option::Option<takumi_core::layout::node::Node>
+pub takumi_pdf::PdfOptions::header: core::option::Option<takumi_core::layout::node::Node>
+pub takumi_pdf::PdfOptions::images: std::collections::hash::map::HashMap<alloc::sync::Arc<str>, takumi_core::resources::image::ImageSource>
+pub takumi_pdf::PdfOptions::lang: core::option::Option<takumi_core::style::stylesheets::Lang>
+pub takumi_pdf::PdfOptions::metadata: core::option::Option<takumi_pdf::PdfMetadata>
+pub takumi_pdf::PdfOptions::node: takumi_core::layout::node::Node
+pub takumi_pdf::PdfOptions::outline: bool
+pub takumi_pdf::PdfOptions::page: core::option::Option<takumi_pdf::PageOptions>
+pub takumi_pdf::PdfOptions::page_ranges: core::option::Option<alloc::vec::Vec<takumi_pdf::PageRange>>
+pub takumi_pdf::PdfOptions::pages: takumi_pdf::PageRules
+pub takumi_pdf::PdfOptions::producer: core::option::Option<alloc::string::String>
+pub takumi_pdf::PdfOptions::resource_cache: core::option::Option<takumi_core::resources::image::ResourceCache>
+pub takumi_pdf::PdfOptions::standard: takumi_pdf::PdfStandard
+pub takumi_pdf::PdfOptions::stylesheet: alloc::sync::Arc<takumi_core::style::selector::StyleSheet>
+pub takumi_pdf::PdfOptions::tagged: takumi_pdf::Tagging
+pub takumi_pdf::PdfOptions::uncovered_text: takumi_pdf::UncoveredText
+pub takumi_pdf::PdfOptions::viewport: core::option::Option<takumi_core::viewport::Viewport>
+impl<'g> takumi_pdf::PdfOptions<'g>
+pub fn takumi_pdf::PdfOptions<'g>::builder() -> PdfOptionsBuilder<'g, ((), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), ())>
+pub struct takumi_pdf::XmpProperty
+pub takumi_pdf::XmpProperty::description: alloc::string::String
+pub takumi_pdf::XmpProperty::name: alloc::string::String
+pub takumi_pdf::XmpProperty::value: alloc::string::String
+impl core::clone::Clone for takumi_pdf::XmpProperty
+pub fn takumi_pdf::XmpProperty::clone(&self) -> takumi_pdf::XmpProperty
+impl core::default::Default for takumi_pdf::XmpProperty
+pub fn takumi_pdf::XmpProperty::default() -> takumi_pdf::XmpProperty
+impl core::fmt::Debug for takumi_pdf::XmpProperty
+pub fn takumi_pdf::XmpProperty::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct takumi_pdf::XmpSchema
+pub takumi_pdf::XmpSchema::name: alloc::string::String
+pub takumi_pdf::XmpSchema::namespace: alloc::string::String
+pub takumi_pdf::XmpSchema::prefix: alloc::string::String
+pub takumi_pdf::XmpSchema::properties: alloc::vec::Vec<takumi_pdf::XmpProperty>
+impl core::clone::Clone for takumi_pdf::XmpSchema
+pub fn takumi_pdf::XmpSchema::clone(&self) -> takumi_pdf::XmpSchema
+impl core::default::Default for takumi_pdf::XmpSchema
+pub fn takumi_pdf::XmpSchema::default() -> takumi_pdf::XmpSchema
+impl core::fmt::Debug for takumi_pdf::XmpSchema
+pub fn takumi_pdf::XmpSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const takumi_pdf::PRODUCER: &str
+pub fn takumi_pdf::measure(takumi_pdf::MeasureOptions<'_>) -> core::result::Result<takumi_pdf::MeasuredSize, takumi_pdf::PdfError>
+pub fn takumi_pdf::needs(takumi_pdf::MeasureOptions<'_>) -> core::result::Result<takumi_core::layout::needs::RenderNeeds, takumi_pdf::PdfError>
+pub fn takumi_pdf::render(takumi_pdf::PdfOptions<'_>) -> core::result::Result<alloc::vec::Vec<u8>, takumi_pdf::PdfError>

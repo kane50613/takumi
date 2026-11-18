@@ -1,0 +1,2 @@
+pub mod takumi_html
+pub use takumi_html::<<takumi_core::html::*>>
