@@ -2037,9 +2037,18 @@ fn svg_zero_length_round_line() {
       .build()
   });
 
+  let lines: Vec<_> = content_lines(&pdf).collect();
+
+  // A degenerate subpath paints a dot only with a segment to the same point and round caps.
   assert!(
-    content_lines(&pdf).any(|line| line == b"S"),
-    "the dot was not stroked"
+    lines
+      .windows(2)
+      .any(|pair| pair[0].ends_with(b"1 J 12 12 m 12 12 l") && pair[1] == b"S"),
+    "the dot was not stroked as a round-capped zero-length segment: {:?}",
+    lines
+      .iter()
+      .map(|line| String::from_utf8_lossy(line))
+      .collect::<Vec<_>>()
   );
 }
 

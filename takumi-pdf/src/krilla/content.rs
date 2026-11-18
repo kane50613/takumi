@@ -1382,8 +1382,11 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
         flush(&mut subpath, &mut out, false);
         subpath.push(segment);
       }
-      // A segment that goes nowhere.
-      PathSegment::LineTo(p) if subpath.last().and_then(end_point) == Some(p) => {}
+      // A segment that goes nowhere. One right after the move stays until another segment
+      // draws, since a round-capped stroke paints `m` then `l` to the same point as a dot but
+      // paints nothing for a bare `m`.
+      PathSegment::LineTo(p)
+        if subpath.len() > 1 && subpath.last().and_then(end_point) == Some(p) => {}
       PathSegment::Close => {
         // `h` draws the closing edge itself.
         if let (Some(PathSegment::MoveTo(start)), Some(PathSegment::LineTo(last))) =
@@ -1395,7 +1398,15 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
 
         flush(&mut subpath, &mut out, true);
       }
-      _ => subpath.push(segment),
+      _ => {
+        if let [PathSegment::MoveTo(start), PathSegment::LineTo(end)] = subpath[..]
+          && start == end
+        {
+          subpath.pop();
+        }
+
+        subpath.push(segment);
+      }
     }
   }
 
