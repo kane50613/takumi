@@ -803,7 +803,8 @@ fn handle_u8_image(data: &[u8], cs: ColorSpace) -> (Vec<u8>, Option<Vec<u8>>, Bi
       });
       deflate_encode(&buf)
     }
-    // Every other color space carries no alpha channel to split off.
+    // The decoders here hand over only RGB, RGBA, luma, and luma with alpha, so any other space
+    // is kept whole.
     _ => deflate_encode(data),
   };
 
@@ -842,7 +843,8 @@ fn handle_u16_image(data: &[u8], cs: ColorSpace) -> (Vec<u8>, Option<Vec<u8>>, B
       });
       deflate_encode(&buf)
     }
-    // Every other color space carries no alpha channel to split off.
+    // The decoders here hand over only RGB, RGBA, luma, and luma with alpha, so any other space
+    // is kept whole.
     _ => deflate_encode(data),
   };
 
