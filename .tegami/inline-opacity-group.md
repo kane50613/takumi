@@ -8,7 +8,7 @@ packages:
 
 # A positioned or stacking inline element paints as a layer of its own
 
-A `display: inline` element now paints as a layer of its own, as Chrome paints it, when any of these hold:
+A `display: inline` element now paints as a layer of its own, as Chrome paints it, when any of these hold. At `opacity: 0` it paints nothing at all, whatever else holds.
 
 - `position` is not `static`
 - `opacity` is below 1

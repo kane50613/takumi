@@ -15,5 +15,5 @@ The `takumi` command used to drop the `@import` rules of a `<style>` element wit
 </style>
 ```
 
-- `ParsedHtml::styles` lists each non-empty CSS `<style>` element that applies, with its `text` and `media` apart. That is every untitled one, plus the titled ones in the preferred style sheet set.
+- `ParsedHtml::styles` lists each non-empty CSS `<style>` element in the HTML namespace that applies, so not one inside an inline `<svg>`, with its `text` and `media` apart. That is every untitled one, plus the titled ones in the preferred style sheet set.
 - `StyleElement::css` returns the text inside the `@media` rule that `ParsedHtml::css` holds.
