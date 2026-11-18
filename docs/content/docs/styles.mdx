@@ -59,6 +59,14 @@ The stylesheet supports:
   never match.
 </Callout>
 
+Takumi drops a declaration whose property it does not support, as a browser drops one it does not know. `@takumi-rs/core` and `@takumi-rs/wasm` report it through `console.warn` each time they parse a style sheet or `style` attribute that uses it. A renderer keeps each list of `css` sheets it parsed for a while, and a render with the same list reuses it without a new warning. A different list, such as one with a sheet added, is parsed and warns afresh:
+
+```text
+takumi: ignored the property `widht` at line 1, column 8 of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.
+```
+
+A vendor-prefixed property, or one that cannot change a static image, such as `cursor`, drops without a warning.
+
 ### Registered custom properties
 
 `@property` gives a custom property a type, as in a browser. A registered property computes to that type, inherits the computed value, and animates through it. This rule spins a conic gradient, which an unregistered `--angle` cannot do, because it would switch from `0deg` to `360deg` halfway through:

@@ -24,6 +24,7 @@ use crate::{
   render_job::RenderJob,
   render_task::RenderTask,
   svg_render_task::SvgRenderTask,
+  warning::forward_warnings,
 };
 
 /// Represents a single run of text in a measured node.
@@ -197,6 +198,7 @@ impl Renderer {
   )]
   pub fn new(env: Env, options: Option<Object>) -> Result<Self> {
     crate::pool::register_cleanup(&env);
+    forward_warnings(&env)?;
 
     let options: RendererOptions = read_options(options)?;
 

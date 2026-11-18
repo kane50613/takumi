@@ -31,6 +31,7 @@ mod render_job;
 mod render_task;
 pub(crate) mod renderer;
 mod svg_render_task;
+mod warning;
 
 use std::{fmt::Display, sync::Arc};
 
