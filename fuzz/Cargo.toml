@@ -1,0 +1,37 @@
+[package]
+name = "takumi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+takumi = { path = "../takumi", features = ["from-html"] }
+takumi-pdf = { path = "../takumi-pdf" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "html_render"
+path = "fuzz_targets/html_render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "font"
+path = "fuzz_targets/font.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf"
+path = "fuzz_targets/pdf.rs"
+test = false
+doc = false
+bench = false
