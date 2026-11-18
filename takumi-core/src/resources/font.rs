@@ -406,17 +406,14 @@ impl Fonts {
       .collect()
   }
 
-  /// The faces system font fallback picks from: the fallback families, the last-resort families
-  /// last, each by its best match for `description`.
+  /// The faces system font fallback picks from: the fallback families, then the faces registered
+  /// as a last resort, each by its best match for `description`.
   pub(crate) fn fallback_bucket(
     &self,
     description: &FontSelectionDescription,
   ) -> Vec<FaceData<MatchedFace>> {
     let families: Vec<&Arc<str>> = match &self.fallback_families {
-      Some(families) => families
-        .iter()
-        .chain(self.registry.selector.last_resort_families())
-        .collect(),
+      Some(families) => families.iter().collect(),
       None => self.registry.selector.fallback_families().collect(),
     };
 
@@ -428,6 +425,7 @@ impl Fonts {
           .selector
           .get_font_data(description, family, false)
       })
+      .chain(self.registry.selector.last_resort_fallback(description))
       .flatten()
       .map(|face| face.map(MatchedFace::of))
       .collect()

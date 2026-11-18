@@ -10,8 +10,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use super::{
-  css_segmented_font_face::CssSegmentedFontFace,
-  font_face::FontFace,
+  css_segmented_font_face::{CssSegmentedFontFace, FontPlatformDataForRangeSet},
+  font_description::FontSelectionDescription,
+  font_face::{FaceData, FontFace},
   font_selection_algorithm::FontSelectionAlgorithm,
   font_selection_types::{FontSelectionCapabilities, FontSelectionRequest},
 };
@@ -62,6 +63,30 @@ impl FontFaceCache {
       .segmented_faces
       .find(family)
       .map_or_else(Vec::new, |faces| faces.ranked(request))
+  }
+
+  /// The faces of `family` matching `font_description`. Approximate: where Blink takes the best
+  /// bucket alone, the other buckets follow it, since `auto` descriptors split one family's
+  /// subsets apart.
+  pub(crate) fn get_font_data(
+    &self,
+    font_description: &FontSelectionDescription,
+    family: &str,
+  ) -> Option<Vec<FaceData<FontPlatformDataForRangeSet>>> {
+    let ranked = self.get_ranked(font_description.font_selection_request, family);
+    let (best, others) = ranked.split_first()?;
+    let mut faces = best.get_font_data(font_description)?;
+
+    if faces.iter().any(|face| !face.range_set().is_entire_range()) {
+      faces.extend(
+        others
+          .iter()
+          .filter_map(|segmented| segmented.get_font_data(font_description))
+          .flatten(),
+      );
+    }
+
+    Some(faces)
   }
 }
 
