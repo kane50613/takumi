@@ -254,7 +254,7 @@ The renderer recognizes an entry it already holds by a key:
 | Descriptor with bytes      | The buffer object and the descriptor's fields.     |
 | Descriptor with a `data()` | Its `name`, `weight`, `style`, and `unicodeRange`. |
 
-A list defined at module level passes the same buffers on every render, so each file decodes once. A buffer read again inside the handler is a new key and decodes again.
+A list defined at module level passes the same entries on every render, so the renderer finds each one by its key and loads nothing. A buffer read again inside the handler is a new key, so every render reads the file again and the renderer compares its bytes with the fonts it holds. A match reuses that decoded font, and the file decodes again only when no held font matches, such as after you release it.
 
 ### Releasing fonts
 
@@ -328,7 +328,7 @@ const image = await render(
 );
 ```
 
-Do not list the same file once per weight. Each entry is its own key, so the file decodes again for each one. `googleFonts` loads a variable font this way. A weight range or an `axes` entry fetches the variable file once and leaves its axes free.
+Do not list the same file once per weight. Each entry is its own key, so each one fetches the file again before the renderer matches its bytes to the font it already holds. `googleFonts` loads a variable font this way. A weight range or an `axes` entry fetches the variable file once and leaves its axes free.
 
 <Callout>
   Which axes a file exposes depends on the build. Google Fonts fixes the axes you did not request at

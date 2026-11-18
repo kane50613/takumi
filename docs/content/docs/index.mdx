@@ -123,7 +123,11 @@ export function GET() {
 
 ## Load a font
 
-`googleFonts` loads Google Fonts families in one request. A weight range or an `axes` entry loads the variable font. Then `font-weight` and `font-variation-settings` set its axes per element.
+`googleFonts` loads Google Fonts families in one request. A weight range or an `axes` entry loads the variable font. Then `font-weight` and `font-variation-settings` set its axes per element. It comes from `@takumi-rs/helpers`, which you install next to `takumi-js`:
+
+```npm
+npm i @takumi-rs/helpers
+```
 
 ```tsx twoslash title="Load a variable font"
 import { render } from "takumi-js";
