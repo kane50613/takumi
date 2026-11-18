@@ -20,7 +20,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 
 ### Share one renderer between requests
 
-One `Renderer` takes overlapping calls without a lock. Concurrent requests can call `render`, `prepare`, `renderSvg`, `renderAsDataUrl`, `measure`, `renderAnimation`, and `registerFont` on it at once, and each call draws what it would draw alone with the same fonts. Two calls that list the same font load it once. On WebAssembly, JavaScript runs one call into the module at a time, and other calls run only while one waits for a font or image to download. The native renderer draws calls in parallel on worker threads, and each draw keeps the fonts it started with.
+One `Renderer` takes overlapping calls without a lock. Concurrent requests can call `render`, `prepare`, `renderSvg`, `measure`, `renderAnimation`, and `registerFont` on it at once, and each call draws what it would draw alone with the same fonts. Two calls that list the same font load it once. On WebAssembly, JavaScript runs one call into the module at a time, and other calls run only while one waits for a font or image to download. The native renderer draws calls in parallel on worker threads, and each draw keeps the fonts it started with.
 
 A few calls change what overlapping calls see:
 
