@@ -89,7 +89,8 @@ impl Clone for FontCache {
 }
 
 impl FontCache {
-  /// A cache keeping at most `max_bytes` of unpinned font data, unbounded without one.
+  /// A cache evicting unpinned font data past `max_bytes`, unbounded without one. The fonts an
+  /// admission adds stay even when they alone exceed it, and system fonts never count toward it.
   pub fn new(max_bytes: Option<u64>) -> Self {
     Self {
       max_bytes: max_bytes.unwrap_or(u64::MAX),

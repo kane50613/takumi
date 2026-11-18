@@ -3,8 +3,9 @@
 //! what per-character fallback reaches after every listed family.
 //!
 //! Approximate: takumi reads no fonts from the platform, so the system fonts are the ones the host
-//! installs through [`crate::Fonts::with_system_fonts`]. Fallback tries them family by family in
-//! install order, for every script.
+//! installs through [`crate::Fonts::with_system_fonts`]. Fallback lists them family by family in
+//! install order, for every script, and per-character fallback keeps that order only within a
+//! color preference.
 
 use std::sync::Arc;
 

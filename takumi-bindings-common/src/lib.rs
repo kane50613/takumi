@@ -89,8 +89,8 @@ pub struct FontStore {
 }
 
 impl FontStore {
-  /// A store holding the embedded system fonts, keeping at most `cache_max_bytes` of fonts
-  /// that are not pinned.
+  /// A store holding the embedded system fonts, which evicts unpinned fonts past `cache_max_bytes`
+  /// as [`FontCache::new`] budgets them.
   pub fn new(cache_max_bytes: Option<u64>) -> Result<Self, FontError> {
     Ok(Self {
       fonts: RefCell::new(Rc::new(default_fonts()?)),
