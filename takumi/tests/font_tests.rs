@@ -396,8 +396,6 @@ fn uncovered_characters_names_each_character_no_font_draws_once() {
   );
 }
 
-const LAST_RESORT_SIZE: (u32, u32) = (240, 180);
-
 /// A family registered under the name of a last-resort font draws before it, and the last-resort
 /// font still draws what the family lacks.
 #[test]
@@ -430,7 +428,7 @@ fn a_registered_family_draws_before_a_last_resort_font_of_its_name() {
   );
   let options = || {
     RenderOptions::builder()
-      .viewport(Viewport::new(LAST_RESORT_SIZE))
+      .viewport(Viewport::new((240, 180)))
       .node(Node::from_html(&html, FromHtmlOptions::default()).unwrap())
       .fonts(&fonts)
       .build()

@@ -1,6 +1,7 @@
 ---
 packages:
-  takumi-core: patch
+  takumi-core:
+    type: patch
 ---
 
 # A font registered under the built-in Geist's name draws before it

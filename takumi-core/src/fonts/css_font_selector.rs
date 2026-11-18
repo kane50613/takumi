@@ -320,6 +320,7 @@ impl CssFontSelector {
   }
 
   /// The families registered as a last resort, which fallback walks after every other.
+  #[cfg(test)]
   pub(crate) fn last_resort_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
     self.last_resort_families.iter()
   }
@@ -371,8 +372,20 @@ impl CssFontSelector {
       .or_else(|| self.last_resort_font_data(font_description, family))
   }
 
+  /// The faces registered as a last resort that match `font_description`, family by family, which
+  /// system fallback tries after every other family.
+  pub(crate) fn last_resort_fallback<'a>(
+    &'a self,
+    font_description: &'a FontSelectionDescription,
+  ) -> impl Iterator<Item = Vec<FaceData<FontPlatformDataForRangeSet>>> + 'a {
+    self
+      .last_resort_families
+      .iter()
+      .filter_map(|family| self.last_resort_font_data(font_description, family))
+  }
+
   /// The faces of `family` registered as a last resort that match `font_description`.
-  pub(crate) fn last_resort_font_data(
+  fn last_resort_font_data(
     &self,
     font_description: &FontSelectionDescription,
     family: &str,
