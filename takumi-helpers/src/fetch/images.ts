@@ -74,6 +74,13 @@ function storeFor(
 }
 
 /**
+ * An image URL a fetch left out, and why.
+ *
+ * @internal
+ */
+export type FailedImage = { src: string; error: unknown };
+
+/**
  * How {@link fetchImages} fetches.
  *
  * @internal
@@ -95,6 +102,67 @@ export type FetchImagesOptions<T extends { src: string } = FetchedImage> = Omit<
  * @internal
  */
 export async function fetchImages<T extends { src: string } = FetchedImage>({
+  throwOnError = true,
+  ...options
+}: FetchImagesOptions<T>): Promise<(T | FetchedImage)[]> {
+  if (!throwOnError) {
+    return (await fetchImagesSettled(options)).images;
+  }
+
+  const { provided, tasks } = startFetches(options);
+  // An emoji image never rejects the render. One that fails to fetch is left out.
+  const emoji = fulfilled(tasks.filter(({ src }) => isEmojiImageUrl(src)));
+  const fetched = await Promise.all(
+    tasks.filter(({ src }) => !isEmojiImageUrl(src)).map(({ fetched }) => fetched),
+  );
+  const emojiFetched = await emoji;
+
+  options.signal?.throwIfAborted();
+
+  return [...provided, ...fetched, ...emojiFetched];
+}
+
+/** The images of the `tasks` that fetch, leaving out the ones that fail. */
+async function fulfilled(tasks: ImageFetch[]): Promise<FetchedImage[]> {
+  return (await Promise.allSettled(tasks.map(({ fetched }) => fetched))).flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+}
+
+/**
+ * Fetches as {@link fetchImages} does with `throwOnError: false`, also returning the URLs it left out
+ * other than emoji images.
+ *
+ * @internal
+ */
+export async function fetchImagesSettled<T extends { src: string } = FetchedImage>(
+  options: Omit<FetchImagesOptions<T>, "throwOnError">,
+): Promise<{ images: (T | FetchedImage)[]; failed: FailedImage[] }> {
+  const { provided, tasks } = startFetches(options);
+  const settled = await Promise.all(
+    tasks.map(({ src, fetched }) =>
+      fetched.then(
+        (image) => ({ image }),
+        (error: unknown) => ({ failure: { src, error } }),
+      ),
+    ),
+  );
+
+  options.signal?.throwIfAborted();
+
+  return {
+    images: [...provided, ...settled.flatMap((result) => ("image" in result ? result.image : []))],
+    failed: settled.flatMap((result) =>
+      "failure" in result && !isEmojiImageUrl(result.failure.src) ? result.failure : [],
+    ),
+  };
+}
+
+/** A started fetch of the image at `src`. */
+type ImageFetch = { src: string; fetched: Promise<FetchedImage> };
+
+/** Starts fetching each of `urls` not already in `sources`, with the `sources` to put first. */
+function startFetches<T extends { src: string }>({
   urls = [],
   sources = [],
   fetchCache,
@@ -104,34 +172,24 @@ export async function fetchImages<T extends { src: string } = FetchedImage>({
   signal,
   maxBytes,
   allowUrl,
-  throwOnError = true,
-}: FetchImagesOptions<T>): Promise<(T | FetchedImage)[]> {
+}: Omit<FetchImagesOptions<T>, "throwOnError">): {
+  provided: T[];
+  tasks: ImageFetch[];
+} {
   const provided = new Map(sources.map((image) => [image.src, image]));
   const missing = [...new Set(urls)].filter(
     (url) => !provided.has(url) && (fetch !== undefined || isRemoteUrl(url)),
   );
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
-  const fetchImage = async (src: string): Promise<FetchedImage> => ({
-    src,
-    data: fetchCache
-      ? await fetchCached(src, fetchOptions, fetchCache)
-      : await fetchBytes(src, { ...fetchOptions, store: storeFor(src, { store, fetch }) }),
-  });
-  // An emoji image never rejects the render. One that fails to fetch is left out.
-  const emoji = fulfilled(missing.filter(isEmojiImageUrl).map(fetchImage));
-  const markup = missing.filter((url) => !isEmojiImageUrl(url)).map(fetchImage);
-  const fetched = throwOnError ? await Promise.all(markup) : await fulfilled(markup);
-  const emojiFetched = await emoji;
-
-  signal?.throwIfAborted();
-
-  return [...provided.values(), ...fetched, ...emojiFetched];
-}
-
-/** The values of the `tasks` that fulfil, leaving out the ones that reject. */
-async function fulfilled<T>(tasks: Promise<T>[]): Promise<T[]> {
-  return (await Promise.allSettled(tasks)).flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
+  return {
+    provided: [...provided.values()],
+    tasks: missing.map((src) => ({
+      src,
+      fetched: (fetchCache
+        ? fetchCached(src, fetchOptions, fetchCache)
+        : fetchBytes(src, { ...fetchOptions, store: storeFor(src, { store, fetch }) })
+      ).then((data) => ({ src, data })),
+    })),
+  };
 }

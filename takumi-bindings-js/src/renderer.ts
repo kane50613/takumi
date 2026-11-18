@@ -3,9 +3,12 @@ import {
   type FetchOptions,
   fontFromUrl,
   type GenericFontFamily,
+  type ImageFetchCache,
 } from "@takumi-rs/helpers";
+import { defaultStore, fetchImagesSettled } from "@takumi-rs/helpers/renderer";
 import type { JsonSource } from "./node-source";
-import type { ListedFont, PrepareExtras } from "./prepared";
+import type { ListedFont, MissingGlyphsHandler, PrepareExtras } from "./prepared";
+import { warnFontLoadFailed } from "./warning";
 import { unicodeRangeOf } from "./unicode-range";
 
 /**
@@ -142,6 +145,7 @@ type RenderExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
+  onMissingGlyphs?: MissingGlyphsHandler;
 };
 
 /**
@@ -309,6 +313,14 @@ export type HeldFontFiles = {
   load(urls: string[], lease: number): Promise<string[]>;
 };
 
+/** How {@link FontRegistry.resolveResources} loads and hands over fonts. */
+type ResolveOptions = {
+  /** The `@font-face` files a prepared render loaded, leased again or loaded again. */
+  files?: HeldFontFiles;
+  /** The fonts join the renderer's registered fallback chain instead of naming the render's families. */
+  implicitFamilies?: boolean;
+};
+
 /** The resources a render uses, as the binding expects them. */
 type ResolvedResources = {
   images?: ImageSource[];
@@ -316,6 +328,33 @@ type ResolvedResources = {
   /** The held `@font-face` files that failed to load again, and the optional fonts that failed. */
   failedFontFiles?: string[];
 };
+
+/**
+ * How a render fetches `@font-face` files and the fonts its `fonts` list names by URL.
+ *
+ * @internal
+ */
+export type FontFetch = FetchOptions & { fetchCache?: ImageFetchCache };
+
+/**
+ * How a render loads fonts: leased to `lease`, adding the key or URL of each optional font and
+ * `@font-face` file that fails to `failed`.
+ *
+ * @internal
+ */
+export type FontLoad = { lease: number; failed: string[] };
+
+/**
+ * The store a render's downloads go through. A caller's own `fetch` may send its credentials, so
+ * its downloads skip the store the renderers share.
+ *
+ * @internal
+ */
+export function downloadStore(
+  fetch: FetchOptions["fetch"],
+): ReturnType<typeof defaultStore> | null {
+  return fetch === undefined ? defaultStore(globalThis.fetch) : null;
+}
 
 /**
  * A 53-bit hash of `bytes` with their length, after
@@ -417,39 +456,30 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return load;
   }
 
-  /** Loads the `@font-face` file `url` names, leased to `lease`. A wasm backend reads only a `Uint8Array`. */
-  async cacheFontFile(url: string, data: ArrayBuffer | Uint8Array, lease: number): Promise<void> {
-    await this.backend.cacheFontFile(url, asView(data), lease);
-  }
-
-  /**
-   * Loads each of `fonts` the backend does not hold, leased to `lease`, adding the key of each
-   * optional one that fails to `failed`, and returns whether any was loaded.
-   */
-  async cache(fonts: FontLoader[], lease: number, failed: string[]): Promise<boolean> {
+  /** Loads each of `fonts` the backend does not hold under `load`, and returns whether any was loaded. */
+  async cache(fonts: FontLoader[], load: FontLoad): Promise<boolean> {
     const loaders = fonts
       .map((font) => toLoader(font))
-      .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
+      .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, load.lease));
 
-    await Promise.all(loaders.map((loader) => this.admit(loader, lease, failed)));
+    await Promise.all(loaders.map((loader) => this.admit(loader, load)));
 
     return loaders.length > 0;
   }
 
-  /** {@link register} for a render's `fonts` list, adding the key of an optional font that fails to `failed` instead of rejecting. */
-  private async admit(
-    loader: Exclude<FontLoader, string>,
-    lease: number,
-    failed: string[],
-  ): Promise<TFamily[]> {
+  /** {@link register} for a render's `fonts` list, adding an optional font that fails to `load` instead of rejecting. */
+  private async admit(loader: Exclude<FontLoader, string>, load: FontLoad): Promise<TFamily[]> {
     try {
-      return await this.register(loader, lease);
+      return await this.register(loader, load.lease);
     } catch (error) {
       if (isBuffer(loader) || !loader.optional) {
         throw error;
       }
 
-      failed.push(this.keyOf(loader));
+      const key = this.keyOf(loader);
+
+      load.failed.push(key);
+      warnFontLoadFailed(key, error);
 
       return [];
     }
@@ -545,6 +575,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return failed.length > 0 ? fonts.filter((font) => !failed.includes(this.key(font))) : fonts;
   }
 
+  /** Removes from `failed` the keys of `fonts`, which load again. */
+  clearFailures(fonts: FontLoader[], failed: string[]): void {
+    const keys = new Set(fonts.map((font) => this.key(font)));
+
+    failed.splice(0, failed.length, ...failed.filter((source) => !keys.has(source)));
+  }
+
   /** The key the backend keeps `font` under. */
   private key(font: FontLoader): string {
     return this.keyOf(toLoader(font));
@@ -581,6 +618,39 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return urls.filter((url) => !this.backend.cachedFontFile(url, lease));
   }
 
+  /** Fetches the `@font-face` files `urls` with `fetch` and loads each under `load`, adding the ones that fail to it. */
+  async loadFontFiles(urls: string[], fetch: FontFetch, load: FontLoad): Promise<void> {
+    const { images, failed } = await fetchImagesSettled({
+      ...fetch,
+      urls,
+      store: downloadStore(fetch.fetch),
+    });
+    const fetched = new Map(images.map(({ src, data }) => [src, data]));
+    const errors = new Map(failed.map(({ src, error }) => [src, error]));
+    const failures = await Promise.all(
+      urls.map(async (url): Promise<[string, unknown][]> => {
+        const data = fetched.get(url);
+
+        if (data === undefined) {
+          return [[url, errors.get(url) ?? new Error(`Fetching ${url} needs your own fetch`)]];
+        }
+
+        try {
+          await this.backend.cacheFontFile(url, asView(data), load.lease);
+
+          return [];
+        } catch (error) {
+          return [[url, error]];
+        }
+      }),
+    );
+
+    for (const [url, error] of failures.flat()) {
+      load.failed.push(url);
+      warnFontLoadFailed(url, error);
+    }
+  }
+
   /** Leases each held file the backend still holds, and loads the others again, returning the ones that failed. */
   private async holdFiles({ urls, load }: HeldFontFiles, lease: number): Promise<string[]> {
     const evicted = this.leaseFontFiles(urls, lease);
@@ -599,19 +669,22 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
     use: (resources: ResolvedResources) => Awaitable<T>,
-    files?: HeldFontFiles,
+    { files, implicitFamilies = false }: ResolveOptions = {},
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
     const loaders = fonts?.map((font) => toLoader(font)) ?? [];
 
     return this.leased(async (lease) => {
-      const failedFontFiles: string[] = [];
-      const families = await Promise.all(
-        loaders.map((loader) => this.admit(loader, lease, failedFontFiles)),
-      );
-
-      failedFontFiles.push(...(files ? await this.holdFiles(files, lease) : []));
-      const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
+      const load: FontLoad = { lease, failed: [] };
+      const families = await Promise.all(loaders.map((loader) => this.admit(loader, load)));
+      const failedFontFiles = [
+        ...load.failed,
+        ...(files ? await this.holdFiles(files, lease) : []),
+      ];
+      const registered =
+        fonts && !implicitFamilies
+          ? [...new Set(families.flat().map((family) => family.name))]
+          : undefined;
 
       // Nothing yields from here into `use`, so the order stands when the render takes its fonts.
       if (loaders.length > 0) {

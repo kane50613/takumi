@@ -224,6 +224,8 @@ const image = await render(element, {
 });
 ```
 
+Each image left out prints a [warning](/docs/fonts#what-a-render-could-not-draw) through `console.warn` that names its URL and the error. An emoji image that fails to fetch is left out without one.
+
 ### URLs from user input
 
 <Callout type="warn">

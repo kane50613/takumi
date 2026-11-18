@@ -288,6 +288,10 @@ export type RenderNeeds = {
   fontFiles: string[];
   /** The URLs of the loaded `@font-face` files the render draws with, sorted. */
   loadedFontFiles: string[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };
 
 export type AnimationScene = {

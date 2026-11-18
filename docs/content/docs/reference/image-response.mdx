@@ -81,6 +81,8 @@ export async function GET() {
 }
 ```
 
+A render that cannot draw something, such as a character no font covers, prints a [warning](/docs/fonts#what-a-render-could-not-draw) through `console.warn` and still resolves `ready`.
+
 `onError` is for side effects such as logging. Takumi ignores its return value, and the response stream still errors. Use `ready` to send a fallback.
 
 ```tsx twoslash title="Log a render failure"

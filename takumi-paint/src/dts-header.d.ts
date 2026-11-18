@@ -413,6 +413,10 @@ export type RenderNeeds = {
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */
   fonts: number[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };
 
 /** The tree as the wasm module serializes it, nodes and runs named by index. */

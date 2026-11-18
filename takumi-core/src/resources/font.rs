@@ -38,7 +38,7 @@ use crate::{
     css_font_selector::CssFontSelector,
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
-    font_description::FontSelectionDescription,
+    font_description::{FontFallbackKey, FontSelectionDescription},
     font_face::{FaceData, FontFace, FontFaceDescriptors, FontMetricsOverride, PendingSource},
     font_height::FontHeight,
     system_fonts::SystemFonts,
@@ -499,6 +499,40 @@ impl Fonts {
           .collect()
       })
       .collect()
+  }
+
+  /// The families `key` names that no face, loaded or pending, provides. Generic keywords resolve
+  /// through the fallback families, so they never count.
+  pub(crate) fn missing_families<'k>(
+    &self,
+    key: &'k FontFallbackKey,
+  ) -> impl Iterator<Item = &'k str> + use<'_, 'k> {
+    key.family.tokens().iter().filter_map(|token| match token {
+      FontFamilyToken::Owned(name) if !self.has_family(name, &key.selection) => Some(name.as_str()),
+      _ => None,
+    })
+  }
+
+  /// The families the render falls back through, as its `fontFamilies` names them, that no face
+  /// provides.
+  pub(crate) fn missing_fallback_families<'a>(
+    &'a self,
+    description: &'a FontSelectionDescription,
+  ) -> impl Iterator<Item = &'a str> + 'a {
+    self
+      .fallback_families
+      .iter()
+      .flatten()
+      .filter(|family| !self.has_family(family, description))
+      .map(|family| &**family)
+  }
+
+  /// Whether a face, loaded or pending, provides `family`.
+  fn has_family(&self, family: &str, description: &FontSelectionDescription) -> bool {
+    self
+      .registry
+      .get_font_data(description, family, false)
+      .is_some()
   }
 
   /// The faces system font fallback picks from: the fallback families, then the system fonts, each

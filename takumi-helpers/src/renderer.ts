@@ -8,7 +8,7 @@ import {
 import type { CacheMode } from "./types";
 import { unicodeRangeOf } from "./unicode-range";
 
-export { fetchImages } from "./fetch/images";
+export { type FailedImage, fetchImages, fetchImagesSettled } from "./fetch/images";
 export { defaultStore } from "./fetch/store";
 export { type JsonSource, toNativeSource } from "./node-source";
 
