@@ -2,13 +2,9 @@
 //!
 //! # Color spaces
 //!
-//! krilla currently supports three color models:
-//! - RGB
-//! - Luma
-//! - CMYK
-//!
-//! Each color space is associated with its specific color type, which you can use to create new
-//! instances of a specific color in that color space.
+//! Paint colors come in two models, RGB and Luma, each with its own color type. CMYK has no
+//! color type: it is only the color space CMYK JPEGs draw in, which [`cmyk::color_space`]
+//! picks.
 //!
 //! # Representation of colors
 //!

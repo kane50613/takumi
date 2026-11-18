@@ -1,4 +1,5 @@
-//! Bitmap images: PNG and JPEG bytes embedded as they came, WebP decoded, and raw RGBA.
+//! Bitmap images: JPEG bytes embedded as they came, the IDAT data of a non-interlaced
+//! grayscale, RGB, or indexed PNG passed through, other PNGs and WebP decoded, and raw RGBA.
 
 mod png;
 
