@@ -159,3 +159,24 @@ test("serializeSvg rejects style entries that leave their declaration", () => {
     expect(() => serializeSvg(<svg style={{ fill }} />)).toThrow("Invalid SVG style value");
   }
 });
+
+test("serializeSvg keeps camelCase attributes SVG itself spells in camelCase", () => {
+  const component = (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" preserveAspectRatio="none">
+      <clipPath id="c" clipPathUnits="objectBoundingBox">
+        <rect width="1" height="1" />
+      </clipPath>
+      <text
+        dominantBaseline="middle"
+        renderingIntent="auto"
+        strikethroughPosition="1"
+        strikethroughThickness="1"
+        xHeight="5"
+      >
+        A
+      </text>
+    </svg>
+  );
+
+  expectReactDomMarkup(component);
+});
