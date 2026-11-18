@@ -789,8 +789,9 @@ jobs:
           echo ""
           git diff HEAD -- api
           echo ""
-          echo "To accept the change, run \`bun run api\` after building the packages, or download"
-          echo "the api-snapshots artifact of this run into api/, and commit the result."
+          echo "To accept the change, run \`bun run api\` after building the packages, or delete"
+          echo "api/js and api/rust, extract the api-snapshots artifact of this run into api/,"
+          echo "and commit the result, so snapshots the run no longer writes go away too."
           echo "The PR body must say what the new API replaces, or why an existing entry point,"
           echo "option, or default cannot do the job. See \"Public API\" in AGENTS.md."
           exit 1

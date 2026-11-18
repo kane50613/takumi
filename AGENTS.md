@@ -4,7 +4,7 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, validation, and
 
 ## Public API
 
-The files under `api/` list the public API of every published package and crate. CI regenerates them and fails when they differ from the committed copies. To update them, run `bun run api` after building the packages, or download the `api-snapshots` artifact of the failed run into `api/`.
+The files under `api/` list the public API of every published package and crate. CI regenerates them and fails when they differ from the committed copies. To update them, run `bun run api` after building the packages, or delete `api/js` and `api/rust` and extract the `api-snapshots` artifact of the failed run into `api/`, so a snapshot the run no longer writes goes away too.
 
 New public API is a decision, not a side effect of a change:
 

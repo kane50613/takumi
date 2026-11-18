@@ -392,6 +392,6 @@ export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptions$1>;
 export { TextNode }
 
 // Warnings were encountered during analysis:
-// dist/export.d.mts:357:3 - (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
-// dist/export.d.mts:453:5 - (ae-forgotten-export) The symbol "JsonSource" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
+// (ae-forgotten-export) The symbol "JsonSource" needs to be exported
 ```

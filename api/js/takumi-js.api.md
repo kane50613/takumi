@@ -174,7 +174,7 @@ export { SupportsRule }
 export { TextNode }
 
 // Warnings were encountered during analysis:
-// dist/render-oPv4-TXB.d.mts:26:3 - (ae-forgotten-export) The symbol "Renderer$1" needs to be exported
+// (ae-forgotten-export) The symbol "Renderer$1" needs to be exported
 ```
 
 ## `takumi-js/response`
@@ -262,8 +262,8 @@ type SharedRenderExtras = {
 };
 
 // Warnings were encountered during analysis:
-// dist/render-oPv4-TXB.d.mts:26:3 - (ae-forgotten-export) The symbol "Renderer$1" needs to be exported
-// dist/render-oPv4-TXB.d.mts:29:3 - (ae-forgotten-export) The symbol "ImagesInput" needs to be exported
+// (ae-forgotten-export) The symbol "Renderer$1" needs to be exported
+// (ae-forgotten-export) The symbol "ImagesInput" needs to be exported
 ```
 
 ## `takumi-js/node`

@@ -1161,8 +1161,8 @@ export function vw(vw: number): `${number}vw`;
 type WeightRange = `${number}..${number}`;
 
 // Warnings were encountered during analysis:
-// dist/fonts-DYcYugsN.d.mts:982:3 - (ae-forgotten-export) The symbol "FontStyle" needs to be exported
-// dist/fonts-DYcYugsN.d.mts:983:3 - (ae-forgotten-export) The symbol "AxisValue" needs to be exported
+// (ae-forgotten-export) The symbol "FontStyle" needs to be exported
+// (ae-forgotten-export) The symbol "AxisValue" needs to be exported
 ```
 
 ## `@takumi-rs/helpers/html`
@@ -1230,10 +1230,10 @@ type TextNode = NodeMetadata & {
 };
 
 // Warnings were encountered during analysis:
-// dist/types-CtSMAucZ.d.mts:60:3 - (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
-// dist/types-CtSMAucZ.d.mts:62:3 - (ae-forgotten-export) The symbol "Declarations" needs to be exported
-// dist/types-CtSMAucZ.d.mts:68:3 - (ae-forgotten-export) The symbol "Node_2" needs to be exported
-// dist/types-CtSMAucZ.d.mts:87:3 - (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
+// (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
+// (ae-forgotten-export) The symbol "Declarations" needs to be exported
+// (ae-forgotten-export) The symbol "Node_2" needs to be exported
+// (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
 ```
 
 ## `@takumi-rs/helpers/jsx`
@@ -1335,9 +1335,9 @@ type TextNode = NodeMetadata & {
 };
 
 // Warnings were encountered during analysis:
-// dist/index-MezLWWhL.d.mts:11:3 - (ae-forgotten-export) The symbol "Declarations" needs to be exported
-// dist/types-CtSMAucZ.d.mts:60:3 - (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
-// dist/types-CtSMAucZ.d.mts:68:3 - (ae-forgotten-export) The symbol "Node_2" needs to be exported
+// (ae-forgotten-export) The symbol "Declarations" needs to be exported
+// (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
+// (ae-forgotten-export) The symbol "Node_2" needs to be exported
 ```
 
 ## `@takumi-rs/helpers/emoji`
@@ -1398,10 +1398,10 @@ type TextNode = NodeMetadata & {
 };
 
 // Warnings were encountered during analysis:
-// dist/types-CtSMAucZ.d.mts:60:3 - (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
-// dist/types-CtSMAucZ.d.mts:62:3 - (ae-forgotten-export) The symbol "Declarations" needs to be exported
-// dist/types-CtSMAucZ.d.mts:68:3 - (ae-forgotten-export) The symbol "Node_2" needs to be exported
-// dist/types-CtSMAucZ.d.mts:87:3 - (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
+// (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
+// (ae-forgotten-export) The symbol "Declarations" needs to be exported
+// (ae-forgotten-export) The symbol "Node_2" needs to be exported
+// (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
 ```
 
 ## `@takumi-rs/helpers/renderer`
@@ -1600,9 +1600,9 @@ export function withRenderInput<TOptions extends RenderExtras & {
 }, TFamily extends RegisteredFamilyLike, TResult>(registry: FontRegistry<TFamily>, options: TOptions, source: CodepointSource, call: (options: ResolvedRenderOptions<TOptions>, signal: AbortSignal | undefined) => Awaitable<TResult>): Promise<TResult>;
 
 // Warnings were encountered during analysis:
-// dist/renderer.d.mts:63:3 - (ae-forgotten-export) The symbol "GenericFontFamily" needs to be exported
-// dist/renderer.d.mts:222:3 - (ae-forgotten-export) The symbol "Awaitable" needs to be exported
-// dist/types-CtSMAucZ.d.mts:60:3 - (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
-// dist/types-CtSMAucZ.d.mts:62:3 - (ae-forgotten-export) The symbol "Declarations" needs to be exported
-// dist/types-CtSMAucZ.d.mts:87:3 - (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
+// (ae-forgotten-export) The symbol "GenericFontFamily" needs to be exported
+// (ae-forgotten-export) The symbol "Awaitable" needs to be exported
+// (ae-forgotten-export) The symbol "NodeAttributes" needs to be exported
+// (ae-forgotten-export) The symbol "Declarations" needs to be exported
+// (ae-forgotten-export) The symbol "RgbaImage" needs to be exported
 ```

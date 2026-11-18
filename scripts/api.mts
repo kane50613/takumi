@@ -178,7 +178,9 @@ async function extractApi(dir: string, typesPath: string, tempDir: string): Prom
       line
         .replace("// @public", "//")
         .replace(/ \(undocumented\)$/, "")
-        .replace(/ by the entry point \S+$/, ""),
+        .replace(/ by the entry point \S+$/, "")
+        // A warning's declaration location moves with unrelated edits and bundle chunk names.
+        .replace(/^\/\/ \S+\.d\.[cm]?ts:\d+:\d+ - /, "// "),
     )
     .filter((line) => !/^\s*\/\/$/.test(line))
     .join("\n")
@@ -257,7 +259,7 @@ async function writeRustReports(): Promise<void> {
 
   for (const crate of crates) {
     const api =
-      await $`cargo +${NIGHTLY} public-api --package ${crate} --all-features --simplified --simplified --color never`
+      await $`cargo +${NIGHTLY} public-api --package ${crate} --all-features --simplified --color never`
         .cwd(root)
         .quiet()
         .text();

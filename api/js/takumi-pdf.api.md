@@ -600,25 +600,25 @@ export type XmpSchema = {
 };
 
 // Warnings were encountered during analysis:
-// dist/export.d.mts:79:3 - (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
-// dist/export.d.mts:125:3 - (ae-forgotten-export) The symbol "Font$1" needs to be exported
-// dist/export.d.mts:125:3 - (ae-forgotten-export) The symbol "Awaitable" needs to be exported
-// dist/export.d.mts:166:5 - (ae-forgotten-export) The symbol "ImageSource$1" needs to be exported
-// dist/export.d.mts:263:3 - (ae-forgotten-export) The symbol "RegisteredFace" needs to be exported
-// dist/export.d.mts:269:3 - (ae-forgotten-export) The symbol "ImageCacheMode" needs to be exported
-// dist/export.d.mts:295:3 - (ae-forgotten-export) The symbol "Band" needs to be exported
-// dist/export.d.mts:300:3 - (ae-forgotten-export) The symbol "PageOverride" needs to be exported
-// dist/export.d.mts:365:3 - (ae-forgotten-export) The symbol "PageMargin$1" needs to be exported
-// dist/export.d.mts:379:3 - (ae-forgotten-export) The symbol "PageRange$1" needs to be exported
-// dist/export.d.mts:381:3 - (ae-forgotten-export) The symbol "ImageSource" needs to be exported
-// dist/export.d.mts:396:3 - (ae-forgotten-export) The symbol "PdfMetadata$1" needs to be exported
-// dist/export.d.mts:400:3 - (ae-forgotten-export) The symbol "Pdfa" needs to be exported
-// dist/export.d.mts:402:3 - (ae-forgotten-export) The symbol "Tagged" needs to be exported
-// dist/export.d.mts:404:3 - (ae-forgotten-export) The symbol "Attachment$1" needs to be exported
-// dist/export.d.mts:413:3 - (ae-forgotten-export) The symbol "UncoveredText$1" needs to be exported
-// dist/export.d.mts:419:3 - (ae-forgotten-export) The symbol "PageSize$1" needs to be exported
-// dist/export.d.mts:423:3 - (ae-forgotten-export) The symbol "ViewportInput$1" needs to be exported
-// dist/export.d.mts:862:3 - (ae-forgotten-export) The symbol "PageRules" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
+// (ae-forgotten-export) The symbol "Font$1" needs to be exported
+// (ae-forgotten-export) The symbol "Awaitable" needs to be exported
+// (ae-forgotten-export) The symbol "ImageSource$1" needs to be exported
+// (ae-forgotten-export) The symbol "RegisteredFace" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode" needs to be exported
+// (ae-forgotten-export) The symbol "Band" needs to be exported
+// (ae-forgotten-export) The symbol "PageOverride" needs to be exported
+// (ae-forgotten-export) The symbol "PageMargin$1" needs to be exported
+// (ae-forgotten-export) The symbol "PageRange$1" needs to be exported
+// (ae-forgotten-export) The symbol "ImageSource" needs to be exported
+// (ae-forgotten-export) The symbol "PdfMetadata$1" needs to be exported
+// (ae-forgotten-export) The symbol "Pdfa" needs to be exported
+// (ae-forgotten-export) The symbol "Tagged" needs to be exported
+// (ae-forgotten-export) The symbol "Attachment$1" needs to be exported
+// (ae-forgotten-export) The symbol "UncoveredText$1" needs to be exported
+// (ae-forgotten-export) The symbol "PageSize$1" needs to be exported
+// (ae-forgotten-export) The symbol "ViewportInput$1" needs to be exported
+// (ae-forgotten-export) The symbol "PageRules" needs to be exported
 ```
 
 ## `takumi-pdf/primitives`

@@ -13,6 +13,13 @@ pub fn takumi_raster::AnimationFormat::clone(&self) -> takumi_raster::AnimationF
 impl core::fmt::Debug for takumi_raster::AnimationFormat
 pub fn takumi_raster::AnimationFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_raster::AnimationFormat
+impl core::marker::Freeze for takumi_raster::AnimationFormat
+impl core::marker::Send for takumi_raster::AnimationFormat
+impl core::marker::Sync for takumi_raster::AnimationFormat
+impl core::marker::Unpin for takumi_raster::AnimationFormat
+impl core::marker::UnsafeUnpin for takumi_raster::AnimationFormat
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::AnimationFormat
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::AnimationFormat
 #[non_exhaustive] pub enum takumi_raster::DitheringAlgorithm
 pub takumi_raster::DitheringAlgorithm::FloydSteinberg
 pub takumi_raster::DitheringAlgorithm::None
@@ -32,6 +39,13 @@ impl serde_core::ser::Serialize for takumi_raster::DitheringAlgorithm
 pub fn takumi_raster::DitheringAlgorithm::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for takumi_raster::DitheringAlgorithm
 pub fn takumi_raster::DitheringAlgorithm::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for takumi_raster::DitheringAlgorithm
+impl core::marker::Send for takumi_raster::DitheringAlgorithm
+impl core::marker::Sync for takumi_raster::DitheringAlgorithm
+impl core::marker::Unpin for takumi_raster::DitheringAlgorithm
+impl core::marker::UnsafeUnpin for takumi_raster::DitheringAlgorithm
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::DitheringAlgorithm
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::DitheringAlgorithm
 #[non_exhaustive] pub enum takumi_raster::OutputFormat
 pub takumi_raster::OutputFormat::Ico
 pub takumi_raster::OutputFormat::Jpeg
@@ -51,6 +65,13 @@ impl core::fmt::Debug for takumi_raster::OutputFormat
 pub fn takumi_raster::OutputFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_raster::OutputFormat
 impl core::marker::StructuralPartialEq for takumi_raster::OutputFormat
+impl core::marker::Freeze for takumi_raster::OutputFormat
+impl core::marker::Send for takumi_raster::OutputFormat
+impl core::marker::Sync for takumi_raster::OutputFormat
+impl core::marker::Unpin for takumi_raster::OutputFormat
+impl core::marker::UnsafeUnpin for takumi_raster::OutputFormat
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::OutputFormat
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::OutputFormat
 #[non_exhaustive] pub struct takumi_raster::AnimatedGifOptions
 pub takumi_raster::AnimatedGifOptions::loop_count: core::option::Option<u16>
 impl core::clone::Clone for takumi_raster::AnimatedGifOptions
@@ -62,6 +83,13 @@ pub fn takumi_raster::AnimatedGifOptions::fmt(&self, &mut core::fmt::Formatter<'
 impl core::marker::Copy for takumi_raster::AnimatedGifOptions
 impl takumi_raster::AnimatedGifOptions
 pub fn takumi_raster::AnimatedGifOptions::builder() -> AnimatedGifOptionsBuilder<(())>
+impl core::marker::Freeze for takumi_raster::AnimatedGifOptions
+impl core::marker::Send for takumi_raster::AnimatedGifOptions
+impl core::marker::Sync for takumi_raster::AnimatedGifOptions
+impl core::marker::Unpin for takumi_raster::AnimatedGifOptions
+impl core::marker::UnsafeUnpin for takumi_raster::AnimatedGifOptions
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::AnimatedGifOptions
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::AnimatedGifOptions
 #[non_exhaustive] pub struct takumi_raster::AnimatedPngOptions
 pub takumi_raster::AnimatedPngOptions::loop_count: core::option::Option<u16>
 impl core::clone::Clone for takumi_raster::AnimatedPngOptions
@@ -73,6 +101,13 @@ pub fn takumi_raster::AnimatedPngOptions::fmt(&self, &mut core::fmt::Formatter<'
 impl core::marker::Copy for takumi_raster::AnimatedPngOptions
 impl takumi_raster::AnimatedPngOptions
 pub fn takumi_raster::AnimatedPngOptions::builder() -> AnimatedPngOptionsBuilder<(())>
+impl core::marker::Freeze for takumi_raster::AnimatedPngOptions
+impl core::marker::Send for takumi_raster::AnimatedPngOptions
+impl core::marker::Sync for takumi_raster::AnimatedPngOptions
+impl core::marker::Unpin for takumi_raster::AnimatedPngOptions
+impl core::marker::UnsafeUnpin for takumi_raster::AnimatedPngOptions
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::AnimatedPngOptions
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::AnimatedPngOptions
 #[non_exhaustive] pub struct takumi_raster::AnimatedWebpOptions
 pub takumi_raster::AnimatedWebpOptions::blend: bool
 pub takumi_raster::AnimatedWebpOptions::dispose: bool
@@ -89,6 +124,13 @@ pub fn takumi_raster::AnimatedWebpOptions::fmt(&self, &mut core::fmt::Formatter<
 impl core::marker::Copy for takumi_raster::AnimatedWebpOptions
 impl takumi_raster::AnimatedWebpOptions
 pub fn takumi_raster::AnimatedWebpOptions::builder() -> AnimatedWebpOptionsBuilder<((), (), (), (), (), ())>
+impl core::marker::Freeze for takumi_raster::AnimatedWebpOptions
+impl core::marker::Send for takumi_raster::AnimatedWebpOptions
+impl core::marker::Sync for takumi_raster::AnimatedWebpOptions
+impl core::marker::Unpin for takumi_raster::AnimatedWebpOptions
+impl core::marker::UnsafeUnpin for takumi_raster::AnimatedWebpOptions
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::AnimatedWebpOptions
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::AnimatedWebpOptions
 #[non_exhaustive] pub struct takumi_raster::AnimationFrame
 pub takumi_raster::AnimationFrame::duration_ms: u32
 pub takumi_raster::AnimationFrame::image: takumi_raster::Bitmap
@@ -98,6 +140,13 @@ impl core::clone::Clone for takumi_raster::AnimationFrame
 pub fn takumi_raster::AnimationFrame::clone(&self) -> takumi_raster::AnimationFrame
 impl core::fmt::Debug for takumi_raster::AnimationFrame
 pub fn takumi_raster::AnimationFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for takumi_raster::AnimationFrame
+impl core::marker::Send for takumi_raster::AnimationFrame
+impl core::marker::Sync for takumi_raster::AnimationFrame
+impl core::marker::Unpin for takumi_raster::AnimationFrame
+impl core::marker::UnsafeUnpin for takumi_raster::AnimationFrame
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::AnimationFrame
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::AnimationFrame
 pub struct takumi_raster::Bitmap
 impl takumi_raster::Bitmap
 pub fn takumi_raster::Bitmap::as_raw(&self) -> &[u8]
@@ -109,6 +158,13 @@ impl core::clone::Clone for takumi_raster::Bitmap
 pub fn takumi_raster::Bitmap::clone(&self) -> takumi_raster::Bitmap
 impl core::fmt::Debug for takumi_raster::Bitmap
 pub fn takumi_raster::Bitmap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for takumi_raster::Bitmap
+impl core::marker::Send for takumi_raster::Bitmap
+impl core::marker::Sync for takumi_raster::Bitmap
+impl core::marker::Unpin for takumi_raster::Bitmap
+impl core::marker::UnsafeUnpin for takumi_raster::Bitmap
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::Bitmap
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::Bitmap
 pub struct takumi_raster::Quality(_)
 impl takumi_raster::Quality
 pub const fn takumi_raster::Quality::get(self) -> u8
@@ -124,6 +180,13 @@ impl core::fmt::Debug for takumi_raster::Quality
 pub fn takumi_raster::Quality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_raster::Quality
 impl core::marker::StructuralPartialEq for takumi_raster::Quality
+impl core::marker::Freeze for takumi_raster::Quality
+impl core::marker::Send for takumi_raster::Quality
+impl core::marker::Sync for takumi_raster::Quality
+impl core::marker::Unpin for takumi_raster::Quality
+impl core::marker::UnsafeUnpin for takumi_raster::Quality
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_raster::Quality
+impl core::panic::unwind_safe::UnwindSafe for takumi_raster::Quality
 pub struct takumi_raster::RenderOptions<'g>
 impl takumi_raster::RenderOptions<'_>
 pub fn takumi_raster::RenderOptions<'_>::take_render_context(&mut self) -> takumi_core::context::RenderContext
@@ -137,11 +200,25 @@ impl<'g> core::clone::Clone for takumi_raster::RenderOptions<'g>
 pub fn takumi_raster::RenderOptions<'g>::clone(&self) -> takumi_raster::RenderOptions<'g>
 impl<'g> takumi_raster::RenderOptions<'g>
 pub fn takumi_raster::RenderOptions<'g>::builder() -> RenderOptionsBuilder<'g, ((), (), (), (), (), (), (), (), (), (), ())>
+impl<'g> core::marker::Freeze for takumi_raster::RenderOptions<'g>
+impl<'g> core::marker::Send for takumi_raster::RenderOptions<'g>
+impl<'g> core::marker::Sync for takumi_raster::RenderOptions<'g>
+impl<'g> core::marker::Unpin for takumi_raster::RenderOptions<'g>
+impl<'g> core::marker::UnsafeUnpin for takumi_raster::RenderOptions<'g>
+impl<'g> !core::panic::unwind_safe::RefUnwindSafe for takumi_raster::RenderOptions<'g>
+impl<'g> !core::panic::unwind_safe::UnwindSafe for takumi_raster::RenderOptions<'g>
 pub struct takumi_raster::SequentialScene<'g>
 impl<'g> core::clone::Clone for takumi_raster::SequentialScene<'g>
 pub fn takumi_raster::SequentialScene<'g>::clone(&self) -> takumi_raster::SequentialScene<'g>
 impl<'g> takumi_raster::SequentialScene<'g>
 pub fn takumi_raster::SequentialScene<'g>::builder() -> SequentialSceneBuilder<'g, ((), ())>
+impl<'g> core::marker::Freeze for takumi_raster::SequentialScene<'g>
+impl<'g> core::marker::Send for takumi_raster::SequentialScene<'g>
+impl<'g> core::marker::Sync for takumi_raster::SequentialScene<'g>
+impl<'g> core::marker::Unpin for takumi_raster::SequentialScene<'g>
+impl<'g> core::marker::UnsafeUnpin for takumi_raster::SequentialScene<'g>
+impl<'g> !core::panic::unwind_safe::RefUnwindSafe for takumi_raster::SequentialScene<'g>
+impl<'g> !core::panic::unwind_safe::UnwindSafe for takumi_raster::SequentialScene<'g>
 pub fn takumi_raster::measure<'g>(takumi_raster::RenderOptions<'g>) -> takumi_core::error::Result<takumi_core::layout::measure::MeasuredNode>
 pub fn takumi_raster::needs(takumi_raster::RenderOptions<'_>) -> takumi_core::layout::needs::RenderNeeds
 pub fn takumi_raster::render<'g>(takumi_raster::RenderOptions<'g>) -> takumi_core::error::Result<takumi_raster::Bitmap>

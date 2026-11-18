@@ -16,6 +16,13 @@ impl core::fmt::Debug for takumi_pdf::AttachmentRelationship
 pub fn takumi_pdf::AttachmentRelationship::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::AttachmentRelationship
 impl core::marker::StructuralPartialEq for takumi_pdf::AttachmentRelationship
+impl core::marker::Freeze for takumi_pdf::AttachmentRelationship
+impl core::marker::Send for takumi_pdf::AttachmentRelationship
+impl core::marker::Sync for takumi_pdf::AttachmentRelationship
+impl core::marker::Unpin for takumi_pdf::AttachmentRelationship
+impl core::marker::UnsafeUnpin for takumi_pdf::AttachmentRelationship
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::AttachmentRelationship
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::AttachmentRelationship
 pub enum takumi_pdf::Band
 pub takumi_pdf::Band::Node(alloc::boxed::Box<takumi_core::layout::node::Node>)
 pub takumi_pdf::Band::Off
@@ -25,6 +32,13 @@ impl core::clone::Clone for takumi_pdf::Band
 pub fn takumi_pdf::Band::clone(&self) -> takumi_pdf::Band
 impl core::convert::From<takumi_core::layout::node::Node> for takumi_pdf::Band
 pub fn takumi_pdf::Band::from(takumi_core::layout::node::Node) -> Self
+impl core::marker::Freeze for takumi_pdf::Band
+impl core::marker::Send for takumi_pdf::Band
+impl core::marker::Sync for takumi_pdf::Band
+impl core::marker::Unpin for takumi_pdf::Band
+impl core::marker::UnsafeUnpin for takumi_pdf::Band
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::Band
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::Band
 pub enum takumi_pdf::PageMargin
 pub takumi_pdf::PageMargin::Auto
 pub takumi_pdf::PageMargin::Px(f32)
@@ -33,6 +47,13 @@ pub fn takumi_pdf::PageMargin::clone(&self) -> takumi_pdf::PageMargin
 impl core::default::Default for takumi_pdf::PageMargin
 pub fn takumi_pdf::PageMargin::default() -> takumi_pdf::PageMargin
 impl core::marker::Copy for takumi_pdf::PageMargin
+impl core::marker::Freeze for takumi_pdf::PageMargin
+impl core::marker::Send for takumi_pdf::PageMargin
+impl core::marker::Sync for takumi_pdf::PageMargin
+impl core::marker::Unpin for takumi_pdf::PageMargin
+impl core::marker::UnsafeUnpin for takumi_pdf::PageMargin
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageMargin
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageMargin
 pub enum takumi_pdf::PdfError
 pub takumi_pdf::PdfError::DuplicateAttachment(alloc::string::String)
 pub takumi_pdf::PdfError::Font(takumi_core::resources::font::FontError)
@@ -60,6 +81,13 @@ impl core::fmt::Debug for takumi_pdf::PdfError
 pub fn takumi_pdf::PdfError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for takumi_pdf::PdfError
 pub fn takumi_pdf::PdfError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for takumi_pdf::PdfError
+impl core::marker::Send for takumi_pdf::PdfError
+impl core::marker::Sync for takumi_pdf::PdfError
+impl core::marker::Unpin for takumi_pdf::PdfError
+impl core::marker::UnsafeUnpin for takumi_pdf::PdfError
+impl !core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PdfError
+impl !core::panic::unwind_safe::UnwindSafe for takumi_pdf::PdfError
 pub enum takumi_pdf::PdfStandard
 pub takumi_pdf::PdfStandard::A2a
 pub takumi_pdf::PdfStandard::A2b
@@ -81,6 +109,13 @@ impl core::fmt::Debug for takumi_pdf::PdfStandard
 pub fn takumi_pdf::PdfStandard::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::PdfStandard
 impl core::marker::StructuralPartialEq for takumi_pdf::PdfStandard
+impl core::marker::Freeze for takumi_pdf::PdfStandard
+impl core::marker::Send for takumi_pdf::PdfStandard
+impl core::marker::Sync for takumi_pdf::PdfStandard
+impl core::marker::Unpin for takumi_pdf::PdfStandard
+impl core::marker::UnsafeUnpin for takumi_pdf::PdfStandard
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PdfStandard
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PdfStandard
 pub enum takumi_pdf::Tagging
 pub takumi_pdf::Tagging::Off
 pub takumi_pdf::Tagging::On
@@ -97,6 +132,13 @@ impl core::fmt::Debug for takumi_pdf::Tagging
 pub fn takumi_pdf::Tagging::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::Tagging
 impl core::marker::StructuralPartialEq for takumi_pdf::Tagging
+impl core::marker::Freeze for takumi_pdf::Tagging
+impl core::marker::Send for takumi_pdf::Tagging
+impl core::marker::Sync for takumi_pdf::Tagging
+impl core::marker::Unpin for takumi_pdf::Tagging
+impl core::marker::UnsafeUnpin for takumi_pdf::Tagging
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::Tagging
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::Tagging
 pub enum takumi_pdf::UncoveredText
 pub takumi_pdf::UncoveredText::Blank
 pub takumi_pdf::UncoveredText::Error
@@ -112,6 +154,13 @@ impl core::fmt::Debug for takumi_pdf::UncoveredText
 pub fn takumi_pdf::UncoveredText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::UncoveredText
 impl core::marker::StructuralPartialEq for takumi_pdf::UncoveredText
+impl core::marker::Freeze for takumi_pdf::UncoveredText
+impl core::marker::Send for takumi_pdf::UncoveredText
+impl core::marker::Sync for takumi_pdf::UncoveredText
+impl core::marker::Unpin for takumi_pdf::UncoveredText
+impl core::marker::UnsafeUnpin for takumi_pdf::UncoveredText
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::UncoveredText
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::UncoveredText
 pub struct takumi_pdf::Attachment
 pub takumi_pdf::Attachment::data: alloc::vec::Vec<u8>
 pub takumi_pdf::Attachment::description: core::option::Option<alloc::string::String>
@@ -121,6 +170,13 @@ pub takumi_pdf::Attachment::name: alloc::string::String
 pub takumi_pdf::Attachment::relationship: takumi_pdf::AttachmentRelationship
 impl core::clone::Clone for takumi_pdf::Attachment
 pub fn takumi_pdf::Attachment::clone(&self) -> takumi_pdf::Attachment
+impl core::marker::Freeze for takumi_pdf::Attachment
+impl core::marker::Send for takumi_pdf::Attachment
+impl core::marker::Sync for takumi_pdf::Attachment
+impl core::marker::Unpin for takumi_pdf::Attachment
+impl core::marker::UnsafeUnpin for takumi_pdf::Attachment
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::Attachment
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::Attachment
 pub struct takumi_pdf::MeasureOptions<'g>
 pub takumi_pdf::MeasureOptions::font_families: core::option::Option<takumi_core::style::properties::font_family::FontFamily>
 pub takumi_pdf::MeasureOptions::fonts: &'g takumi_core::resources::font::Fonts
@@ -133,6 +189,13 @@ pub takumi_pdf::MeasureOptions::stylesheet: alloc::sync::Arc<takumi_core::style:
 pub takumi_pdf::MeasureOptions::viewport: core::option::Option<takumi_core::viewport::Viewport>
 impl<'g> takumi_pdf::MeasureOptions<'g>
 pub fn takumi_pdf::MeasureOptions<'g>::builder() -> MeasureOptionsBuilder<'g, ((), (), (), (), (), (), (), (), ())>
+impl<'g> core::marker::Freeze for takumi_pdf::MeasureOptions<'g>
+impl<'g> core::marker::Send for takumi_pdf::MeasureOptions<'g>
+impl<'g> core::marker::Sync for takumi_pdf::MeasureOptions<'g>
+impl<'g> core::marker::Unpin for takumi_pdf::MeasureOptions<'g>
+impl<'g> core::marker::UnsafeUnpin for takumi_pdf::MeasureOptions<'g>
+impl<'g> !core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::MeasureOptions<'g>
+impl<'g> !core::panic::unwind_safe::UnwindSafe for takumi_pdf::MeasureOptions<'g>
 pub struct takumi_pdf::MeasuredSize
 pub takumi_pdf::MeasuredSize::height: f32
 pub takumi_pdf::MeasuredSize::width: f32
@@ -144,11 +207,25 @@ impl core::fmt::Debug for takumi_pdf::MeasuredSize
 pub fn takumi_pdf::MeasuredSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::MeasuredSize
 impl core::marker::StructuralPartialEq for takumi_pdf::MeasuredSize
+impl core::marker::Freeze for takumi_pdf::MeasuredSize
+impl core::marker::Send for takumi_pdf::MeasuredSize
+impl core::marker::Sync for takumi_pdf::MeasuredSize
+impl core::marker::Unpin for takumi_pdf::MeasuredSize
+impl core::marker::UnsafeUnpin for takumi_pdf::MeasuredSize
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::MeasuredSize
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::MeasuredSize
 pub struct takumi_pdf::PageBand
 impl takumi_pdf::PageBand
 pub fn takumi_pdf::PageBand::for_page(&self, usize, usize) -> core::option::Option<&takumi_core::layout::node::Node>
 impl core::clone::Clone for takumi_pdf::PageBand
 pub fn takumi_pdf::PageBand::clone(&self) -> takumi_pdf::PageBand
+impl core::marker::Freeze for takumi_pdf::PageBand
+impl core::marker::Send for takumi_pdf::PageBand
+impl core::marker::Sync for takumi_pdf::PageBand
+impl core::marker::Unpin for takumi_pdf::PageBand
+impl core::marker::UnsafeUnpin for takumi_pdf::PageBand
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageBand
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageBand
 pub struct takumi_pdf::PageMargins
 pub takumi_pdf::PageMargins::bottom: takumi_pdf::PageMargin
 pub takumi_pdf::PageMargins::left: takumi_pdf::PageMargin
@@ -162,6 +239,13 @@ pub fn takumi_pdf::PageMargins::clone(&self) -> takumi_pdf::PageMargins
 impl core::default::Default for takumi_pdf::PageMargins
 pub fn takumi_pdf::PageMargins::default() -> takumi_pdf::PageMargins
 impl core::marker::Copy for takumi_pdf::PageMargins
+impl core::marker::Freeze for takumi_pdf::PageMargins
+impl core::marker::Send for takumi_pdf::PageMargins
+impl core::marker::Sync for takumi_pdf::PageMargins
+impl core::marker::Unpin for takumi_pdf::PageMargins
+impl core::marker::UnsafeUnpin for takumi_pdf::PageMargins
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageMargins
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageMargins
 pub struct takumi_pdf::PageOptions
 pub takumi_pdf::PageOptions::height: f32
 pub takumi_pdf::PageOptions::margin: takumi_pdf::PageMargins
@@ -183,6 +267,13 @@ pub const fn takumi_pdf::PageOptions::with_margin(self, f32) -> Self
 impl core::clone::Clone for takumi_pdf::PageOptions
 pub fn takumi_pdf::PageOptions::clone(&self) -> takumi_pdf::PageOptions
 impl core::marker::Copy for takumi_pdf::PageOptions
+impl core::marker::Freeze for takumi_pdf::PageOptions
+impl core::marker::Send for takumi_pdf::PageOptions
+impl core::marker::Sync for takumi_pdf::PageOptions
+impl core::marker::Unpin for takumi_pdf::PageOptions
+impl core::marker::UnsafeUnpin for takumi_pdf::PageOptions
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageOptions
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageOptions
 pub struct takumi_pdf::PageOverride
 pub takumi_pdf::PageOverride::footer: core::option::Option<takumi_pdf::Band>
 pub takumi_pdf::PageOverride::header: core::option::Option<takumi_pdf::Band>
@@ -190,6 +281,13 @@ impl core::clone::Clone for takumi_pdf::PageOverride
 pub fn takumi_pdf::PageOverride::clone(&self) -> takumi_pdf::PageOverride
 impl core::default::Default for takumi_pdf::PageOverride
 pub fn takumi_pdf::PageOverride::default() -> takumi_pdf::PageOverride
+impl core::marker::Freeze for takumi_pdf::PageOverride
+impl core::marker::Send for takumi_pdf::PageOverride
+impl core::marker::Sync for takumi_pdf::PageOverride
+impl core::marker::Unpin for takumi_pdf::PageOverride
+impl core::marker::UnsafeUnpin for takumi_pdf::PageOverride
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageOverride
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageOverride
 pub struct takumi_pdf::PageRange
 pub takumi_pdf::PageRange::from: core::option::Option<usize>
 pub takumi_pdf::PageRange::to: core::option::Option<usize>
@@ -206,6 +304,13 @@ impl core::fmt::Display for takumi_pdf::PageRange
 pub fn takumi_pdf::PageRange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::PageRange
 impl core::marker::StructuralPartialEq for takumi_pdf::PageRange
+impl core::marker::Freeze for takumi_pdf::PageRange
+impl core::marker::Send for takumi_pdf::PageRange
+impl core::marker::Sync for takumi_pdf::PageRange
+impl core::marker::Unpin for takumi_pdf::PageRange
+impl core::marker::UnsafeUnpin for takumi_pdf::PageRange
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageRange
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageRange
 pub struct takumi_pdf::PageRules
 pub takumi_pdf::PageRules::even: takumi_pdf::PageOverride
 pub takumi_pdf::PageRules::first: takumi_pdf::PageOverride
@@ -218,6 +323,13 @@ impl core::clone::Clone for takumi_pdf::PageRules
 pub fn takumi_pdf::PageRules::clone(&self) -> takumi_pdf::PageRules
 impl core::default::Default for takumi_pdf::PageRules
 pub fn takumi_pdf::PageRules::default() -> takumi_pdf::PageRules
+impl core::marker::Freeze for takumi_pdf::PageRules
+impl core::marker::Send for takumi_pdf::PageRules
+impl core::marker::Sync for takumi_pdf::PageRules
+impl core::marker::Unpin for takumi_pdf::PageRules
+impl core::marker::UnsafeUnpin for takumi_pdf::PageRules
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PageRules
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PageRules
 pub struct takumi_pdf::PdfDate
 pub takumi_pdf::PdfDate::day: u8
 pub takumi_pdf::PdfDate::hour: u8
@@ -234,6 +346,13 @@ impl core::fmt::Debug for takumi_pdf::PdfDate
 pub fn takumi_pdf::PdfDate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for takumi_pdf::PdfDate
 impl core::marker::StructuralPartialEq for takumi_pdf::PdfDate
+impl core::marker::Freeze for takumi_pdf::PdfDate
+impl core::marker::Send for takumi_pdf::PdfDate
+impl core::marker::Sync for takumi_pdf::PdfDate
+impl core::marker::Unpin for takumi_pdf::PdfDate
+impl core::marker::UnsafeUnpin for takumi_pdf::PdfDate
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PdfDate
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PdfDate
 pub struct takumi_pdf::PdfMetadata
 pub takumi_pdf::PdfMetadata::authors: alloc::vec::Vec<alloc::string::String>
 pub takumi_pdf::PdfMetadata::creation_date: core::option::Option<takumi_pdf::PdfDate>
@@ -246,6 +365,13 @@ impl core::clone::Clone for takumi_pdf::PdfMetadata
 pub fn takumi_pdf::PdfMetadata::clone(&self) -> takumi_pdf::PdfMetadata
 impl core::default::Default for takumi_pdf::PdfMetadata
 pub fn takumi_pdf::PdfMetadata::default() -> takumi_pdf::PdfMetadata
+impl core::marker::Freeze for takumi_pdf::PdfMetadata
+impl core::marker::Send for takumi_pdf::PdfMetadata
+impl core::marker::Sync for takumi_pdf::PdfMetadata
+impl core::marker::Unpin for takumi_pdf::PdfMetadata
+impl core::marker::UnsafeUnpin for takumi_pdf::PdfMetadata
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PdfMetadata
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::PdfMetadata
 pub struct takumi_pdf::PdfOptions<'g>
 pub takumi_pdf::PdfOptions::attachments: alloc::vec::Vec<takumi_pdf::Attachment>
 pub takumi_pdf::PdfOptions::background_color: core::option::Option<takumi_core::style::properties::color::Color>
@@ -270,6 +396,13 @@ pub takumi_pdf::PdfOptions::uncovered_text: takumi_pdf::UncoveredText
 pub takumi_pdf::PdfOptions::viewport: core::option::Option<takumi_core::viewport::Viewport>
 impl<'g> takumi_pdf::PdfOptions<'g>
 pub fn takumi_pdf::PdfOptions<'g>::builder() -> PdfOptionsBuilder<'g, ((), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), (), ())>
+impl<'g> core::marker::Freeze for takumi_pdf::PdfOptions<'g>
+impl<'g> core::marker::Send for takumi_pdf::PdfOptions<'g>
+impl<'g> core::marker::Sync for takumi_pdf::PdfOptions<'g>
+impl<'g> core::marker::Unpin for takumi_pdf::PdfOptions<'g>
+impl<'g> core::marker::UnsafeUnpin for takumi_pdf::PdfOptions<'g>
+impl<'g> !core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::PdfOptions<'g>
+impl<'g> !core::panic::unwind_safe::UnwindSafe for takumi_pdf::PdfOptions<'g>
 pub struct takumi_pdf::XmpProperty
 pub takumi_pdf::XmpProperty::description: alloc::string::String
 pub takumi_pdf::XmpProperty::name: alloc::string::String
@@ -280,6 +413,13 @@ impl core::default::Default for takumi_pdf::XmpProperty
 pub fn takumi_pdf::XmpProperty::default() -> takumi_pdf::XmpProperty
 impl core::fmt::Debug for takumi_pdf::XmpProperty
 pub fn takumi_pdf::XmpProperty::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for takumi_pdf::XmpProperty
+impl core::marker::Send for takumi_pdf::XmpProperty
+impl core::marker::Sync for takumi_pdf::XmpProperty
+impl core::marker::Unpin for takumi_pdf::XmpProperty
+impl core::marker::UnsafeUnpin for takumi_pdf::XmpProperty
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::XmpProperty
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::XmpProperty
 pub struct takumi_pdf::XmpSchema
 pub takumi_pdf::XmpSchema::name: alloc::string::String
 pub takumi_pdf::XmpSchema::namespace: alloc::string::String
@@ -291,6 +431,13 @@ impl core::default::Default for takumi_pdf::XmpSchema
 pub fn takumi_pdf::XmpSchema::default() -> takumi_pdf::XmpSchema
 impl core::fmt::Debug for takumi_pdf::XmpSchema
 pub fn takumi_pdf::XmpSchema::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for takumi_pdf::XmpSchema
+impl core::marker::Send for takumi_pdf::XmpSchema
+impl core::marker::Sync for takumi_pdf::XmpSchema
+impl core::marker::Unpin for takumi_pdf::XmpSchema
+impl core::marker::UnsafeUnpin for takumi_pdf::XmpSchema
+impl core::panic::unwind_safe::RefUnwindSafe for takumi_pdf::XmpSchema
+impl core::panic::unwind_safe::UnwindSafe for takumi_pdf::XmpSchema
 pub const takumi_pdf::PRODUCER: &str
 pub fn takumi_pdf::measure(takumi_pdf::MeasureOptions<'_>) -> core::result::Result<takumi_pdf::MeasuredSize, takumi_pdf::PdfError>
 pub fn takumi_pdf::needs(takumi_pdf::MeasureOptions<'_>) -> core::result::Result<takumi_core::layout::needs::RenderNeeds, takumi_pdf::PdfError>

@@ -422,8 +422,8 @@ export type SyncInitInput = BufferSource | WebAssembly.Module;
 export { TextNode }
 
 // Warnings were encountered during analysis:
-// dist/export.d.mts:368:3 - (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
-// dist/export.d.mts:464:5 - (ae-forgotten-export) The symbol "JsonSource" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
+// (ae-forgotten-export) The symbol "JsonSource" needs to be exported
 ```
 
 ## `@takumi-rs/wasm/node`, `@takumi-rs/wasm/auto` (bun), `@takumi-rs/wasm/auto` (webpack.node.default, node.default)
@@ -843,8 +843,8 @@ export type SyncInitInput = BufferSource | WebAssembly.Module;
 export { TextNode }
 
 // Warnings were encountered during analysis:
-// dist/export.d.mts:368:3 - (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
-// dist/export.d.mts:464:5 - (ae-forgotten-export) The symbol "JsonSource" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
+// (ae-forgotten-export) The symbol "JsonSource" needs to be exported
 ```
 
 ## `@takumi-rs/wasm/auto` (unwasm, workerd, edge-light, default), `@takumi-rs/wasm/next`

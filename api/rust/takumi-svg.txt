@@ -2,4 +2,11 @@ pub mod takumi_svg
 pub struct takumi_svg::SvgOptions<'g>
 impl<'g> takumi_svg::SvgOptions<'g>
 pub fn takumi_svg::SvgOptions<'g>::builder() -> SvgOptionsBuilder<'g, ((), (), (), (), (), (), (), ())>
+impl<'g> core::marker::Freeze for takumi_svg::SvgOptions<'g>
+impl<'g> core::marker::Send for takumi_svg::SvgOptions<'g>
+impl<'g> core::marker::Sync for takumi_svg::SvgOptions<'g>
+impl<'g> core::marker::Unpin for takumi_svg::SvgOptions<'g>
+impl<'g> core::marker::UnsafeUnpin for takumi_svg::SvgOptions<'g>
+impl<'g> !core::panic::unwind_safe::RefUnwindSafe for takumi_svg::SvgOptions<'g>
+impl<'g> !core::panic::unwind_safe::UnwindSafe for takumi_svg::SvgOptions<'g>
 pub fn takumi_svg::render(takumi_svg::SvgOptions<'_>) -> takumi_core::error::Result<alloc::string::String>

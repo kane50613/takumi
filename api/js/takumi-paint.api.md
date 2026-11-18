@@ -699,19 +699,19 @@ class WasmRenderer<TFamily extends RegisteredFamilyLike, TInner extends WasmBind
 }
 
 // Warnings were encountered during analysis:
-// dist/export.d.mts:78:3 - (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
-// dist/export.d.mts:124:3 - (ae-forgotten-export) The symbol "Font$1" needs to be exported
-// dist/export.d.mts:124:3 - (ae-forgotten-export) The symbol "Awaitable" needs to be exported
-// dist/export.d.mts:165:5 - (ae-forgotten-export) The symbol "ImageSource$1" needs to be exported
-// dist/export.d.mts:238:3 - (ae-forgotten-export) The symbol "ByteBuf" needs to be exported
-// dist/export.d.mts:268:3 - (ae-forgotten-export) The symbol "ImageCacheMode" needs to be exported
-// dist/export.d.mts:278:3 - (ae-forgotten-export) The symbol "ImageInput" needs to be exported
-// dist/export.d.mts:577:3 - (ae-forgotten-export) The symbol "RawTextRun" needs to be exported
-// dist/export.d.mts:600:3 - (ae-forgotten-export) The symbol "RawPaintNode" needs to be exported
-// dist/export.d.mts:602:3 - (ae-forgotten-export) The symbol "RawPaintStep" needs to be exported
-// dist/export.d.mts:847:3 - (ae-forgotten-export) The symbol "SERIALIZED_VERSION" needs to be exported
-// dist/export.d.mts:891:3 - (ae-forgotten-export) The symbol "InitInput" needs to be exported
-// dist/export.d.mts:895:3 - (ae-forgotten-export) The symbol "SyncInitInput" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode$1" needs to be exported
+// (ae-forgotten-export) The symbol "Font$1" needs to be exported
+// (ae-forgotten-export) The symbol "Awaitable" needs to be exported
+// (ae-forgotten-export) The symbol "ImageSource$1" needs to be exported
+// (ae-forgotten-export) The symbol "ByteBuf" needs to be exported
+// (ae-forgotten-export) The symbol "ImageCacheMode" needs to be exported
+// (ae-forgotten-export) The symbol "ImageInput" needs to be exported
+// (ae-forgotten-export) The symbol "RawTextRun" needs to be exported
+// (ae-forgotten-export) The symbol "RawPaintNode" needs to be exported
+// (ae-forgotten-export) The symbol "RawPaintStep" needs to be exported
+// (ae-forgotten-export) The symbol "SERIALIZED_VERSION" needs to be exported
+// (ae-forgotten-export) The symbol "InitInput" needs to be exported
+// (ae-forgotten-export) The symbol "SyncInitInput" needs to be exported
 ```
 
 ## `takumi-paint/takumi_paint_wasm_bg.wasm`
