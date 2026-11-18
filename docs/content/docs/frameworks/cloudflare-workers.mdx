@@ -1,0 +1,67 @@
+---
+title: Cloudflare Workers
+description: Render images in a Cloudflare Worker with Takumi, which picks its WebAssembly backend on workerd without extra configuration.
+---
+
+Takumi renders in a Worker on its WebAssembly backend. Wrangler resolves the `workerd` export condition, so `takumi-js` loads the WebAssembly binary with no configuration and no `module` option.
+
+<Steps>
+  <Step>
+    ### Install Takumi
+
+    ```npm
+    npm i takumi-js
+    ```
+
+  </Step>
+  <Step>
+    ### Write the Worker
+
+    This Worker renders an HTML string, so it needs no JSX setup.
+
+    ```ts title="src/worker.ts"
+    import { render } from "takumi-js";
+
+    // A tag in `title` would otherwise load whatever URL it names.
+    const escapeHtml = (text: string) =>
+      text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+
+    export default {
+      async fetch(request: Request): Promise<Response> {
+        const title = escapeHtml(
+          new URL(request.url).searchParams.get("title") ?? "Hello from a Worker",
+        );
+        const png = await render(
+          `<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #f48120; color: white; font-size: 64px">${title}</div>`,
+          { width: 1200, height: 630 },
+        );
+
+        return new Response(png, { headers: { "content-type": "image/png" } });
+      },
+    };
+    ```
+
+    Escape any text a request supplies before it goes into HTML, as `escapeHtml` does, or build a [node tree](/docs/reference/helpers) instead, which takes text as text.
+
+  </Step>
+  <Step>
+    ### Configure Wrangler
+
+    The default configuration works:
+
+    ```jsonc title="wrangler.jsonc"
+    { "name": "og", "main": "src/worker.ts", "compatibility_date": "2025-10-30" }
+    ```
+
+    Run `npx wrangler dev`, then open `/?title=Hello`.
+
+  </Step>
+</Steps>
+
+## Size and limits
+
+The WebAssembly binary is about 4.3 MB, or 1.9 MB compressed, and makes up most of the Worker. Check it against your plan's script size and CPU time limits in [Cloudflare's Workers limits](https://developers.cloudflare.com/workers/platform/limits/).
+
+- A Worker's first render in each isolate compiles the code it runs, so it takes longer than the renders after it.
+- Takumi's built-in Geist covers Latin text. Pass fonts for other scripts through `fonts`. See [Fonts](/docs/fonts).
+- With `@cloudflare/vite-plugin`, the same code works unchanged.
