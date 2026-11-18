@@ -1,13 +1,13 @@
 //! Encoded raster bytes go into the PDF as they came in, decoded by the
-//! vendored krilla or, for a JPEG, not decoded at all.
+//! vendored writer or, for a JPEG, not decoded at all.
 
-use crate::krilla::image::Image as KrillaImage;
+use crate::writer::image::Image as PdfImage;
 
-pub(crate) fn embedded_image(bytes: &[u8]) -> Option<KrillaImage> {
+pub(crate) fn embedded_image(bytes: &[u8]) -> Option<PdfImage> {
   let embed = match bytes {
-    [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => KrillaImage::from_png,
-    [0xFF, 0xD8, 0xFF, ..] => KrillaImage::from_jpeg,
-    _ if is_webp(bytes) => KrillaImage::from_webp,
+    [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => PdfImage::from_png,
+    [0xFF, 0xD8, 0xFF, ..] => PdfImage::from_jpeg,
+    _ if is_webp(bytes) => PdfImage::from_webp,
     _ => return None,
   };
 

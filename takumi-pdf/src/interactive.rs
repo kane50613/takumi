@@ -20,23 +20,23 @@ use takumi_core::{
 
 use crate::{
   counters::any_node,
-  krilla::{
-    action::LinkAction,
-    annotation::{Annotation, LinkAnnotation, Target},
-    destination::{Destination, XyzDestination},
-    geom::{Point, Rect as KrillaRect},
-    outline::{Outline, OutlineNode},
-    page::Page,
-  },
   options::{PT_PER_PX, PdfError},
   tags::{TagCollector, tag_id, text_content},
   tree::PreparedTree,
+  writer::{
+    action::LinkAction,
+    annotation::{Annotation, LinkAnnotation, Target},
+    destination::{Destination, XyzDestination},
+    geom::{Point, Rect as PdfRect},
+    outline::{Outline, OutlineNode},
+    page::Page,
+  },
 };
 
 /// A hyperlink box in content coordinates.
 pub(crate) struct LinkTarget {
   uri: String,
-  rect: KrillaRect,
+  rect: PdfRect,
   /// The source node's box, so the annotation can join that node's `Link` element.
   node: BoxId,
   /// Whether a repeated fragment, such as a table header on a later page, paints this link.
@@ -117,14 +117,10 @@ pub(crate) fn xyz_destination(
 
 /// The axis-aligned bounding box of a node-local rect under the node's
 /// absolute transform, in content coordinates.
-fn transformed_rect(
-  transform: Affine,
-  origin: CorePoint<f32>,
-  size: Size<f32>,
-) -> Option<KrillaRect> {
+fn transformed_rect(transform: Affine, origin: CorePoint<f32>, size: Size<f32>) -> Option<PdfRect> {
   let (left, top, right, bottom) = transformed_rect_extents(origin, size, transform)?;
 
-  KrillaRect::from_ltrb(left, top, right, bottom)
+  PdfRect::from_ltrb(left, top, right, bottom)
 }
 
 fn heading_level(tag: &str) -> Option<u8> {
@@ -371,7 +367,7 @@ struct PaintedBox<'s> {
   node: &'s RenderNode,
   source: &'s Node,
   layout: Layout,
-  rect: KrillaRect,
+  rect: PdfRect,
   /// Whether a repeated fragment, such as a table header on a later page, paints it.
   repeated: bool,
 }
@@ -562,7 +558,7 @@ pub(crate) fn add_link_annotations<'l>(
     if bottom <= top {
       continue;
     }
-    let Some(rect) = KrillaRect::from_ltrb(
+    let Some(rect) = PdfRect::from_ltrb(
       (link.rect.left() + offset.x) * PT_PER_PX,
       (top - y0 + offset.y) * PT_PER_PX,
       (link.rect.right() + offset.x) * PT_PER_PX,

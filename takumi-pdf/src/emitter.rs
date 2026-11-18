@@ -1,4 +1,4 @@
-//! The scene walker that emits boxes, text and images onto a krilla surface.
+//! The scene walker that emits boxes, text and images onto a writer surface.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -41,39 +41,39 @@ use takumi_core::{
 };
 
 #[cfg(feature = "images")]
-use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
-#[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg::SvgPainter;
+#[cfg(feature = "images")]
+use crate::writer::{geom::Size as PdfSize, image::Image as PdfImage};
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineCache, visit_inline_layout},
-  krilla::{
+  options::{PT_PER_PX, PdfError},
+  paint::{
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, pdf_path, pdf_stop,
+    pdf_stops, pop_transforms, rect_path, shape_path, spread,
+  },
+  shadow::Band,
+  tags::TagCollector,
+  tree::draws,
+  window::{LineFrame, Window},
+  writer::{
     Data,
-    geom::{Path as KrillaPath, Point, Rect as KrillaRect, Transform},
+    geom::{Path as PdfPath, Point, Rect as PdfRect, Transform},
     mask::{Mask, MaskType},
     num::NormalizedF32,
     paint::{
-      Fill, FillRule, LineCap, LineJoin, LinearGradient as KrillaLinearGradient, Paint, Pattern,
-      RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
+      Fill, FillRule, LineCap, LineJoin, LinearGradient as PdfLinearGradient, Paint, Pattern,
+      RadialGradient as PdfRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
     stream::Stream,
     surface::Surface,
     tagging::ContentTag,
     text::{Font, Tag},
   },
-  options::{PT_PER_PX, PdfError},
-  paint::{
-    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_path, krilla_stop,
-    krilla_stops, normalized, pop_transforms, rect_path, shape_path, spread,
-  },
-  shadow::Band,
-  tags::TagCollector,
-  tree::draws,
-  window::{LineFrame, Window},
 };
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
@@ -81,7 +81,7 @@ use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style:
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
-/// Krilla fonts embedded so far, one per distinct instance.
+/// Writer fonts embedded so far, one per distinct instance.
 type FontMap = FxHashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
@@ -179,11 +179,7 @@ impl Emitter<'_> {
 
   /// The image to draw, or nothing and a kept failure.
   #[cfg(feature = "images")]
-  fn drawable(
-    &self,
-    label: &str,
-    image: Result<Option<KrillaImage>, String>,
-  ) -> Option<KrillaImage> {
+  fn drawable(&self, label: &str, image: Result<Option<PdfImage>, String>) -> Option<PdfImage> {
     match image {
       Ok(image) => image,
       Err(reason) => {
@@ -499,7 +495,7 @@ impl Emitter<'_> {
     tile_space: Transform,
   ) {
     let dest = tiling.dest;
-    let Some(dest_path) = KrillaRect::from_ltrb(
+    let Some(dest_path) = PdfRect::from_ltrb(
       origin.x + dest.left,
       origin.y + dest.top,
       origin.x + dest.right,
@@ -576,7 +572,7 @@ impl Emitter<'_> {
         self.draw_svg(svg, &node.context, at, tiling.image_size, size, surface);
         return;
       }
-      let Some(krilla_image) = self.drawable(
+      let Some(pdf_image) = self.drawable(
         url,
         self
           .document
@@ -585,19 +581,19 @@ impl Emitter<'_> {
       ) else {
         return;
       };
-      let Some(target) = KrillaSize::from_wh(w, h) else {
+      let Some(target) = PdfSize::from_wh(w, h) else {
         return;
       };
 
       surface.push_transform(&Transform::from_translate(at.x, at.y));
-      surface.draw_image(krilla_image, target);
+      surface.draw_image(pdf_image, target);
       surface.pop();
       return;
     }
     let Some(paint) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
-    let Some(path) = KrillaRect::from_xywh(at.x, at.y, w, h).and_then(rect_path) else {
+    let Some(path) = PdfRect::from_xywh(at.x, at.y, w, h).and_then(rect_path) else {
       return;
     };
 
@@ -609,7 +605,7 @@ impl Emitter<'_> {
     surface.draw_path(&path);
   }
 
-  /// The krilla paint of a gradient layer. `pattern_space` carries the stream's default space,
+  /// The writer paint of a gradient layer. `pattern_space` carries the stream's default space,
   /// per PDF 32000-1 8.7.3.1.
   fn gradient_paint(
     &self,
@@ -647,14 +643,14 @@ impl Emitter<'_> {
         let (x1, y1) = point_at(t0);
         let (x2, y2) = point_at(t1);
 
-        KrillaLinearGradient {
+        PdfLinearGradient {
           x1,
           y1,
           x2,
           y2,
           transform: pattern_space,
           spread_method: spread(gradient.repeating),
-          stops: krilla_stops(resolved, base, span),
+          stops: pdf_stops(resolved, base, span),
           anti_alias: false,
         }
         .into()
@@ -675,12 +671,12 @@ impl Emitter<'_> {
         let stops = if gradient.repeating {
           expanded_radial_stops(resolved, extent)
         } else {
-          krilla_stops(resolved, 0.0, extent)
+          pdf_stops(resolved, 0.0, extent)
         };
         let scale_x = (radius_x / extent).max(1e-6);
         let scale_y = (radius_y / extent).max(1e-6);
 
-        KrillaRadialGradient {
+        PdfRadialGradient {
           fx: 0.0,
           fy: 0.0,
           fr: 0.0,
@@ -716,7 +712,7 @@ impl Emitter<'_> {
               tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
             let color = tile.lut.sample(index).demultiply();
 
-            krilla_stop(
+            pdf_stop(
               t,
               self.filtered(Color([
                 color.red(),
@@ -916,7 +912,7 @@ impl Emitter<'_> {
     #[cfg(not(feature = "svg"))]
     let svg: Option<()> = None;
 
-    let krilla_image = if svg.is_none() {
+    let pdf_image = if svg.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
         match &image.src {
@@ -939,12 +935,12 @@ impl Emitter<'_> {
     let ix = bx + placement.offset.x;
     let iy = by + placement.offset.y;
 
-    let Some(size) = KrillaSize::from_wh(dw, dh) else {
+    let Some(size) = PdfSize::from_wh(dw, dh) else {
       return;
     };
     let clip_path = replaced.clip.and_then(|clip| {
       if clip.border.is_zero() {
-        KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path)
+        PdfRect::from_xywh(bx, by, w, h).and_then(rect_path)
       } else {
         shape_path(&clip.into(), frame.origin)
       }
@@ -969,9 +965,9 @@ impl Emitter<'_> {
         surface,
       );
     }
-    if let Some(krilla_image) = krilla_image {
+    if let Some(pdf_image) = pdf_image {
       surface.push_transform(&Transform::from_translate(ix, iy));
-      surface.draw_image(krilla_image, size);
+      surface.draw_image(pdf_image, size);
       surface.pop();
     }
     if clip_path.is_some() {
@@ -995,8 +991,7 @@ impl Emitter<'_> {
       return;
     }
     let ops = svg.vector_ops(context, viewport);
-    let canvas =
-      KrillaRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+    let canvas = PdfRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
 
     surface.push_transform(&Transform::from_row(
       size.width / viewport.width,
@@ -1306,7 +1301,7 @@ impl Emitter<'_> {
   ) -> Vec<GlyphBackground> {
     let mut fills = Vec::new();
     let rect_clip = |left: f32, top: f32, right: f32, bottom: f32| {
-      KrillaRect::from_ltrb(
+      PdfRect::from_ltrb(
         frame.origin.x + left,
         frame.origin.y + top,
         frame.origin.x + right,
@@ -1412,7 +1407,7 @@ impl Emitter<'_> {
     true
   }
 
-  /// A krilla font for a run's backing blob, instanced at the run's variation
+  /// A writer font for a run's backing blob, instanced at the run's variation
   /// coordinates, sharing the blob's bytes.
   fn cached_font(&self, shaped: &ShapedRun) -> Option<Font> {
     let key = (
@@ -1453,7 +1448,7 @@ struct Entered {
   color_filter: Option<Rc<ColorFilter>>,
 }
 
-/// A [`PropertySink`] writing chunks onto a krilla surface.
+/// A [`PropertySink`] writing chunks onto a writer surface.
 struct ChunkWriter<'w, 'a, 's> {
   emitter: &'w mut Emitter<'a>,
   surface: &'w mut Surface<'s>,
@@ -1723,7 +1718,7 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
 }
 
 /// The PDF surface as a [`PaintDevice`], so the shared painting code can drive
-/// it without knowing about krilla.
+/// it without knowing about the writer.
 struct SurfaceDevice<'s, 'a> {
   surface: &'s mut Surface<'a>,
   filter: Option<&'s ColorFilter>,
@@ -1744,7 +1739,7 @@ enum Saved {
 
 impl SurfaceDevice<'_, '_> {
   /// Clips later draws to `path`, or hides them when the clip has no area.
-  fn open_clip(&mut self, path: Option<KrillaPath>, rule: CoreFillRule) {
+  fn open_clip(&mut self, path: Option<PdfPath>, rule: CoreFillRule) {
     let saved = match &path {
       Some(_) => Saved::Clip,
       None => Saved::EmptyClip,
@@ -1785,8 +1780,8 @@ impl SurfaceDevice<'_, '_> {
   fn draw(
     &mut self,
     transform: Affine,
-    build: impl FnOnce(CorePoint<f32>) -> Option<KrillaPath>,
-    paint: impl FnOnce(&mut Surface, &KrillaPath),
+    build: impl FnOnce(CorePoint<f32>) -> Option<PdfPath>,
+    paint: impl FnOnce(&mut Surface, &PdfPath),
   ) {
     let flat = transform.only_translation();
     let origin = if flat {
@@ -1869,7 +1864,7 @@ impl SurfaceDevice<'_, '_> {
 
     self.draw(
       transform,
-      |origin| krilla_path(&shape.to_commands(), origin),
+      |origin| pdf_path(&shape.to_commands(), origin),
       |surface, path| {
         surface.set_fill(None);
         surface.set_stroke(Some(stroke));
@@ -1989,7 +1984,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         },
       )
     } else {
-      krilla_path(&device_commands(shape, transform), CorePoint::ZERO)
+      pdf_path(&device_commands(shape, transform), CorePoint::ZERO)
     };
 
     self.open_clip(path, shape.rule());
@@ -2019,10 +2014,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       },
     );
     commands.extend(device_commands(shape, transform));
-    self.open_clip(
-      krilla_path(&commands, CorePoint::ZERO),
-      CoreFillRule::EvenOdd,
-    );
+    self.open_clip(pdf_path(&commands, CorePoint::ZERO), CoreFillRule::EvenOdd);
   }
 
   fn pop_clip(&mut self) {
@@ -2096,7 +2088,7 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
 /// A paint glyphs show under `background-clip: text`, and the rectangle it shows in.
 struct GlyphBackground {
   fill: Fill,
-  clip: Option<KrillaPath>,
+  clip: Option<PdfPath>,
 }
 
 /// The PDF surface as a [`PaintDevice`] for one block's text, glyphs drawn as extractable text.
@@ -2626,7 +2618,7 @@ fn draw_alpha(
   transform: Affine,
   surface: &mut Surface,
 ) {
-  let Some(size) = KrillaSize::from_wh(width as f32, height as f32) else {
+  let Some(size) = PdfSize::from_wh(width as f32, height as f32) else {
     return;
   };
   let data = alpha
@@ -2639,7 +2631,7 @@ fn draw_alpha(
     .collect();
 
   surface.push_transform(&transform.into());
-  surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
+  surface.draw_image(PdfImage::from_rgba8(data, width, height), size);
   surface.pop();
 }
 

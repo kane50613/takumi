@@ -166,9 +166,9 @@ mod tree;
 mod window;
 
 #[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
-mod krilla;
-#[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
 mod subsetter;
+#[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
+mod writer;
 
 use takumi_core::{
   geometry::Point as CorePoint,
@@ -192,17 +192,17 @@ use crate::{
   glyph::Uncovered,
   inline::{InlineCache, TextBox},
   interactive::{Interactive, PageSummary, add_link_annotations, xyz_destination},
-  krilla::{
-    Document, SerializeSettings,
-    configure::ConfigurationBuilder,
-    destination::XyzDestination,
-    geom::{Point, Size as KrillaSize, Transform},
-    page::PageSettings,
-  },
   options::{PT_PER_PX, PageSelection},
   page::{PageBands, PageDrawing, PagePlan, band_viewport},
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
+  writer::{
+    Document, SerializeSettings,
+    configure::ConfigurationBuilder,
+    destination::XyzDestination,
+    geom::{Point, Size as PdfSize, Transform},
+    page::PageSettings,
+  },
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -364,7 +364,7 @@ fn render_settling(mut options: PdfOptions<'_>, settle: Settle<'_>) -> Result<Ve
     return Err(error);
   }
 
-  pdf.finish().map_err(PdfError::Krilla)
+  pdf.finish().map_err(PdfError::Writer)
 }
 
 /// A document with its validators, metadata and attachments set, before any
@@ -467,7 +467,7 @@ impl SinglePage {
     background: Option<Color>,
     structural: bool,
   ) -> Result<Self, PdfError> {
-    let page_size = KrillaSize::from_wh(
+    let page_size = PdfSize::from_wh(
       content.scene.size.width * PT_PER_PX,
       content.scene.size.height * PT_PER_PX,
     )

@@ -1,4 +1,4 @@
-//! Path, gradient, decoration and image helpers translating takumi paint into krilla.
+//! Path, gradient, decoration and image helpers translating takumi paint into the writer.
 
 #[cfg(feature = "images")]
 use std::{cell::RefCell, sync::Arc};
@@ -19,21 +19,21 @@ use takumi_core::{
   style::{Affine, BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
 };
 
-use crate::krilla::{
-  blend::BlendMode as KrillaBlendMode,
+use crate::writer::{
+  blend::BlendMode as PdfBlendMode,
   color::rgb,
-  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect, Transform},
+  geom::{Path as PdfPath, PathBuilder, Rect as PdfRect, Transform},
   num::NormalizedF32,
   paint::{Fill, FillRule, SpreadMethod, Stop},
   stream::Stream,
   surface::Surface,
 };
 #[cfg(feature = "images")]
-use crate::{filter::ColorFilter, krilla::image::Image as KrillaImage, raster::embedded_image};
+use crate::{filter::ColorFilter, raster::embedded_image, writer::image::Image as PdfImage};
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
-pub(crate) fn empty_path(origin: Point<f32>) -> Option<KrillaPath> {
+pub(crate) fn empty_path(origin: Point<f32>) -> Option<PdfPath> {
   let mut builder = PathBuilder::new();
 
   builder.move_to(origin.x, origin.y);
@@ -42,16 +42,16 @@ pub(crate) fn empty_path(origin: Point<f32>) -> Option<KrillaPath> {
   builder.finish()
 }
 
-/// A single-rectangle krilla path.
-pub(crate) fn rect_path(rect: KrillaRect) -> Option<KrillaPath> {
+/// A single-rectangle writer path.
+pub(crate) fn rect_path(rect: PdfRect) -> Option<PdfPath> {
   let mut builder = PathBuilder::new();
 
   builder.push_rect(rect);
   builder.finish()
 }
 
-/// Converts takumi-core path commands to a krilla path translated by `origin`.
-pub(crate) fn krilla_path(commands: &[PathCommand], origin: Point<f32>) -> Option<KrillaPath> {
+/// Converts takumi-core path commands to a writer path translated by `origin`.
+pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<PdfPath> {
   let Point { x, y } = origin;
   let mut builder = PathBuilder::new();
 
@@ -69,13 +69,13 @@ pub(crate) fn krilla_path(commands: &[PathCommand], origin: Point<f32>) -> Optio
   builder.finish()
 }
 
-/// A fill shape as a krilla path translated by `origin`.
-pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<KrillaPath> {
+/// A fill shape as a writer path translated by `origin`.
+pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<PdfPath> {
   match shape {
     FillShape::Rect(size) => {
-      KrillaRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
+      PdfRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
     }
-    _ => krilla_path(&shape.to_commands(), origin),
+    _ => pdf_path(&shape.to_commands(), origin),
   }
 }
 
@@ -89,14 +89,14 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
   }
 }
 
-/// An image source as a krilla image, `Ok(None)` for no raster image, such as an SVG the vector
+/// An image source as a writer image, `Ok(None)` for no raster image, such as an SVG the vector
 /// path draws.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
   filter: Option<&ColorFilter>,
-) -> Result<Option<KrillaImage>, String> {
+) -> Result<Option<PdfImage>, String> {
   if filter.is_none()
     && let ImageSource::Encoded(encoded) = source
     && let Some(image) = embedded_image(encoded.bytes())
@@ -132,7 +132,7 @@ pub(crate) fn rasterized_image(
 
 /// A decoded bitmap as a straight-alpha PDF image, recolored by `filter`.
 #[cfg(feature = "images")]
-pub(crate) fn bitmap_image(buffer: &ImageBuffer, filter: Option<&ColorFilter>) -> KrillaImage {
+pub(crate) fn bitmap_image(buffer: &ImageBuffer, filter: Option<&ColorFilter>) -> PdfImage {
   let mut data = buffer.data().to_vec();
 
   data
@@ -146,7 +146,7 @@ pub(crate) fn bitmap_image(buffer: &ImageBuffer, filter: Option<&ColorFilter>) -
     }
   }
 
-  KrillaImage::from_rgba8(data, buffer.width(), buffer.height())
+  PdfImage::from_rgba8(data, buffer.width(), buffer.height())
 }
 
 /// What a rasterized image depends on: the `src` it resolved from and the filter.
@@ -162,7 +162,7 @@ struct RasterKey {
 #[cfg(feature = "images")]
 #[derive(Default)]
 pub(crate) struct RasterizedImages {
-  images: RefCell<FxHashMap<RasterKey, Option<KrillaImage>>>,
+  images: RefCell<FxHashMap<RasterKey, Option<PdfImage>>>,
 }
 
 #[cfg(feature = "images")]
@@ -175,7 +175,7 @@ impl RasterizedImages {
     source: &ImageSource,
     context: &RenderContext,
     filter: Option<&ColorFilter>,
-  ) -> Result<Option<KrillaImage>, String> {
+  ) -> Result<Option<PdfImage>, String> {
     let key = RasterKey {
       src: Arc::clone(src),
       filter: filter.map(ColorFilter::key).unwrap_or_default(),
@@ -200,7 +200,7 @@ pub(crate) const fn spread(repeating: bool) -> SpreadMethod {
   }
 }
 
-pub(crate) fn krilla_stop(offset: f32, rgba: [u8; 4]) -> Stop {
+pub(crate) fn pdf_stop(offset: f32, rgba: [u8; 4]) -> Stop {
   Stop {
     offset: NormalizedF32::new(offset.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ZERO),
     color: rgb::Color::new(rgba[0], rgba[1], rgba[2]).into(),
@@ -208,10 +208,10 @@ pub(crate) fn krilla_stop(offset: f32, rgba: [u8; 4]) -> Stop {
   }
 }
 
-pub(crate) fn krilla_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
+pub(crate) fn pdf_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
   resolved
     .iter()
-    .map(|stop| krilla_stop((stop.position - base) / span, stop.color.0))
+    .map(|stop| pdf_stop((stop.position - base) / span, stop.color.0))
     .collect()
 }
 
@@ -243,7 +243,7 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
     let offset = first + cycle as f32 * period;
 
     for stop in resolved {
-      stops.push(krilla_stop(
+      stops.push(pdf_stop(
         (offset + (stop.position - first) * scale) / extent,
         stop.color.0,
       ));
@@ -281,7 +281,7 @@ impl From<Transform> for Affine {
   }
 }
 
-impl From<BlendMode> for KrillaBlendMode {
+impl From<BlendMode> for PdfBlendMode {
   fn from(mode: BlendMode) -> Self {
     match mode {
       BlendMode::Multiply => Self::Multiply,
@@ -309,8 +309,7 @@ pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surfa
   let Some(color) = color else {
     return;
   };
-  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.width, size.height).and_then(rect_path)
-  else {
+  let Some(path) = PdfRect::from_xywh(0.0, 0.0, size.width, size.height).and_then(rect_path) else {
     return;
   };
 

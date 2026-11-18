@@ -5,14 +5,14 @@ use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds, style:
 
 use crate::{
   emitter::Emitter,
-  krilla::{
-    geom::{Rect as KrillaRect, Transform},
+  options::PdfError,
+  paint::rect_path,
+  writer::{
+    geom::{Rect as PdfRect, Transform},
     paint::FillRule,
     surface::Surface,
     tagging::ContentTag,
   },
-  options::PdfError,
-  paint::rect_path,
 };
 
 /// The content windows one emit walk filters by, in content coordinates.
@@ -139,7 +139,7 @@ impl ContentWindow {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     let (x, y, width, height) = self.clip;
-    let Some(path) = KrillaRect::from_xywh(x, y, width, height).and_then(rect_path) else {
+    let Some(path) = PdfRect::from_xywh(x, y, width, height).and_then(rect_path) else {
       return Ok(());
     };
 

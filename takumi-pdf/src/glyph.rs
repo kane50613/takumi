@@ -1,4 +1,4 @@
-//! The krilla [`Glyph`] implementation and its ToUnicode span mapping.
+//! The writer [`Glyph`] implementation and its ToUnicode span mapping.
 
 use std::ops::Range;
 
@@ -11,21 +11,21 @@ use takumi_core::{
 };
 
 use crate::{
-  krilla::{
-    geom::Path as KrillaPath,
+  options::{PdfError, UncoveredText},
+  paint::{normalized, pdf_path},
+  writer::{
+    geom::Path as PdfPath,
     num::NormalizedF32,
     surface::{Location, Surface},
     text::{Glyph, GlyphId},
   },
-  options::{PdfError, UncoveredText},
-  paint::{krilla_path, normalized},
 };
 
 /// A run's colour glyphs, which a shadow fills as silhouettes, as Blink's does through `SrcIn`.
 pub(crate) struct ColorGlyphs<'r> {
   /// The colour-layered outlines, placed, each with the alpha its layer paints at; the opaque
   /// layers joined into one path.
-  outlines: Vec<(NormalizedF32, KrillaPath)>,
+  outlines: Vec<(NormalizedF32, PdfPath)>,
   /// The bitmap glyphs, each with its origin.
   #[cfg_attr(not(feature = "images"), expect(dead_code))]
   pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Point<f32>)>,
@@ -55,7 +55,7 @@ impl<'r> ColorGlyphs<'r> {
               0 => {}
               u8::MAX => opaque.extend(placed),
               alpha => outlines.extend(
-                krilla_path(&placed.collect::<Vec<_>>(), Point::ZERO)
+                pdf_path(&placed.collect::<Vec<_>>(), Point::ZERO)
                   .map(|path| (normalized(f32::from(alpha) / 255.0), path)),
               ),
             }
@@ -68,7 +68,7 @@ impl<'r> ColorGlyphs<'r> {
       }
     }
 
-    outlines.extend(krilla_path(&opaque, Point::ZERO).map(|path| (NormalizedF32::ONE, path)));
+    outlines.extend(pdf_path(&opaque, Point::ZERO).map(|path| (NormalizedF32::ONE, path)));
 
     Self { outlines, bitmaps }
   }
@@ -216,7 +216,7 @@ fn cluster_spans(shaped: &ShapedRun, run_text: &str) -> Option<Vec<Range<usize>>
   )
 }
 
-/// Merges overlapping glyph ranges, so krilla emits them under one `/ActualText`.
+/// Merges overlapping glyph ranges, so the writer emits them under one `/ActualText`.
 fn merge_overlapping_spans(spans: &mut [Range<usize>]) {
   let mut group = 0;
 
@@ -237,7 +237,7 @@ fn spans_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
   left.start < right.end && right.start < left.end
 }
 
-/// A positioned glyph with em-normalized offsets, which krilla scales by the size it asks with.
+/// A positioned glyph with em-normalized offsets, which the writer scales by the size it asks with.
 #[derive(Clone)]
 pub(crate) struct PdfGlyph {
   pub(crate) id: GlyphId,

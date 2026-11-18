@@ -17,12 +17,12 @@ use crate::{
   counters::{has_page_counters, substitute_page_counters},
   emitter::{DocumentState, Emitter},
   interactive::{Interactive, LinkTarget},
-  krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PageBand, PdfError},
   page::{PageBands, PageFrame},
   page_kinds::PerPage,
   tree::{PreparedTree, TreeInputs, page_root},
   window::{ContentWindow, Window},
+  writer::surface::Surface,
 };
 
 /// Where a repeatable draws on the page.
