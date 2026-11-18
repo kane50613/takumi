@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use takumi_bindings_common::warning::{Warning, WarningLog};
+use takumi_bindings_common::warning::WarningLog;
 use takumi_core::resources::glyph_cache;
 use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
@@ -17,16 +17,14 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
   js_sys::Error::new(&err.to_string())
 }
 
-/// Prints takumi's warnings, such as an unsupported CSS property, with `console.warn`, once each.
+/// Prints takumi's warnings, such as an unsupported CSS property, with `console.warn`.
 pub(crate) fn forward_warnings() {
   WarningLog::install(print_warning);
 }
 
-fn print_warning(warning: Warning) {
+fn print_warning(message: String) {
   // A `console.warn` that throws must not fail the render that logged the warning.
-  if warning.is_first() {
-    let _ = console_warn(warning.message);
-  }
+  let _ = console_warn(message);
 }
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;

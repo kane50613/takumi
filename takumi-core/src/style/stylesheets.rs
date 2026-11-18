@@ -362,7 +362,6 @@ fn log_unsupported_property(name: &str, location: SourceLocation) {
 
   log::warn!(
     target: "takumi::style",
-    property = name;
     "ignored the property `{name}` at line {}, column {} of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.",
     location.line + 1,
     location.column

@@ -59,7 +59,7 @@ The stylesheet supports:
   never match.
 </Callout>
 
-Takumi drops a declaration whose property it does not support, as a browser drops one it does not know. `@takumi-rs/core` and `@takumi-rs/wasm` report it through `console.warn`, once per property for the life of the process:
+Takumi drops a declaration whose property it does not support, as a browser drops one it does not know. `@takumi-rs/core` and `@takumi-rs/wasm` report it through `console.warn` each time they parse a style sheet or `style` attribute that uses it. A style sheet the renderer already parsed is not parsed again, so it does not warn again:
 
 ```text
 takumi: ignored the property `widht` at line 1, column 8 of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.

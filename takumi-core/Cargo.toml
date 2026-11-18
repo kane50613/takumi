@@ -13,6 +13,7 @@ rust-version = "1.91"
 ignored = ["serde_bytes"]
 
 [dependencies]
+log.workspace = true
 data-url.workspace = true
 color.workspace = true
 serde_bytes.workspace = true
@@ -32,10 +33,6 @@ precomputed-hash.workspace = true
 selectors.workspace = true
 thin-vec.workspace = true
 rustc-hash.workspace = true
-
-[dependencies.log]
-workspace = true
-features = ["kv"]
 
 [dependencies.gif]
 workspace = true

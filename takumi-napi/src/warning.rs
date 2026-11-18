@@ -1,4 +1,4 @@
-//! Takumi's warnings, printed with `console.warn` on the JS thread, once each.
+//! Takumi's warnings, printed with `console.warn` on the JS thread.
 
 use std::sync::OnceLock;
 
@@ -7,10 +7,10 @@ use napi::{
   bindgen_prelude::*,
   threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
-use takumi_bindings_common::warning::{Warning, WarningLog};
+use takumi_bindings_common::warning::WarningLog;
 
-/// Calls into the JS thread with a warning's key and message, without keeping its event loop alive.
-type PrintWarning = ThreadsafeFunction<(String, String), (), (String, String), Status, false, true>;
+/// Calls into the JS thread with a warning, without keeping its event loop alive.
+type PrintWarning = ThreadsafeFunction<String, (), String, Status, false, true>;
 
 /// The function warnings logged on any thread reach the JS thread of the first renderer through.
 static PRINT: OnceLock<PrintWarning> = OnceLock::new();
@@ -23,13 +23,8 @@ pub(crate) fn forward_warnings(env: &Env) -> Result<()> {
 
   let print = env
     .create_function_from_closure("printTakumiWarning", |ctx| {
-      let (key, message) = ctx.first_arg::<(String, String)>()?;
-      let warning = Warning { key, message };
-
       // A `console.warn` that throws must not fail the render that logged the warning.
-      if warning.is_first() {
-        let _ = console_warn(ctx.env, warning.message);
-      }
+      let _ = console_warn(ctx.env, ctx.first_arg()?);
 
       Ok(())
     })?
@@ -45,12 +40,9 @@ pub(crate) fn forward_warnings(env: &Env) -> Result<()> {
   Ok(())
 }
 
-fn send(warning: Warning) {
+fn send(message: String) {
   if let Some(print) = PRINT.get() {
-    print.call(
-      (warning.key, warning.message),
-      ThreadsafeFunctionCallMode::NonBlocking,
-    );
+    print.call(message, ThreadsafeFunctionCallMode::NonBlocking);
   }
 }
 
