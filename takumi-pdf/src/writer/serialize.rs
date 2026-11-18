@@ -16,7 +16,7 @@ use crate::writer::configure::{Configuration, PdfVersion, ValidationError, Valid
 use crate::writer::error::{LimitError, WriterError, WriterResult};
 use crate::writer::geom::Size;
 use crate::writer::graphics::color::{ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
-use crate::writer::graphics::icc::{ICCBasedColorSpace, ICCProfile};
+use crate::writer::graphics::icc::ICCBasedColorSpace;
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::interactive::destination::XyzDestination;
@@ -73,12 +73,6 @@ pub struct SerializeSettings {
   /// you use. For example, when exporting to PDF/A, this value will be set to
   /// true, regardless of what value will be passed.
   pub xmp_metadata: bool,
-  /// The ICC profile that should be used for CMYK colors
-  /// when `no_device_cs` is enabled.
-  ///
-  /// This is usually not required, but it is for example required when exporting
-  /// to PDF/A and using a CMYK color, since they have to be device-independent.
-  pub cmyk_profile: Option<ICCProfile<4>>,
   /// A validator and PDF version used for export.
   ///
   /// In case validation fails, export will fail, and a list of validation errors that
@@ -146,7 +140,6 @@ impl Default for SerializeSettings {
       compress_content_streams: true,
       no_device_cs: false,
       xmp_metadata: true,
-      cmyk_profile: None,
       configuration: Configuration::default(),
       enable_tagging: true,
       producer: crate::PRODUCER.to_string(),
@@ -573,9 +566,6 @@ impl SerializeContext {
           chunk_container,
           ICCBasedColorSpace(self.serialize_settings.pdf_version().grey_icc()),
         ))
-      }
-      ColorSpace::CieBased(CieBasedColorSpace::Cmyk(cs)) => {
-        MaybeDeviceColorSpace::ColorSpace(self.register_resourceable(chunk_container, cs))
       }
       ColorSpace::Device(DeviceColorSpace::Gray) => MaybeDeviceColorSpace::DeviceGray,
       ColorSpace::Device(DeviceColorSpace::Rgb) => MaybeDeviceColorSpace::DeviceRgb,
