@@ -26,16 +26,16 @@ import {
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export type {
+  DocumentInput,
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+} from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
-export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
-export type { CounterProps, CounterStyle } from "./primitives";
-
-/** A document input: a takumi node tree, JSX, or an HTML string. */
-export type NodeInput = DocumentInput;
 
 /** A band on a page: a document input, or `false` for none. */
-export type BandInput = NodeInput | false;
+export type BandInput = DocumentInput | false;
 
 /** What some pages draw instead of the document's own bands. A field left out falls through. */
 export type PageOverrideInput = {
@@ -169,9 +169,6 @@ export type MeasureOptions = (
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
 };
-
-/** A node tree's laid-out size in CSS px. */
-export type MeasuredSize = { width: number; height: number };
 
 /** Document metadata written to the PDF's info dictionary. */
 export type PdfMetadata = {
@@ -415,7 +412,7 @@ async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
 
 /** What the wasm side reads a document as: HTML as written, a tree as JSON when it can, or JSX rendered. */
 async function resolveNode(
-  input: NodeInput,
+  input: DocumentInput,
 ): Promise<{ node: Node | string | JsonSource; css: string[] }> {
   const { node, css } = await resolveDocument(input);
 
@@ -424,7 +421,7 @@ async function resolveNode(
 
 /** A document's main tree as the wasm side reads it, and the layout options that carry its bands and the CSS they bring. */
 async function resolveLayout(
-  node: NodeInput,
+  node: DocumentInput,
   {
     header,
     footer,
@@ -462,7 +459,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
   }
 
   /** Reads what a document and its bands need under `options`, then loads their font subsets and fetches their images. */
-  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
+  async prepare(node: DocumentInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, header, footer, pages, css, ...rest } = options;
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
@@ -478,8 +475,11 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 
   /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
   render(document: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array>;
-  render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
-  async render(node: PreparedSource | NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
+  render(node: DocumentInput, options?: RenderOptions): Promise<Uint8Array>;
+  async render(
+    node: PreparedSource | DocumentInput,
+    options: RenderOptions = {},
+  ): Promise<Uint8Array> {
     return renderPrepared(
       this.fonts,
       node instanceof Prepared ? node : await this.read(node, options),
@@ -499,12 +499,12 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
    * The returned size is the tree's own, not the space it was laid out
    * against: a box with `width: 100px` measures 100 wide on any page.
    */
-  measure(document: PreparedSource): Promise<MeasuredSize>;
-  measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
+  measure(document: PreparedSource): Promise<Dimensions>;
+  measure(node: DocumentInput, options?: MeasureOptions): Promise<Dimensions>;
   async measure(
-    node: PreparedSource | NodeInput,
+    node: PreparedSource | DocumentInput,
     options: MeasureOptions = {},
-  ): Promise<MeasuredSize> {
+  ): Promise<Dimensions> {
     if (node instanceof Prepared) {
       return renderPrepared(this.fonts, node, {}, (native, opts) =>
         this.inner.measure(native, opts),
@@ -530,7 +530,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
   }
 
   /** A document and its bands read under `options` without fetching, for {@link render}. */
-  private async read(node: NodeInput, options: RenderOptions): Promise<PreparedSource> {
+  private async read(node: DocumentInput, options: RenderOptions): Promise<PreparedSource> {
     const { fonts, images, header, footer, pages, css, fontFamilies, signal, ...rest } = options;
     const document = await resolveLayout(node, { header, footer, pages, css });
     const layout = { ...rest, ...document.layout };
@@ -548,7 +548,7 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
 const shared = lazy(() => new PdfRenderer());
 
 /** Prepares with a lazily created shared {@link PdfRenderer}. */
-export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
+export function prepare(node: DocumentInput, options?: PrepareOptions): Promise<PreparedSource> {
   return shared().prepare(node, options);
 }
 
@@ -557,20 +557,20 @@ export function render(
   document: PreparedSource,
   options?: PreparedRenderOptions,
 ): Promise<Uint8Array>;
-export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
+export function render(node: DocumentInput, options?: RenderOptions): Promise<Uint8Array>;
 export function render(
-  node: PreparedSource | NodeInput,
+  node: PreparedSource | DocumentInput,
   options?: RenderOptions,
 ): Promise<Uint8Array> {
   return node instanceof Prepared ? shared().render(node, options) : shared().render(node, options);
 }
 
 /** Measures with a lazily created shared {@link PdfRenderer}. */
-export function measure(document: PreparedSource): Promise<MeasuredSize>;
-export function measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize>;
+export function measure(document: PreparedSource): Promise<Dimensions>;
+export function measure(node: DocumentInput, options?: MeasureOptions): Promise<Dimensions>;
 export function measure(
-  node: PreparedSource | NodeInput,
+  node: PreparedSource | DocumentInput,
   options?: MeasureOptions,
-): Promise<MeasuredSize> {
+): Promise<Dimensions> {
   return node instanceof Prepared ? shared().measure(node) : shared().measure(node, options);
 }

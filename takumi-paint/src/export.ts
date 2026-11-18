@@ -26,7 +26,12 @@ import initWasm, {
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
 
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export type {
+  DocumentInput,
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+} from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 export type {
   BlendMode,
@@ -66,9 +71,6 @@ export type {
   TextRun,
 } from "./tree";
 
-/** A document input: a takumi node tree, JSX, or an HTML string. */
-export type NodeInput = DocumentInput;
-
 /** Options for {@link Painter.paint}. */
 export type PaintOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
@@ -104,7 +106,7 @@ export type PreparedSource = Prepared<
 
 /** What the wasm side reads `input` as: HTML as written, a tree as JSON when it can, or JSX rendered. */
 async function resolveNode(
-  input: NodeInput,
+  input: DocumentInput,
 ): Promise<{ node: Node | string | JsonSource; css: string[] }> {
   const { node, css } = await resolveDocument(input);
 
@@ -129,7 +131,7 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
   }
 
   /** Reads what a node tree, JSX, or HTML needs under `options`, then loads its font subsets and fetches its images. */
-  async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
+  async prepare(node: DocumentInput, options: PrepareOptions = {}): Promise<PreparedSource> {
     const { fonts, images, signal, fontFamilies, css, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
@@ -145,8 +147,11 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
 
   /** Lays out a node tree, JSX, an HTML string, or a prepared document and returns what painting it would draw. */
   paint(document: PreparedSource): Promise<PaintTree>;
-  paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
-  async paint(node: PreparedSource | NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+  paint(node: DocumentInput, options?: PaintOptions): Promise<PaintTree>;
+  async paint(
+    node: PreparedSource | DocumentInput,
+    options: PaintOptions = {},
+  ): Promise<PaintTree> {
     const prepared = node instanceof Prepared ? node : await this.read(node, options);
     const painted = await renderPrepared(this.fonts, prepared, {}, (native, opts) =>
       this.inner.paint(native, opts),
@@ -155,7 +160,7 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
     return new PaintTreeView(painted.tree(), painted);
   }
 
-  private async read(node: NodeInput, options: PaintOptions): Promise<PreparedSource> {
+  private async read(node: DocumentInput, options: PaintOptions): Promise<PreparedSource> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
@@ -169,15 +174,15 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
 const shared = lazy(() => new Painter());
 
 /** Prepares with a lazily created shared {@link Painter}. */
-export function prepare(node: NodeInput, options?: PrepareOptions): Promise<PreparedSource> {
+export function prepare(node: DocumentInput, options?: PrepareOptions): Promise<PreparedSource> {
   return shared().prepare(node, options);
 }
 
 /** Paints with a lazily created shared {@link Painter}. */
 export function paint(document: PreparedSource): Promise<PaintTree>;
-export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree>;
+export function paint(node: DocumentInput, options?: PaintOptions): Promise<PaintTree>;
 export function paint(
-  node: PreparedSource | NodeInput,
+  node: PreparedSource | DocumentInput,
   options?: PaintOptions,
 ): Promise<PaintTree> {
   return node instanceof Prepared ? shared().paint(node) : shared().paint(node, options);

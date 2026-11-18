@@ -2,11 +2,7 @@ import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { ReactNode } from "react";
 
-/**
- * A document a takumi package renders: a node tree, JSX, or HTML markup.
- *
- * @internal
- */
+/** A document a takumi package renders: a node tree, JSX, or HTML markup. */
 export type DocumentInput = Node | ReactNode | ReactElementLike | string;
 
 /**
