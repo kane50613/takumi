@@ -5,7 +5,10 @@ use std::{
   cell::{Cell, RefCell},
 };
 
-use takumi_core::html::{FromHtmlOptions, from_html};
+use takumi_core::{
+  html::{FromHtmlOptions, from_html},
+  viewport::Viewport,
+};
 
 use crate::{PageMargins, PageOptions, PdfOptions, render_settling, test_support::fonts};
 
@@ -125,4 +128,33 @@ fn a_total_pages_document_keeps_live_bytes_flat_through_both_passes() {
       "pass {pass} grew from {early} bytes after page {EARLY_PAGE} to {late} after page {LATE_PAGE}"
     );
   }
+}
+
+/// Live bytes a render of `source` leaves behind once its PDF is dropped, after a warm-up render
+/// fills the caches it shares with later renders.
+fn live_bytes_left_by(source: &str) -> isize {
+  let fonts = fonts();
+  let render_once = || {
+    let options = PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the document"))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&fonts)
+      .build();
+
+    drop(crate::render(options).expect("the document renders"));
+  };
+
+  render_once();
+  let before = live_bytes();
+  render_once();
+  live_bytes() - before
+}
+
+#[test]
+fn a_gradient_with_many_stops_frees_its_function_once_written() {
+  let left = live_bytes_left_by(
+    r#"<div style="width: 200px; height: 100px; background-image: conic-gradient(red 0%, yellow 25%, green 50%, blue 75%, red 100%)"></div>"#,
+  );
+
+  assert!(left <= 0, "the render left {left} bytes behind");
 }
