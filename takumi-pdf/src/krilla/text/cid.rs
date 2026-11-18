@@ -1,4 +1,4 @@
-use crate::subsetter::{GlyphRemapper, Tag as SubsetTag, subset_with_variations};
+use crate::subsetter::{GlyphRemapper, Tag as SubsetTag, subset};
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use pdf_writer::writers::WMode;
 use pdf_writer::{Finish, Name, Ref, Str};
@@ -430,7 +430,7 @@ fn subset_font(font: Font, glyph_remapper: &GlyphRemapper) -> KrillaResult<(Font
     .iter()
     .map(|v| (SubsetTag::new(v.0.get()), v.1.get()))
     .collect::<Vec<_>>();
-  let font = subset_with_variations(
+  let font = subset(
     font.font_data().as_ref(),
     font.index(),
     &variation_coordinates,

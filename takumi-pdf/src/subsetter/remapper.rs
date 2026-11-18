@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
 use std::ops::Add;
 
@@ -136,28 +135,6 @@ impl GlyphRemapper {
   /// of the subset.
   pub fn new() -> Self {
     Self::default()
-  }
-
-  /// Create a remapper from an existing set of glyphs
-  pub fn new_from_glyphs(glyphs: &[u16]) -> Self {
-    let mut map = Self::new();
-
-    for glyph in glyphs {
-      map.remap(*glyph);
-    }
-
-    map
-  }
-
-  /// Create a remapper from an existing set of glyphs. The method
-  /// will ensure that the mapping is monotonically increasing.
-  pub fn new_from_glyphs_sorted(glyphs: &[u16]) -> Self {
-    let sorted = BTreeSet::from_iter(glyphs)
-      .iter()
-      .map(|g| **g)
-      .collect::<Vec<_>>();
-
-    GlyphRemapper::new_from_glyphs(&sorted)
   }
 
   /// Get the number of gids that have been remapped.
