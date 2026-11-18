@@ -10,7 +10,7 @@ use takumi_bindings_common::{
   options::RendererOptions,
   source_cache::SourceCache,
 };
-use takumi_core::{Cache, Fonts, resources::cache::CacheOptions};
+use takumi_core::{Cache, Fonts};
 
 use crate::{
   JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
@@ -208,13 +208,7 @@ impl Renderer {
           fonts: Arc::new(default_fonts().map_err(map_error)?),
           cache: FontCache::new(options.font_cache_bytes()),
         }),
-        cache: match options.cache_bytes() {
-          Some(bytes) => CacheOptions::builder()
-            .images(bytes)
-            .stylesheets(bytes)
-            .build(),
-          None => Cache::default(),
-        },
+        cache: options.cache(),
         sources: SourceCache::default(),
       }),
     })

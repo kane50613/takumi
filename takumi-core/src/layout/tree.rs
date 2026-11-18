@@ -2390,6 +2390,7 @@ impl RenderNode {
       &node,
       &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
+      parent_context.cache().tailwind(),
     );
     let mut list_item_counts = ListItemCounts::default();
 
@@ -3514,8 +3515,14 @@ impl PageContext {
   ) -> Option<Vec<NodeMatchedDeclarations<'s>>> {
     let stylesheet = parent_context.stylesheet();
 
-    (!stylesheet.page_rules.is_empty())
-      .then(|| match_stylesheets_view(tree, &[stylesheet], parent_context.sizing.viewport))
+    (!stylesheet.page_rules.is_empty()).then(|| {
+      match_stylesheets_view(
+        tree,
+        &[stylesheet],
+        parent_context.sizing.viewport,
+        parent_context.cache().tailwind(),
+      )
+    })
   }
 
   /// The page context of `root`, the node at `source_order` in `matched`. A `display: none` root

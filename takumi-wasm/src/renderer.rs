@@ -16,10 +16,7 @@ use takumi_bindings_common::{
 use takumi_core::{
   Fonts,
   layout::{needs::RenderNeeds, node::Node},
-  resources::{
-    cache::{Cache, CacheOptions},
-    image::ImageSource as LoadedImageSource,
-  },
+  resources::{cache::Cache, image::ImageSource as LoadedImageSource},
 };
 use takumi_raster::{SequentialScene, measure, needs, render, write_animation, write_image};
 use wasm_bindgen::prelude::*;
@@ -86,13 +83,7 @@ impl Renderer {
 
     Ok(Renderer {
       fonts: FontStore::new(options.font_cache_bytes()).map_err(map_error)?,
-      cache: match options.cache_bytes() {
-        Some(bytes) => CacheOptions::builder()
-          .images(bytes)
-          .stylesheets(bytes)
-          .build(),
-        None => Cache::default(),
-      },
+      cache: options.cache(),
       sources: SourceCache::default(),
     })
   }

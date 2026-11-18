@@ -85,7 +85,7 @@ fn whole_document(mut options: RenderOptions<'_>, page_size: Size<f32>) -> Resul
 
   for index in 0..page_count {
     let origin = sizes.origin(index).map(|length| length.round() as i32);
-    let mut canvas = Canvas::try_new(size)
+    let mut canvas = Canvas::try_new(size, scene.root.context.cache().clone())
       .ok_or(Error::InvalidViewport)?
       .with_origin(origin);
 
