@@ -2,7 +2,6 @@
 packages:
   "@takumi-rs/core": patch
   "@takumi-rs/wasm": patch
-  takumi-core: patch
 ---
 
 # Unsupported CSS warns through `console.warn`
