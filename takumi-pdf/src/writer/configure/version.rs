@@ -2,10 +2,10 @@ use pdf_writer::Pdf;
 use std::sync::LazyLock;
 use xmp_writer::XmpWriter;
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::graphics::icc::ICCMetadata;
 use crate::writer::graphics::icc::ICCProfile;
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::image::BitsPerComponent;
 
 /// The version of a PDF document.
@@ -71,7 +71,7 @@ impl PdfVersion {
     }
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn supports_icc(&self, metadata: &ICCMetadata) -> bool {
     let max_version = match self {
       PdfVersion::Pdf14 => (2, 3),
@@ -84,7 +84,7 @@ impl PdfVersion {
     (metadata.major, metadata.minor) <= max_version
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn supports_bit_depth(&self, bits_per_component: BitsPerComponent) -> bool {
     match bits_per_component {
       BitsPerComponent::Eight => true,
@@ -162,7 +162,7 @@ mod bundled_profile_tests {
   }
 }
 
-#[cfg(all(test, feature = "raster-images"))]
+#[cfg(all(test, feature = "images"))]
 mod tests {
   use super::PdfVersion;
   use crate::writer::graphics::icc::{ICCColorSpace, ICCMetadata};

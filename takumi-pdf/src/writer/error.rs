@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 use crate::writer::configure::{ValidationError, Validators};
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::surface::Location;
 use crate::writer::tagging::TagId;
@@ -40,11 +40,11 @@ pub enum WriterError {
   /// An image couldn't be processed properly.
   ///
   /// The third argument contains the error message.
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   Image(Image, Option<Location>, String),
   /// A sixteen bit image was used, even though it isn't
   /// supported by the used PDF version (only available in PDF 1.5+).
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   SixteenBitImage(Image, Option<Location>),
 }
 
@@ -70,13 +70,13 @@ impl Display for WriterError {
         write_location(f, *location)
       }
       WriterError::TagTree(message) => write!(f, "invalid tag tree: {message}"),
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       WriterError::Image(_, location, message) => {
         write!(f, "failed to process image")?;
         write_location(f, *location)?;
         write!(f, ": {message}")
       }
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       WriterError::SixteenBitImage(_, location) => {
         write!(
           f,

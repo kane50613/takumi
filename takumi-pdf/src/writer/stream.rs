@@ -30,7 +30,7 @@ use std::ops::DerefMut;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use pdf_writer::{Array, Dict, Name};
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 use pdf_writer::{Finish, Null};
 
 use crate::writer::SerializeSettings;
@@ -136,7 +136,7 @@ pub(crate) enum StreamFilter {
   Flate,
   FlateMemoized,
   AsciiHex,
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   Dct,
 }
 
@@ -146,7 +146,7 @@ impl StreamFilter {
       Self::AsciiHex => Name(b"ASCIIHexDecode"),
       Self::Flate => Name(b"FlateDecode"),
       Self::FlateMemoized => Name(b"FlateDecode"),
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       Self::Dct => Name(b"DCTDecode"),
     }
   }
@@ -156,7 +156,7 @@ impl StreamFilter {
       StreamFilter::Flate => true,
       StreamFilter::FlateMemoized => true,
       StreamFilter::AsciiHex => false,
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       StreamFilter::Dct => true,
     }
   }
@@ -169,7 +169,7 @@ impl StreamFilter {
       StreamFilter::FlateMemoized => deflate_encode_memoized(content),
       StreamFilter::AsciiHex => hex_encode(content),
       // Only JPEGs carry this filter, and they come already encoded.
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       StreamFilter::Dct => content.to_vec(),
     }
   }
@@ -179,7 +179,7 @@ impl StreamFilter {
 #[derive(Debug, Copy, Clone)]
 struct Filter {
   kind: StreamFilter,
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   decode_params: Option<DecodeParams>,
 }
 
@@ -187,19 +187,19 @@ impl Filter {
   fn new(kind: StreamFilter) -> Self {
     Self {
       kind,
-      #[cfg(feature = "raster-images")]
+      #[cfg(feature = "images")]
       decode_params: None,
     }
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   fn with_decode_params(mut self, decode_params: DecodeParams) -> Self {
     self.decode_params = Some(decode_params);
     self
   }
 }
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 #[derive(Debug, Copy, Clone)]
 enum DecodeParams {
   PngPredictor {
@@ -209,7 +209,7 @@ enum DecodeParams {
   },
 }
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 impl DecodeParams {
   fn write(self, mut dict: Dict<'_>) {
     match self {
@@ -321,7 +321,7 @@ impl<'a> FilterStreamBuilder<'a> {
     Self::binary(content)
   }
 
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn new_from_jpeg_data(content: &'a [u8]) -> Self {
     let mut filter_stream = Self::empty(content);
     // JPEG data already is DCT encoded.
@@ -331,7 +331,7 @@ impl<'a> FilterStreamBuilder<'a> {
   }
 
   /// A PNG IDAT stream, already deflated with the PNG row predictors applied.
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   pub(crate) fn new_from_png_data(
     content: &'a [u8],
     colors: i32,
@@ -398,7 +398,7 @@ impl FilterStream<'_> {
           .deref_mut()
           .pair(Name(b"Filter"), filter.kind.to_name());
 
-        #[cfg(feature = "raster-images")]
+        #[cfg(feature = "images")]
         if let Some(params) = filter.decode_params {
           params.write(dict.deref_mut().insert(Name(b"DecodeParms")).dict());
         }
@@ -410,7 +410,7 @@ impl FilterStream<'_> {
           .start::<Array>()
           .items(filters.iter().rev().map(|filter| filter.kind.to_name()));
 
-        #[cfg(feature = "raster-images")]
+        #[cfg(feature = "images")]
         if filters.iter().any(|filter| filter.decode_params.is_some()) {
           let mut decode_params = dict.deref_mut().insert(Name(b"DecodeParms")).array();
 

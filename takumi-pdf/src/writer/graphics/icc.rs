@@ -60,7 +60,7 @@ impl<const C: u8> Cacheable for ICCProfile<C> {
   }
 }
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub(crate) enum GenericICCProfile {
   Luma(ICCProfile<1>),
@@ -68,7 +68,7 @@ pub(crate) enum GenericICCProfile {
   Cmyk(ICCProfile<4>),
 }
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 impl GenericICCProfile {
   pub(crate) fn metadata(&self) -> &ICCMetadata {
     match self {
@@ -79,7 +79,7 @@ impl GenericICCProfile {
   }
 }
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 impl Cacheable for GenericICCProfile {
   fn serialize(
     self,

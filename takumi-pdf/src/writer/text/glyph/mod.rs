@@ -7,7 +7,7 @@ use crate::writer::geom::Transform;
 use crate::writer::surface::Surface;
 use crate::writer::text::Font;
 
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 pub(crate) mod bitmap;
 pub(crate) mod outline;
 pub(crate) mod svg;
@@ -55,10 +55,10 @@ pub(crate) fn draw_color_glyph(
   )
   .or_else(|| svg::draw_glyph(font.clone(), context_color, glyph, surface))
   .or_else(|| {
-    #[cfg(feature = "raster-images")]
+    #[cfg(feature = "images")]
     let res = bitmap::draw_glyph(font.clone(), glyph, surface);
 
-    #[cfg(not(feature = "raster-images"))]
+    #[cfg(not(feature = "images"))]
     let res = None;
 
     res
@@ -77,9 +77,9 @@ pub(crate) fn should_outline(font: &Font, glyph: GlyphId) -> bool {
     .color_glyphs()
     .get(glyph.to_skrifa())
     .is_some();
-  #[cfg(feature = "raster-images")]
+  #[cfg(feature = "images")]
   let has_bitmap = bitmap::has_bitmap_data(font, glyph);
-  #[cfg(not(feature = "raster-images"))]
+  #[cfg(not(feature = "images"))]
   let has_bitmap = false;
   font.font_info().can_be_cid_font() && !has_svg && !has_colr && !has_bitmap
 }

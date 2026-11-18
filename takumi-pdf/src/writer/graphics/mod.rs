@@ -2,7 +2,7 @@ pub mod blend;
 pub mod color;
 pub(crate) mod graphics_state;
 pub mod icc;
-#[cfg(feature = "raster-images")]
+#[cfg(feature = "images")]
 pub mod image;
 pub mod mask;
 pub mod paint;

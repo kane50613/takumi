@@ -10,8 +10,7 @@ rust-version = "1.91"
 
 [features]
 default = ["images", "svg", "font-face"]
-images = ["raster-images"]
-raster-images = ["dep:png", "dep:zune-jpeg", "dep:image-webp"]
+images = ["dep:png", "dep:zune-jpeg", "dep:image-webp"]
 svg = ["takumi-core/svg"]
 # `@font-face` rules, whose files `needs` reports and `Fonts::load_font_file` takes.
 font-face = ["takumi-core/font-face"]
