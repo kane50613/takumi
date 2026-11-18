@@ -82,34 +82,42 @@ export function image(props: Omit<ImageNode, "type">): ImageNode {
   return node;
 }
 
+/** @deprecated Type the object as `CSSProperties` from React instead. Will be removed in v3. */
 export function style(style: Declarations): CSSProperties {
   return style;
 }
 
+/** @deprecated Write the CSS string, such as `"50%"`, instead. Will be removed in v3. */
 export function percentage(percentage: number): `${number}%` {
   return `${percentage}%` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"100vw"`, instead. Will be removed in v3. */
 export function vw(vw: number): `${number}vw` {
   return `${vw}vw` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"100vh"`, instead. Will be removed in v3. */
 export function vh(vh: number): `${number}vh` {
   return `${vh}vh` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"1.5em"`, instead. Will be removed in v3. */
 export function em(em: number): `${number}em` {
   return `${em}em` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"1.5rem"`, instead. Will be removed in v3. */
 export function rem(rem: number): `${number}rem` {
   return `${rem}rem` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"1fr"`, instead. Will be removed in v3. */
 export function fr(fr: number): `${number}fr` {
   return `${fr}fr` as const;
 }
 
+/** @deprecated Write the CSS string, such as `"rgb(0 0 0 / 0.5)"`, instead. Will be removed in v3. */
 export function rgba(
   r: number,
   g: number,

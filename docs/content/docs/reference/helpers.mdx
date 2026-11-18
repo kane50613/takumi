@@ -41,29 +41,15 @@ text inside SVG images included.
 
 ## Building nodes
 
-| Helper                               | Returns                       |
-| :----------------------------------- | :---------------------------- |
-| `container(props)`                   | A container node.             |
-| `text(text, style?)` / `text(props)` | A text node.                  |
-| `image(props)`                       | An image node.                |
-| `style(css)`                         | The same style object, typed. |
+| Helper                               | Returns           |
+| :----------------------------------- | :---------------- |
+| `container(props)`                   | A container node. |
+| `text(text, style?)` / `text(props)` | A text node.      |
+| `image(props)`                       | An image node.    |
 
 The `props` argument holds the node's own fields. [Node types](/docs/reference#node-types) lists them. Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
 
-Length and color shorthands return CSS strings. `vw` and `vh` are viewport units, `em` and `rem` are font-relative, and `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
-
-<Callout type="info">
-  `rem` resolves against the viewport's font size, not the outermost node.
-  [Units](/docs/reference#units) covers what each font-relative unit follows.
-</Callout>
-
-| Helper                 | Output             |
-| :--------------------- | :----------------- |
-| `percentage(50)`       | `50%`              |
-| `vw(100)` / `vh(100)`  | `100vw` / `100vh`  |
-| `em(1.5)` / `rem(1.5)` | `1.5em` / `1.5rem` |
-| `fr(1)`                | `1fr`              |
-| `rgba(0, 0, 0, 0.5)`   | `rgb(0 0 0 / 0.5)` |
+Write lengths and colors as CSS strings, such as `"50%"`, `"1.5rem"`, or `"rgb(0 0 0 / 0.5)"`. The unit helpers `percentage`, `vw`, `vh`, `em`, `rem`, `fr`, and `rgba`, and the `style` helper, are deprecated and will be removed in v3.
 
 ## Parsing templates
 

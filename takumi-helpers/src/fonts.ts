@@ -272,18 +272,22 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
   return merged;
 }
 
-/** Content trees, HTML markup, or strings whose codepoints count, character references decoded too. */
+/**
+ * Content trees, HTML markup, or strings whose codepoints count, character references decoded too.
+ *
+ * @deprecated Pass the fonts to a render, which picks the subsets its text uses. Will be removed in v3.
+ */
 export type CodepointSource = string | Node | (string | Node)[];
 
 /**
  * Every character the predefined list markers can generate, mirroring `MARKER_CHARACTERS` in takumi-core.
  *
- * @deprecated Renderers read the characters markers generate themselves.
+ * @deprecated Renderers read the characters markers generate themselves. Will be removed in v3.
  */
 export const LIST_MARKER_CHARACTERS =
   "•◦■▪▸◂▾ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/** @deprecated Renderers pick font subsets from the text they lay out. */
+/** @deprecated Renderers pick font subsets from the text they lay out. Will be removed in v3. */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
 
@@ -342,7 +346,7 @@ function lowerBound(values: Uint32Array, target: number): number {
   return low;
 }
 
-/** @deprecated Pass the fonts to a render, which picks the subsets its text uses. */
+/** @deprecated Pass the fonts to a render, which picks the subsets its text uses. Will be removed in v3. */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
 

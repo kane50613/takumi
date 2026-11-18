@@ -1,4 +1,4 @@
-import { container, percentage } from "./helpers";
+import { container } from "./helpers";
 import type { FromJsxResult } from "./jsx";
 import type { Node } from "./types";
 
@@ -39,8 +39,8 @@ function rootNode(nodes: Node[]): Node {
     children: nodes,
     style: {
       display: "block",
-      width: percentage(100),
-      height: percentage(100),
+      width: "100%",
+      height: "100%",
     },
   });
 }
