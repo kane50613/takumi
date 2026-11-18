@@ -17,7 +17,7 @@ test.each(["export.mjs", "export.cjs"])(
 
     expect(exitCode).not.toBe(0);
     expect(message).toContain(`Cannot find @takumi-rs/core-${process.platform}-${process.arch}`);
-    expect(message).toContain('serverExternalPackages: ["@takumi-rs/core"]');
+    expect(message).toContain("Keep @takumi-rs/core out of the bundle");
     expect(message).toContain(
       "https://takumi.kane.tw/docs/troubleshooting#cannot-find-native-binding",
     );

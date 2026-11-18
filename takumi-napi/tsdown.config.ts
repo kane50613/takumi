@@ -27,7 +27,7 @@ const missingBindingMessage = `(() => {
         : \`\${process.platform}-\${process.arch}\`;
 
   return ${JSON.stringify(publishedTargets)}.includes(target)
-    ? \`Cannot find @takumi-rs/core-\${target}, the native binding @takumi-rs/core loads on this platform. A bundler that inlines @takumi-rs/core, or a deploy that leaves out its platform package, usually causes this. Keep @takumi-rs/core external, such as with \\\`serverExternalPackages: ["@takumi-rs/core"]\\\` in Next.js or \\\`ssr.external\\\` in Vite, and install @takumi-rs/core-\${target} where the app runs. See ${troubleshootingUrl}\`
+    ? \`Cannot find @takumi-rs/core-\${target}. Keep @takumi-rs/core out of the bundle, and install @takumi-rs/core-\${target} where the app runs. See ${troubleshootingUrl}\`
     : \`@takumi-rs/core has no native binding for \${target}. Render with @takumi-rs/wasm instead. See ${troubleshootingUrl}\`;
 })()`;
 
