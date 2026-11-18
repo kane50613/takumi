@@ -28,6 +28,7 @@ Install these prerequisites:
 - Bun 1.4
 - The `wasm32-unknown-unknown` target, for the WebAssembly binding. Install it with `rustup target add wasm32-unknown-unknown`
 - [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/), for building the WebAssembly packages. CI pins version 0.15.0.
+- `nightly-2026-08-05` and `cargo-public-api` 0.52.0, only to regenerate the Rust snapshots under `api/` with `bun run api`. Install them with `rustup toolchain install nightly-2026-08-05` and `cargo install cargo-public-api@0.52.0 --locked`, or update the snapshots from the CI artifact as `AGENTS.md` describes.
 
 Install the workspace dependencies:
 
