@@ -27,3 +27,25 @@ test("warns about an unsupported property in each style sheet that uses it", asy
     warn.mockRestore();
   }
 });
+
+test("renders when console.warn throws", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {
+    throw new Error("console.warn failed");
+  });
+  const renderer = new Renderer();
+
+  try {
+    const pixels = await renderer.render("<div></div>", {
+      width: 4,
+      height: 4,
+      format: "raw",
+      css: ["div { takumi-throwing-warn: 1 }"],
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(pixels.length).toBe(64);
+    expect(warn).toHaveBeenCalled();
+  } finally {
+    warn.mockRestore();
+  }
+});
