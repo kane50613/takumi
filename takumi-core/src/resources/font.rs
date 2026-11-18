@@ -1330,6 +1330,63 @@ mod tests {
     assert!(!families[0].faces.is_empty());
   }
 
+  /// `bytes`, a single-face sfnt, with its `head` table's `unitsPerEm` set to `units_per_em`.
+  fn with_units_per_em(mut bytes: Vec<u8>, units_per_em: u16) -> Vec<u8> {
+    let table_count = usize::from(u16::from_be_bytes([bytes[4], bytes[5]]));
+    let head = (0..table_count)
+      .map(|table| 12 + table * 16)
+      .find(|&record| &bytes[record..record + 4] == b"head")
+      .map(|record| u32::from_be_bytes(bytes[record + 8..record + 12].try_into().unwrap()))
+      .unwrap() as usize;
+
+    bytes[head + 18..head + 20].copy_from_slice(&units_per_em.to_be_bytes());
+    bytes
+  }
+
+  /// `unitsPerEm` values at and beyond both inclusive bounds of OTS's range, and whether each is valid.
+  const UNITS_PER_EM_CASES: [(u16, bool); 5] = [
+    (1, false),
+    (15, false),
+    (16, true),
+    (16384, true),
+    (16385, false),
+  ];
+
+  fn geist_ttf_bytes() -> Vec<u8> {
+    read_font_asset("../assets/fonts/geist/geist-latin-wght-300-800.ttf")
+  }
+
+  /// A face registers only with a `unitsPerEm` in OTS's inclusive range of 16 to 16384.
+  #[test]
+  fn a_font_with_units_per_em_out_of_range_registers_no_face() {
+    for (units_per_em, valid) in UNITS_PER_EM_CASES {
+      let mut fonts = Fonts::default();
+      let families = register_named(
+        &mut fonts,
+        with_units_per_em(geist_ttf_bytes(), units_per_em),
+        "Geist",
+      );
+
+      assert_eq!(!families.is_empty(), valid, "unitsPerEm {units_per_em}");
+    }
+  }
+
+  /// An `@font-face` file with a `unitsPerEm` outside OTS's range fails to load, so its rule moves
+  /// on to the next source.
+  #[test]
+  #[cfg(feature = "font-face")]
+  fn a_font_file_with_units_per_em_out_of_range_fails_to_load() {
+    for (units_per_em, valid) in UNITS_PER_EM_CASES {
+      let mut fonts = Fonts::default();
+      let loaded = fonts.load_font_file(
+        "geist.ttf",
+        FontSource::from(with_units_per_em(geist_ttf_bytes(), units_per_em)),
+      );
+
+      assert_eq!(loaded.is_ok(), valid, "unitsPerEm {units_per_em}");
+    }
+  }
+
   /// The same bytes under another family share one decoded face, so one set of shaping tables.
   #[test]
   fn a_font_registered_under_two_families_shares_its_face() {

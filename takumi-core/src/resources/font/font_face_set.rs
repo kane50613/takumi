@@ -13,7 +13,7 @@ use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedByt
 use crate::{
   fonts::{
     css_font_selector::CssFontSelector,
-    font_custom_platform_data::FontCustomPlatformData,
+    font_custom_platform_data::{FontCustomPlatformData, UNITS_PER_EM_RANGE},
     font_face::{FontFace, PendingSource},
   },
   style::{
@@ -223,9 +223,15 @@ impl RuleSource<'_> {
 }
 
 /// Whether `data` is a font with the tables a face draws from. Approximate: Blink's OTS sanitizer
-/// checks every table, where this only requires `head`, `hhea`, `maxp`, and `cmap`.
+/// checks every table, where this only requires `head`, with a `unitsPerEm` in OTS's range,
+/// `hhea`, `maxp`, and `cmap`.
 fn is_usable_font(data: &SharedBytes) -> bool {
   FontRef::from_index((**data).as_ref(), 0).is_ok_and(|font| {
-    font.head().is_ok() && font.hhea().is_ok() && font.maxp().is_ok() && font.cmap().is_ok()
+    font
+      .head()
+      .is_ok_and(|head| UNITS_PER_EM_RANGE.contains(&head.units_per_em()))
+      && font.hhea().is_ok()
+      && font.maxp().is_ok()
+      && font.cmap().is_ok()
   })
 }

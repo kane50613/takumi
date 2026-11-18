@@ -7,6 +7,7 @@
 
 use std::{
   fmt::{self, Debug, Formatter},
+  ops::RangeInclusive,
   sync::{Arc, OnceLock},
 };
 
@@ -33,6 +34,9 @@ use crate::{
   resources::font::{FontBlob, SharedBytes, has_color_table},
   style::FontOpticalSizing,
 };
+
+/// The `unitsPerEm` range OTS accepts, as [`head.cc`](https://github.com/khaledhosny/ots/blob/main/src/head.cc) checks it.
+pub(crate) const UNITS_PER_EM_RANGE: RangeInclusive<u16> = 16..=16384;
 
 const ITAL_TAG: Tag = Tag::new(b"ital");
 const OPSZ_TAG: Tag = Tag::new(b"opsz");
@@ -127,9 +131,15 @@ pub(crate) struct FontPlatformData {
 }
 
 impl FontCustomPlatformData {
-  /// Blink's `Create`: the face at `index` of `data`, or none when it does not parse.
+  /// Blink's `Create`: the face at `index` of `data`, or none when it does not parse or its
+  /// `unitsPerEm` falls outside the range OTS accepts.
   pub(crate) fn create(data: SharedBytes, id: u64, index: u32) -> Option<Self> {
     let font = FontRef::from_index((*data).as_ref(), index).ok()?;
+
+    if !UNITS_PER_EM_RANGE.contains(&font.head().ok()?.units_per_em()) {
+      return None;
+    }
+
     let variable_font_sub_type = VariableFontSubType::probe_variable_font(&font);
     let axes = font
       .axes()
