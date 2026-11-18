@@ -154,7 +154,8 @@ impl CIDFont {
 
     let new_id = self
       .glyph_remapper
-      .remap(u16::try_from(glyph_id.to_u32()).unwrap());
+      // OpenType glyph ids fit in a `u16`, so a larger one can only be `.notdef`.
+      .remap(u16::try_from(glyph_id.to_u32()).unwrap_or(0));
 
     // This means that the glyph ID has been newly assigned, and thus we need to add its width.
     if new_id as usize >= self.widths.len() {
@@ -315,15 +316,13 @@ impl CIDFont {
     flags.insert(FontFlags::SYMBOLIC);
     flags.insert(FontFlags::SMALL_CAP);
 
-    let bbox = {
-      Rect::from_ltrb(
-        to_pdf_units(global_bbox.left()),
-        to_pdf_units(global_bbox.top()),
-        to_pdf_units(global_bbox.right()),
-        to_pdf_units(global_bbox.bottom()),
-      )
-      .unwrap()
-    }
+    let bbox = Rect::from_ltrb(
+      to_pdf_units(global_bbox.left()),
+      to_pdf_units(global_bbox.top()),
+      to_pdf_units(global_bbox.right()),
+      to_pdf_units(global_bbox.bottom()),
+    )
+    .unwrap_or_else(Rect::unit)
     .to_pdf_rect();
 
     let italic_angle = self.font.italic_angle();
@@ -395,7 +394,7 @@ pub(crate) fn subset_tag<T: Hash>(data: &T) -> String {
     *l = b'A' + (hash % BASE) as u8;
     hash /= BASE;
   }
-  std::str::from_utf8(&letter).unwrap().to_string()
+  letter.iter().copied().map(char::from).collect()
 }
 
 /// The width the most glyphs share, which `/DW` then states once.

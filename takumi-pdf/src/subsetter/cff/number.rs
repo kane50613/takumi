@@ -162,21 +162,17 @@ impl IntegerNumber {
 
 impl Writeable for IntegerNumber {
   fn write(&self, w: &mut Writer) {
+    // Each range bounds the bytes it writes, so the casts below cannot truncate.
     if (-107..=107).contains(&self.0) {
-      let b0 = u8::try_from(self.0 + 139).unwrap();
-      w.write(b0);
+      w.write((self.0 + 139) as u8);
     } else if (108..=1131).contains(&self.0) {
       let temp = self.0 - 108;
-      let b0 = u8::try_from(temp / 256 + 247).unwrap();
-      let b1 = u8::try_from(temp % 256).unwrap();
-      w.write([b0, b1]);
+      w.write([(temp / 256 + 247) as u8, (temp % 256) as u8]);
     } else if (-1131..=-108).contains(&self.0) {
       let temp = -self.0 - 108;
-      let b0 = u8::try_from(temp / 256 + 251).unwrap();
-      let b1 = u8::try_from(temp % 256).unwrap();
-      w.write([b0, b1])
+      w.write([(temp / 256 + 251) as u8, (temp % 256) as u8])
     } else if (-32768..=32767).contains(&self.0) {
-      let bytes = i16::try_from(self.0).unwrap().to_be_bytes();
+      let bytes = (self.0 as i16).to_be_bytes();
       w.write([28, bytes[0], bytes[1]])
     } else {
       self.write_as_5_bytes(w)

@@ -108,8 +108,8 @@ struct Header {
 impl Header {
   fn new(data: &[u8]) -> Option<Self> {
     let data: &[u8; 13] = data.try_into().ok()?;
-    let width = u32::from_be_bytes(data[0..4].try_into().unwrap());
-    let height = u32::from_be_bytes(data[4..8].try_into().unwrap());
+    let width = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+    let height = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
     let bit_depth = png::BitDepth::from_u8(data[8])?;
     let color_type = png::ColorType::from_u8(data[9])?;
 
@@ -216,6 +216,6 @@ impl<'a> Reader<'a> {
 
   fn read_u32(&mut self) -> Option<u32> {
     let bytes = self.read(size_of::<u32>())?;
-    Some(u32::from_be_bytes(bytes.try_into().unwrap()))
+    Some(u32::from_be_bytes(bytes.try_into().ok()?))
   }
 }

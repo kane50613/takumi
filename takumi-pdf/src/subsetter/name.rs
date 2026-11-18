@@ -63,7 +63,8 @@ pub fn subset_table<'a>(table: &Table<'a>) -> Option<Table<'a>> {
 
 impl Writeable for Table<'_> {
   fn write(&self, w: &mut Writer) {
-    let count = u16::try_from(self.names.len()).unwrap();
+    // The records come from a table that counted them in a `u16`.
+    let count = self.names.len() as u16;
 
     // version
     w.write::<u16>(0);

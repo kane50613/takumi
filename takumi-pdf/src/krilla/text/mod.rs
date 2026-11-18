@@ -76,15 +76,6 @@ impl FontContainer {
   }
 
   #[inline]
-  pub(crate) fn font_identifier(&self, glyph: ColoredGlyph) -> Option<FontIdentifier> {
-    let (id, _) = self
-      .cid_cache
-      .get(&glyph.glyph_id.to_u32())
-      .or_else(|| self.type3_cache.get(&glyph.to_owned()))?;
-    Some(id.clone())
-  }
-
-  #[inline]
   pub(crate) fn get_from_identifier_mut(
     &mut self,
     font_identifier: FontIdentifier,
@@ -158,15 +149,13 @@ impl PdfFont for Type3Font {
     Type3Font::font(self)
   }
 
-  #[track_caller]
   fn get_codepoints(&self, pdf_glyph: PDFGlyph) -> Option<&str> {
     match pdf_glyph {
       PDFGlyph::Type3(t3) => self.get_codepoints(t3),
-      PDFGlyph::Cid(_) => panic!("attempted to pass cid to type 3 font"),
+      PDFGlyph::Cid(_) => None,
     }
   }
 
-  #[track_caller]
   fn set_codepoints(
     &mut self,
     pdf_glyph: PDFGlyph,
@@ -175,7 +164,7 @@ impl PdfFont for Type3Font {
   ) {
     match pdf_glyph {
       PDFGlyph::Type3(t3) => self.set_codepoints(t3, text, location),
-      PDFGlyph::Cid(_) => panic!("attempted to pass cid to type 3 font"),
+      PDFGlyph::Cid(_) => {}
     }
   }
 
@@ -197,15 +186,13 @@ impl PdfFont for CIDFont {
     CIDFont::font(self)
   }
 
-  #[track_caller]
   fn get_codepoints(&self, pdf_glyph: PDFGlyph) -> Option<&str> {
     match pdf_glyph {
-      PDFGlyph::Type3(_) => panic!("attempted to pass type 3 glyph to cid font"),
+      PDFGlyph::Type3(_) => None,
       PDFGlyph::Cid(cid) => self.get_codepoints(cid),
     }
   }
 
-  #[track_caller]
   fn set_codepoints(
     &mut self,
     pdf_glyph: PDFGlyph,
@@ -213,7 +200,7 @@ impl PdfFont for CIDFont {
     location: Option<crate::krilla::surface::Location>,
   ) {
     match pdf_glyph {
-      PDFGlyph::Type3(_) => panic!("attempted to pass type 3 glyph to cid font"),
+      PDFGlyph::Type3(_) => {}
       PDFGlyph::Cid(cid) => self.set_codepoints(cid, text, location),
     }
   }

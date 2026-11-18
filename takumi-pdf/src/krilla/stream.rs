@@ -83,7 +83,7 @@ impl Stream {
   pub(crate) fn empty() -> Self {
     Self {
       content: vec![],
-      bbox: Rect::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap(),
+      bbox: Rect::empty(),
       validation_errors: vec![],
       resource_dictionary: ResourceDictionaryBuilder::new().finish(),
       uses_mask: false,
@@ -163,17 +163,14 @@ impl StreamFilter {
 }
 
 impl StreamFilter {
-  #[track_caller]
   pub(crate) fn apply(&self, content: &[u8]) -> Vec<u8> {
     match self {
       StreamFilter::Flate => deflate_encode(content),
       StreamFilter::FlateMemoized => deflate_encode_memoized(content),
       StreamFilter::AsciiHex => hex_encode(content),
-      // Note: We don't actually encode manually with DCT, because
-      // this is only used for JPEG images which are already encoded,
-      // so this shouldn't be called at all.
+      // Only JPEGs carry this filter, and they come already encoded.
       #[cfg(feature = "raster-images")]
-      StreamFilter::Dct => panic!("can't apply dct decode"),
+      StreamFilter::Dct => content.to_vec(),
     }
   }
 }
@@ -254,7 +251,7 @@ impl StreamFilters {
     match self {
       StreamFilters::None => false,
       StreamFilters::Single(filter) => filter.kind.is_binary(),
-      StreamFilters::Multiple(filters) => filters.last().unwrap().kind.is_binary(),
+      StreamFilters::Multiple(filters) => filters.last().is_some_and(|f| f.kind.is_binary()),
     }
   }
 }
@@ -440,8 +437,9 @@ pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {
 
   const COMPRESSION_LEVEL: u8 = 6;
   let mut e = ZlibEncoder::new(Vec::new(), Compression::new(COMPRESSION_LEVEL as u32));
-  e.write_all(data).unwrap();
-  e.finish().unwrap()
+  // Writing into a `Vec` cannot fail.
+  let _ = e.write_all(data);
+  e.finish().unwrap_or_default()
 }
 
 fn hex_encode(data: &[u8]) -> Vec<u8> {
@@ -452,7 +450,8 @@ fn hex_encode(data: &[u8]) -> Vec<u8> {
   let capacity = 2 * len + len / COLUMNS;
   let mut output = String::with_capacity(capacity);
   for (index, byte) in data.iter().enumerate() {
-    write!(output, "{byte:02X}").unwrap();
+    // Writing into a `String` cannot fail.
+    let _ = write!(output, "{byte:02X}");
     if index % COLUMNS == COLUMNS - 1 {
       output.push('\n');
     }

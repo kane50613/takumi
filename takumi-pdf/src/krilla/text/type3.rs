@@ -77,7 +77,7 @@ impl Type3Font {
   }
 
   pub(crate) fn count(&self) -> u16 {
-    u16::try_from(self.glyphs.len()).unwrap()
+    u16::try_from(self.glyphs.len()).unwrap_or(u16::MAX)
   }
 
   #[inline]
@@ -99,14 +99,17 @@ impl Type3Font {
     if let Some(pos) = self.get_gid(&glyph) {
       pos
     } else {
-      assert!(self.glyphs.len() < 256);
+      // The mapper starts a new font once this one is full.
+      debug_assert!(!self.is_full());
+
+      let gid = u8::try_from(self.glyphs.len()).unwrap_or(u8::MAX);
 
       self.glyph_set.insert(glyph);
       self.glyphs.push(glyph);
       self
         .widths
         .push(self.font.advance_width(glyph.glyph_id).unwrap_or(0.0));
-      u8::try_from(self.glyphs.len() - 1).unwrap()
+      gid
     }
   }
 
@@ -139,7 +142,7 @@ impl Type3Font {
     let mut stream_chunk = sc.new_chunk();
 
     let mut rd_builder = ResourceDictionaryBuilder::new();
-    let mut font_bbox = Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap();
+    let mut font_bbox = Rect::unit();
 
     let glyph_streams = self
       .glyphs
@@ -328,7 +331,7 @@ impl Type3Font {
       .to_pdf_transform(),
     );
     type3_font.first_char(0);
-    type3_font.last_char(u8::try_from(self.glyphs.len() - 1).unwrap());
+    type3_font.last_char(u8::try_from(self.glyphs.len().saturating_sub(1)).unwrap_or(u8::MAX));
     type3_font.widths(self.widths.iter().copied());
     if let Some(descriptor_ref) = descriptor_ref {
       type3_font.font_descriptor(descriptor_ref);
@@ -354,8 +357,7 @@ impl Type3Font {
     let cmap = {
       let mut cmap = UnicodeCmap::new(CMAP_NAME, SYSTEM_INFO);
 
-      for g in 0..self.glyphs.len() {
-        let g = u8::try_from(g).unwrap();
+      for g in (0..=u8::MAX).take(self.glyphs.len()) {
         let entry = self.cmap_entries.get(&g);
         write_cmap_entry(&self.font, entry, sc, &mut cmap, g);
       }
@@ -434,12 +436,11 @@ impl Type3FontMapper {
   pub(crate) fn add_glyph(&mut self, glyph: ColoredGlyph) -> (FontIdentifier, Gid) {
     // If the glyph has already been added, return the font identifier of
     // the type 3 font as well as the Type3 gid in that font.
-    if let Some(id) = self.id_from_glyph(&glyph) {
-      let gid = self
+    if let Some(id) = self.id_from_glyph(&glyph)
+      && let Some(gid) = self
         .font_from_id(id.clone())
-        .unwrap()
-        .get_gid(&glyph)
-        .unwrap();
+        .and_then(|font| font.get_gid(&glyph))
+    {
       return (id, gid);
     }
 

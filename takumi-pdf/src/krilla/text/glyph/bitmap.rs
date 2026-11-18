@@ -32,7 +32,7 @@ pub(crate) fn draw_glyph(font: Font, glyph: GlyphId, surface: &mut Surface) -> O
   match bitmap_glyph.data {
     BitmapData::Png(data) => {
       let image = Image::from_png(data.to_vec().into(), false).ok()?;
-      let size = Size::from_wh(image.size().0 as f32, image.size().1 as f32).unwrap();
+      let size = Size::from_wh(image.size().0 as f32, image.size().1 as f32)?;
 
       // Adapted from vello.
       let scale_factor = upem / (bitmap_glyph.ppem_y);
