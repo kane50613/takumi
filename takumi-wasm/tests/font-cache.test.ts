@@ -28,8 +28,8 @@ const counted = (name: string, data: ArrayBuffer) => {
 };
 
 describe("fontCacheMaxBytes", () => {
-  test("releases the font renders used least recently, and loads it again when a render lists it", async () => {
-    const renderer = new Renderer({ fontCacheMaxBytes: 1 });
+  test("of 0 releases each font once its render settles, and loads it again when a render lists it", async () => {
+    const renderer = new Renderer({ fontCacheMaxBytes: 0 });
     const mono = counted("Mono", monoData);
     const sans = counted("Sans", sansData);
 

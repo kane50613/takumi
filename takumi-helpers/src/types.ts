@@ -121,9 +121,9 @@ export type CacheMode = "auto" | "none";
 /** The memory a renderer keeps across renders, one pool of bytes every kind of data shares. */
 export interface CacheOptions {
   /**
-   * The bytes the renderer keeps for later renders, shared by every kind of data except fonts.
-   * When it is full, the entries used least recently go first, whatever their kind. `0` keeps
-   * nothing. Sizes are estimates, and the process uses memory this does not count.
+   * The bytes the renderer keeps for later renders, shared by every kind of data. When it is full,
+   * the entries used least recently go first, whatever their kind. `0` keeps nothing but the fonts
+   * from `registerFont`. Sizes are estimates, and the process uses memory this does not count.
    * @default 128 MiB
    */
   maxBytes?: number;
@@ -138,9 +138,11 @@ export interface CacheOptions {
    */
   glyphs?: CacheMode;
   /**
-   * Whether to keep the decoded fonts that renders' `fonts` lists load. `"none"` releases each
-   * font once the renderer loads another, and loads it again when a later render lists it. Fonts
-   * from `registerFont` stay either way. A running render keeps the fonts it started with.
+   * Whether to keep decoded font files, each counted once, once no render uses them. With `"auto"`,
+   * the files renders used least recently are evicted one at a time when `maxBytes` is full, and
+   * load again when a render lists them. `"none"` releases each file as the last render using it
+   * finishes. A render keeps every file it uses until it finishes. Fonts from `registerFont` always
+   * stay and count toward `maxBytes`.
    * @default "auto"
    */
   fonts?: CacheMode;
@@ -152,17 +154,17 @@ export interface CacheOptions {
  * memory.
  */
 export interface CacheStats {
-  /** The pool that every kind of data except fonts shares. */
+  /** The pool that every kind of data shares. */
   memory: CacheMemoryStats;
   /** Decoded images and the bitmaps drawn from them. */
   images: CacheKindStats;
   /** Resolved glyphs and their masks. */
   glyphs: CacheKindStats;
-  /** The fonts that renders' `fonts` lists loaded. */
+  /** Decoded font files, registered ones included. */
   fonts: CacheKindStats;
 }
 
-/** The bytes the pool holds, every kind of data except fonts together. */
+/** The bytes the pool holds, every kind of data together. */
 export interface CacheMemoryStats {
   /** The bytes held now. */
   current: number;
@@ -172,7 +174,7 @@ export interface CacheMemoryStats {
 
 /** What one kind of data holds and how lookups for it went. */
 export interface CacheKindStats {
-  /** The bytes held now. For `fonts`, the fonts that renders' `fonts` lists loaded. */
+  /** The bytes held now. For `fonts`, fonts from `registerFont` included. */
   current: number;
   /** Lookups that found what they looked for. */
   hits: number;
@@ -189,7 +191,8 @@ export interface RendererOptions {
   /** @deprecated Use `cache.maxBytes`. */
   cacheMaxBytes?: number;
   /**
-   * The most bytes of fonts that renders' `fonts` lists keep, unless `cache.fonts` is `"none"`.
+   * `0` keeps no fonts, as `cache.fonts: "none"` does. Any other value has no effect, as fonts
+   * share `cache.maxBytes`.
    * @deprecated Use `cache.fonts`.
    */
   fontCacheMaxBytes?: number;

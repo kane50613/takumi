@@ -29,7 +29,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 The native `@takumi-rs/core` reads WOFF2, WOFF, TTF, OTF, and TTC files. The WebAssembly packages read all of them except WOFF, so convert a WOFF font to WOFF2 for an edge runtime.
 
-`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until [`cache.fonts: "none"`](/docs/caching#release-fonts) releases it.
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`. The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until the renderer [evicts it](/docs/caching#release-fonts) to make room. Among equally matching faces of one family that cover the character, the one listed last wins, as a later `@font-face` rule does.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -247,7 +247,7 @@ renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
 renderer.clearFonts(); // back to the built-in Geist
 ```
 
-A later render that lists a released font loads it again. To release fonts automatically, set [`cache.fonts` to `"none"`](/docs/caching#release-fonts).
+A later render that lists a released font loads it again. The renderer also evicts the fonts that renders' lists load when it needs room, one file at a time. To let each one go as soon as no render uses it, set [`cache.fonts` to `"none"`](/docs/caching#release-fonts).
 
 ## Choosing a font
 

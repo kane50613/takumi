@@ -19,8 +19,8 @@ pub struct RendererOptions {
   pub cache: Option<CacheOptions>,
   /// The old name of [`CacheOptions::max_bytes`].
   pub cache_max_bytes: Option<f64>,
-  /// The old bound on the bytes of fonts from renders' `fonts` lists, unless
-  /// [`CacheOptions::fonts`] is [`ImageCacheMode::None`].
+  /// The old bound on the bytes of fonts, which `0` sets [`CacheOptions::fonts`] to
+  /// [`ImageCacheMode::None`] for, unless `fonts` is set.
   pub font_cache_max_bytes: Option<f64>,
 }
 
@@ -29,26 +29,17 @@ pub struct RendererOptions {
 #[derive(Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheOptions {
-  /// The bytes every kind of data but fonts shares, [`PoolOptions::DEFAULT_MAX_BYTES`] when absent.
+  /// The bytes every kind of data shares, [`PoolOptions::DEFAULT_MAX_BYTES`] when absent.
   pub max_bytes: Option<f64>,
   /// [`PoolOptions`]'s `images`.
   pub images: Option<ImageCacheMode>,
   /// [`PoolOptions`]'s `glyphs`, what the last [`set_default_glyph_mode`] set when absent.
   pub glyphs: Option<ImageCacheMode>,
-  /// Whether to keep the fonts from renders' `fonts` lists for later renders.
+  /// [`PoolOptions`]'s `fonts`, the decoded font files registered fonts and `@font-face` files hold.
   pub fonts: Option<ImageCacheMode>,
 }
 
 impl RendererOptions {
-  /// The bytes a font cache keeps, none for unbounded: nothing when `fonts` is
-  /// [`ImageCacheMode::None`], else the old bound when one was given.
-  pub fn font_cache_bytes(&self) -> Option<u64> {
-    match self.cache.and_then(|cache| cache.fonts) {
-      Some(ImageCacheMode::None) => Some(0),
-      _ => self.font_cache_max_bytes.map(bytes),
-    }
-  }
-
   /// The cache a renderer built with these options keeps.
   pub fn cache(&self) -> Cache {
     let cache = self.cache.unwrap_or_default();
@@ -67,6 +58,12 @@ impl RendererOptions {
       options.glyphs = glyphs;
     }
 
+    if let Some(fonts) = cache.fonts {
+      options.fonts = fonts;
+    } else if self.font_cache_max_bytes == Some(0.0) {
+      options.fonts = ImageCacheMode::None;
+    }
+
     Cache::from(options)
   }
 }
@@ -82,7 +79,7 @@ pub struct CacheStats {
   fonts: CacheKindStats,
 }
 
-/// The bytes the pool holds of every kind but fonts.
+/// The bytes the pool holds of every kind together.
 #[derive(Serialize)]
 struct CacheMemoryStats {
   current: f64,
@@ -90,7 +87,7 @@ struct CacheMemoryStats {
 }
 
 /// What one kind of data holds and how its lookups went, in JavaScript numbers.
-#[derive(Serialize, Default)]
+#[derive(Serialize)]
 pub struct CacheKindStats {
   /// The bytes held now.
   pub current: f64,
@@ -123,15 +120,15 @@ impl From<PoolKindStats> for CacheKindStats {
 }
 
 impl CacheStats {
-  /// What `cache` holds, with `fonts` for the fonts it does not.
-  pub fn new(cache: &Cache, fonts: CacheKindStats) -> Self {
+  /// What `cache` holds.
+  pub fn new(cache: &Cache) -> Self {
     let stats = cache.stats();
 
     Self {
       memory: stats.memory.into(),
       images: stats.images.into(),
       glyphs: stats.glyphs.into(),
-      fonts,
+      fonts: stats.fonts.into(),
     }
   }
 }
@@ -153,7 +150,6 @@ mod tests {
   use std::sync::Arc;
 
   use super::*;
-  use crate::font_cache::FontCache;
 
   fn options(json: &str) -> RendererOptions {
     serde_json::from_str(json).unwrap()
@@ -173,7 +169,6 @@ mod tests {
     let options = options(r#"{ "cache": null }"#);
 
     assert!(options.cache.is_none());
-    assert_eq!(options.font_cache_bytes(), None);
     assert!(keeps_stylesheets(r#"{ "cache": null }"#));
     assert!(keeps_stylesheets(r#"{ "cache": { "images": null } }"#));
   }
@@ -206,26 +201,26 @@ mod tests {
   }
 
   #[test]
-  fn fonts_of_none_keep_no_fonts_whatever_the_old_bound() {
-    assert_eq!(
-      options(r#"{ "fontCacheMaxBytes": 2 }"#).font_cache_bytes(),
-      Some(2)
-    );
-    assert_eq!(
-      options(r#"{ "cache": { "fonts": "none" }, "fontCacheMaxBytes": 2 }"#).font_cache_bytes(),
-      Some(0)
-    );
-    assert_eq!(
-      options(r#"{ "cache": { "fonts": "auto" } }"#).font_cache_bytes(),
-      None
-    );
+  fn an_old_font_bound_of_zero_keeps_no_fonts() {
+    let keeps_fonts = |json| {
+      let cache = options(json).cache();
+
+      drop(cache.fonts().keep(1, 64));
+      cache.stats().fonts.current > 0
+    };
+
+    assert!(keeps_fonts(r#"{ "fontCacheMaxBytes": 2 }"#));
+    assert!(!keeps_fonts(r#"{ "fontCacheMaxBytes": 0 }"#));
+    assert!(keeps_fonts(
+      r#"{ "cache": { "fonts": "auto" }, "fontCacheMaxBytes": 0 }"#
+    ));
+    assert!(!keeps_fonts(r#"{ "cache": { "fonts": "none" } }"#));
   }
 
   #[test]
   fn stats_report_under_the_option_keys() {
     let options = options(r#"{ "cache": { "images": "none" } }"#);
-    let fonts = FontCache::new(options.font_cache_bytes());
-    let stats = serde_json::to_value(CacheStats::new(&options.cache(), fonts.stats())).unwrap();
+    let stats = serde_json::to_value(CacheStats::new(&options.cache())).unwrap();
 
     assert_eq!(stats["memory"]["current"], 0.0);
     assert_eq!(stats["images"]["current"], 0.0);

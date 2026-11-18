@@ -6,6 +6,7 @@
 use crate::sort_key::sort_by_key;
 use std::sync::Arc;
 
+use rustc_hash::FxHashMap;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -62,6 +63,15 @@ impl Fonts {
     }
 
     let registry = Arc::make_mut(&mut self.registry);
+    // Files with the same bytes share one copy, so a host that charges a file by its id charges what it holds.
+    let data = registry
+      .font_files
+      .values()
+      .find_map(|file| match file {
+        FontFile::Loaded { data, id: held } if *held == id => Some(Arc::clone(data)),
+        _ => None,
+      })
+      .unwrap_or(data);
 
     registry.revise();
     registry
@@ -83,6 +93,19 @@ impl Fonts {
     registry.font_files.remove(url);
 
     true
+  }
+
+  /// The URLs of the loaded `@font-face` files, by the id of their data.
+  pub(crate) fn loaded_font_files(&self) -> FxHashMap<u64, Vec<Arc<str>>> {
+    let mut files: FxHashMap<u64, Vec<Arc<str>>> = FxHashMap::default();
+
+    for (url, file) in &self.registry.font_files {
+      if let FontFile::Loaded { id, .. } = file {
+        files.entry(*id).or_default().push(Arc::clone(url));
+      }
+    }
+
+    files
   }
 
   /// These fonts with each of `urls` failed to load, as one document's downloads did. The revision
@@ -256,4 +279,35 @@ fn is_usable_font(data: &SharedBytes) -> bool {
       && font.maxp().is_ok()
       && font.cmap().is_ok()
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{fs, path::Path, sync::Arc};
+
+  use super::*;
+
+  #[test]
+  fn files_with_the_same_bytes_share_one_copy() {
+    let bytes = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
+    )
+    .unwrap();
+    let mut fonts = Fonts::default();
+
+    fonts
+      .load_font_file("a.ttf", FontSource::from(bytes.clone()))
+      .unwrap();
+    fonts
+      .load_font_file("b.ttf", FontSource::from(bytes))
+      .unwrap();
+
+    let data = |url: &str| match &fonts.registry.font_files[url] {
+      FontFile::Loaded { data, .. } => Arc::clone(data),
+      FontFile::Failed => panic!("{url} failed"),
+    };
+
+    assert!(Arc::ptr_eq(&data("a.ttf"), &data("b.ttf")));
+  }
 }

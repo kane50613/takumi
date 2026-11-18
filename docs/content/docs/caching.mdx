@@ -9,23 +9,20 @@ Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, s
 
 A renderer keeps these kinds of work in one pool of memory, 128 MiB by default:
 
-| Work                                           | `cache` key |
-| :--------------------------------------------- | :---------- |
-| Decoded images and the rasters drawn from them | `images`    |
-| Glyph outlines and rasterized masks            | `glyphs`    |
-| SVG images laid out to drawing ops             | none        |
-| Parsed stylesheets                             | none        |
-| Compiled Tailwind classes                      | none        |
-| Where glyphs cross a `text-decoration` line    | none        |
-| Faces that `@font-face` rules add              | none        |
+| Work                                            | `cache` key |
+| :---------------------------------------------- | :---------- |
+| Decoded images and the rasters drawn from them  | `images`    |
+| Glyph outlines and rasterized masks             | `glyphs`    |
+| Font files that renders and `registerFont` load | `fonts`     |
+| SVG images laid out to drawing ops              | none        |
+| Parsed stylesheets                              | none        |
+| Compiled Tailwind classes                       | none        |
+| Where glyphs cross a `text-decoration` line     | none        |
+| Faces that `@font-face` rules add               | none        |
 
 Every render on that renderer reads from the pool and adds to it. When the pool is full, the renderer evicts the entries renders have not reused, whatever their kind, and a later render that needs one does the work again. A page heavy with images can use most of the pool, and a page of CJK text can fill it with glyphs, without either needing a setting.
 
-The pool counts the estimated size of each entry, not the memory of the whole process. It does not count:
-
-- Fonts that renders' `fonts` lists load, which [Release fonts](#release-fonts) covers.
-- Fonts from `registerFont`.
-- Active renders, output buffers, and allocator overhead.
+The pool counts the estimated size of each entry, not the memory of the whole process. It does not count active renders, output buffers, or allocator overhead.
 
 See [Performance](/docs/performance) for measuring memory and render time.
 
@@ -53,7 +50,7 @@ const renderer = new Renderer({
 });
 ```
 
-Raise `maxBytes` when renders keep redoing work that earlier renders did, such as decoding the same images. A larger pool helps only when later renders reuse what it keeps, so benchmark your own content first. A `maxBytes` of `0` keeps nothing in the pool between renders. Fonts are counted apart, as [Release fonts](#release-fonts) describes.
+Raise `maxBytes` when renders keep redoing work that earlier renders did, such as decoding the same images. A larger pool helps only when later renders reuse what it keeps, so benchmark your own content first. A `maxBytes` of `0` keeps nothing in the pool between renders, except the fonts from `registerFont`, as [Release fonts](#release-fonts) describes.
 
 `PdfRenderer` and `Painter` take the same `cache` option.
 
@@ -61,7 +58,7 @@ The options apply when the renderer is created. To change them, create another r
 
 ### Keep none of one kind
 
-Set `images`, `glyphs`, or `fonts` to `"none"` to keep none of that kind, while the other kinds still share the pool. Most renderers need neither. Set one when you measured that one kind pushes out the others, such as a route that draws a different large photo on every request and evicts the glyphs every render reuses:
+Set `images`, `glyphs`, or `fonts` to `"none"` to keep none of that kind, while the other kinds still share the pool. Most renderers need none of these. Set one when you measured that one kind pushes out the others, such as a route that draws a different large photo on every request and evicts the glyphs every render reuses:
 
 ```ts twoslash title="Keep no images"
 import { Renderer } from "takumi-js/node";
@@ -74,7 +71,7 @@ const renderer = new Renderer({
 });
 ```
 
-Each key defaults to `"auto"`, which keeps that kind in the pool. `fonts` works apart from the pool, as [Release fonts](#release-fonts) describes.
+Each key defaults to `"auto"`, which keeps that kind in the pool.
 
 ## See what the cache holds
 
@@ -91,7 +88,7 @@ console.log(memory.current, memory.high);
 console.log(images.hits, images.misses, images.evictions);
 ```
 
-`memory` covers the pool that every kind except fonts shares. `current` is the bytes it holds now. `high` is the most it held at once since the renderer was created.
+`memory` covers the pool that every kind shares. `current` is the bytes it holds now. `high` is the most it held at once since the renderer was created.
 
 `images`, `glyphs`, and `fonts` report each kind under its `cache` key. Each entry has these fields:
 
@@ -99,7 +96,7 @@ console.log(images.hits, images.misses, images.evictions);
 - `hits` counts lookups that found an entry, and `misses` counts lookups that had to do the work again.
 - `evictions` counts entries released to stay within `maxBytes`.
 
-The `fonts` entry counts the fonts that renders' `fonts` lists loaded. It leaves out fonts from `registerFont`, since the renderer never releases them. All sizes are the same estimates `maxBytes` counts, not the memory of the process, and the counts start when the renderer is created.
+The `fonts` entry counts the decoded font files the renderer holds, fonts from `registerFont` included. All sizes are the same estimates `maxBytes` counts, not the memory of the process, and the counts start when the renderer is created.
 
 For the renderer that `render` and the other functions share, call `cacheStats` from `takumi-js`. It returns `undefined` until the first render creates that renderer:
 
@@ -206,15 +203,19 @@ Emoji images from the [`emoji`](/docs/reference/image-response) option are cache
 
 ## Release fonts
 
-A renderer keeps every font a render loads. Its fonts count apart from `maxBytes`. `cache.fonts: "none"` keeps none of the fonts that renders' `fonts` lists load:
+A renderer keeps each font file a render loads in its pool, as one entry the size of the decoded file. A file counts once, however many renders, keys, or families load it. When the pool needs room, the renderer evicts the files renders have not reused, one file at a time, and a later render that lists one loads it again. This applies to fonts from a render's `fonts` list and to files that `@font-face` rules load.
 
-```ts twoslash title="Keep no listed fonts"
+Set `fonts` to `"none"` to let each file go as soon as no render uses it:
+
+```ts twoslash title="Release fonts after each render"
 import { Renderer } from "takumi-js/node";
 
 const renderer = new Renderer({ cache: { fonts: "none" } }); // [!code highlight]
 ```
 
-With `"none"`, the renderer releases each listed family once it loads another, and a later render that lists one loads it again. Fonts from `registerFont` always stay, and a running render keeps the fonts it started with. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
+A render holds every font file it uses until it finishes, whether it succeeds or fails, so another render cannot evict them. While renders hold more than `maxBytes`, the renderer keeps them all, and it evicts what no longer fits once they finish. With `fonts: "none"` or a `maxBytes` of `0`, no font a render loaded stays after that render.
+
+Fonts from `registerFont` always stay. They count toward `maxBytes`, so they leave that much less room for the rest. A prepared render loads any `@font-face` file it draws with that the renderer evicted after `prepare`, and tries a rule's next `src` when that file fails to load again. To release fonts yourself, see [Releasing fonts](/docs/fonts#releasing-fonts).
 
 ## Google Fonts CSS
 
@@ -240,4 +241,4 @@ let options = RenderOptions::builder()
   .build();
 ```
 
-`max_bytes` sets the pool in bytes, and `images` and `glyphs` take an `ImageCacheMode`, where `ImageCacheMode::None` keeps none of that kind. `Cache::stats` returns a `CacheStats` with the fields `cacheStats` reports, except `fonts`. The `fonts` key belongs to the JavaScript renderers, so `Cache` has no setter for it. A render without `cache` uses `Cache::shared()`, one 128 MiB cache for the whole process. `Cache::decode_image` and `Cache::parse_stylesheet` decode images and parse CSS through a cache before a render, as the JavaScript renderers do.
+`max_bytes` sets the pool in bytes, and `images`, `glyphs`, and `fonts` take an `ImageCacheMode`, where `ImageCacheMode::None` keeps none of that kind. `Cache::stats` returns a `CacheStats` with the fields `cacheStats` reports. A render without `cache` uses `Cache::shared()`, one 128 MiB cache for the whole process. `Cache::decode_image` and `Cache::parse_stylesheet` decode images and parse CSS through a cache before a render, as the JavaScript renderers do.

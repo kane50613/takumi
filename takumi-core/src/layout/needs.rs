@@ -1,14 +1,17 @@
 //! What a render tree needs from outside before it renders, read from the styled tree.
 
-use std::{collections::BTreeSet, rc::Rc};
+use std::{collections::BTreeSet, rc::Rc, sync::Arc};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
   context::RenderContext,
   fonts::{
-    font::Font, font_face::PendingSource, font_fallback_list::FontFallbackList,
-    font_fallback_priority::FontFallbackPriority, symbols_iterator::SymbolsIterator,
+    font::Font,
+    font_face::PendingSource,
+    font_fallback_list::{FontFallbackList, ReachedFace},
+    font_fallback_priority::FontFallbackPriority,
+    symbols_iterator::SymbolsIterator,
   },
   layout::{
     inline::{inline_item::InlineItemType, inline_node::InlineNode},
@@ -16,9 +19,8 @@ use crate::{
     tree::RenderNode,
   },
   resources::image::{ImageSource, is_svg_like},
-  style::{BackgroundImage, Display, Float, find_keyframes},
+  style::{BackgroundImage, Display, Float, FontVariantCaps, find_keyframes},
 };
-#[cfg(feature = "svg")]
 use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
 
 /// The images a render tree looks up by URL and the pending fonts its text loads.
@@ -31,6 +33,9 @@ pub struct RenderNeeds {
   /// The `@font-face` `src` URLs font fallback would load, to hand to
   /// [`Fonts::load_font_file`](crate::Fonts::load_font_file).
   pub font_files: BTreeSet<String>,
+  /// The URLs of the loaded `@font-face` files font fallback draws from, which a host keeps loaded
+  /// until the render runs.
+  pub loaded_font_files: BTreeSet<String>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -39,6 +44,7 @@ impl Extend<RenderNeeds> for RenderNeeds {
       self.images.extend(read.images);
       self.faces.extend(read.faces);
       self.font_files.extend(read.font_files);
+      self.loaded_font_files.extend(read.loaded_font_files);
     }
   }
 }
@@ -59,6 +65,8 @@ struct NeedsCollector {
   needs: RenderNeeds,
   /// Each fallback list by address, held so the address stays unique, with what it has looked up.
   walked: FxHashMap<*const FontFallbackList, WalkedCharacters>,
+  /// The URLs of the loaded `@font-face` files, by the id of their data.
+  loaded_font_files: FxHashMap<u64, Vec<Arc<str>>>,
 }
 
 /// A fallback list and the characters it has walked, each at a fallback priority.
@@ -78,7 +86,11 @@ impl RenderNode {
 
   /// What this render tree needs before it renders.
   pub fn needs(&self) -> RenderNeeds {
-    let mut needs = NeedsCollector::default();
+    let mut needs = NeedsCollector {
+      #[cfg(feature = "font-face")]
+      loaded_font_files: self.context.fonts().loaded_font_files(),
+      ..NeedsCollector::default()
+    };
 
     // The tree builder drops hidden children but keeps a hidden root.
     if self.context.style.base_data.display == Display::None {
@@ -90,6 +102,7 @@ impl RenderNode {
     // `walked`: an ancestor's inline walk already read this node's text.
     while let Some((node, walked)) = stack.pop() {
       needs.add_style(&node.context);
+      needs.add_primary_face(&node.context);
       needs.add_keyframes(&node.context);
 
       if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|node| &node.kind) {
@@ -149,6 +162,23 @@ impl NeedsCollector {
     }
   }
 
+  /// Adds the loaded `@font-face` file whose metrics size the box's font-relative lengths and lines,
+  /// whether or not the box has text.
+  fn add_primary_face(&mut self, context: &RenderContext) {
+    if self.loaded_font_files.is_empty() {
+      return;
+    }
+
+    let font = context.font(FontDescription::new(&SizedFontStyle::from_style(
+      &context.style,
+      context,
+    )));
+
+    if let Some(id) = font.fallback_list.primary_face() {
+      insert_loaded(&mut self.needs, &self.loaded_font_files, id);
+    }
+  }
+
   /// Adds the images the box's `@keyframes` switch to.
   fn add_keyframes(&mut self, context: &RenderContext) {
     for name in context.style.misc1_data.animation_name.iter().flatten() {
@@ -173,7 +203,7 @@ impl NeedsCollector {
   /// Adds the pending faces an SVG image's `text` elements would load.
   fn add_svg_text(&mut self, image: impl FnOnce() -> Option<ImageSource>, context: &RenderContext) {
     #[cfg(feature = "svg")]
-    if context.fonts().has_pending_faces()
+    if (context.fonts().has_pending_faces() || !self.loaded_font_files.is_empty())
       && let Some(ImageSource::Svg(svg)) = image()
     {
       for (context, text) in svg.text_runs(context) {
@@ -209,11 +239,12 @@ impl NeedsCollector {
     }
   }
 
-  /// Adds the pending faces `font` would load to draw `text`, at Blink's `SymbolsIterator` priorities.
+  /// Adds the pending faces `font` would load to draw `text`, and the loaded `@font-face` files it
+  /// draws with, at Blink's `SymbolsIterator` priorities.
   fn add_text(&mut self, font: &Font, text: &str) {
     let list = &font.fallback_list;
 
-    if !list.has_pending_faces() {
+    if !list.has_pending_faces() && self.loaded_font_files.is_empty() {
       return;
     }
 
@@ -223,28 +254,93 @@ impl NeedsCollector {
       .or_insert_with(|| (Rc::clone(list), FxHashSet::default()));
     let mut symbols = SymbolsIterator::new(text);
     let mut start = 0;
+    let synthesizes_caps = font.description.variant_caps != FontVariantCaps::Normal;
+
+    if let Some(id) = list.primary_face() {
+      insert_loaded(&mut self.needs, &self.loaded_font_files, id);
+    }
 
     while let Some((end, priority)) = symbols.consume() {
-      for character in text[start..end].chars() {
-        if !walked.insert((character, priority)) {
-          continue;
+      let mut characters = text[start..end].chars().peekable();
+
+      while let Some(character) = characters.next() {
+        if characters
+          .peek()
+          .copied()
+          .is_some_and(is_variation_selector)
+        {
+          for id in list.loaded_faces_for_sequence(character, priority) {
+            insert_loaded(&mut self.needs, &self.loaded_font_files, id);
+          }
         }
 
-        match list.pending_face_for_character(character, priority) {
-          Some(PendingSource::Listed(id)) => {
-            self.needs.faces.insert(id);
+        reach(
+          &mut self.needs,
+          &self.loaded_font_files,
+          walked,
+          list,
+          character,
+          priority,
+        );
+
+        // Synthesized caps shape the other case, which can fall back to another face, so request both.
+        if synthesizes_caps {
+          for mapped in character.to_uppercase().chain(character.to_lowercase()) {
+            reach(
+              &mut self.needs,
+              &self.loaded_font_files,
+              walked,
+              list,
+              mapped,
+              priority,
+            );
           }
-          #[cfg(feature = "font-face")]
-          Some(PendingSource::Url(url)) => {
-            self.needs.font_files.insert(url.to_string());
-          }
-          None => {}
         }
       }
 
       start = end;
     }
   }
+}
+
+/// Adds the face `list` reaches for `character` at `priority` to `needs`, once per `walked` pair.
+fn reach(
+  needs: &mut RenderNeeds,
+  loaded_font_files: &FxHashMap<u64, Vec<Arc<str>>>,
+  walked: &mut FxHashSet<(char, FontFallbackPriority)>,
+  list: &FontFallbackList,
+  character: char,
+  priority: FontFallbackPriority,
+) {
+  if !walked.insert((character, priority)) {
+    return;
+  }
+
+  match list.face_for_character(character, priority) {
+    Some(ReachedFace::Pending(PendingSource::Listed(id))) => {
+      needs.faces.insert(id);
+    }
+    #[cfg(feature = "font-face")]
+    Some(ReachedFace::Pending(PendingSource::Url(url))) => {
+      needs.font_files.insert(url.to_string());
+    }
+    Some(ReachedFace::Loaded(id)) => {
+      insert_loaded(needs, loaded_font_files, id);
+    }
+    None => {}
+  }
+}
+
+/// Adds the loaded `@font-face` files whose data `id` names to what `needs` keeps loaded.
+fn insert_loaded(needs: &mut RenderNeeds, files: &FxHashMap<u64, Vec<Arc<str>>>, id: u64) {
+  for url in files.get(&id).into_iter().flatten() {
+    needs.loaded_font_files.insert(url.to_string());
+  }
+}
+
+/// Whether `character` picks a glyph variant of the one before it.
+fn is_variation_selector(character: char) -> bool {
+  matches!(character, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}')
 }
 
 /// The SVG `src` names when the render can read it without fetching.
@@ -353,6 +449,14 @@ mod tests {
 
     shaped.sort_unstable();
     shaped.into_iter().collect()
+  }
+
+  #[test]
+  fn synthesized_caps_request_the_faces_of_the_other_case() {
+    let css = ".container { font-variant-caps: small-caps }";
+
+    assert_eq!(shaped("aA", [Node::text("a")], css), "Aa");
+    assert_eq!(shaped("aA", [Node::text("a")], ""), "a");
   }
 
   #[test]
