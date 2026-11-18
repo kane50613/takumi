@@ -524,9 +524,9 @@ impl Drop for Surface<'_> {
       None => 0,
     };
 
-    assert!(self.bd.sub_builders.is_empty());
-    assert!(self.push_instructions.is_empty());
-    assert!(!root_builder.active_marked_content);
+    debug_assert!(self.bd.sub_builders.is_empty());
+    debug_assert!(self.push_instructions.is_empty());
+    debug_assert!(!root_builder.active_marked_content);
 
     (self.finish_fn)(root_builder.finish(self.sc), num_mcids)
   }
