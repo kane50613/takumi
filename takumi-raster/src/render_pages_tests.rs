@@ -263,6 +263,18 @@ fn a_negative_margin_on_a_late_page_paints_on_an_early_one() {
 }
 
 #[test]
+fn a_box_laid_out_before_a_forced_break_paints_on_the_next_page() {
+  assert_streams_like_whole(
+    "forced break",
+    &"<div style=\"display: flex; break-before: page; height: 400px\"><div style=\"margin: 50px\">Text</div></div>".repeat(2),
+    Size {
+      width: 384.0,
+      height: 192.0,
+    },
+  );
+}
+
+#[test]
 fn page_areas_that_go_on_after_the_root_paint_on_its_last_fragment() {
   assert_streams_like_whole(
     "page areas after the root",

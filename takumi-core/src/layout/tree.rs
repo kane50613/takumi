@@ -978,7 +978,7 @@ impl LayoutTree<'_> {
     };
 
     while let Some((laid, finished)) = releases.pop_up_to(pages) {
-      self.release_finished(&mut releases, laid, finished);
+      self.release_finished(&mut releases, pages, laid, finished);
     }
     self.releases = Some(releases);
     self.release_unplaced();
@@ -1020,14 +1020,27 @@ impl LayoutTree<'_> {
     }
   }
 
-  fn release_finished(&mut self, releases: &mut Releases, laid: usize, finished: Finished) {
+  fn release_finished(
+    &mut self,
+    releases: &mut Releases,
+    pages: usize,
+    laid: usize,
+    finished: Finished,
+  ) {
     match finished {
       Finished::Items { node, fragment } => {
-        if releases.take_placed_items(node, fragment, laid) {
-          self.render_nodes[usize::from(node)]
-            .fragment_items
-            .release(fragment);
+        if !releases.take_placed_items(node, fragment, laid) {
+          return;
         }
+        let page = self.live().page_holding(node, fragment);
+
+        if page.is_none_or(|page| page >= pages) {
+          releases.defer_items(node, fragment, page);
+          return;
+        }
+        self.render_nodes[usize::from(node)]
+          .fragment_items
+          .release(fragment);
       }
       Finished::LayoutsBefore { node, fragment } => {
         self.nodes[usize::from(node)].cache.release_before(fragment);
@@ -1052,7 +1065,7 @@ impl LayoutTree<'_> {
         #[cfg(debug_assertions)]
         self.released_boxes.borrow_mut().insert(usize::from(node));
         for (laid, held) in releases.take_held(node) {
-          self.release_finished(releases, laid, held);
+          self.release_finished(releases, pages, laid, held);
         }
       }
     }
@@ -1570,12 +1583,18 @@ impl<'r> LayoutTree<'r> {
   /// The layout so far, for reading while it lays out more pages.
   #[cfg(feature = "fragmentation")]
   pub fn view(&self) -> LayoutView<'_> {
-    LayoutView::Live(LiveLayout {
+    LayoutView::Live(self.live())
+  }
+
+  /// The layout so far, as the view reads it while it lays out more pages.
+  #[cfg(feature = "fragmentation")]
+  fn live(&self) -> LiveLayout<'_> {
+    LiveLayout {
       nodes: &self.nodes,
       tables: &self.table_fragments,
       hidden: &self.hidden,
       hoisted_by: &self.hoisted_by,
-    })
+    }
   }
 
   #[cfg(feature = "fragmentation")]
