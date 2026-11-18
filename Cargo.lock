@@ -1892,13 +1892,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "takumi-html"
-version = "0.8.1"
-dependencies = [
- "takumi-core",
-]
-
-[[package]]
 name = "takumi-napi"
 version = "0.0.0"
 dependencies = [
