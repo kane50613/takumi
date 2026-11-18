@@ -1,4 +1,9 @@
-import { type CacheMode, fontFromUrl, type GenericFontFamily } from "@takumi-rs/helpers";
+import {
+  type CacheMode,
+  type FetchOptions,
+  fontFromUrl,
+  type GenericFontFamily,
+} from "@takumi-rs/helpers";
 import type { JsonSource } from "./node-source";
 import type { ListedFont, PrepareExtras } from "./prepared";
 import { unicodeRangeOf } from "./unicode-range";
@@ -204,8 +209,9 @@ function extractFontBuffer(font: Exclude<FontLoader, string>) {
   return font.data();
 }
 
-const toLoader = (font: FontLoader): Exclude<FontLoader, string> =>
-  typeof font === "string" ? fontFromUrl(font) : font;
+/** `font` with a URL string turned into a loader that downloads it with `fetch`. */
+const toLoader = (font: FontLoader, fetch?: FetchOptions): Exclude<FontLoader, string> =>
+  typeof font === "string" ? fontFromUrl(font, fetch) : font;
 
 function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
   if (isBuffer(font)) {
@@ -413,7 +419,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   /** Loads each of `fonts` the backend does not hold, leased to `lease`, and returns whether any was loaded. */
   async cache(fonts: FontLoader[], lease: number): Promise<boolean> {
     const loaders = fonts
-      .map(toLoader)
+      .map((font) => toLoader(font))
       .filter((loader) => !this.backend.cachedFonts(this.keyOf(loader), false, lease));
 
     await Promise.all(loaders.map((loader) => this.register(loader, lease)));
@@ -480,9 +486,14 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.unkept.delete(key);
   }
 
+  /** `fonts` as loaders, each URL string downloading with `fetch` as the render's other downloads do. */
+  loaders(fonts: FontLoader[], fetch: FetchOptions): Exclude<FontLoader, string>[] {
+    return fonts.map((font) => toLoader(font, fetch));
+  }
+
   /** `fonts` described for a backend's needs pass. None when no font declares a `unicodeRange`. */
   listed(fonts: FontLoader[]): ListedFont[] | undefined {
-    const loaders = fonts.map(toLoader);
+    const loaders = fonts.map((font) => toLoader(font));
 
     if (!loaders.some((loader) => unicodeRangeOf(loader).length > 0)) {
       return undefined;
@@ -553,7 +564,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     files?: HeldFontFiles,
   ): Promise<T> {
     const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
-    const loaders = fonts?.map(toLoader) ?? [];
+    const loaders = fonts?.map((font) => toLoader(font)) ?? [];
 
     return this.leased(async (lease) => {
       const families = await Promise.all(loaders.map((loader) => this.register(loader, lease)));

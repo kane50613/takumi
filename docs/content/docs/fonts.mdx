@@ -23,7 +23,8 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.            |
 | Descriptor | `{ name, data, weight, style, generic, unicodeRange, cache }`. <sup>2</sup> |
 
-<sup>1</sup> Name, weight, and style come from the file.
+<sup>1</sup> Name, weight, and style come from the file. Takumi downloads it with the `fetch`,
+`timeout`, `maxBytes`, and `allowUrl` you pass in `images`, as it does images.
 
 <sup>2</sup> A descriptor's fields override what the file reports.
 
