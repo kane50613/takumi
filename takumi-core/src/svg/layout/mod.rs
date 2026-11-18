@@ -16,9 +16,9 @@ mod text;
 mod use_element;
 mod view_box;
 
-use std::rc::Rc;
 #[cfg(feature = "svg-raster")]
 use std::sync::Arc;
+use std::{cell::Cell, rc::Rc};
 
 use cssparser::Parser;
 use rustc_hash::FxHashMap;
@@ -31,7 +31,7 @@ use self::{
   view_box::PreserveAspectRatio,
 };
 use super::{
-  SvgDocument, SvgHost,
+  HostReads, SvgDocument, SvgHost,
   approx_eq::ApproxEq,
   element::SvgElementKind,
   length::{LengthAxis, SvgLengthContext},
@@ -44,8 +44,8 @@ use crate::{
   geometry::{Rect, Size},
   resources::{font::FontsSnapshot, image::SvgOp, svg_size::ViewBox},
   style::{
-    Affine, BackgroundImage, BasicShape, BlendMode, ColorInput, ComputedStyle, Display, FromCssStr,
-    Isolation, Length, SizingContext, SvgResource,
+    Affine, BackgroundImage, BasicShape, BlendMode, Color, ColorInput, ComputedStyle, Display,
+    FromCssStr, Isolation, Length, SizingContext, SvgResource,
   },
 };
 
@@ -118,6 +118,8 @@ pub(super) struct SvgLayout<'a> {
   /// How many more element instances may be laid out.
   budget: Budget,
   fonts: Option<&'a FontsSnapshot>,
+  /// What the layout has read from the host so far.
+  reads: Cell<HostReads>,
 }
 
 impl<'a> SvgLayout<'a> {
@@ -155,16 +157,49 @@ impl<'a> SvgLayout<'a> {
       image_depth,
       budget: Budget::default(),
       fonts: host.fonts(),
+      reads: Cell::default(),
     }
   }
 
-  /// The ops of the document, none when its root cannot be laid out and empty when it outgrows the
-  /// budget.
-  pub(super) fn layout(mut self) -> Option<Vec<SvgOp>> {
+  /// The ops of the document and what they read from the host, none when its root cannot be laid
+  /// out and empty ops when it outgrows the budget.
+  pub(super) fn layout(mut self) -> Option<(Vec<SvgOp>, HostReads)> {
     let document = self.layout_root()?;
 
     // A document that outgrows the budget draws nothing.
-    Some(SvgPainter::paint(&document.root, &mut self.budget).unwrap_or_default())
+    let ops = SvgPainter::paint(&document.root, &mut self.budget).unwrap_or_default();
+
+    Some((ops, self.host_reads()))
+  }
+
+  /// What the layout has read from the host so far, its styles' font metrics included.
+  fn host_reads(&self) -> HostReads {
+    let mut reads = self.reads.get();
+
+    reads.fonts |= self.styles.read_fonts();
+    reads
+  }
+
+  /// `color` in the context of `styled`. Approximate: a `color: currentColor` under an ancestor's
+  /// own color counts as a read of the host's.
+  fn resolve_color(&self, styled: &Styled, color: ColorInput) -> Color {
+    if color == ColorInput::CurrentColor
+      && styled.style().inherited_data.color == ColorInput::CurrentColor
+    {
+      self.read(HostReads {
+        color: true,
+        fonts: false,
+      });
+    }
+
+    color.resolve(styled.context.current_color)
+  }
+
+  fn read(&self, reads: HostReads) {
+    let mut all = self.reads.get();
+
+    all |= reads;
+    self.reads.set(all);
   }
 
   /// The document as Blink's `LayoutSVGRoot` lays it out: the container of everything it draws and

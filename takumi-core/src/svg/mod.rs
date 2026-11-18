@@ -14,6 +14,7 @@ mod tests;
 
 use std::{
   collections::{BTreeMap, HashMap},
+  ops::BitOrAssign,
   sync::Arc,
 };
 
@@ -37,6 +38,23 @@ use crate::{
 const XLINK_NAMESPACE: &str = "http://www.w3.org/1999/xlink";
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 const XMLNS_NAMESPACE: &str = "http://www.w3.org/2000/xmlns/";
+
+/// What a layout read from the box an SVG image draws in, which a drawing reused in another box
+/// must match.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HostReads {
+  /// The box's `color`, which `currentColor` resolves to.
+  pub(crate) color: bool,
+  /// The registered fonts, which text draws with.
+  pub(crate) fonts: bool,
+}
+
+impl BitOrAssign for HostReads {
+  fn bitor_assign(&mut self, other: Self) {
+    self.color |= other.color;
+    self.fonts |= other.fonts;
+  }
+}
 
 /// The box an SVG document draws in, which its root element inherits from.
 #[derive(Clone, Copy)]
@@ -92,7 +110,7 @@ pub(crate) struct SvgDocument {
   pub(super) size: SvgSize,
   /// The size of the canvas, which the extent of the content gives when the root sets none.
   canvas: Size<f32>,
-  mentions_current_color: bool,
+  /// Whether the root has a `color` attribute.
   has_color: bool,
 }
 
@@ -131,10 +149,6 @@ impl SvgDocument {
 
     let mut document = Self {
       stylesheet: Arc::new(StyleSheet::parse_list_loosy(&sheets)),
-      mentions_current_color: builder.mentions_current_color
-        || sheets
-          .iter()
-          .any(|sheet| contains_ignore_case(sheet, "currentcolor")),
       has_color: root.attribute("color").is_some(),
       root: root_node,
       elements: builder.elements,
@@ -157,15 +171,6 @@ impl SvgDocument {
 
   pub(crate) fn intrinsic_sizing(&self) -> IntrinsicSizing {
     self.size.intrinsic
-  }
-
-  /// Whether the document holds a `text` element, which draws with the registered fonts.
-  #[cfg(feature = "svg-raster")]
-  pub(crate) fn has_text(&self) -> bool {
-    self
-      .elements
-      .iter()
-      .any(|element| element.kind == SvgElementKind::Text)
   }
 
   /// The displayed text of the `text` elements, each with its styled context; approximate, ignoring `use`.
@@ -239,10 +244,9 @@ impl SvgDocument {
       .collect()
   }
 
-  /// Whether the rendering depends on the host `color`: the markup names `currentColor` and the
-  /// root sets no `color` of its own.
-  pub(crate) fn uses_current_color(&self) -> bool {
-    self.mentions_current_color && !self.has_color
+  /// Whether the root has a `color` attribute.
+  pub(crate) fn has_color(&self) -> bool {
+    self.has_color
   }
 
   /// How many nodes the document retains, for cache weighing.
@@ -257,8 +261,13 @@ impl SvgDocument {
       .filter_by_id(id, width, height)
   }
 
-  /// The drawing ops of the document drawn in `host` at `viewport`, in its coordinates.
-  pub(crate) fn ops(&self, host: SvgHost<'_>, viewport: Size<f32>) -> Option<Vec<SvgOp>> {
+  /// The drawing ops of the document drawn in `host` at `viewport`, in its coordinates, and what
+  /// they read from `host`.
+  pub(crate) fn ops(
+    &self,
+    host: SvgHost<'_>,
+    viewport: Size<f32>,
+  ) -> Option<(Vec<SvgOp>, HostReads)> {
     layout::SvgLayout::new(self, host, viewport).layout()
   }
 
@@ -268,20 +277,12 @@ impl SvgDocument {
   }
 }
 
-fn contains_ignore_case(text: &str, needle: &str) -> bool {
-  text
-    .as_bytes()
-    .windows(needle.len())
-    .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
-}
-
 /// Builds the node tree and the element table together, numbering each node as the matcher will.
 #[derive(Default)]
 struct TreeBuilder {
   elements: Vec<ElementEntry>,
   first_ids: HashMap<Box<str>, usize>,
   last_ids: HashMap<Box<str>, usize>,
-  mentions_current_color: bool,
   names: Names,
 }
 
@@ -353,7 +354,6 @@ impl TreeBuilder {
           self.last_ids.insert(value.into(), index);
         }
         (None, "style") => {
-          self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value)));
         }
         (Some(XLINK_NAMESPACE), "href") => {
@@ -371,7 +371,6 @@ impl TreeBuilder {
           }
         }
         (None, name) => {
-          self.mentions_current_color |= contains_ignore_case(value, "currentcolor");
           attributes.insert(self.names.get(name), value.into());
         }
         _ => {}
