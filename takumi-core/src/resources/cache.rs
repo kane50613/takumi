@@ -42,7 +42,7 @@ struct Caches {
   #[cfg(feature = "svg")]
   pictures: Store<u64, Weighed<Arc<SvgPicture>>, ByBytes>,
   #[cfg(feature = "svg")]
-  host_reads: Store<(u64, u32, u32), Weighed<HostReads>, ByBytes>,
+  host_reads: Store<HostReadsKey, Weighed<HostReads>, ByBytes>,
   stylesheets: Store<u64, Weighed<Arc<StyleSheet>>, ByBytes>,
   tailwind: TailwindCache,
   glyphs: GlyphCache,
@@ -202,21 +202,34 @@ impl Cache {
     }
   }
 
-  /// What the layout of the SVG source `source` at `viewport` read from its host, once one said.
+  /// What the layout of the SVG source `source` at `viewport` read from its host, once one said,
+  /// for the content of an `svg` element when `svg_element`.
   #[cfg(feature = "svg")]
-  pub(crate) fn host_reads(&self, source: u64, viewport: Size<f32>) -> Option<HostReads> {
+  pub(crate) fn host_reads(
+    &self,
+    source: u64,
+    viewport: Size<f32>,
+    svg_element: bool,
+  ) -> Option<HostReads> {
     self
       .0
       .host_reads
-      .get(&host_reads_key(source, viewport))
+      .get(&host_reads_key(source, viewport, svg_element))
       .map(|entry| entry.value)
   }
 
-  /// Keeps what the layout of the SVG source `source` at `viewport` read from its host.
+  /// Keeps what the layout of the SVG source `source` at `viewport` read from its host, for the
+  /// content of an `svg` element when `svg_element`.
   #[cfg(feature = "svg")]
-  pub(crate) fn keep_host_reads(&self, source: u64, viewport: Size<f32>, reads: HostReads) {
+  pub(crate) fn keep_host_reads(
+    &self,
+    source: u64,
+    viewport: Size<f32>,
+    svg_element: bool,
+    reads: HostReads,
+  ) {
     self.0.host_reads.insert(
-      host_reads_key(source, viewport),
+      host_reads_key(source, viewport, svg_element),
       Weighed::new(reads, HOST_READS_BYTES),
     );
   }
@@ -302,12 +315,21 @@ where
 
 /// The bytes one entry of what SVG layouts read holds, its key and bookkeeping included.
 #[cfg(feature = "svg")]
-const HOST_READS_BYTES: usize = size_of::<((u64, u32, u32), HostReads)>() + ENTRY_OVERHEAD;
+const HOST_READS_BYTES: usize = size_of::<(HostReadsKey, HostReads)>() + ENTRY_OVERHEAD;
 
-/// An SVG source and the bits of the width and height of a viewport it is laid out at.
+/// An SVG source, the bits of the width and height of a viewport it is laid out at, and whether it
+/// is the content of an `svg` element, which passes the host's `color` in.
 #[cfg(feature = "svg")]
-fn host_reads_key(source: u64, viewport: Size<f32>) -> (u64, u32, u32) {
-  (source, viewport.width.to_bits(), viewport.height.to_bits())
+type HostReadsKey = (u64, u32, u32, bool);
+
+#[cfg(feature = "svg")]
+fn host_reads_key(source: u64, viewport: Size<f32>, svg_element: bool) -> HostReadsKey {
+  (
+    source,
+    viewport.width.to_bits(),
+    viewport.height.to_bits(),
+    svg_element,
+  )
 }
 
 /// How large an image draws: its buffer size and the filter it scales with.

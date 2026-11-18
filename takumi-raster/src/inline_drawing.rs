@@ -31,7 +31,12 @@ pub(crate) fn draw_inline_box(
 
   context.transform = transform * Affine::translation(layout.location.x, layout.location.y);
   draw_box_shell(&context, canvas, layout, None, true)?;
-  draw_own_content(OwnContent::of(node), &context, canvas, layout)?;
+  draw_own_content(
+    OwnContent::of(node),
+    &node.image_context(&context),
+    canvas,
+    layout,
+  )?;
   if let Some(outline) = DeferredOutline::of(&context, layout) {
     outline.paint(canvas)?;
   }

@@ -342,7 +342,13 @@ impl<'n> PlacedBox<'n> {
       OwnContent::Inline(_) | OwnContent::InlineLayer(..) => {
         emit_inline_content(content, &self.node.context, self.frame, doc)
       }
-      OwnContent::Image(image) => emit_image(image, &self.painter, self.frame, doc),
+      OwnContent::Image(image) => emit_image(
+        image,
+        &self.node.image_context(self.painter.context()),
+        &self.painter,
+        self.frame,
+        doc,
+      ),
       OwnContent::None => Ok(()),
     }
   }
@@ -966,8 +972,9 @@ mod tests {
     assert!(!svg.contains("base64"));
   }
 
-  /// An SVG embedded as markup, here because a filter keeps its ops from SVG elements, takes the
-  /// host color when the viewport it is drawn at, not its own canvas, makes it read the color.
+  /// An `svg` element embedded as markup, here because a filter keeps its ops from SVG elements,
+  /// takes the host color when the viewport it is drawn at, not its own canvas, makes it read the
+  /// color.
   #[test]
   fn embedded_svg_markup_reads_the_color_at_the_size_it_is_drawn() {
     let markup = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter><style>rect { fill: red } @media (min-width: 8px) { rect { fill: currentColor } }</style><rect width="4" height="4" filter="url(#f)"/></svg>"#;
@@ -975,7 +982,8 @@ mod tests {
       src: ImageSourceInput::Buffer(markup.as_bytes().to_vec()),
       width: Some(16.0),
       height: Some(16.0),
-    });
+    })
+    .with_tag_name("svg");
     let blue = Style::default().with(StyleDeclaration::color(ColorInput::Value(Color([
       0, 0, 255, 255,
     ]))));
@@ -1020,5 +1028,42 @@ mod tests {
 
     assert!(definition.contains(r#"width="4""#), "{definition}");
     assert!(!definition.contains(r#"width="16""#), "{definition}");
+  }
+
+  /// One SVG URL embedded as markup for an `svg` element and for an image gets the markup of each,
+  /// whichever draws first.
+  #[test]
+  fn an_svg_url_embeds_apart_for_an_svg_element_and_an_image() {
+    let markup = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter><rect width="4" height="4" fill="currentColor" filter="url(#f)"/></svg>"#;
+    let url = to_data_url("image/svg+xml", markup.as_bytes());
+    let image = || Node::image(url.as_str());
+    let red = Style::default().with(StyleDeclaration::color(ColorInput::Value(Color([
+      255, 0, 0, 255,
+    ]))));
+    let fonts = Fonts::default();
+    let render_both = |first: Node, second: Node| {
+      render(
+        SvgOptions::builder()
+          .node(Node::container([first, second]).with_style(red.clone()))
+          .viewport(Viewport::new((16, 8)))
+          .fonts(&fonts)
+          .build(),
+      )
+      .unwrap()
+    };
+    let element = to_data_url(
+      "image/svg+xml",
+      markup
+        .replacen("<svg", r##"<svg color="#ff0000ff""##, 1)
+        .as_bytes(),
+    );
+
+    for svg in [
+      render_both(image().with_tag_name("svg"), image()),
+      render_both(image(), image().with_tag_name("svg")),
+    ] {
+      assert!(svg.contains(&format!(r#"href="{element}""#)));
+      assert!(svg.contains(&format!(r#"href="{url}""#)));
+    }
   }
 }

@@ -13,7 +13,7 @@ use crate::{
   layout::node::Node,
   matching::{NodeMatchedDeclarations, match_stylesheets_view},
   resources::{cache::Cache, font::Fonts},
-  style::{ComputedStyle, LonghandId, SizingContext},
+  style::{Color, ComputedStyle, LonghandId, SizingContext},
   viewport::Viewport,
 };
 use rustc_hash::FxHashMap;
@@ -74,7 +74,7 @@ impl<'a> StyleResolver<'a> {
               .build()
               .noting_font_reads(Rc::clone(&font_read)),
           )
-          .current_color(current_color)
+          .current_color(current_color.unwrap_or_else(Color::black))
           .style(ComputedStyle::default())
           .cache(cache.cloned().unwrap_or_else(Cache::shared))
           .stylesheet(Arc::clone(&document.stylesheet))

@@ -8,15 +8,9 @@ packages:
     type: patch
 ---
 
-# An SVG image drawn in two text colors shows each color
+# An `svg` element drawn in two text colors shows each color
 
-An SVG image that uses its host's `color` or fonts now follows each host it is drawn in. Before, the cache kept the raster of the first color, so the same icon next to red and blue text came out red both times. This affected an SVG image that:
-
-- sets `color="currentColor"` on its root
-- inherits `color` through a `<style>` rule
-- nests an SVG image that uses `currentColor`
-
-In Rust, `SvgSource::picture` returns the laid-out drawing ops, which the render's cache keeps for the next host that reads the same color and fonts.
+An `svg` element that inherits `color`, through `color="currentColor"` on its root or a `<style>` rule, now draws in the `color` of each box it sits in. Before, every copy took the first color it was drawn in. An SVG image that uses its host's fonts follows each host too.
 
 #### Migration
 
