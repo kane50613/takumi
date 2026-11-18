@@ -17,7 +17,7 @@ members = [
 ]
 # cargo doesn't need this. tegami reads every Cargo.toml under a member, so
 # @napi-rs/cli's vendored `napi-derive` fixture crate shadows the real dependency.
-exclude = ["**/node_modules/**"]
+exclude = ["**/node_modules/**", "fuzz"]
 
 [workspace.dependencies]
 arc-swap = "1"
