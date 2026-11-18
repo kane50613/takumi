@@ -1,0 +1,25 @@
+---
+name: takumi-fonts
+description: Load fonts so every character of a Takumi image or PDF draws in the intended family, including Google Fonts, brand and variable fonts, CJK, Arabic, Devanagari, and emoji. Use when text shows empty boxes or the wrong font or weight, an emoji breaks a render, or a template adds a script beyond Latin.
+---
+
+# Font coverage in Takumi
+
+A render has coverage when every character it can receive draws in a font you chose. Takumi never reads system fonts, and its one built-in font, Geist, covers only Latin at weights 300 to 800. [fonts.md](https://takumi.kane.tw/docs/fonts.md) is the reference for every step below.
+
+## Steps
+
+1. **List what the text needs.** Collect the scripts, weights, and styles the template draws, counting the data it renders as well as its fixed text. A title from a CMS or a user can be in any language. Done when you have a list of script, weight, and style triples and know whether the text can contain emoji.
+
+2. **Choose a source for each family.**
+   - Google Fonts load through `googleFonts([...])` from `takumi-js`, or from `takumi-pdf` for a PDF. In `takumi-js`, pass the call to `fonts` without `await`. A render downloads only the subsets its text uses, so listing a CJK family costs nothing for a Latin title.
+   - A hosted file is a URL string in `fonts`, such as `"https://example.com/Inter.woff2"`.
+   - A render that must work offline or in CI reads the file once at module level and passes the bytes.
+
+   List a variable font once, without `weight`, so it serves its whole axis. Done when each triple from step 1 maps to an entry, each variable font appears once, and the `fonts` list is a module-level constant.
+
+3. **Name the families in CSS.** Write each loaded family into the `font-family` stack of the text it draws, in the fallback order described in the "Fallback chain" section. A Tailwind `font-mono` or `font-serif` reaches a font only through its `generic` field. Done when each family name in the CSS matches the name of a loaded font.
+
+4. **Choose the emoji source.** This step applies to `takumi-js`. By default, it fetches each emoji's image from a CDN during the render. The "Failed fetches" section of [images.md](https://takumi.kane.tw/docs/images.md) says what a failed fetch does to the render. To keep the CDN out of the render, load a color emoji font through `fonts` and set `emoji: "from-font"`, as the "COLR / bitmap fonts" section shows. Done when every template that draws user text sets `emoji` on purpose, and no code fetches emoji images or calls `extractEmojis` before `render`.
+
+5. **Check coverage.** Render the template with the longest real strings in every script and weight from step 1, plus an emoji if the text can hold one, and open the image. For a PDF, `takumi-pdf` rejects the render and names each character no font draws. Done when no character shows as an empty box and each script draws in its family. Each `font-weight` the CSS asks for also maps to a loaded weight or a variable font's range.
