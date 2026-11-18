@@ -183,6 +183,18 @@ impl ComputedStyle {
       || self.needs_offscreen_compositing()
   }
 
+  /// Whether a `display: inline` element is a stacking context, by the properties that apply to
+  /// a box that is not atomic: `transform` and `contain` do not.
+  pub(crate) fn creates_inline_stacking_context(&self) -> bool {
+    self.is_z_index_applicable(false) || self.needs_offscreen_compositing()
+  }
+
+  /// Whether a `display: inline` element paints as a layer of its own, as Blink gives its
+  /// `LayoutInline` a self-painting `PaintLayer`.
+  pub(crate) fn paints_inline_layer(&self) -> bool {
+    self.base_data.position.is_positioned() || self.creates_inline_stacking_context()
+  }
+
   /// Whether the element floats in a paint layer of its own, as Blink's floats with a
   /// self-painting layer do.
   pub(crate) fn floats_in_own_layer(&self, is_flex_or_grid_item: bool) -> bool {

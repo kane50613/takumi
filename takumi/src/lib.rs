@@ -83,7 +83,7 @@
 pub mod prelude {
   #[cfg(feature = "from-html")]
   pub use takumi_core::html::{
-    FromHtml, FromHtmlOptions, HtmlError, ParsedHtml, StylePresets, StyleSheetLink,
+    FromHtml, FromHtmlOptions, HtmlError, ParsedHtml, StyleElement, StylePresets, StyleSheetLink,
   };
   #[cfg(feature = "from-html")]
   pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;

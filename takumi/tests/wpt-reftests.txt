@@ -187,7 +187,6 @@ css/
 !css/CSS2/margin-padding-clear/margin-em-inherit-001.xht
 !css/CSS2/margin-padding-clear/margin-percentage-inherit-001.xht
 !css/CSS2/margin-padding-clear/padding-em-inherit-001.xht
-!css/CSS2/normal-flow/block-in-inline-float-in-layer-001.html
 !css/CSS2/normal-flow/block-in-inline-nested-002.xht
 !css/CSS2/normal-flow/block-replaced-height-002.xht
 !css/CSS2/normal-flow/block-replaced-height-004.xht
@@ -830,7 +829,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-color/display-p3-linear-004.html
 !css/css-color/display-p3-linear-005.html
 !css/css-color/display-p3-linear-006.html
-!css/css-color/inline-opacity-float-child.html
 !css/css-color/lch-009.html
 !css/css-color/lch-010.html
 !css/css-color/oklch-009.html
@@ -851,8 +849,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-color/relative-currentcolor-rgb-02.html
 !css/css-color/relative-currentcolor-xyzd50-01.html
 !css/css-color/relative-currentcolor-xyzd65-01.html
-!css/css-color/t32-opacity-offscreen-multiple-boxes-1-c.xht
-!css/css-color/t32-opacity-offscreen-multiple-boxes-2-c.xht
 !css/css-color/t421-rgb-func-no-mixed-f.xht
 !css/css-color/t421-rgb-func-whitespace-b.xht
 !css/css-color/t422-rgba-func-no-mixed-f.xht
@@ -879,8 +875,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-contain/contain-inline-size-regular-container.html
 !css/css-contain/contain-inline-size-vertical-rl-.html
 !css/css-contain/contain-layout-001.html
-!css/css-contain/contain-layout-017.html
-!css/css-contain/contain-layout-018.html
 !css/css-contain/contain-layout-baseline-001.html
 !css/css-contain/contain-layout-baseline-002.html
 !css/css-contain/contain-layout-baseline-003.html
@@ -903,8 +897,6 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-contain/contain-layout-size-003.html
 !css/css-contain/contain-layout-suppress-baseline-001.html
 !css/css-contain/contain-layout-suppress-baseline-002.html
-!css/css-contain/contain-paint-021.html
-!css/css-contain/contain-paint-025.html
 !css/css-contain/contain-paint-cell-001.html
 !css/css-contain/contain-paint-clip-003.html
 !css/css-contain/contain-paint-clip-004.html
@@ -1871,7 +1863,6 @@ css/css-masking/clip-path-svg-content/
 !css/css-masking/clip-path-svg-content/mask-nested-clip-path-panning-002.svg
 css/css-masking/clip-path/animations/clip-path-animation-forward-fill-positive-delay.html
 css/css-masking/clip-path/animations/clip-path-animation-forward-fill.html
-css/css-masking/clip-path/animations/clip-path-animation-fragmented-inline.html
 css/css-masking/clip-path/animations/clip-path-animation-incompatible-shapes1.html
 css/css-masking/clip-path/animations/clip-path-animation-incompatible-shapes2.html
 css/css-masking/clip-path/animations/clip-path-animation-none-backdrop-filter-subpixel-offset.html
@@ -1905,9 +1896,6 @@ css/css-masking/clip-path/clip-path-ellipse-008.html
 css/css-masking/clip-path/clip-path-filter-order.html
 css/css-masking/clip-path/clip-path-filter-radius-clips.html
 css/css-masking/clip-path/clip-path-fixed-scroll.html
-css/css-masking/clip-path/clip-path-inline-004.html
-css/css-masking/clip-path/clip-path-inline-005.html
-css/css-masking/clip-path/clip-path-inline-009.html
 css/css-masking/clip-path/clip-path-inset-round-percent.html
 css/css-masking/clip-path/clip-path-localRef-1.html
 css/css-masking/clip-path/clip-path-polygon-001.html
@@ -3152,7 +3140,6 @@ css/css-values/viewport-units-scrollbars-scroll-vw-001.html
 css/css-values/viewport-units-scrollbars-scroll-vw-002.html
 css/css-values/viewport-units-scrollbars-scroll-vw-003.html
 !css/filter-effects/backdrop-filter-backdrop-root-backdrop-filter.html
-!css/filter-effects/backdrop-filter-backdrop-root-clip-path-2.html
 !css/filter-effects/backdrop-filter-backdrop-root-clip-path.html
 !css/filter-effects/backdrop-filter-backdrop-root-filter.html
 !css/filter-effects/backdrop-filter-backdrop-root-mask.html
@@ -3186,6 +3173,7 @@ css/css-values/viewport-units-scrollbars-scroll-vw-003.html
 !css/filter-effects/backdrop-filters-contrast.html
 !css/filter-effects/backdrop-filters-invert.html
 !css/filter-effects/backdrop-filters-sepia.html
+!css/filter-effects/blur-text.html
 !css/filter-effects/effect-reference-displacement-negative-scale-001.html
 !css/filter-effects/effect-reference-feimage-001.html
 !css/filter-effects/effect-reference-feimage-002.html
@@ -3214,7 +3202,6 @@ css/filter-effects/filter-function/filter-function-008.html
 !css/filter-effects/filter-region-html-content-viewport.tentative.html
 !css/filter-effects/filter-region-units-001.html
 !css/filter-effects/filter-turbulence-invalid-001.html
-!css/filter-effects/filtered-inline-applies-to-float.html
 !css/filter-effects/svg-empty-element-with-filter-001.html
 !css/filter-effects/svg-empty-hidden-foreignobject-with-filter-001.html
 !css/filter-effects/svg-external-filter-resource.html

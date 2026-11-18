@@ -5,12 +5,9 @@ use takumi_core::{
 
 use crate::{
   Canvas, CanvasDevice, DeferredOutline, RenderContext, Result, SizedFontStyle, draw_box_shell,
-  layout::{
-    inline::{InlineBoxItem, InlineBoxKind, ProcessedInlineSpan, VisualInlineBox},
-    tree::RenderNode,
-  },
+  layout::inline::{InlineBoxItem, InlineBoxKind, ProcessedInlineSpan, VisualInlineBox},
   node_paint::draw_image_node_content,
-  painter::{BoxFrame, OwnContent, PaintedInline},
+  painter::{OwnContent, PaintedInline},
   style::Affine,
 };
 
@@ -34,34 +31,36 @@ pub(crate) fn draw_inline_box(
 
   context.transform = transform * Affine::translation(layout.location.x, layout.location.y);
   draw_box_shell(&context, canvas, layout, None, true)?;
-  draw_own_content(node, &context, canvas, layout)?;
+  draw_own_content(OwnContent::of(node), &context, canvas, layout)?;
   if let Some(outline) = DeferredOutline::of(&context, layout) {
     outline.paint(canvas)?;
   }
   Ok(())
 }
 
-/// Draws the node's own image or inline content in `context`, then the inline boxes the content
-/// places.
+/// Draws `content`, a node's own image or inline content, in `context`, then the inline boxes the
+/// content places.
 pub(crate) fn draw_own_content(
-  node: &RenderNode,
+  content: OwnContent<'_>,
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let content = OwnContent::of(node);
-
   if let OwnContent::Image(image) = content {
     return draw_image_node_content(image, context, canvas, layout);
   }
 
-  let font_style = SizedFontStyle::from_style(&context.style, context);
+  let font_style = content.font_style(context);
   let Some(painted) = content.lay_out_inline(&font_style, layout) else {
     return Ok(());
   };
   let painted = painted?;
 
-  draw_inline_layout(context, canvas, layout, &painted, &font_style)?;
+  draw_inline_layout(context, canvas, &painted, &font_style)?;
+
+  if !matches!(content, OwnContent::Inline(_)) {
+    return Ok(());
+  }
 
   for positioned in painted
     .runs
@@ -79,17 +78,11 @@ pub(crate) fn draw_own_content(
 pub(crate) fn draw_inline_layout(
   context: &RenderContext,
   canvas: &mut Canvas,
-  layout: Layout,
   painted: &PaintedInline<'_>,
   font_style: &SizedFontStyle,
 ) -> Result<()> {
   let mut device = CanvasDevice::of(canvas, context);
 
-  painted.runs.paint(
-    &painted.spans,
-    font_style,
-    BoxFrame::new(layout, Point::ZERO),
-    &mut device,
-  );
+  painted.paint(font_style, Point::ZERO, &mut device);
   device.finish()
 }

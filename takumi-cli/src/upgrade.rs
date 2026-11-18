@@ -60,6 +60,12 @@ impl UpgradeArgs {
       return Ok(());
     }
 
+    // Windows keeps a running executable locked, so `cargo install` cannot replace takumi.exe
+    // while this process waits for it. <https://github.com/rust-lang/cargo/issues/3486>
+    if cfg!(windows) {
+      return Err(format!("Windows cannot replace takumi while it runs. Run `cargo {shown}` in PowerShell once this command exits.").into());
+    }
+
     eprintln!("Running: cargo {shown}");
 
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -100,10 +106,21 @@ fn installed_source(root: &Path) -> Result<Source, Box<dyn Error>> {
         && install
           .get("bins")
           .and_then(serde_json::Value::as_array)
-          .is_some_and(|bins| bins.iter().any(|bin| bin == "takumi"))
+          .is_some_and(|bins| {
+            bins
+              .iter()
+              .filter_map(serde_json::Value::as_str)
+              .any(|bin| is_takumi(bin, env::consts::EXE_SUFFIX))
+          })
     })
     .and_then(|(id, _)| Source::from_package_id(id))
     .ok_or_else(not_from_cargo)
+}
+
+/// Whether `bin`, a file name Cargo records, is takumi's executable on a platform whose
+/// executables end in `suffix`, such as `.exe`.
+fn is_takumi(bin: &str, suffix: &str) -> bool {
+  bin.strip_suffix(suffix) == Some("takumi")
 }
 
 impl Source {
@@ -171,13 +188,13 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
       };
       let command = command_line(&install_arguments(&unpinned, root)?);
 
-      return Err(format!("takumi was installed from {url} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.").into());
+      return Err(format!("takumi was installed from {} at {pin}, which does not move. To follow the default branch instead, run `cargo {command}`.", without_credentials(url)).into());
     }
-    Source::Registry { index } => {
-      if let Some(index) = index {
-        arguments.extend(["--index".into(), index.into()]);
-      }
-    }
+    // Without `--registry`, Cargo installs from a configured `registry.default`, not crates.io.
+    Source::Registry { index } => arguments.extend(match index {
+      Some(index) => ["--index".into(), index.into()],
+      None => ["--registry".into(), "crates-io".into()],
+    }),
     Source::Path(path) => {
       let command = command_line(&[
         "install".into(),
@@ -197,57 +214,88 @@ fn install_arguments(source: &Source, root: &Path) -> Result<Vec<OsString>, Box<
   Ok(arguments)
 }
 
-/// `arguments` joined into one line the platform's shell splits back into the same arguments:
-/// a POSIX shell, or on Windows `cmd` and PowerShell, which both read double quotes.
+/// `arguments` joined into one line to show, with any URL's credentials left out, that a POSIX
+/// shell, or PowerShell on Windows, splits back into the same arguments.
 fn command_line(arguments: &[OsString]) -> String {
   arguments
     .iter()
-    .map(|argument| {
-      let argument = argument.to_string_lossy();
-
-      if !argument.is_empty()
-        && argument
-          .chars()
-          .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,%".contains(c))
-      {
-        argument.into_owned()
-      } else if cfg!(windows) {
-        windows_quote(&argument)
-      } else {
-        format!("'{}'", argument.replace('\'', r"'\''"))
-      }
-    })
+    .map(|argument| Shell::NATIVE.quote(&without_credentials(&argument.to_string_lossy())))
     .collect::<Vec<_>>()
     .join(" ")
 }
 
-/// `argument` in double quotes, read back whole by the Windows argument rules Cargo parses with,
-/// where backslashes escape only a quote, or the closing quote when they end the argument.
-/// <https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>
-fn windows_quote(argument: &str) -> String {
-  let mut quoted = String::from('"');
-  let mut backslashes = 0;
+/// `text` with the password of a URL it holds removed, and its user name unless it is an SSH
+/// URL, so a shown command carries no credential.
+fn without_credentials(text: &str) -> String {
+  let Ok(mut url) = Url::parse(text) else {
+    return text.to_owned();
+  };
+  // An SSH user name, such as GitHub's `git`, names the account to log in as, not a secret.
+  let drops_username = !url.username().is_empty() && url.scheme() != "ssh";
 
-  for c in argument.chars() {
-    if c == '\\' {
-      backslashes += 1;
-      continue;
-    }
-
-    if c == '"' {
-      quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
-    } else {
-      quoted.push_str(&"\\".repeat(backslashes));
-    }
-
-    quoted.push(c);
-    backslashes = 0;
+  if !drops_username && url.password().is_none() {
+    return text.to_owned();
   }
 
-  quoted.push_str(&"\\".repeat(backslashes * 2));
-  quoted.push('"');
+  if drops_username {
+    let _ = url.set_username("");
+  }
 
-  quoted
+  let _ = url.set_password(None);
+  url.to_string()
+}
+
+/// The shell a shown command is quoted for.
+#[derive(Clone, Copy)]
+enum Shell {
+  /// A POSIX shell such as bash or zsh.
+  Posix,
+  /// PowerShell, whose single quotes expand nothing, so `$` and backticks stay.
+  /// <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules>
+  PowerShell,
+}
+
+/// The characters PowerShell reads as a single quote.
+const POWERSHELL_SINGLE_QUOTES: [char; 5] = ['\'', '\u{2018}', '\u{2019}', '\u{201A}', '\u{201B}'];
+
+impl Shell {
+  /// The shell takumi quotes shown commands for on this platform.
+  const NATIVE: Self = if cfg!(windows) {
+    Self::PowerShell
+  } else {
+    Self::Posix
+  };
+
+  /// `argument` as one word that this shell reads back unchanged.
+  fn quote(self, argument: &str) -> String {
+    let plain = !argument.is_empty()
+      && argument
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-_./:=@+,".contains(c));
+
+    match self {
+      Self::Posix if plain => argument.to_owned(),
+      Self::Posix => format!("'{}'", argument.replace('\'', r"'\''")),
+      // A leading `@` splats a variable, and a comma joins words into an array.
+      Self::PowerShell if plain && !argument.starts_with('@') && !argument.contains(',') => {
+        argument.to_owned()
+      }
+      Self::PowerShell => {
+        let mut quoted = String::from("'");
+
+        for c in argument.chars() {
+          if POWERSHELL_SINGLE_QUOTES.contains(&c) {
+            quoted.push(c);
+          }
+
+          quoted.push(c);
+        }
+
+        quoted.push('\'');
+        quoted
+      }
+    }
+  }
 }
 
 #[cfg(test)]
@@ -343,31 +391,81 @@ mod tests {
     );
   }
 
-  #[cfg(not(windows))]
   #[test]
-  fn quotes_what_a_shell_would_split() {
+  fn quotes_what_a_posix_shell_would_split() {
+    assert_eq!(Shell::Posix.quote("/opt/it's here"), r"'/opt/it'\''s here'");
+    assert_eq!(Shell::Posix.quote(""), "''");
+    assert_eq!(Shell::Posix.quote("@release,next"), "@release,next");
+  }
+
+  #[test]
+  fn a_powershell_quote_expands_nothing() {
     assert_eq!(
-      command_line(&["--root".into(), "/opt/it's here".into(), "".into()]),
-      r#"--root '/opt/it'\''s here' ''"#
+      Shell::PowerShell.quote(r"C:\tools\$build"),
+      r"'C:\tools\$build'"
+    );
+    assert_eq!(Shell::PowerShell.quote("it's"), "'it''s'");
+    assert_eq!(
+      Shell::PowerShell.quote("C:\\Users\\O\u{2019}Connor\\.cargo"),
+      "'C:\\Users\\O\u{2019}\u{2019}Connor\\.cargo'"
     );
   }
 
   #[test]
-  fn a_windows_quote_keeps_backslashes_before_a_quote() {
-    assert_eq!(windows_quote(r"C:\"), r#""C:\\""#);
-    assert_eq!(windows_quote(r#"a\"b"#), r#""a\\\"b""#);
+  fn powershell_quotes_a_splat_or_an_array() {
+    assert_eq!(Shell::PowerShell.quote("@release"), "'@release'");
+    assert_eq!(Shell::PowerShell.quote("a,b"), "'a,b'");
+    assert_eq!(Shell::PowerShell.quote("--branch"), "--branch");
+  }
+
+  #[test]
+  fn names_takumi_with_the_platform_suffix() {
+    assert!(is_takumi("takumi", ""));
+    assert!(is_takumi("takumi.exe", ".exe"));
+    assert!(!is_takumi("takumi", ".exe"));
+    assert!(!is_takumi("takumi-other", ""));
+  }
+
+  #[test]
+  fn reinstalls_from_crates_io_by_name() {
+    let arguments =
+      install_arguments(&Source::Registry { index: None }, Path::new("/opt/takumi")).unwrap();
+
     assert_eq!(
-      windows_quote(r"C:\Program Files\tools"),
-      r#""C:\Program Files\tools""#
+      arguments,
+      [
+        "install",
+        "--locked",
+        "--registry",
+        "crates-io",
+        "takumi-cli",
+        "--root",
+        "/opt/takumi"
+      ]
+      .map(OsString::from)
     );
   }
 
-  #[cfg(windows)]
   #[test]
-  fn quotes_what_cmd_would_split() {
+  fn a_shown_command_leaves_out_credentials() {
     assert_eq!(
-      command_line(&["--root".into(), r"C:\Program Files\tools".into()]),
-      r#"--root "C:\Program Files\tools""#
+      command_line(&[
+        "--git".into(),
+        "https://user:secret@example.com/takumi".into()
+      ]),
+      "--git https://example.com/takumi"
+    );
+  }
+
+  #[test]
+  fn a_shown_ssh_command_keeps_its_user_name() {
+    assert_eq!(
+      without_credentials("ssh://git@github.com/kane50613/takumi"),
+      "ssh://git@github.com/kane50613/takumi"
+    );
+    assert_eq!(
+      without_credentials("ssh://git:secret@github.com/kane50613/takumi"),
+      "ssh://git@github.com/kane50613/takumi"
     );
   }
 }

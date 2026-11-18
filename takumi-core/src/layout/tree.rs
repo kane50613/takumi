@@ -625,12 +625,19 @@ impl<T> Default for RecentStyles<T> {
 }
 
 impl<T: PartialEq> RecentStyles<T> {
-  const LEN: usize = 8;
+  const LEN: usize = 32;
 
   /// `style`, or an equal one a recent node laid out with.
   fn share(&mut self, style: T) -> Rc<T> {
-    if let Some(shared) = self.0.iter().find(|shared| ***shared == style) {
-      return Rc::clone(shared);
+    // A hit moves to the back, so a style every row repeats stays while rarer ones age out.
+    if let Some(shared) = self
+      .0
+      .iter()
+      .position(|shared| **shared == style)
+      .and_then(|index| self.0.remove(index))
+    {
+      self.0.push_back(Rc::clone(&shared));
+      return shared;
     }
 
     let style = Rc::new(style);
@@ -714,7 +721,7 @@ pub struct RenderNode {
   pub(crate) is_flex_or_grid_item: bool,
   /// Whether it is a run of text and no element's box, so a flex or grid container wraps it and
   /// the runs beside it in one anonymous item.
-  is_text_run: bool,
+  pub(crate) is_text_run: bool,
   /// The part it plays in a text control, if any.
   pub(crate) text_control: Option<TextControlBox>,
   /// The fragment items its inline content last laid out to.
@@ -2615,7 +2622,7 @@ impl RenderNode {
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
-  pub(super) fn padding_px(&self) -> Rect<f32> {
+  pub(crate) fn padding_px(&self) -> Rect<f32> {
     self.padding_px_against(0.0)
   }
 
@@ -2676,7 +2683,7 @@ impl RenderNode {
   }
 
   /// Used border widths in pixels.
-  pub(super) fn border_px(&self) -> Rect<f32> {
+  pub(crate) fn border_px(&self) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
@@ -3517,11 +3524,11 @@ impl PageContext {
 
 #[cfg(test)]
 mod tests {
-  use std::{str::FromStr, sync::Arc};
+  use std::{rc::Rc, str::FromStr, sync::Arc};
 
   use super::{
-    NodeId, NodeOrigin, RenderNode, active_registrations, registered_custom_property_parent_style,
-    sort_children_by_order,
+    NodeId, NodeOrigin, RecentStyles, RenderNode, active_registrations,
+    registered_custom_property_parent_style, sort_children_by_order,
   };
   use crate::layout::floats_utils::Float as LayoutFloat;
   use crate::{
@@ -3540,6 +3547,21 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  /// A style every row repeats stays shared while the rows' other styles come and go.
+  #[test]
+  fn a_style_repeated_among_many_others_stays_shared() {
+    let mut styles = RecentStyles::default();
+    let first = styles.share(0);
+
+    for row in 1..=40 {
+      for other in 0..12 {
+        styles.share(row * 100 + other);
+      }
+
+      assert!(Rc::ptr_eq(&first, &styles.share(0)), "row {row}");
+    }
   }
 
   #[test]

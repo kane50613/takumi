@@ -1,6 +1,7 @@
 ---
 packages:
   takumi-core: minor
+  takumi: minor
 ---
 
 # `parse_html` reports the style sheets a document links

@@ -14,11 +14,12 @@ use crate::{
     decoration::OutlineGeometry,
     inline::InkBox,
     layout_view::LayoutView,
-    tree::{ContainingBlocks, LayoutResults, OrderedChild, RenderNode},
+    tree::{ContainingBlocks, LayoutResults, OrderedChild, RenderNode, StitchedFragment},
   },
   paint_chunk::PaintChunk,
   paint_property::{
-    ContainerContents, EffectKind, LineClampFloatClip, NodeProperties, PropertyState, PropertyTrees,
+    ClipId, ContainerContents, EffectKind, LineClampFloatClip, NodeProperties, PropertyState,
+    PropertyTrees,
   },
   painter::OwnContent,
   shadow::SizedShadow,
@@ -48,6 +49,36 @@ pub struct NodePaint {
   pub paint_bounds: Option<SceneBounds>,
   /// The clips and effects it paints under.
   pub properties: NodeProperties,
+  /// What it paints of its block's inline content when it is a `display: inline` element painting
+  /// as a layer of its own; `node_id` and `fragment_index` then name its block's fragment.
+  pub inline_layer: Option<InlineLayer>,
+}
+
+/// A `display: inline` element painting as a layer of its own, as Blink paints the self-painting
+/// `PaintLayer` of a `LayoutInline`.
+///
+/// Approximate: its box is the union of its fragments' border boxes on its block's lines, where
+/// Blink places each fragment on its own.
+#[derive(Clone, Copy, Debug)]
+pub struct InlineLayer {
+  /// The element's decoration id among the spans its block's inline content opens.
+  pub(crate) span: usize,
+  /// How far the element's path runs past its block's.
+  pub(crate) span_depth: usize,
+  /// The union of its fragments' border boxes, placed in its block's border box.
+  pub(crate) layout: ComputedLayout,
+  /// The layout of its block's fragment, whose inline content it paints part of.
+  pub(crate) block: ComputedLayout,
+}
+
+impl NodePaint {
+  /// The layout of the box it paints, from `results`.
+  pub fn layout(&self, results: LayoutView<'_>) -> Result<ComputedLayout> {
+    match &self.inline_layer {
+      Some(layer) => Ok(layer.layout),
+      None => results.fragment_layout(self.node_id, self.fragment_index),
+    }
+  }
 }
 
 /// Device-space integer bounds of a node or stacking context's paint output.
@@ -318,6 +349,19 @@ struct StackingContextBuildVisit {
   line_clamp_float_clip: Option<LineClampFloatClip>,
   parent_display: Option<Display>,
   is_root: bool,
+  /// What the visit of an inline layer carries besides its box.
+  inline_layer: Option<Box<LayerVisit>>,
+}
+
+/// A visit of a `display: inline` element painting as a layer of its own.
+struct LayerVisit {
+  layer: InlineLayer,
+  /// Its block's paint bounds, which hold its ink.
+  bounds: Option<SceneBounds>,
+  /// The clip its block's children start from, which the boxes inside it start from instead.
+  block_clip: Option<ClipId>,
+  /// The visits of the boxes inside it, as its block's children made them.
+  inner: Vec<StackingContextBuildVisit>,
 }
 
 impl PaintBucket {
@@ -441,6 +485,7 @@ fn build_layers(
         line_clamp_float_clip: None,
         parent_display: None,
         is_root: true,
+        inline_layer: None,
       },
     )
     .collect();
@@ -481,16 +526,25 @@ fn build_layers(
     let Some(current) = root.node_at_path(&visit.path) else {
       return Err(Error::InvalidLayoutNode(visit.node_id.into()));
     };
-    let layout = layout_results.fragment_layout(visit.node_id, visit.fragment_index)?;
+    let layer = visit.inline_layer.as_deref();
+    let layout = match layer {
+      Some(layer) => layer.layer.layout,
+      None => layout_results.fragment_layout(visit.node_id, visit.fragment_index)?,
+    };
     if current.context.style.is_invisible() || layout_results.is_hidden_for_paint(visit.node_id) {
       continue;
     }
 
-    let local_transform = current.context.style.local_transform(
-      layout.size.width,
-      layout.size.height,
-      &current.context.sizing,
-    );
+    // A transform applies to no box that is not atomic.
+    let local_transform = if layer.is_some() {
+      Affine::IDENTITY
+    } else {
+      current.context.style.local_transform(
+        layout.size.width,
+        layout.size.height,
+        &current.context.sizing,
+      )
+    };
     let mut current_transform = visit.base.transform;
     current_transform *= Affine::translation(layout.location.x, layout.location.y);
     current_transform *= local_transform;
@@ -504,7 +558,10 @@ fn build_layers(
         .style
         .paint_offset_after_translation(visit.base.paint_offset + layout.location, local_transform),
     };
-    containing_blocks.record_placement(visit.node_id, child_base);
+    // An inline layer shares its block's node, whose placement and contents stay the block's.
+    if layer.is_none() {
+      containing_blocks.record_placement(visit.node_id, child_base);
+    }
 
     let state = match visit.line_clamp_float_clip {
       Some(clip) if layout_results.is_line_clamp_clipped_float(visit.node_id) => {
@@ -514,27 +571,34 @@ fn build_layers(
     };
     let line_clamp_float_clip = LineClampFloatClip::of(&current.context, layout, current_transform)
       .or(visit.line_clamp_float_clip);
+    let fragment = match layer {
+      Some(_) => StitchedFragment::unbroken(layout),
+      None => layout_results.stitched_fragment(visit.node_id, visit.fragment_index)?,
+    };
     let node_properties = NodeProperties::build(
       &mut properties,
       state,
       &visit.path,
       &current.context,
-      layout_results.stitched_fragment(visit.node_id, visit.fragment_index)?,
+      (fragment, layer.is_none()),
       current_transform,
       child_base.paint_offset,
     );
 
-    contents.insert(
-      visit.node_id,
-      ContainerContents {
-        clip: node_properties.contents.clip,
-        path: visit.path.clone(),
-        fragment_index: visit.fragment_index,
-      },
-    );
-    hoisted.enter((visit.node_id, visit.fragment_index), visits.len());
+    if layer.is_none() {
+      contents.insert(
+        visit.node_id,
+        ContainerContents {
+          clip: node_properties.contents.clip,
+          path: visit.path.clone(),
+          fragment_index: visit.fragment_index,
+        },
+      );
+      hoisted.enter((visit.node_id, visit.fragment_index), visits.len());
+    }
     #[cfg(feature = "fragmentation")]
     if let Some(trace) = trace.as_deref_mut()
+      && layer.is_none()
       && layout_results
         .hoisted_children(visit.node_id)
         .next()
@@ -552,27 +616,34 @@ fn build_layers(
       transform: current_transform,
       paint_offset: child_base.paint_offset,
       container_size: visit.container_size,
-      paint_bounds: paint_bounds
-        .then(|| {
-          compute_node_paint_bounds(current, visit.fragment_index, layout, current_transform)
-        })
-        .flatten(),
+      paint_bounds: match layer {
+        Some(layer) => layer.bounds,
+        None => paint_bounds
+          .then(|| {
+            compute_node_paint_bounds(current, visit.fragment_index, layout, current_transform)
+          })
+          .flatten(),
+      },
       properties: node_properties,
+      inline_layer: layer.map(|layer| layer.layer),
     };
-    let table_borders = layout_results
-      .table_fragment(visit.node_id, visit.fragment_index)
-      .is_some_and(|fragment| fragment.borders.is_some())
-      .then(|| node_paint.clone());
+    let block_bounds = node_paint.paint_bounds;
+    let table_borders = (layer.is_none()
+      && layout_results
+        .table_fragment(visit.node_id, visit.fragment_index)
+        .is_some_and(|fragment| fragment.borders.is_some()))
+    .then(|| node_paint.clone());
 
     let is_flex_or_grid_item = visit
       .parent_display
       .is_some_and(|display| display.should_blockify_children());
 
+    let style = &current.context.style;
     let creates_stacking_context = visit.is_root
-      || current
-        .context
-        .style
-        .creates_stacking_context(is_flex_or_grid_item);
+      || match layer {
+        Some(_) => style.creates_inline_stacking_context(),
+        None => style.creates_stacking_context(is_flex_or_grid_item),
+      };
 
     let mut context_id = visit.context_id;
     let mut stacking_id = visit.stacking_id;
@@ -622,6 +693,24 @@ fn build_layers(
       source_order += 1;
     }
 
+    // The boxes inside an inline layer paint in it, under its clip and effect.
+    if let Some(layer) = visit.inline_layer {
+      let LayerVisit {
+        block_clip, inner, ..
+      } = *layer;
+
+      for mut inner in in_visit_order(inner) {
+        if inner.state.clip == block_clip {
+          inner.state.clip = node_properties.contents.clip;
+        }
+        inner.state.effect = node_properties.contents.effect;
+        inner.context_id = context_id;
+        inner.stacking_id = stacking_id;
+        visits.push(inner);
+      }
+      continue;
+    }
+
     if current.children.is_none() {
       continue;
     }
@@ -656,6 +745,33 @@ fn build_layers(
       height: Some(layout.content_box_height()),
     };
     containing_blocks.record_content_box(visit.node_id, child_container_size);
+
+    let layers = inline_layer_visits(
+      current,
+      &visit.path,
+      visit.fragment_index,
+      layout,
+      |path, layer| StackingContextBuildVisit {
+        path,
+        node_id: visit.node_id,
+        fragment_index: visit.fragment_index,
+        base: child_base,
+        container_size: child_container_size,
+        state: node_properties.contents,
+        context_id,
+        stacking_id,
+        line_clamp_float_clip,
+        parent_display: Some(current.context.style.base_data.display),
+        is_root: false,
+        inline_layer: Some(Box::new(LayerVisit {
+          layer,
+          bounds: block_bounds,
+          block_clip: node_properties.contents.clip,
+          inner: Vec::new(),
+        })),
+      },
+    );
+    let mut children = Vec::new();
 
     for position in positions {
       let child = &layout_children[position];
@@ -695,6 +811,7 @@ fn build_layers(
         line_clamp_float_clip,
         parent_display: Some(current.context.style.base_data.display),
         is_root: false,
+        inline_layer: None,
       };
 
       for child_fragment_index in
@@ -715,7 +832,7 @@ fn build_layers(
           None => node_properties.contents.clip,
         };
 
-        visits.push(child_visit(
+        children.push(child_visit(
           child_fragment_index,
           base,
           base_container,
@@ -737,6 +854,7 @@ fn build_layers(
         }
       }
     }
+    visits.extend(nest_in_layers(layers, children));
   }
 
   for context in &mut contexts {
@@ -902,11 +1020,10 @@ pub struct SceneView<'a> {
 impl SceneView<'_> {
   /// The layout of the fragment `paint` paints, with its box set to paint it.
   pub fn enter(&self, paint: &NodePaint) -> Result<ComputedLayout> {
-    let layout = self
-      .results
-      .fragment_layout(paint.node_id, paint.fragment_index)?;
+    let layout = paint.layout(self.results)?;
 
-    if let Some(fragments) = self.fragments {
+    // An inline layer paints with its block's paint offset, which its block's entry set.
+    if let Some(fragments) = self.fragments.filter(|_| paint.inline_layer.is_none()) {
       fragments.enter(self.root, paint, layout.location);
     }
     Ok(layout)
@@ -1177,7 +1294,13 @@ impl SceneLayers {
         PaintItemKind::Context(_) => None,
       });
 
-      for paint in context.roots.iter().chain(paints) {
+      // An inline layer shares its block's fragment and paints with its paint offset.
+      for paint in context
+        .roots
+        .iter()
+        .chain(paints)
+        .filter(|paint| paint.inline_layer.is_none())
+      {
         if let Ok(layout) = results.fragment_layout(paint.node_id, paint.fragment_index) {
           placements.insert(
             paint.path.clone(),
@@ -1818,6 +1941,109 @@ fn outset_bounds(
   bounds.right = bounds.right.saturating_add(pad_x);
   bounds.bottom = bounds.bottom.saturating_add(pad_y);
   Some(bounds)
+}
+
+/// The visits of the `display: inline` elements painting as layers of their own on the lines of
+/// `block`'s fragment at `layout`, its path `path`, each made by `visit` from its path and layer,
+/// in tree order.
+fn inline_layer_visits(
+  block: &RenderNode,
+  path: &[usize],
+  fragment_index: usize,
+  layout: ComputedLayout,
+  visit: impl Fn(Vec<usize>, InlineLayer) -> StackingContextBuildVisit,
+) -> Vec<StackingContextBuildVisit> {
+  let Some(items) = block
+    .fragment_items_of(fragment_index, layout)
+    .filter(|items| !items.inline_layers().is_empty())
+  else {
+    return Vec::new();
+  };
+  let spans = block.inline_spans(&items);
+  let links = spans.links();
+
+  items
+    .inline_layers()
+    .iter()
+    .filter_map(|rect| {
+      let owner = links.get(&rect.span)?.decoration.owner;
+      let relative = block.path_to(owner)?;
+      let layer = InlineLayer {
+        span: rect.span,
+        span_depth: relative.len(),
+        layout: ComputedLayout::new(
+          rect.origin,
+          rect.size,
+          owner.border_px(),
+          owner.padding_px(),
+        ),
+        block: layout,
+      };
+
+      Some(visit([path, &relative].concat(), layer))
+    })
+    .collect()
+}
+
+/// `children`, a block's child visits in the order its visit pushes them, with each box inside one
+/// of `layers` moved into the innermost such layer's visit, and the layers among them.
+fn nest_in_layers(
+  layers: Vec<StackingContextBuildVisit>,
+  children: Vec<StackingContextBuildVisit>,
+) -> Vec<StackingContextBuildVisit> {
+  if layers.is_empty() {
+    return children;
+  }
+
+  let mut layers: Vec<Option<StackingContextBuildVisit>> = layers.into_iter().map(Some).collect();
+  let innermost = |layers: &[Option<StackingContextBuildVisit>], path: &[usize]| {
+    layers
+      .iter()
+      .enumerate()
+      .filter_map(|(index, layer)| {
+        let layer = layer.as_ref()?;
+
+        (layer.path.len() < path.len() && path.starts_with(&layer.path))
+          .then_some((index, layer.path.len()))
+      })
+      .max_by_key(|&(_, length)| length)
+      .map(|(index, _)| index)
+  };
+  let nest = |layers: &mut [Option<StackingContextBuildVisit>],
+              visit: StackingContextBuildVisit| {
+    match innermost(layers, &visit.path)
+      .and_then(|index| layers[index].as_mut()?.inline_layer.as_mut())
+    {
+      Some(layer) => {
+        layer.inner.push(visit);
+        None
+      }
+      None => Some(visit),
+    }
+  };
+  let mut outside: Vec<StackingContextBuildVisit> = children
+    .into_iter()
+    .filter_map(|child| nest(&mut layers, child))
+    .collect();
+  let mut by_depth: Vec<usize> = (0..layers.len()).collect();
+
+  sort_by_key(&mut by_depth, |&index| {
+    layers[index].as_ref().map_or(0, |layer| layer.path.len())
+  });
+  for index in by_depth.into_iter().rev() {
+    if let Some(layer) = layers[index].take() {
+      outside.extend(nest(&mut layers, layer));
+    }
+  }
+
+  in_visit_order(outside)
+}
+
+/// `visits` in the order a visit pushes its children: the last in tree order first, so the first
+/// pops first.
+fn in_visit_order(mut visits: Vec<StackingContextBuildVisit>) -> Vec<StackingContextBuildVisit> {
+  visits.sort_by(|a, b| b.path.cmp(&a.path));
+  visits
 }
 
 fn compute_node_paint_bounds(

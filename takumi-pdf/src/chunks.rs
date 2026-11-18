@@ -35,7 +35,9 @@ impl<'s> SceneChunks<'s> {
         ResolvedChunk {
           chunk,
           node,
-          content: node.map_or(OwnContent::None, OwnContent::of),
+          content: node.map_or(OwnContent::None, |node| {
+            OwnContent::of_paint(scene.root, node, chunk.node)
+          }),
         }
       })
       .collect::<Vec<_>>();

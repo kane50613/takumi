@@ -227,14 +227,16 @@ describe("Painter.paint", () => {
       `<p>plain <span style="opacity: 0.5; background-color: rgb(255, 0, 0)">faded</span></p>`,
       { width: 200 },
     );
-    const text = tree.nodes.find((node) => node.type === "text");
-    const group = text?.drawables.find((drawable) => drawable.type === "group");
+    const group = tree.nodes.find(
+      (node): node is BoxNode => node.type === "box" && node.effects?.opacity === 0.5,
+    );
+    const [fragment, faded] = group?.children ?? [];
 
-    expect(group).toMatchObject({ type: "group", opacity: 0.5 });
-    expect(group?.type === "group" && group.drawables[0]).toMatchObject({
-      role: "inline-background",
-      paint: { type: "color", color: [255, 0, 0, 255] },
-    });
+    expect(group?.element?.tagName).toBe("span");
+    expect(fragment?.drawables).toMatchObject([
+      { role: "inline-background", paint: { type: "color", color: [255, 0, 0, 255] } },
+    ]);
+    expect(faded?.type === "text" && faded.runs.map((run) => run.text)).toEqual(["faded"]);
   });
 
   it("masks a text-clipped background with the outlines of the text inside it, keeping its blend modes", async () => {

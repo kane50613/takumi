@@ -257,23 +257,6 @@
           "ascent": 16.079999923706055,
           "descent": 4.720000267028809,
           "element": {
-            "path": [0, 0, 3, 2, 1],
-            "tagName": "em"
-          },
-          "font": 2,
-          "fontSize": 16.0,
-          "letterSpacing": 0.0,
-          "line": 0,
-          "lineHeight": 21.0,
-          "text": "inline",
-          "width": 39.1199951171875,
-          "x": 48.0625,
-          "y": 16.0
-        },
-        {
-          "ascent": 16.079999923706055,
-          "descent": 4.720000267028809,
-          "element": {
             "path": [0, 0, 3, 2, 2],
             "tagName": "i"
           },

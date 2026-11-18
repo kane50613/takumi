@@ -69,8 +69,9 @@ impl Document {
       .and_then(|href| location.join(href).ok())
       .unwrap_or_else(|| location.clone());
 
-    for css in &mut parsed.css {
-      *css = loader.rewrite(css, &base)?;
+    for (css, style) in parsed.css.iter_mut().zip(&mut parsed.styles) {
+      style.text = loader.rewrite(&style.text, &base)?;
+      *css = style.css();
     }
 
     resolve_image_sources(&mut parsed.node, &base);

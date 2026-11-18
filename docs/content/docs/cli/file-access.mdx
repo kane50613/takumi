@@ -38,7 +38,8 @@ A read outside the granted directories stops the render, so you notice before th
 
 <sup>1</sup> The error names the `--allow-read` flag that would allow the read.
 
-<sup>2</sup> A relative symlink that stays inside its directory loads normally.
+<sup>2</sup> A relative symlink that stays inside its directory loads normally. This applies to
+symlinks inside a granted directory. The granted directory itself may be a symlink.
 
 `takumi` never loads anything from the network. To use a remote image or font, download it beside the document, or write it as a `data:` URL, which loads wherever the document is.
 
@@ -60,4 +61,4 @@ font	blocked	file:///home/me/fonts/Inter.woff2	… Pass `--allow-read /home/me/f
 
 Each line holds the kind, a status, the URL, and for a file that would not load the reason, separated by tabs. An `invalid` line holds the reference as the document wrote it in place of the URL, and no reason. The status is `allowed` when the file would load, `missing` when a granted directory does not hold it, `blocked` when takumi would not or could not load it, and `invalid` when the reference is not a URL takumi can resolve. A `missing` file outside the granted directories lists as `blocked`, since takumi does not look there. A blocked stylesheet does not stop the listing, but the files it would have loaded are missing from the list until you allow it.
 
-The listing checks each file on its own, including the 32 MiB limit. It does not add files up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders.
+The listing checks each image and font on its own, including the 32 MiB limit. It does not add them up, so a document over the 256 MiB or 1024-file totals can list as allowed and still stop when it renders. Stylesheets are the exception. The listing loads them to find what they reference, so they count toward the totals as they do in a render.
