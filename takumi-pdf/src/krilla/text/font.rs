@@ -339,6 +339,8 @@ impl FontInfo {
     )?;
     let is_monospaced = metrics.is_monospace;
     let cap_height = metrics.cap_height.and_then(FiniteF32::new);
+    // Unlike the optional cap height, the descriptor requires an italic angle, so a damaged one
+    // is written as upright.
     let italic_angle = FiniteF32::new(metrics.italic_angle).or_else(|| FiniteF32::new(0.0))?;
     let weight = FiniteF32::new(font_ref.attributes().weight.value())?;
     let stretch = FiniteF32::new(font_ref.attributes().stretch.ratio())?;
