@@ -115,16 +115,16 @@ impl CssFontSelector {
 
       if !last_resort {
         insert_family(&mut self.fallback_families, &family);
-      }
 
-      if let Some(generic_family) = generic_family {
-        insert_family(
-          self
-            .generic_font_family_settings
-            .entry(fold_family_name(generic_family))
-            .or_default(),
-          &family,
-        );
+        if let Some(generic_family) = generic_family {
+          insert_family(
+            self
+              .generic_font_family_settings
+              .entry(fold_family_name(generic_family))
+              .or_default(),
+            &family,
+          );
+        }
       }
 
       faces.push(font_face);
@@ -201,20 +201,20 @@ impl CssFontSelector {
       .any(|registered| registered.font_face.custom_platform_data().is_none())
   }
 
-  /// Removes every face of `family`, so it falls back as an unknown family; false when it has none.
+  /// Removes every face of `family` not registered as a last resort, so it falls back as an
+  /// unknown family; false when it has none.
   pub(crate) fn unregister_family(&mut self, family: &str) -> bool {
     let key = fold_family_name(family);
 
-    self.remove_font_faces(|font_face| fold_family_name(&font_face.family) == key)
+    self.remove_font_faces(|registered| {
+      !registered.last_resort && fold_family_name(&registered.font_face.family) == key
+    })
   }
 
   /// Removes the faces `is_removed` picks, and from each family list the families left without a
   /// face it lists them for; false when it picks none.
-  fn remove_font_faces(&mut self, is_removed: impl Fn(&Arc<FontFace>) -> bool) -> bool {
-    let (removed, kept): (Vec<_>, Vec<_>) = self
-      .font_faces
-      .drain(..)
-      .partition(|registered| is_removed(&registered.font_face));
+  fn remove_font_faces(&mut self, is_removed: impl Fn(&RegisteredFontFace) -> bool) -> bool {
+    let (removed, kept): (Vec<_>, Vec<_>) = self.font_faces.drain(..).partition(is_removed);
 
     self.font_faces = kept;
 
@@ -229,20 +229,17 @@ impl CssFontSelector {
     }
 
     let font_faces = &self.font_faces;
-    let has_faces = |family: &Arc<str>, last_resort: Option<bool>| {
+    let has_faces = |family: &Arc<str>| {
       let key = fold_family_name(family);
 
       font_faces.iter().any(|registered| {
-        last_resort.is_none_or(|last_resort| registered.last_resort == last_resort)
-          && fold_family_name(&registered.font_face.family) == key
+        !registered.last_resort && fold_family_name(&registered.font_face.family) == key
       })
     };
 
-    self
-      .fallback_families
-      .retain(|family| has_faces(family, Some(false)));
+    self.fallback_families.retain(has_faces);
     self.generic_font_family_settings.retain(|_, families| {
-      families.retain(|family| has_faces(family, None));
+      families.retain(has_faces);
       !families.is_empty()
     });
 
@@ -696,9 +693,33 @@ mod tests {
 
     assert_eq!(matched(&selector), registered);
     assert!(selector.unregister_family("Geist"));
+    assert_eq!(matched(&selector), last_resort);
+    assert!(!selector.unregister_family("Geist"));
+  }
+
+  #[test]
+  fn a_generic_family_lists_no_last_resort_family() {
+    let mut selector = CssFontSelector::default();
+    let (data, id) = FontCustomPlatformData::read_asset(GEIST_LATIN);
+    let description = request(400.0, NORMAL_SLOPE_VALUE);
+
+    selector.register(data, id, &named("Geist"), Some("monospace"), true);
+
+    assert!(selector.family_names_from_settings("monospace").is_empty());
+
+    let (data, id) = FontCustomPlatformData::read_asset(GEIST);
+
+    selector.register(data, id, &named("Geist"), Some("sans-serif"), false);
+
     assert!(
       selector
-        .get_font_data(&description, "Geist", false)
+        .get_font_data(&description, "sans-serif", true)
+        .is_some()
+    );
+    assert!(selector.unregister_family("Geist"));
+    assert!(
+      selector
+        .get_font_data(&description, "sans-serif", true)
         .is_none()
     );
   }

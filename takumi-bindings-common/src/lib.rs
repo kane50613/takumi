@@ -75,18 +75,7 @@ const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
 pub fn default_fonts() -> Result<Fonts, FontError> {
   let mut fonts = Fonts::default();
 
-  register_embedded(&mut fonts, |_| true)?;
-
-  Ok(fonts)
-}
-
-/// Registers the embedded last-resort fonts whose family `wanted` accepts.
-fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result<(), FontError> {
   for (bytes, name) in EMBEDDED_FONTS {
-    if !wanted(name) {
-      continue;
-    }
-
     let resource = FontResource::new(FontSource::from_static(bytes))
       .override_info(FontOverride {
         family_name: Some((*name).into()),
@@ -97,7 +86,7 @@ fn register_embedded(fonts: &mut Fonts, wanted: impl Fn(&str) -> bool) -> Result
     drop(fonts.register(resource)?);
   }
 
-  Ok(())
+  Ok(fonts)
 }
 
 /// Registered fonts for the single-threaded wasm bindings, copy-on-write like the napi
@@ -213,7 +202,7 @@ impl FontStore {
     self
       .cache
       .borrow_mut()
-      .admit(&mut fonts, key, &registered, bytes, pinned)?;
+      .admit(&mut fonts, key, &registered, bytes, pinned);
     *self.fonts.borrow_mut() = Rc::new(fonts);
 
     Ok(registered)
