@@ -14,8 +14,7 @@ import type { ReactNode } from "react";
 declare const invoice: { number: string };
 declare function InvoiceDocument(props: { data: typeof invoice }): ReactNode;
 // ---cut---
-import { googleFonts } from "@takumi-rs/helpers";
-import { measure, render } from "takumi-pdf";
+import { googleFonts, measure, render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const footer = (

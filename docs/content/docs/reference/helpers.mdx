@@ -1,16 +1,18 @@
 ---
 title: Helpers
-description: Look up the helpers that build node trees, convert JSX and HTML, prepare images, and load fonts.
+description: Look up the helpers that build node trees, convert JSX for a renderer binding, and load fonts, and the package that exports each one.
 ---
 
-`@takumi-rs/helpers` builds node trees and loads fonts for `render`. Install it next to `takumi-js`, `takumi-pdf`, or a renderer binding:
+Takumi's packages export helpers that build node trees and load fonts. Import each one from the package you render with:
 
-```bash
-npm install @takumi-rs/helpers
-```
+| Package                                 | Helpers                                                                                          |
+| :-------------------------------------- | :----------------------------------------------------------------------------------------------- |
+| `takumi-js`                             | `googleFonts`, `container`, `text`, `image`, `Bitmap`                                            |
+| `takumi-pdf`                            | `googleFonts`                                                                                    |
+| `@takumi-rs/core` and `@takumi-rs/wasm` | `fromJsx`, `googleFonts`, `fontFromUrl`, `extractEmojis`, `container`, `text`, `image`, `Bitmap` |
 
 ```ts twoslash title="Build a node tree"
-import { container, text } from "@takumi-rs/helpers";
+import { container, text } from "takumi-js";
 
 const node = container({
   style: { padding: 32, backgroundColor: "white" },
@@ -18,26 +20,22 @@ const node = container({
 });
 ```
 
-Use it to build node trees or load fonts yourself. For JSX or HTML input, `render` and `ImageResponse` already convert the input and load its resources. The `takumi-js/helpers` entries re-export this package. They are deprecated and will be removed in v3.
+`render` and `ImageResponse` already convert JSX and HTML and load the images they use, so use these helpers to build node trees or load fonts yourself. `@takumi-rs/helpers` and the `takumi-js/helpers` entries still export them, but both are deprecated, and `@takumi-rs/helpers` becomes internal in v3.
 
 ## Fonts
 
-| Helper                           | Use                                                     |
-| :------------------------------- | :------------------------------------------------------ |
-| `googleFonts(options)`           | Load Google Fonts families in one request. <sup>1</sup> |
-| `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. <sup>2</sup> |
-| `subsetFonts({ fonts, source })` | Deprecated. <sup>3</sup>                                |
+| Helper                       | Use                                                     |
+| :--------------------------- | :------------------------------------------------------ |
+| `googleFonts(options)`       | Load Google Fonts families in one request. <sup>1</sup> |
+| `fontFromUrl(url, options?)` | Turn a font URL into a lazy `fonts` entry. <sup>2</sup> |
 
 <sup>1</sup> `render` keeps only the subsets the text uses. See [Fonts &
 text](/docs/fonts#from-google-fonts).
 
 <sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits). Without them, pass the
-URL string in `fonts` instead.
+URL string in `fonts` instead, which `takumi-js` and `takumi-pdf` take too.
 
-<sup>3</sup> `subsetFonts` is no longer needed, since a render keeps the subsets its text uses, the
-text inside SVG images included.
-
-`googleFonts`, `fontFromUrl`, and `prepareImages` share [fetch limits and retry behavior](/docs/images#fetch-limits).
+`googleFonts` and `fontFromUrl` share [fetch limits and retry behavior](/docs/images#fetch-limits).
 
 ## Building nodes
 
@@ -49,28 +47,23 @@ text inside SVG images included.
 
 The `props` argument holds the node's own fields. [Node types](/docs/reference#node-types) lists them. Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
 
-Write lengths and colors as CSS strings, such as `"50%"`, `"1.5rem"`, or `"rgb(0 0 0 / 0.5)"`. The unit helpers `percentage`, `vw`, `vh`, `em`, `rem`, `fr`, and `rgba`, and the `style` helper, are deprecated and will be removed in v3.
+Write lengths and colors as CSS strings, such as `"50%"`, `"1.5rem"`, or `"rgb(0 0 0 / 0.5)"`.
 
-## Parsing templates
+## Converting JSX for a binding
 
-| Helper                       | Import                    | Use                                                |
-| :--------------------------- | :------------------------ | :------------------------------------------------- |
-| `fromJsx(element, options?)` | `@takumi-rs/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
-| `fromHtml(html)`             | `@takumi-rs/helpers/html` | Convert an HTML string to `{ node, css }`.         |
+A `Renderer` from `@takumi-rs/core` or `@takumi-rs/wasm` takes a node tree or an HTML string. Convert JSX with `fromJsx(element, options?)` from the same package, which returns `{ node, css }`:
+
+```tsx
+import { fromJsx, Renderer } from "@takumi-rs/core";
+
+const { node, css } = await fromJsx(<div tw="flex text-4xl">Hello</div>);
+const png = await new Renderer().render(node, { width: 1200, height: 630, css });
+```
 
 `fromJsx` resolves React hooks and context without `react-dom`. Components that call `useState`, `useContext`, or `use()` render with server semantics: initial state, no effects. Preact trees work only when their components call no Preact hooks.
 
-## Images & emoji
+## Emoji
 
-| Helper                           | Import                     | Use                                                |
-| :------------------------------- | :------------------------- | :------------------------------------------------- |
-| `prepareImages(options)`         | `@takumi-rs/helpers`       | Deprecated. <sup>1</sup>                           |
-| `extractEmojis(node, emojiType)` | `@takumi-rs/helpers/emoji` | Replace emoji with CDN `<img>` nodes. <sup>2</sup> |
-
-<sup>1</sup> Use a renderer's `prepare` instead, which reads the images a document draws and fetches
-them.
-
-<sup>2</sup> `takumi-js` does this through its `emoji` option, so call it only on a renderer
-binding. See [Emoji](/docs/images#emoji).
+`takumi-js` splits emoji out of the text through its `emoji` option. On a renderer binding, call `extractEmojis(node, emojiType)` to replace emoji with CDN `<img>` nodes, then call the renderer's `prepare`, which fetches them with the other images. See [Emoji](/docs/images#emoji).
 
 `emojiType` takes the CDN values of the `emoji` option listed in [Image loading & emoji](/docs/images#dynamic-fetching). It does not take `from-font`, which fetches nothing.

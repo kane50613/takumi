@@ -35,8 +35,7 @@ await browser.close();
 declare const html: string;
 // ---cut---
 // takumi-pdf
-import { googleFonts } from "@takumi-rs/helpers";
-import { render } from "takumi-pdf";
+import { googleFonts, render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(html, {

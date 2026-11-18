@@ -1,5 +1,4 @@
-import { type Node, Renderer } from "takumi-js/node";
-import { container, text } from "@takumi-rs/helpers";
+import { container, type Node, Renderer, text } from "takumi-js/node";
 import { spawn } from "bun";
 
 const fps = 60;

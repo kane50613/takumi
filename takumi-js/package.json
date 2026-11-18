@@ -244,6 +244,7 @@
     "@takumi-rs/wasm": "workspace:*"
   },
   "devDependencies": {
+    "@takumi-rs/bindings-js": "workspace:*",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "react": "catalog:",

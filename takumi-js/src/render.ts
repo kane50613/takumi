@@ -1,16 +1,18 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
-import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import { type CssInput, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
+import type { DocumentInput } from "@takumi-rs/bindings-js";
 import {
-  type DocumentInput,
+  type CssInput,
+  type EmojiType,
+  extractEmojis,
+  type FetchOptions,
   type FromJsxOptions,
-  resolveDocument,
-  sheetsOf,
-} from "@takumi-rs/helpers/jsx";
-import { defaultRenderer, type Renderer } from "./backend/renderer";
-import type { Node } from "@takumi-rs/helpers";
+  type ImageFetchCache,
+  type Node,
+} from "@takumi-rs/bindings-js/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
+import { resolveDocument, sheetsOf } from "@takumi-rs/helpers/jsx";
+import { defaultRenderer, type Renderer } from "./backend/renderer";
 
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
 

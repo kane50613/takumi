@@ -4,7 +4,6 @@
   "type": "module",
   "module": "index.tsx",
   "dependencies": {
-    "@takumi-rs/helpers": "workspace:*",
     "react": "catalog:",
     "takumi-pdf": "workspace:*"
   },

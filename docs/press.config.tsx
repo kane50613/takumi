@@ -32,7 +32,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts } from "takumi-js";
 import wasmModule from "takumi-js/wasm";
 import { docs } from "./.source/server";
 import sticker from "./public/sticker.svg?raw";

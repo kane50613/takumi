@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FontDetails } from "takumi-js";
-import { googleFonts, type GoogleFontFamily } from "@takumi-rs/helpers";
+import { type FontDetails, googleFonts, type GoogleFontFamily } from "takumi-js";
 
 export type AssetModule = {
   fonts?: ReadonlyArray<string | ({ path: string } & Omit<FontDetails, "data">)>;

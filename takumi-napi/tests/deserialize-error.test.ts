@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { container, type Declarations } from "@takumi-rs/helpers";
-import { Renderer } from "../src/export";
+import { container, type Declarations, Renderer } from "../src/export";
 
 const renderer = new Renderer();
 

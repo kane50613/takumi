@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
-import { Renderer } from "../bundlers/node";
+import { container, Renderer, text } from "../bundlers/node";
 
 const monoData = await Bun.file("../assets/fonts/geist/GeistMono[wght].woff2").arrayBuffer();
 

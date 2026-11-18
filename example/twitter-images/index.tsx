@@ -1,8 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type OutputFormat } from "takumi-js";
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+import { fromJsx, Renderer } from "takumi-js/node";
 import { loadFonts, loadImages } from "./assets";
 import * as FiveHundredStars from "./components/500-stars";
 import * as GithubSocialPreview from "./components/github-social-preview";

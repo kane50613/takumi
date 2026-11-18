@@ -1,7 +1,6 @@
 import {
   Renderer as RendererInternal,
   type MeasuredNode,
-  type Node,
   type RegisteredFamily,
   type RendererOptions,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
@@ -32,6 +31,7 @@ import type {
   JsonSource,
   RegisteredFamilyLike,
 } from "@takumi-rs/bindings-js";
+import type { Node } from "@takumi-rs/bindings-js/helpers";
 
 export type {
   AnimationOutputFormatOptions,
@@ -42,6 +42,7 @@ export type {
   PrepareImagesInput,
 } from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
+export * from "@takumi-rs/bindings-js/helpers";
 
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;

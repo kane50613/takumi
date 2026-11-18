@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { container, type Declarations, image, text } from "@takumi-rs/helpers";
-import { type Node, Renderer } from "../index";
+import { container, type Declarations, image, type Node, text } from "../src/export";
+import { Renderer } from "../index";
 import { toNativeSource } from "@takumi-rs/bindings-js";
 
 const renderer = new Renderer();

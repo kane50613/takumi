@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { container, text } from "@takumi-rs/helpers";
 import { Glob } from "bun";
-import { Renderer } from "../src/export";
+import { container, Renderer, text } from "../src/export";
 
 const repoRoot = join(import.meta.dir, "../..");
 const glob = new Glob("assets/fonts/**/*.{woff2,ttf}");

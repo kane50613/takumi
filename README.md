@@ -159,8 +159,7 @@ for (const node of tree.nodes) {
 ### Fonts
 
 ```tsx
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 
 const image = await render(
   <div
@@ -181,7 +180,7 @@ const image = await render(
 );
 ```
 
-`googleFonts` comes from `@takumi-rs/helpers`. `render()` registers only the font subsets the content uses, and every render in the process shares the fonts it loaded. See [Fonts](https://takumi.kane.tw/docs/fonts#reusing-fonts-across-renders).
+`render()` registers only the font subsets the content uses, and every render in the process shares the fonts it loaded. See [Fonts](https://takumi.kane.tw/docs/fonts#reusing-fonts-across-renders).
 
 ### API route (`next/og`-compatible)
 
@@ -273,15 +272,14 @@ The laid-out tree goes to one of four backends: raster (`takumi-raster`), SVG (`
 
 ## Packages
 
-| Package                                  | Use                                                                |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| [`takumi-js`](./takumi-js)               | JSX, HTML, and node trees to images, SVG, and animations.          |
-| [`takumi-pdf`](./takumi-pdf-js)          | JSX, HTML, and node trees to PDF documents.                        |
-| [`takumi-paint`](./takumi-paint)         | JSX, HTML, and node trees to a paint tree of used values.          |
-| [`@takumi-rs/core`](./takumi-napi)       | Native Node.js bindings for direct node-tree rendering.            |
-| [`@takumi-rs/wasm`](./takumi-wasm)       | WebAssembly bindings for edge runtimes and browsers.               |
-| [`@takumi-rs/helpers`](./takumi-helpers) | Template conversion, fonts, images, and emoji.                     |
-| [`takumi`](./takumi)                     | Rust crate for node trees and HTML to images, animations, and SVG. |
+| Package                            | Use                                                                |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| [`takumi-js`](./takumi-js)         | JSX, HTML, and node trees to images, SVG, and animations.          |
+| [`takumi-pdf`](./takumi-pdf-js)    | JSX, HTML, and node trees to PDF documents.                        |
+| [`takumi-paint`](./takumi-paint)   | JSX, HTML, and node trees to a paint tree of used values.          |
+| [`@takumi-rs/core`](./takumi-napi) | Native Node.js bindings for direct node-tree rendering.            |
+| [`@takumi-rs/wasm`](./takumi-wasm) | WebAssembly bindings for edge runtimes and browsers.               |
+| [`takumi`](./takumi)               | Rust crate for node trees and HTML to images, animations, and SVG. |
 
 ## Showcase
 

@@ -2,7 +2,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
-import type { Node } from "@takumi-rs/helpers";
+import type { Node } from "../src/helpers";
 import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);

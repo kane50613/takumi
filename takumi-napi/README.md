@@ -40,7 +40,16 @@ const png = await renderer.render(
 await writeFile("output.png", png);
 ```
 
-`render()` returns a PNG `Buffer` unless you set `format`. To build the tree from JSX or HTML, use [`@takumi-rs/helpers`](https://www.npmjs.com/package/@takumi-rs/helpers).
+`render()` returns a PNG `Buffer` unless you set `format`. It also takes an HTML string. For JSX, convert the element with `fromJsx` first and pass its CSS along:
+
+```tsx
+import { fromJsx } from "@takumi-rs/core";
+
+const { node, css } = await fromJsx(<div tw="text-6xl">Hello from Takumi</div>);
+const image = await renderer.render(node, { width: 1200, height: 630, css });
+```
+
+This package also exports the node builders `container`, `text`, and `image`, the `googleFonts` and `fontFromUrl` font loaders, and `extractEmojis`.
 
 ## Fonts
 

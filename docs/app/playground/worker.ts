@@ -1,8 +1,12 @@
-import { googleFonts, prepareImages } from "@takumi-rs/helpers";
-import { extractEmojis } from "@takumi-rs/helpers/emoji";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FetchedImage, Node } from "@takumi-rs/helpers";
-import wasm, { init, Renderer } from "takumi-js/wasm";
+import { type FetchedImage, prepareImages } from "@takumi-rs/helpers";
+import wasm, {
+  extractEmojis,
+  fromJsx,
+  googleFonts,
+  init,
+  type Node,
+  Renderer,
+} from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
 // `no-init` over the entry that instantiates the module: the worker has the
 // asset URL already, and instantiating up front would defeat the lazy fetch.

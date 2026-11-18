@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { googleFonts } from "@takumi-rs/helpers";
 import { write } from "bun";
-import { measure, render } from "takumi-pdf";
+import { googleFonts, measure, render } from "takumi-pdf";
 import { facturXml, facturXmp, invoice } from "./facturx";
 import { InvoiceDocument } from "./invoice";
 

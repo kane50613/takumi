@@ -33,8 +33,7 @@ const pdf = await renderToBuffer(
 
 ```tsx twoslash title="After: HTML elements and CSS"
 // takumi-pdf
-import { googleFonts } from "@takumi-rs/helpers";
-import { render } from "takumi-pdf";
+import { googleFonts, render } from "takumi-pdf";
 
 const pdf = await render(
   <div tw="flex justify-between text-gray-500" style={{ fontSize: (10 * 96) / 72 }}>

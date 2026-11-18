@@ -40,7 +40,16 @@ const png = await renderer.render(
 );
 ```
 
-`render()` returns a PNG `Uint8Array` unless you set `format`. WebP output is always lossless in this binding. To build the tree from JSX or HTML, use [`@takumi-rs/helpers`](https://www.npmjs.com/package/@takumi-rs/helpers).
+`render()` returns a PNG `Uint8Array` unless you set `format`. WebP output is always lossless in this binding. It also takes an HTML string. For JSX, convert the element with `fromJsx` first and pass its CSS along:
+
+```tsx
+import { fromJsx } from "@takumi-rs/wasm";
+
+const { node, css } = await fromJsx(<div tw="text-6xl">Hello from Takumi</div>);
+const image = await renderer.render(node, { width: 1200, height: 630, css });
+```
+
+This package also exports the node builders `container`, `text`, and `image`, the `googleFonts` and `fontFromUrl` font loaders, and `extractEmojis`.
 
 ## Load the binary on other runtimes
 

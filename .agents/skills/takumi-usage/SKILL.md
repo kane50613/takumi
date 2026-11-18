@@ -84,25 +84,24 @@ export function GET() {
 }
 ```
 
-### 4. Parsing Helpers (`@takumi-rs/helpers/*`)
+### 4. Converting JSX for a Binding
 
-Low-level utilities for compiling layout elements without executing the full renderer.
+`takumi-js` renders JSX and HTML directly. When you call a `@takumi-rs/core` or `@takumi-rs/wasm` `Renderer` yourself, convert JSX with the binding's `fromJsx` first. The binding's `render` takes an HTML string as is.
 
-```typescript
-import { fromHtml } from "@takumi-rs/helpers/html";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
+```tsx
+import { fromJsx, Renderer } from "@takumi-rs/core";
 
-// Converts raw HTML template string into JSON layout node tree
-const htmlNodeTree = fromHtml(
-  "<div class='flex'><span>Hello</span></div>",
-  { max_depth: 512 }
+// Compiles React elements into a node tree and the CSS they collected
+const { node, css } = await fromJsx(
+  <div tw="flex">
+    <span>Hello</span>
+  </div>,
 );
 
-// Compiles React ReactNode elements into JSON layout node tree
-const jsxNodeTree = fromJsx(
-  <div tw="flex"><span>Hello</span></div>
-);
+const png = await new Renderer().render(node, { width: 1200, height: 630, css });
 ```
+
+Do not import from `@takumi-rs/helpers`. It is deprecated and becomes internal in v3. `takumi-js` exports `googleFonts`, `container`, `text`, `image`, and `Bitmap`. `takumi-pdf` exports `googleFonts`.
 
 ---
 

@@ -7,18 +7,17 @@ To render a chart, generate it as an SVG string and pass that string to an `<img
 
 ## Render an ECharts chart
 
-Install ECharts and `@takumi-rs/helpers` alongside `takumi-js`.
+Install ECharts alongside `takumi-js`.
 
 ```npm
-npm i echarts takumi-js @takumi-rs/helpers react
+npm i echarts takumi-js react
 ```
 
 This example draws a bar chart and saves it as a PNG. ECharts uses its SVG server renderer, so it needs no DOM or canvas.
 
 ```tsx twoslash title="Render a chart to PNG"
 import * as echarts from "echarts";
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
 const chart = echarts.init(null, null, {
@@ -60,8 +59,7 @@ For PDF output, see [Charts in PDF](/docs/pdf/charts).
 Pass fonts that cover every label, tick, and legend entry through `fonts`. Takumi reads the text inside the SVG, so the `googleFonts` subsets that only chart labels use still load:
 
 ```tsx twoslash title="Load chart label fonts"
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 
 declare const chart: string;
 // ---cut---

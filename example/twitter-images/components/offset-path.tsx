@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { GoogleFontFamily } from "@takumi-rs/helpers";
+import type { GoogleFontFamily } from "takumi-js";
 
 export const name = "offset-path";
 

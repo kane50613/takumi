@@ -1,15 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
-export {
-  ContainerNode,
-  ImageNode,
-  Node,
-  NodeMetadata,
-  RgbaImage,
-  TextNode,
-} from "@takumi-rs/helpers";
-
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
 /** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
@@ -24,7 +15,6 @@ export type KeyframesRuleList = {
 }[];
 /** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type Keyframes = KeyframesMap | KeyframesRuleList;
-export type { CssInput };
 
 /** Output format for static images. */
 export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";

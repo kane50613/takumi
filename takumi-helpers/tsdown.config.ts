@@ -100,9 +100,9 @@ await generateCatalog();
 
 const config: UserConfig = defineConfig({
   entry: {
-    index: "src/index.ts",
-    emoji: "src/emoji.ts",
-    jsx: "src/jsx/index.ts",
+    index: "src/entries/index.ts",
+    emoji: "src/entries/emoji.ts",
+    jsx: "src/entries/jsx.ts",
     html: "src/html/index.ts",
     renderer: "src/renderer.ts",
   },

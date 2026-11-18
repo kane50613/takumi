@@ -12,8 +12,7 @@ Pass the SVG string to `src` and set its size in CSS px.
 ```tsx twoslash title="Add a chart"
 declare const svg: string;
 // ---cut---
-import { render } from "takumi-pdf";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-pdf";
 
 const pdf = await render(
   <figure style={{ margin: 0, breakInside: "avoid" }}>
@@ -37,8 +36,7 @@ Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart 
 ```tsx twoslash title="Load chart label fonts"
 declare const svg: string;
 // ---cut---
-import { render } from "takumi-pdf";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-pdf";
 
 const pdf = await render(<img src={svg} alt="營收" style={{ width: 560, height: 360 }} />, {
   fonts: await googleFonts(["Noto Sans TC"]), // [!code highlight]

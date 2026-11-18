@@ -3,6 +3,7 @@ import { fromStaticMarkup } from "./markup";
 import { rootResult } from "../root";
 import type { Node } from "../types";
 
+/** @deprecated Pass the markup to a renderer, which parses it in Rust. Will be removed in v3. */
 export interface FromHtmlResult extends FromJsxResult {}
 
 const isWhitespaceOnlyText = (node: Node | undefined): boolean =>

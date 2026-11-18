@@ -1,7 +1,7 @@
 {
   "name": "@takumi-rs/helpers",
   "version": "2.20.0",
-  "description": "Convert JSX and HTML to Takumi node trees. Load fonts and emoji.",
+  "description": "Deprecated: code the Takumi packages share. Import from takumi-js, @takumi-rs/core, or @takumi-rs/wasm instead.",
   "keywords": [
     "emoji",
     "fonts",

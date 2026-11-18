@@ -121,15 +121,10 @@ export function GET() {
 
 ## Load a font
 
-`googleFonts` loads Google Fonts families in one request. A weight range or an `axes` entry loads the variable font. Then `font-weight` and `font-variation-settings` set its axes per element. It comes from `@takumi-rs/helpers`, which you install next to `takumi-js`:
-
-```npm
-npm i @takumi-rs/helpers
-```
+`googleFonts` loads Google Fonts families in one request. A weight range or an `axes` entry loads the variable font. Then `font-weight` and `font-variation-settings` set its axes per element.
 
 ```tsx twoslash title="Load a variable font"
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 
 const png = await render(
   <div
@@ -158,7 +153,7 @@ const png = await render(
 );
 ```
 
-`googleFonts` comes from `@takumi-rs/helpers`. `fonts` also takes a font URL, raw bytes, or a descriptor. Every render in the process shares one renderer, so define the list once and later renders reuse its fonts. See [Reusing fonts across renders](/docs/fonts#reusing-fonts-across-renders).
+`fonts` also takes a font URL, raw bytes, or a descriptor. Every render in the process shares one renderer, so define the list once and later renders reuse its fonts. See [Reusing fonts across renders](/docs/fonts#reusing-fonts-across-renders).
 
 ## Coming from satori
 

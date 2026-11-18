@@ -85,8 +85,7 @@ function OgImage() {
 Pass raw RGBA pixels instead of encoding a PNG first, and Takumi skips decoding. The `Bitmap` helper renders a row-major buffer of `width * height * 4` bytes as an `<img>`. This example fills a 64 × 64 image with opaque blue:
 
 ```tsx twoslash title="Render raw RGBA pixels"
-import { render } from "takumi-js";
-import { Bitmap } from "@takumi-rs/helpers/jsx";
+import { Bitmap, render } from "takumi-js";
 
 const pixels = new Uint8Array(64 * 64 * 4);
 
@@ -134,7 +133,7 @@ export function GET() {
 
 Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
-A renderer from `@takumi-rs/core` or `@takumi-rs/wasm` does not split emoji out of the text. Call `extractEmojis` from `@takumi-rs/helpers/emoji` on the node tree before its [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with the other images.
+A renderer from `@takumi-rs/core` or `@takumi-rs/wasm` does not split emoji out of the text. Import `extractEmojis` from the same package and call it on the node tree before the renderer's [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with the other images.
 
 ### COLR / bitmap fonts
 

@@ -1,14 +1,25 @@
 export type {
+  AnimationRule,
+  BitmapProps,
   ContainerNode,
+  CssInput,
+  Declarations,
   FetchOptions,
+  GoogleFontFamily,
+  GoogleFontsOptions,
   ImageNode,
+  LayerRule,
+  MediaRule,
   Node,
   NodeAttributes,
   NodeMetadata,
   RgbaImage,
   ReactElementLike,
+  StyleRule,
+  SupportsRule,
   TextNode,
-} from "@takumi-rs/helpers";
+} from "@takumi-rs/bindings-js/helpers";
+export { Bitmap, container, googleFonts, image, text } from "@takumi-rs/bindings-js/helpers";
 export type {
   AnimationOutputFormat,
   DitheringAlgorithm,
@@ -35,15 +46,6 @@ export type {
   RenderOptions,
   RenderSvgOptions,
 } from "./render";
-export type {
-  AnimationRule,
-  CssInput,
-  Declarations,
-  LayerRule,
-  MediaRule,
-  StyleRule,
-  SupportsRule,
-} from "@takumi-rs/helpers";
 
 declare module "react" {
   interface DOMAttributes<T> {

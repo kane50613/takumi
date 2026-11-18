@@ -11,7 +11,7 @@ It shares one layout engine, a port of Chromium's layout, with [image output](/d
 ## Install
 
 ```npm
-npm i takumi-pdf @takumi-rs/helpers
+npm i takumi-pdf
 ```
 
 ## Render a document
@@ -19,9 +19,8 @@ npm i takumi-pdf @takumi-rs/helpers
 Save this as `invoice.tsx` and run `bun invoice.tsx` to write `invoice.pdf`. On Node.js, compile the JSX first.
 
 ```tsx twoslash title="invoice.tsx"
-import { render } from "takumi-pdf";
+import { googleFonts, render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
-import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
 
 const pdf = await render(

@@ -12,9 +12,7 @@ import type { ReactNode } from "react";
 declare const doc: ReactNode;
 declare const fontBytes: Uint8Array;
 // ---cut---
-import { render } from "takumi-pdf";
-
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-pdf";
 
 const pdf = await render(doc, {
   // [!code highlight:2]

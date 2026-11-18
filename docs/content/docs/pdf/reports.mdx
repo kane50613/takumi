@@ -145,8 +145,7 @@ declare const accounts: { id: string }[];
 declare function Statement(props: { account: (typeof accounts)[number] }): ReactNode;
 declare function save(id: string, pdf: Uint8Array): Promise<void>;
 // ---cut---
-import { PdfRenderer } from "takumi-pdf";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, PdfRenderer } from "takumi-pdf";
 
 // [!code highlight]
 const renderer = new PdfRenderer();

@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { container, type Declarations } from "@takumi-rs/helpers";
-import { Renderer } from "../bundlers/node";
+import { container, type Declarations, Renderer } from "../bundlers/node";
 
 const renderer = new Renderer();
 

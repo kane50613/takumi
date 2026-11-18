@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import ImageResponse from "../src/response";
-import { render } from "../src";
-import type { Node } from "@takumi-rs/helpers";
+import { type Node, render } from "../src";
 
 describe("ImageResponse", () => {
   test("should accept Takumi Node input in render()", async () => {

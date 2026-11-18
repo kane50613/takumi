@@ -83,15 +83,8 @@ export function GET() {
 
 ### From Google Fonts
 
-`googleFonts` comes from `@takumi-rs/helpers`. Install it next to `takumi-js`:
-
-```bash
-npm install @takumi-rs/helpers
-```
-
 ```tsx twoslash title="Load multilingual fonts"
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 
 const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>, {
   width: 1200,
@@ -106,7 +99,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
 ```tsx twoslash title="Choose font weights and axes"
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts } from "takumi-js";
 
 await googleFonts([
   {
@@ -146,7 +139,7 @@ it.
 Pass an object instead of an array for request options:
 
 ```ts twoslash title="Limit font requests"
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts } from "takumi-js";
 
 const fonts = await googleFonts({
   families: ["Inter"],
@@ -280,8 +273,7 @@ Past the cap, the least recently used families go first. Fonts from `registerFon
 An element's own `font-family` comes first. When none of its families covers a character, Takumi tries `fontFamilies` in order, where a browser would try the system's fonts. So you don't need to append these families to every element's `font-family`. For an emoji, a color font anywhere in `fontFamilies` wins over an earlier font without color glyphs, as in Chromium.
 
 ```tsx twoslash title="Choose font fallback order"
-import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts, render } from "takumi-js";
 
 const image = await render(<div>Hello こんにちは</div>, {
   fonts: googleFonts(["Inter", "Noto Sans JP"]),

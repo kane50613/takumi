@@ -1,6 +1,7 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
-import { type DocumentInput, resolveDocument, sheetsOf } from "@takumi-rs/helpers/jsx";
+import { resolveDocument, sheetsOf } from "@takumi-rs/helpers/jsx";
 import {
+  type DocumentInput,
   type FontLoader,
   type ImagesInput,
   type JsonSource,
@@ -24,8 +25,17 @@ import {
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
-export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
-export type { DocumentInput } from "@takumi-rs/helpers/jsx";
+export type {
+  DocumentInput,
+  FontLoader,
+  ImagesInput,
+  PrepareImagesInput,
+} from "@takumi-rs/bindings-js";
+export {
+  googleFonts,
+  type GoogleFontFamily,
+  type GoogleFontsOptions,
+} from "@takumi-rs/bindings-js/helpers";
 export { Prepared } from "@takumi-rs/bindings-js";
 
 /** A band on a page: a document input, or `false` for none. */

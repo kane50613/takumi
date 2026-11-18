@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
-import { Renderer } from "../src/export";
+import { container, Renderer, text } from "../src/export";
 
 const monoData = await Bun.file("../assets/fonts/geist/GeistMono[wght].woff2").arrayBuffer();
 const sansData = await Bun.file("../assets/fonts/geist/Geist[wght].woff2").arrayBuffer();

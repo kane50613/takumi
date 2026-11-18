@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { container, image, text } from "@takumi-rs/helpers";
-import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Glob } from "bun";
-import { Renderer, type RenderOptions } from "../src/export";
+import { container, fromJsx, image, Renderer, type RenderOptions, text } from "../src/export";
 
 const glob = new Glob("../assets/fonts/**/*.{woff2,ttf}");
 const files = await Array.fromAsync(glob.scan());

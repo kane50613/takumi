@@ -1,8 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { container, image } from "@takumi-rs/helpers";
-import { Renderer } from "../bundlers/node";
+import { container, image, Renderer } from "../bundlers/node";
 
 const fontPath = join(
   import.meta.dir,

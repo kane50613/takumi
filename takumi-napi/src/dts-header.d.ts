@@ -1,16 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
-export type {
-  ContainerNode,
-  ImageNode,
-  NodeMetadata,
-  RgbaImage,
-  TextNode,
-} from "@takumi-rs/helpers";
-
-export type { CssInput, Node };
-
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
 export interface FontDetails {

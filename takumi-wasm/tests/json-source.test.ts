@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
 import { toNativeSource } from "@takumi-rs/bindings-js";
-import { type Node, Renderer } from "../bundlers/node";
+import { container, type Node, Renderer, text } from "../bundlers/node";
 
 const renderer = new Renderer();
 const inner = renderer["inner"];

@@ -1,8 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { container, text } from "@takumi-rs/helpers";
-import { Renderer } from "../bundlers/node";
+import { container, Renderer, text } from "../bundlers/node";
 
 const fontsRoot = join(import.meta.dir, "../../assets/fonts");
 const manropeFont = await readFile(join(fontsRoot, "manrope/manrope-latin-wght-normal.woff2"));

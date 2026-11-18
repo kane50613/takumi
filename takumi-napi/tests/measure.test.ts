@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
-import { Renderer } from "../src/export";
+import { container, Renderer, text } from "../src/export";
 
 describe("Renderer.measure", () => {
   const renderer = new Renderer();

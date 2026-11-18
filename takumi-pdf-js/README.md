@@ -16,19 +16,18 @@ Takumi's packages share one layout engine, with text and inline layout ported fr
 ## Install
 
 ```bash
-npm install takumi-pdf @takumi-rs/helpers
+npm install takumi-pdf
 # or
-bun add takumi-pdf @takumi-rs/helpers
+bun add takumi-pdf
 ```
 
 ## Render a document
 
-`@takumi-rs/helpers` provides `googleFonts()` here. Save this as `invoice.tsx` and run `bun invoice.tsx`.
+Save this as `invoice.tsx` and run `bun invoice.tsx`.
 
 ```tsx
 import { writeFile } from "node:fs/promises";
-import { googleFonts } from "@takumi-rs/helpers";
-import { render } from "takumi-pdf";
+import { googleFonts, render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(
