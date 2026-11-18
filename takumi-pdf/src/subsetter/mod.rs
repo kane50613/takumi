@@ -271,6 +271,10 @@ fn parse(data: &[u8], index: u32) -> Result<Face<'_>> {
     records.push(r.read::<TableRecord>().ok_or(MalformedFont)?);
   }
 
+  // `Face::table` binary-searches by tag, but fonts in the wild violate the spec's requirement that
+  // the directory be sorted.
+  records.sort_by_key(|record| record.tag);
+
   Ok(Face { data, records })
 }
 
@@ -666,6 +670,32 @@ mod tests {
     let result = subset(&font, 0, &GlyphRemapper::new());
 
     assert_eq!(result, Err(Error::CFFError));
+  }
+
+  #[test]
+  fn unsorted_table_directory_is_searchable() {
+    // `head` stored before `cmap`, against the spec's sort order.
+    let mut font = Vec::new();
+    font.extend(0x00010000u32.to_be_bytes());
+    font.extend(2u16.to_be_bytes());
+    font.extend(0u16.to_be_bytes());
+    font.extend(0u16.to_be_bytes());
+    font.extend(0u16.to_be_bytes());
+    font.extend(*b"head");
+    font.extend(0u32.to_be_bytes());
+    font.extend(44u32.to_be_bytes());
+    font.extend(4u32.to_be_bytes());
+    font.extend(*b"cmap");
+    font.extend(0u32.to_be_bytes());
+    font.extend(48u32.to_be_bytes());
+    font.extend(4u32.to_be_bytes());
+    font.extend([1, 2, 3, 4]);
+    font.extend([5, 6, 7, 8]);
+
+    let face = parse(&font, 0).unwrap();
+
+    assert_eq!(face.table(Tag::HEAD), Some([1, 2, 3, 4].as_slice()));
+    assert_eq!(face.table(Tag(*b"cmap")), Some([5, 6, 7, 8].as_slice()));
   }
 
   #[test]

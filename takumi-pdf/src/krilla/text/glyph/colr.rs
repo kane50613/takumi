@@ -1,10 +1,9 @@
 use skrifa::MetadataProvider;
 use skrifa::color::{Brush, ColorPainter, ColorStop, CompositeMode};
 use skrifa::outline::DrawSettings;
-use skrifa::raw::TableProvider;
 use skrifa::raw::types::BoundingBox;
 use takumi_core::resources::glyph::draw_outline;
-use tiny_skia_path::{Path, PathBuilder};
+use tiny_skia_path::{Path, PathBuilder, Rect};
 
 use crate::krilla::geom::Transform;
 use crate::krilla::graphics::blend::BlendMode;
@@ -47,24 +46,28 @@ pub(crate) fn draw_glyph(
   colr_glyph
     .paint(font.location_ref(), &mut colr_canvas)
     .ok()?;
-  let instructions = colr_canvas.finish()?;
+  let (instructions, bounds) = colr_canvas.finish()?;
+  let Some(bounds) = bounds.filter(|rect| !rect.is_empty()) else {
+    return Some(());
+  };
+  let bounds = PathBuilder::from_rect(bounds);
 
   surface.push_transform(&Transform::from_scale(1.0, -1.0));
-  interpret(instructions, surface);
+  interpret(instructions, &bounds, surface);
   surface.pop();
 
   Some(())
 }
 
 // Interpret the glyph bytecode
-fn interpret(instructions: Vec<Instruction>, surface: &mut Surface) {
+fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surface) {
   for instruction in instructions {
     match instruction {
       Instruction::Layer(mode, instructions) => {
         let blend = mode.to_blend_mode().unwrap_or(BlendMode::Normal);
         surface.push_blend_mode(blend);
         surface.push_isolated();
-        interpret(instructions, surface);
+        interpret(instructions, bounds, surface);
         surface.pop();
         surface.pop();
       }
@@ -72,9 +75,9 @@ fn interpret(instructions: Vec<Instruction>, surface: &mut Surface) {
         source,
         mode,
         backdrop,
-      } => interpret_composite(source, mode, backdrop, surface),
+      } => interpret_composite(source, mode, backdrop, bounds, surface),
       Instruction::Filled(fill, mut clips) => {
-        let filled = clips.split_off(clips.len() - 1);
+        let filled = clips.pop().unwrap_or_else(|| bounds.clone());
 
         let num_clips = clips.len();
         for path in clips {
@@ -87,7 +90,7 @@ fn interpret(instructions: Vec<Instruction>, surface: &mut Surface) {
         surface.set_fill(Some(*fill));
         surface.set_stroke(None);
 
-        surface.draw_path(&crate::krilla::geom::Path(filled[0].clone()));
+        surface.draw_path(&crate::krilla::geom::Path(filled));
 
         surface.set_fill(old_fill);
         surface.set_stroke(old_stroke);
@@ -104,48 +107,49 @@ fn interpret_composite(
   source: Vec<Instruction>,
   mode: CompositeMode,
   backdrop: Vec<Instruction>,
+  bounds: &Path,
   surface: &mut Surface,
 ) {
   match mode {
     CompositeMode::Clear => {}
     CompositeMode::Src => {
       surface.push_isolated();
-      interpret(source, surface);
+      interpret(source, bounds, surface);
       surface.pop();
     }
     CompositeMode::Dest => {
       surface.push_isolated();
-      interpret(backdrop, surface);
+      interpret(backdrop, bounds, surface);
       surface.pop();
     }
     CompositeMode::SrcOver => {
       surface.push_isolated();
-      interpret(backdrop, surface);
-      interpret(source, surface);
+      interpret(backdrop, bounds, surface);
+      interpret(source, bounds, surface);
       surface.pop();
     }
     CompositeMode::DestOver => {
       surface.push_isolated();
-      interpret(source, surface);
-      interpret(backdrop, surface);
+      interpret(source, bounds, surface);
+      interpret(backdrop, bounds, surface);
       surface.pop();
     }
-    CompositeMode::SrcIn => interpret_masked(source, backdrop, surface),
-    CompositeMode::DestIn => interpret_masked(backdrop, source, surface),
+    CompositeMode::SrcIn => interpret_masked(source, backdrop, bounds, surface),
+    CompositeMode::DestIn => interpret_masked(backdrop, source, bounds, surface),
     _ => {
       let Some(blend) = mode.to_blend_mode() else {
         surface.push_isolated();
-        interpret(backdrop, surface);
-        interpret(source, surface);
+        interpret(backdrop, bounds, surface);
+        interpret(source, bounds, surface);
         surface.pop();
         return;
       };
 
       surface.push_isolated();
-      interpret(backdrop, surface);
+      interpret(backdrop, bounds, surface);
       surface.push_blend_mode(blend);
       surface.push_isolated();
-      interpret(source, surface);
+      interpret(source, bounds, surface);
       surface.pop();
       surface.pop();
       surface.pop();
@@ -153,17 +157,22 @@ fn interpret_composite(
   }
 }
 
-fn interpret_masked(visible: Vec<Instruction>, mask: Vec<Instruction>, surface: &mut Surface) {
+fn interpret_masked(
+  visible: Vec<Instruction>,
+  mask: Vec<Instruction>,
+  bounds: &Path,
+  surface: &mut Surface,
+) {
   let mask_stream = {
     let mut builder = surface.stream_builder();
     let mut mask_surface = builder.surface();
-    interpret(mask, &mut mask_surface);
+    interpret(mask, bounds, &mut mask_surface);
     mask_surface.finish();
     builder.finish()
   };
 
   surface.push_mask(Mask::new(mask_stream, MaskType::Alpha));
-  interpret(visible, surface);
+  interpret(visible, bounds, surface);
   surface.pop();
 }
 
@@ -172,7 +181,8 @@ struct ColrBuilder {
   font: Font,
   context_color: rgb::Color,
   clips: Vec<Vec<Path>>,
-  stack: Vec<Vec<Instruction>>,
+  stack: Vec<(Vec<Instruction>, bool)>,
+  bounds: Option<Rect>,
   layers: Vec<CompositeMode>,
   transforms: Vec<Transform>,
   error: bool,
@@ -222,7 +232,8 @@ impl ColrBuilder {
     Self {
       font,
       context_color,
-      stack: vec![vec![]],
+      stack: vec![(vec![], true)],
+      bounds: None,
       transforms: vec![Transform::identity()],
       clips: vec![vec![]],
       layers: vec![],
@@ -230,14 +241,34 @@ impl ColrBuilder {
     }
   }
 
-  pub fn finish(mut self) -> Option<Vec<Instruction>> {
+  pub fn finish(mut self) -> Option<(Vec<Instruction>, Option<Rect>)> {
     if self.error {
       return None;
-    } else if let Some(instructions) = self.stack.pop() {
-      return Some(instructions);
     }
 
-    None
+    let (instructions, bounded) = self.stack.pop()?;
+    // A color glyph needs to be bounded to be considered valid.
+    bounded.then_some((instructions, self.bounds))
+  }
+
+  fn push_clip(&mut self, path: Path) {
+    let Some(mut clips) = self.clips.last().cloned() else {
+      self.error = true;
+      return;
+    };
+
+    self.bounds = match self.bounds {
+      Some(bounds) => bounds.join(&path.bounds()),
+      None => Some(path.bounds()),
+    };
+
+    if self.bounds.is_none() {
+      self.error = true;
+      return;
+    }
+
+    clips.push(path);
+    self.clips.push(clips);
   }
 }
 
@@ -247,14 +278,12 @@ impl ColrBuilder {
     palette_index: u16,
     alpha: f32,
   ) -> Option<(rgb::Color, NormalizedF32)> {
+    let alpha = alpha.clamp(0.0, 1.0);
+
     if palette_index != u16::MAX {
-      let color = self
-        .font
-        .font_ref()
-        .cpal()
-        .ok()?
-        .color_records_array()?
-        .ok()?[palette_index as usize];
+      let palettes = self.font.font_ref().color_palettes();
+      let palette = palettes.get(0)?;
+      let color = palette.colors().get(usize::from(palette_index))?;
 
       Some((
         rgb::Color::new(color.red, color.green, color.blue),
@@ -323,11 +352,6 @@ impl ColorPainter for ColrBuilder {
   }
 
   fn push_clip_glyph(&mut self, glyph_id: skrifa::GlyphId) {
-    let Some(mut old) = self.clips.last().cloned() else {
-      self.error = true;
-      return;
-    };
-
     let mut glyph_builder = OutlineBuilder::new();
     let outline_glyphs = self.font.outline_glyphs();
     let Some(outline_glyph) = outline_glyphs.get(glyph_id) else {
@@ -352,17 +376,10 @@ impl ColorPainter for ColrBuilder {
       return;
     };
 
-    old.push(path);
-
-    self.clips.push(old);
+    self.push_clip(path);
   }
 
   fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
-    let Some(mut old) = self.clips.last().cloned() else {
-      self.error = true;
-      return;
-    };
-
     let mut path_builder = PathBuilder::new();
     path_builder.move_to(clip_box.x_min, clip_box.y_min);
     path_builder.line_to(clip_box.x_min, clip_box.y_max);
@@ -377,9 +394,7 @@ impl ColorPainter for ColrBuilder {
       self.error = true;
       return;
     };
-    old.push(path);
-
-    self.clips.push(old);
+    self.push_clip(path);
   }
 
   fn pop_clip(&mut self) {
@@ -536,29 +551,40 @@ impl ColorPainter for ColrBuilder {
         return;
       };
 
-      let Some(stack) = self.stack.last_mut() else {
+      let Some((stack, bounded)) = self.stack.last_mut() else {
         self.error = true;
         return;
       };
 
+      *bounded &= !clips.is_empty();
       stack.push(Instruction::Filled(Box::new(fill), clips));
     }
   }
 
   fn push_layer(&mut self, composite_mode: CompositeMode) {
     self.layers.push(composite_mode);
-    self.stack.push(vec![]);
+    self.stack.push((vec![], true));
   }
 
   fn pop_layer(&mut self) {
-    let (Some(composite), Some(mut instructions)) = (self.layers.pop(), self.stack.pop()) else {
+    let (Some(composite), Some((mut instructions, bounded))) =
+      (self.layers.pop(), self.stack.pop())
+    else {
       self.error = true;
       return;
     };
 
-    let Some(stack) = self.stack.last_mut() else {
+    let Some((stack, parent_bounded)) = self.stack.last_mut() else {
       self.error = true;
       return;
+    };
+
+    *parent_bounded = match composite {
+      CompositeMode::Clear => true,
+      CompositeMode::Src | CompositeMode::SrcOut => bounded,
+      CompositeMode::Dest | CompositeMode::DestOut => *parent_bounded,
+      CompositeMode::SrcIn | CompositeMode::DestIn => bounded || *parent_bounded,
+      _ => bounded && *parent_bounded,
     };
 
     // See the skrifa code to see how it handles composite operations.
@@ -578,5 +604,54 @@ impl ColorPainter for ColrBuilder {
     }
 
     stack.push(Instruction::Layer(composite, instructions));
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use skrifa::color::{Brush, ColorPainter};
+  use skrifa::raw::types::BoundingBox;
+
+  use super::ColrBuilder;
+  use crate::krilla::graphics::color::rgb;
+  use crate::krilla::text::Font;
+
+  fn builder() -> ColrBuilder {
+    let data = include_bytes!("../../../../tests/fonts/NotoColorEmoji.COLR.subset.ttf");
+
+    ColrBuilder::new(
+      Font::new(data.to_vec().into(), 0).unwrap(),
+      rgb::Color::black(),
+    )
+  }
+
+  #[test]
+  fn a_palette_index_past_the_palette_fails_the_glyph() {
+    let mut builder = builder();
+
+    builder.push_clip_box(BoundingBox {
+      x_min: 0.0,
+      y_min: 0.0,
+      x_max: 10.0,
+      y_max: 10.0,
+    });
+    builder.fill(Brush::Solid {
+      palette_index: 60_000,
+      alpha: 1.0,
+    });
+
+    assert!(builder.finish().is_none());
+  }
+
+  #[test]
+  fn a_fill_without_a_clip_leaves_the_glyph_unbounded() {
+    let mut builder = builder();
+
+    builder.fill(Brush::Solid {
+      palette_index: 0,
+      alpha: 1.0,
+    });
+
+    assert!(builder.finish().is_none());
   }
 }

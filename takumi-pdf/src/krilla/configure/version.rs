@@ -73,13 +73,15 @@ impl PdfVersion {
 
   #[cfg(feature = "raster-images")]
   pub(crate) fn supports_icc(&self, metadata: &ICCMetadata) -> bool {
-    match self {
-      PdfVersion::Pdf14 => metadata.major <= 2 && metadata.minor <= 2,
-      PdfVersion::Pdf15 => metadata.major <= 4,
-      PdfVersion::Pdf16 => metadata.major <= 4 && metadata.minor <= 1,
-      PdfVersion::Pdf17 => metadata.major <= 4 && metadata.minor <= 2,
-      PdfVersion::Pdf20 => metadata.major <= 4 && metadata.minor <= 2,
-    }
+    let max_version = match self {
+      PdfVersion::Pdf14 => (2, 3),
+      PdfVersion::Pdf15 => (4, 0),
+      PdfVersion::Pdf16 => (4, 1),
+      PdfVersion::Pdf17 => (4, 2),
+      PdfVersion::Pdf20 => (4, 3),
+    };
+
+    (metadata.major, metadata.minor) <= max_version
   }
 
   #[cfg(feature = "raster-images")]
@@ -128,3 +130,40 @@ static GREY_V4_ICC: LazyLock<ICCProfile<1>> =
 /// The ICC v2 profile for the sgray color space.
 static GREY_V2_ICC: LazyLock<ICCProfile<1>> =
   LazyLock::new(|| ICCProfile::new(include_bytes!("../../../icc/sGrey-v2-magic.icc")).unwrap());
+
+#[cfg(all(test, feature = "raster-images"))]
+mod tests {
+  use super::PdfVersion;
+  use crate::krilla::graphics::icc::{ICCColorSpace, ICCMetadata};
+
+  fn icc_metadata(major: u8, minor: u8) -> ICCMetadata {
+    ICCMetadata {
+      major,
+      minor,
+      color_space: ICCColorSpace::Cmyk,
+    }
+  }
+
+  #[test]
+  fn icc_v2_4_supported_from_pdf_1_5() {
+    assert!(!PdfVersion::Pdf14.supports_icc(&icc_metadata(2, 4)));
+    assert!(PdfVersion::Pdf15.supports_icc(&icc_metadata(2, 4)));
+    assert!(PdfVersion::Pdf16.supports_icc(&icc_metadata(2, 4)));
+    assert!(PdfVersion::Pdf17.supports_icc(&icc_metadata(2, 4)));
+    assert!(PdfVersion::Pdf20.supports_icc(&icc_metadata(2, 4)));
+  }
+
+  #[test]
+  fn icc_max_version_per_pdf_version() {
+    assert!(PdfVersion::Pdf14.supports_icc(&icc_metadata(2, 3)));
+    assert!(!PdfVersion::Pdf14.supports_icc(&icc_metadata(4, 0)));
+    assert!(PdfVersion::Pdf15.supports_icc(&icc_metadata(4, 0)));
+    assert!(!PdfVersion::Pdf15.supports_icc(&icc_metadata(4, 1)));
+    assert!(PdfVersion::Pdf16.supports_icc(&icc_metadata(4, 1)));
+    assert!(!PdfVersion::Pdf16.supports_icc(&icc_metadata(4, 2)));
+    assert!(PdfVersion::Pdf17.supports_icc(&icc_metadata(4, 2)));
+    assert!(!PdfVersion::Pdf17.supports_icc(&icc_metadata(4, 3)));
+    assert!(PdfVersion::Pdf20.supports_icc(&icc_metadata(4, 3)));
+    assert!(!PdfVersion::Pdf20.supports_icc(&icc_metadata(4, 4)));
+  }
+}

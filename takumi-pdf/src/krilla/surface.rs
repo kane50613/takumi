@@ -240,12 +240,12 @@ impl<'a> Surface<'a> {
     font: Font,
     font_size: f32,
   ) {
-    let (mut cur_x, y) = (start.x, start.y);
+    let (mut cur_x, mut cur_y) = (start.x, start.y);
 
     for glyph in glyphs {
       let mut base_transform = tiny_skia_path::Transform::from_translate(
         cur_x + glyph.x_offset(font_size),
-        y - glyph.y_offset(font_size),
+        cur_y - glyph.y_offset(font_size),
       );
       base_transform = base_transform.pre_concat(tiny_skia_path::Transform::from_scale(
         font_size / font.units_per_em(),
@@ -260,6 +260,7 @@ impl<'a> Surface<'a> {
       );
 
       cur_x += glyph.x_advance(font_size);
+      cur_y -= glyph.y_advance(font_size);
     }
   }
 
