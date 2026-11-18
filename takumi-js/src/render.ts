@@ -2,10 +2,14 @@ import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
 import { type CssInput, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
-import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
+import {
+  type DocumentInput,
+  type FromJsxOptions,
+  resolveDocument,
+  sheetsOf,
+} from "@takumi-rs/helpers/jsx";
 import { defaultRenderer, type Renderer } from "./backend/renderer";
-import type { ReactNode } from "react";
-import type { Node, ReactElementLike } from "@takumi-rs/helpers";
+import type { Node } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
@@ -102,33 +106,15 @@ type PipelineOptions = Partial<SharedRenderExtras> &
     stylesheets?: string[];
   };
 
-/** A document to render: JSX, an HTML string, or a node tree. */
-export type DocumentInput = ReactNode | ReactElementLike | Node | string;
+export type { DocumentInput };
 
 /** @deprecated Use `DocumentInput` instead. Will be removed in v3. */
 export type RenderInput = DocumentInput;
 
-function isTakumiNode(element: unknown): element is Node {
-  if (typeof element !== "object" || element === null || !("type" in element)) {
-    return false;
-  }
-
-  return element.type === "container" || element.type === "text" || element.type === "image";
-}
-
 async function transformElement(element: DocumentInput, options?: PipelineOptions) {
-  if (isTakumiNode(element)) {
-    return {
-      node: element,
-      css: [],
-    };
-  }
+  const { node, css } = await resolveDocument(element, options?.jsx);
 
-  if (typeof element === "string") {
-    return fromHtml(element);
-  }
-
-  return fromJsx(element, options?.jsx);
+  return typeof node === "string" ? fromHtml(node) : { node, css };
 }
 
 /** Resolves a caller-supplied renderer or the default provider. */
@@ -184,11 +170,6 @@ function warnStylesheetsDeprecated(): void {
   console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
 }
 
-/** Narrows the `css` option, which takes one entry or a list of them. */
-function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
-  return Array.isArray(css);
-}
-
 function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInput[] {
   if (options?.css !== undefined && options?.stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
@@ -198,14 +179,7 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
     warnStylesheetsDeprecated();
   }
 
-  const own =
-    options?.css !== undefined
-      ? isCssList(options.css)
-        ? options.css
-        : [options.css]
-      : (options?.stylesheets ?? []);
-
-  return [...own, ...extra];
+  return sheetsOf(options?.css ?? options?.stylesheets, extra) ?? [];
 }
 
 type RenderedImage = Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>;

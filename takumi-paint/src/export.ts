@@ -1,6 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
+import { type DocumentInput, resolveDocument, sheetsOf } from "@takumi-rs/helpers/jsx";
 import {
-  type DocumentInput,
   type FontLoader,
   type ImagesInput,
   type JsonSource,
@@ -11,8 +11,6 @@ import {
   prepareSource,
   readSource,
   renderPrepared,
-  resolveDocument,
-  sheetsOf,
   toNativeSource,
   WasmRenderer,
 } from "@takumi-rs/bindings-js";
@@ -26,12 +24,8 @@ import initWasm, {
 } from "../pkg/takumi_paint_wasm";
 import { type PaintTree, PaintTreeView } from "./tree";
 
-export type {
-  DocumentInput,
-  FontLoader,
-  ImagesInput,
-  PrepareImagesInput,
-} from "@takumi-rs/bindings-js";
+export type { FontLoader, ImagesInput, PrepareImagesInput } from "@takumi-rs/bindings-js";
+export type { DocumentInput } from "@takumi-rs/helpers/jsx";
 export { Prepared } from "@takumi-rs/bindings-js";
 export type {
   BlendMode,

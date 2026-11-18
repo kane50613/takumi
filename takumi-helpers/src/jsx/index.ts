@@ -19,6 +19,7 @@ import {
   isValidElement,
 } from "./utils";
 
+export * from "../document";
 export * from "./style-presets";
 
 declare module "react" {

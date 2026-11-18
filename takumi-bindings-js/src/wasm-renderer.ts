@@ -4,7 +4,6 @@ import {
   FontRegistry,
   type RegisteredFamilyLike,
 } from "./renderer";
-import type { CssInput } from "@takumi-rs/helpers";
 
 /**
  * A wasm binding renderer whose fonts a {@link FontRegistry} loads.
@@ -58,26 +57,6 @@ export class WasmRenderer<
   [Symbol.dispose](): void {
     this.free();
   }
-}
-
-/**
- * The `css` option followed by the sheets a document brings, or `undefined` for none.
- *
- * @internal
- */
-export function sheetsOf(
-  css: CssInput | readonly CssInput[] | undefined,
-  documentCss: string[],
-): CssInput[] | undefined {
-  const own: readonly CssInput[] = css === undefined ? [] : isCssList(css) ? css : [css];
-  const sheets = [...own, ...documentCss];
-
-  return sheets.length > 0 ? sheets : undefined;
-}
-
-/** Narrows the `css` option, which takes one entry or a list of them. */
-function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
-  return Array.isArray(css);
 }
 
 /**

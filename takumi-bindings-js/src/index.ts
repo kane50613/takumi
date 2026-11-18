@@ -1,4 +1,3 @@
-export * from "./document";
 export * from "./node-source";
 export * from "./prepared";
 export * from "./renderer";

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
-import { isNode, resolveDocument } from "../src/document";
-import { lazy, sheetsOf } from "../src/wasm-renderer";
+import { isNode, resolveDocument, sheetsOf } from "../src/document";
 
 describe("resolveDocument", () => {
   test("keeps HTML and node trees as they are", async () => {
@@ -17,17 +16,17 @@ describe("resolveDocument", () => {
     expect(isNode(element)).toBeFalse();
     expect((await resolveDocument(element)).node).not.toBe(element);
   });
+
+  test("renders an element without $$typeof whose type no node tree uses", async () => {
+    const element = { type: "p", props: { children: "a" } };
+
+    expect(isNode(element)).toBeFalse();
+    expect((await resolveDocument(element)).node).toMatchObject({ tagName: "p", text: "a" });
+  });
 });
 
 test("sheetsOf puts the option's sheets before the document's", () => {
   expect(sheetsOf("a {}", ["b {}"])).toEqual(["a {}", "b {}"]);
   expect(sheetsOf(["a {}"], [])).toEqual(["a {}"]);
   expect(sheetsOf(undefined, [])).toBeUndefined();
-});
-
-test("lazy creates its value once", () => {
-  let made = 0;
-  const value = lazy(() => ++made);
-
-  expect([value(), value()]).toEqual([1, 1]);
 });
