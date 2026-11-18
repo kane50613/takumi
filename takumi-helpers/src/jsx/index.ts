@@ -9,6 +9,7 @@ import type { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
   isAsciiWhitespace,
+  componentRenderer,
   isFunctionComponent,
   isHtmlElement,
   isUnrenderedElement,
@@ -114,8 +115,10 @@ class NodeBuilder implements RenderEnv {
     const contextResult = this.tryContext(element);
     if (contextResult !== undefined) return contextResult;
 
-    if (isFunctionComponent(element.type)) {
-      return this.functionComponent(element.type, element.props);
+    const render = componentRenderer(element.type);
+
+    if (render) {
+      return this.functionComponent(render, element.props);
     }
 
     const wrapperResult = this.tryWrapper(element);
@@ -216,9 +219,10 @@ class NodeBuilder implements RenderEnv {
 
     if (isReactMemo(element.type)) {
       const innerType = element.type.type;
+      const render = componentRenderer(innerType);
 
-      if (isFunctionComponent(innerType)) {
-        return this.functionComponent(innerType, element.props);
+      if (render) {
+        return this.functionComponent(render, element.props);
       }
 
       return this.element({ ...element, type: innerType });

@@ -32,6 +32,67 @@ export function isFunctionComponent(value: unknown): value is (props: unknown) =
   return typeof value === "function";
 }
 
+type ComponentInstance = { props: unknown; state?: unknown; render(): ReactNode };
+
+type ClassComponent = {
+  new (props: unknown): ComponentInstance;
+  defaultProps?: Record<string, unknown>;
+  getDerivedStateFromProps?: (props: unknown, state: unknown) => unknown;
+};
+
+/** Whether `value` is a class extending React's `Component` or `PureComponent`. */
+function isClassComponent(value: unknown): value is ClassComponent {
+  return (
+    typeof value === "function" &&
+    typeof value.prototype === "object" &&
+    value.prototype !== null &&
+    "isReactComponent" in value.prototype
+  );
+}
+
+/**
+ * The function that renders an element of `type`, or `undefined` when `type` is not a component.
+ * A class component mounts as React mounts it: default props, the constructor, derived state, then
+ * `render`.
+ */
+export function componentRenderer(type: unknown): ((props: unknown) => ReactNode) | undefined {
+  if (isClassComponent(type)) {
+    return (props) => {
+      const resolved = withDefaultProps(props, type.defaultProps);
+      const instance = new type(resolved);
+
+      instance.props = resolved;
+      if (type.getDerivedStateFromProps) {
+        const derived = type.getDerivedStateFromProps(resolved, instance.state);
+
+        if (derived !== null && derived !== undefined) {
+          instance.state = { ...(instance.state as object), ...(derived as object) };
+        }
+      }
+
+      return instance.render();
+    };
+  }
+
+  return isFunctionComponent(type) ? type : undefined;
+}
+
+function withDefaultProps(props: unknown, defaults: Record<string, unknown> | undefined): unknown {
+  if (!defaults) {
+    return props;
+  }
+
+  const resolved: Record<string, unknown> = { ...(props as Record<string, unknown>) };
+
+  for (const [name, value] of Object.entries(defaults)) {
+    if (resolved[name] === undefined) {
+      resolved[name] = value;
+    }
+  }
+
+  return resolved;
+}
+
 const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
 const REACT_MEMO_TYPE = Symbol.for("react.memo");
 const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
