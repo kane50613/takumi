@@ -12,8 +12,7 @@ use pdf_writer::{Chunk, Content, Finish, Limits, Name, Obj, Pdf, Ref, Settings, 
 use rustc_hash::FxHashMap;
 
 use crate::krilla::chunk_container::ChunkContainer;
-use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
-use crate::krilla::configure::validate::ValidationStore;
+use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace};
 use crate::krilla::configure::{Configuration, PdfVersion, ValidationError, Validators};
 use crate::krilla::error::{KrillaError, KrillaResult, LimitError};
 use crate::krilla::geom::Size;
@@ -21,15 +20,14 @@ use crate::krilla::graphics::color::{ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVIC
 use crate::krilla::graphics::icc::{ICCBasedColorSpace, ICCProfile};
 #[cfg(feature = "raster-images")]
 use crate::krilla::graphics::image::Image;
-use crate::krilla::graphics::separation::SeparationColorSpace;
-use crate::krilla::interactive::destination::{NamedDestination, XyzDestination};
+use crate::krilla::interactive::destination::XyzDestination;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
 use crate::krilla::interchange::tagging::{
   AnnotationIdentifier, PageTagIdentifier, TagId, TagTree,
 };
 use crate::krilla::object_stream::ObjectStreams;
-use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
+use crate::krilla::page::InternalPage;
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
 use crate::krilla::surface::{Location, Surface};
@@ -162,7 +160,6 @@ pub(crate) struct PageInfo {
   ref_: Ref,
   surface_size: Size,
   annotations: Vec<(Ref, OnceCell<Ref>)>,
-  page_label: PageLabel,
 }
 
 impl PageInfo {
@@ -172,10 +169,6 @@ impl PageInfo {
 
   pub(crate) fn size(&self) -> Size {
     self.surface_size
-  }
-
-  pub(crate) fn page_label(&self) -> &PageLabel {
-    &self.page_label
   }
 
   pub(crate) fn annotations(&self) -> &[(Ref, OnceCell<Ref>)] {
@@ -260,7 +253,6 @@ pub(crate) struct SerializeContext {
   limits: Limits,
   /// Additional information stored during serialization that allows us to
   /// raise standards errors later.
-  validation_store: ValidationStore,
   /// The current location, if set.
   pub(crate) location: Option<Location>,
 }
@@ -296,7 +288,6 @@ impl SerializeContext {
       serialize_settings: Arc::new(serialize_settings),
       chunk_settings,
       limits: Limits::new(),
-      validation_store: ValidationStore::new(),
     }
   }
 
@@ -325,14 +316,6 @@ impl SerializeContext {
     {
       self.global_objects.outline = MaybeTaken::new(Some(outline));
     }
-  }
-
-  pub(crate) fn set_location(&mut self, location: Location) {
-    self.location = Some(location)
-  }
-
-  pub(crate) fn reset_location(&mut self) {
-    self.location = None
   }
 
   pub(crate) fn embed_file(
@@ -398,10 +381,6 @@ impl SerializeContext {
       .clone()
   }
 
-  pub(crate) fn validation_store(&mut self) -> &mut ValidationStore {
-    &mut self.validation_store
-  }
-
   pub(crate) fn finish(
     mut self,
     mut chunk_container: ChunkContainer,
@@ -412,7 +391,6 @@ impl SerializeContext {
 
     // Serialize all objects that can only be written in the end.
     self.serialize_destination_profiles(&mut chunk_container);
-    self.serialize_page_label_tree(&mut chunk_container);
     self.serialize_outline(&mut chunk_container);
     self.serialize_fonts(&mut chunk_container)?;
     self.serialize_pages(&mut chunk_container)?;
@@ -505,20 +483,6 @@ impl SerializeContext {
     }
   }
 
-  pub(crate) fn register_named_destination(&mut self, nd: NamedDestination) -> Option<Ref> {
-    if let Some((dest_ref, existing)) = self.global_objects.named_destinations.get(nd.name.as_ref())
-    {
-      return (existing == nd.xyz_dest.as_ref()).then_some(*dest_ref);
-    }
-
-    let dest_ref = self.register_xyz_destination((*nd.xyz_dest).clone());
-    self
-      .global_objects
-      .named_destinations
-      .insert(nd.name.clone(), (dest_ref, (*nd.xyz_dest).clone()));
-    Some(dest_ref)
-  }
-
   pub(crate) fn register_page(&mut self, page: InternalPage) {
     let ref_ = self.new_ref();
     self.page_infos.push(PageInfo {
@@ -526,7 +490,6 @@ impl SerializeContext {
       surface_size: page.page_settings.surface_size(),
       // Will be populated when the page is serialized.
       annotations: vec![],
-      page_label: page.page_settings.page_label().clone(),
     });
     self.global_objects.pages.push((ref_, page));
   }
@@ -588,16 +551,6 @@ impl SerializeContext {
     })
   }
 
-  pub(crate) fn register_page_label(
-    &mut self,
-    chunk_container: &mut ChunkContainer,
-    page_label: PageLabel,
-  ) -> Ref {
-    let ref_ = self.new_ref();
-    page_label.serialize(chunk_container, ref_);
-    ref_
-  }
-
   pub(crate) fn register_font_identifier(&mut self, f: FontIdentifier) -> resource::Font {
     let hash = f.sip_hash();
     if let Some(_ref) = self.cached_mappings.get(&hash) {
@@ -633,9 +586,6 @@ impl SerializeContext {
       ColorSpace::Device(DeviceColorSpace::Gray) => MaybeDeviceColorSpace::DeviceGray,
       ColorSpace::Device(DeviceColorSpace::Rgb) => MaybeDeviceColorSpace::DeviceRgb,
       ColorSpace::Device(DeviceColorSpace::Cmyk) => MaybeDeviceColorSpace::DeviceCMYK,
-      ColorSpace::Special(SpecialColorSpace::Separation(s)) => MaybeDeviceColorSpace::ColorSpace(
-        self.register_resourceable(chunk_container, SeparationColorSpace::new(s)),
-      ),
     }
   }
 }
@@ -674,19 +624,6 @@ impl SerializeContext {
 
       (root_ref, chunk)
     });
-  }
-
-  fn serialize_page_label_tree(&mut self, chunk_container: &mut ChunkContainer) {
-    if let Some(container) = PageLabelContainer::new(
-      &self
-        .page_infos
-        .iter()
-        .map(|page| page.page_label().clone())
-        .collect::<Vec<_>>(),
-    ) {
-      let page_label_tree_ref = self.new_ref();
-      container.serialize(self, chunk_container, page_label_tree_ref);
-    }
   }
 
   fn serialize_outline(&mut self, chunk_container: &mut ChunkContainer) {
@@ -767,7 +704,6 @@ impl SerializeContext {
         struct_tree_root_ref,
       )?;
 
-      root.validate(&id_tree_map)?;
       self.tag_refs = id_tree_map.clone();
 
       let mut chunk = self.new_chunk();
@@ -999,10 +935,6 @@ pub(crate) struct Pdf2Namespaces {
 
 #[derive(Default)]
 pub(crate) struct GlobalObjects {
-  /// All named destinations that have been registered, including a Ref to their destination and
-  /// the destination itself.
-  // Needs to be pub(crate) because writing of named destinations happens in `ChunkContainer`.
-  pub(crate) named_destinations: MaybeTaken<HashMap<Arc<String>, (Ref, XyzDestination)>>,
   /// A map from fonts to font container.
   font_map: MaybeTaken<IndexMap<Font, Rc<RefCell<FontContainer>>>>,
   /// All XYZ destinations used in the document. The reason we need to store them
@@ -1029,7 +961,6 @@ pub(crate) struct GlobalObjects {
 
 impl GlobalObjects {
   pub(crate) fn assert_all_taken(&self) {
-    assert!(self.named_destinations.is_taken());
     assert!(self.font_map.is_taken());
     assert!(self.xyz_destinations.is_taken());
     assert!(self.pages.is_taken());

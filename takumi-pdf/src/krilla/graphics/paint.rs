@@ -5,9 +5,8 @@ use std::sync::Arc;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
 
-use crate::krilla::color::SpecialColor;
 use crate::krilla::geom::Transform;
-use crate::krilla::graphics::color::{Color, cmyk, luma, rgb};
+use crate::krilla::graphics::color::{Color, luma, rgb};
 use crate::krilla::num::NormalizedF32;
 use crate::krilla::stream::Stream;
 
@@ -183,10 +182,7 @@ pub struct Paint(pub(crate) InnerPaint);
 impl Paint {
   pub(crate) fn as_rgb(&self) -> Option<rgb::Color> {
     match &self.0 {
-      InnerPaint::Color(c) => match c {
-        Color::Regular(c) => c.as_rgb(),
-        Color::Special(SpecialColor::Separation(c)) => c.space.fallback.as_rgb(),
-      },
+      InnerPaint::Color(c) => Some(c.as_rgb()),
       _ => None,
     }
   }
@@ -200,12 +196,6 @@ impl From<rgb::Color> for Paint {
 
 impl From<luma::Color> for Paint {
   fn from(value: luma::Color) -> Self {
-    Paint(InnerPaint::Color(value.into()))
-  }
-}
-
-impl From<cmyk::Color> for Paint {
-  fn from(value: cmyk::Color) -> Self {
     Paint(InnerPaint::Color(value.into()))
   }
 }
@@ -272,7 +262,8 @@ pub enum LineCap {
   Butt,
   /// The round line cap.
   Round,
-  /// The square line cap.
+  /// The square line cap, which only SVG strokes ask for.
+  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
   Square,
 }
 
@@ -294,7 +285,8 @@ pub enum LineJoin {
   Miter,
   /// The round line join.
   Round,
-  /// The bevel line join.
+  /// The bevel line join, which only SVG strokes ask for.
+  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
   Bevel,
 }
 

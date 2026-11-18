@@ -62,7 +62,7 @@ use crate::{
     },
     stream::Stream,
     surface::Surface,
-    tagging::{ContentTag, SpanTag},
+    tagging::ContentTag,
     text::{Font, Tag},
   },
   options::{PT_PER_PX, PdfError},
@@ -71,7 +71,7 @@ use crate::{
     krilla_stops, normalized, pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
-  tags::{ARTIFACT, TagCollector},
+  tags::TagCollector,
   tree::draws,
   window::{LineFrame, Window},
 };
@@ -209,9 +209,7 @@ impl Emitter<'_> {
   /// The marked-content tag a node's own content opens.
   fn content_tag<'t>(&self, node: &'t RenderNode) -> ContentTag<'t> {
     match node.context.style.lang.as_ref().map(Lang::as_str) {
-      Some(lang) if Some(lang) != self.document.lang => {
-        ContentTag::Span(SpanTag::empty().with_lang(Some(lang)))
-      }
+      Some(lang) if Some(lang) != self.document.lang => ContentTag::Span(lang),
       _ => ContentTag::Other,
     }
   }
@@ -436,7 +434,7 @@ impl Emitter<'_> {
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
     } else if artifact {
-      surface.start_tagged(ARTIFACT);
+      surface.start_tagged(ContentTag::Artifact);
     }
     // Nothing inside the artifact is tagged, the replaced boxes on its lines included.
     let tagging = self.tagged;
@@ -828,7 +826,7 @@ impl Emitter<'_> {
 
   fn in_artifact(&self, surface: &mut Surface, draw: impl FnOnce(&mut Surface)) {
     if self.tagged {
-      surface.start_tagged(ARTIFACT);
+      surface.start_tagged(ContentTag::Artifact);
     }
     draw(surface);
     if self.tagged {
@@ -1189,7 +1187,7 @@ impl Emitter<'_> {
   /// artifact for a decorative image, otherwise a region recorded at `path`.
   fn start_node_region(&self, node: &RenderNode, path: Option<&[usize]>, surface: &mut Surface) {
     if decorative_image(node) {
-      surface.start_tagged(ARTIFACT);
+      surface.start_tagged(ContentTag::Artifact);
       return;
     }
     let identifier = surface.start_tagged(self.content_tag(node));
@@ -1763,7 +1761,7 @@ impl SurfaceDevice<'_, '_> {
   /// does not nest.
   fn open(&mut self, saved: Saved) {
     if self.artifact && self.stack.is_empty() {
-      self.surface.start_tagged(ARTIFACT);
+      self.surface.start_tagged(ContentTag::Artifact);
     }
 
     self.stack.push(saved);
@@ -1811,7 +1809,7 @@ impl SurfaceDevice<'_, '_> {
       self.surface.push_transform(&transform.into());
     }
     if artifact {
-      self.surface.start_tagged(ARTIFACT);
+      self.surface.start_tagged(ContentTag::Artifact);
     }
     paint(self.surface, &path);
     if !flat {

@@ -134,39 +134,6 @@ impl Rect {
   }
 }
 
-/// A quadrilateral.
-///
-/// The points should be given in the following order:
-/// 1. bottom-left
-/// 2. bottom-right
-/// 3. top-right
-/// 4. top-left
-///
-/// Where the coordinate system is Y-down:
-/// ```md
-///      |
-///      |
-/// -----+---->  X
-///      |
-///      |
-///      v
-///
-///      Y
-/// ```
-#[derive(Clone, Copy, PartialEq)]
-pub struct Quadrilateral(pub [Point; 4]);
-
-impl From<Rect> for Quadrilateral {
-  fn from(r: Rect) -> Self {
-    Self([
-      Point::from_xy(r.left(), r.bottom()),
-      Point::from_xy(r.right(), r.bottom()),
-      Point::from_xy(r.right(), r.top()),
-      Point::from_xy(r.left(), r.top()),
-    ])
-  }
-}
-
 /// An affine transformation matrix.
 ///
 /// Unlike other types, doesn't guarantee to be valid. This is Skia quirk.
@@ -288,12 +255,7 @@ impl Hash for Transform {
 /// A path.
 pub struct Path(pub(crate) tiny_skia_path::Path);
 
-impl Path {
-  /// Apply a transformation to the path.
-  pub fn transform(self, transform: Transform) -> Option<Self> {
-    Some(Self(self.0.transform(transform.to_tsp())?))
-  }
-}
+impl Path {}
 
 /// A path builder.
 #[derive(Default)]

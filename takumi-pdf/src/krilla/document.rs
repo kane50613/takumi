@@ -18,7 +18,6 @@ use pdf_writer::{Filter, XRefFilter};
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::configure::PdfVersion;
-use crate::krilla::destination::NamedDestination;
 use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::metadata::Metadata;
@@ -27,7 +26,6 @@ use crate::krilla::interchange::tagging::TagTree;
 use crate::krilla::page::{Page, PageSettings};
 use crate::krilla::serialize::{SerializeContext, SerializeSettings};
 use crate::krilla::stream::deflate_encode;
-use crate::krilla::surface::Location;
 
 /// A PDF document.
 pub struct Document {
@@ -86,16 +84,6 @@ impl Document {
     )
   }
 
-  /// Set the location that should be assumed for subsequent operations.
-  pub fn set_location(&mut self, location: Location) {
-    self.serializer_context.set_location(location);
-  }
-
-  /// Reset the location that should be assumed for subsequent operations.
-  pub fn reset_location(&mut self) {
-    self.serializer_context.reset_location();
-  }
-
   /// Set the outline of the document.
   pub fn set_outline(&mut self, outline: Outline) {
     self.serializer_context.set_outline(outline);
@@ -119,21 +107,6 @@ impl Document {
     self
       .serializer_context
       .embed_file(&mut self.chunk_container, file)
-  }
-
-  /// Manually register a global named destination.
-  ///
-  /// Named destinations used in link annotations are automatically registered, so you don't need
-  /// to call this function for them.
-  ///
-  /// Returns `None` if a named destination with the same name and a different destination has
-  /// already been registered, and therefore could not be registered again.
-  #[must_use]
-  pub fn register_named_destination(&mut self, dest: NamedDestination) -> Option<()> {
-    self
-      .serializer_context
-      .register_named_destination(dest)
-      .map(|_| ())
   }
 
   /// Attempt to export the document to a PDF file.

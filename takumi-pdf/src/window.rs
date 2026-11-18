@@ -9,10 +9,10 @@ use crate::{
     geom::{Rect as KrillaRect, Transform},
     paint::FillRule,
     surface::Surface,
+    tagging::ContentTag,
   },
   options::PdfError,
   paint::rect_path,
-  tags::ARTIFACT,
 };
 
 /// The content windows one emit walk filters by, in content coordinates.
@@ -144,7 +144,7 @@ impl ContentWindow {
     };
 
     if self.artifact {
-      surface.start_tagged(ARTIFACT);
+      surface.start_tagged(ContentTag::Artifact);
     }
     surface.push_clip_path(&path, &FillRule::NonZero);
     surface.push_transform(&Transform::from_translate(

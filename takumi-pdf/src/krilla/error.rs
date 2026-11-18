@@ -5,7 +5,6 @@
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use std::sync::Arc;
 
 use crate::krilla::configure::{ValidationError, Validators};
 #[cfg(feature = "raster-images")]
@@ -29,17 +28,10 @@ pub enum KrillaError {
   Validation(Vec<(ValidationError, Validators)>),
   /// A hard limit of the selected PDF version was exceeded.
   Limit(LimitError),
-  /// The same destination name has been associated with two different destinations,
-  /// which is prohibited.
-  DuplicateNamedDestination(Arc<String>),
   /// A duplicate [`Tag::id`] was provided.
   ///
   /// [`Tag::id`]: crate::krilla::interchange::tagging::Tag::id
   DuplicateTagId(TagId, Option<Location>),
-  /// A [`TagId`] was not found in the [`TagTree`].
-  ///
-  /// [`TagTree`]: crate::krilla::interchange::tagging::TagTree
-  UnknownTagId(TagId, Option<Location>),
   /// The tag tree references content that does not exist, references it
   /// twice, or omits recorded content.
   ///
@@ -69,21 +61,10 @@ impl Display for KrillaError {
         )
       }
       KrillaError::Limit(error) => write!(f, "PDF version limit exceeded: {error}"),
-      KrillaError::DuplicateNamedDestination(name) => {
-        write!(f, "duplicate named destination: {name}")
-      }
       KrillaError::DuplicateTagId(id, location) => {
         write!(
           f,
           "duplicate tag id {}",
-          String::from_utf8_lossy(id.as_bytes())
-        )?;
-        write_location(f, *location)
-      }
-      KrillaError::UnknownTagId(id, location) => {
-        write!(
-          f,
-          "unknown tag id {}",
           String::from_utf8_lossy(id.as_bytes())
         )?;
         write_location(f, *location)

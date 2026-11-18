@@ -166,7 +166,6 @@ mod tree;
 mod window;
 
 #[allow(
-  dead_code,
   missing_docs,
   clippy::all,
   clippy::redundant_closure_for_method_calls,
@@ -176,7 +175,6 @@ mod window;
 )]
 mod krilla;
 #[allow(
-  dead_code,
   missing_docs,
   clippy::all,
   clippy::redundant_closure_for_method_calls,

@@ -6,7 +6,6 @@ use xmp_writer::{RenditionClass, XmpWriter};
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
-use crate::krilla::metadata::PageLayout;
 use crate::krilla::object_stream::{self, ObjectStreams};
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::util::{Deferred, stable_hash_base64};
@@ -40,11 +39,9 @@ pub(crate) struct MixedChunks {
 pub(crate) struct NonStreamChunks {
   pub(crate) page_tree: Option<(Ref, Chunk)>,
   pub(crate) outline: Option<(Ref, Chunk)>,
-  pub(crate) page_label_tree: Option<(Ref, Chunk)>,
   pub(crate) destination_profiles: Option<(Ref, Chunk)>,
   pub(crate) struct_tree_root: Option<(Ref, Chunk)>,
   pub(crate) struct_elements: Option<Chunk>,
-  pub(crate) page_labels: Chunk,
   pub(crate) annotations: Chunk,
   pub(crate) color_spaces: Chunk,
   pub(crate) destinations: Chunk,
@@ -78,11 +75,9 @@ impl ChunkContainer {
       non_stream: NonStreamChunks {
         page_tree: None,
         outline: None,
-        page_label_tree: None,
         destination_profiles: None,
         struct_tree_root: None,
         struct_elements: None,
-        page_labels: sc.new_chunk(),
         annotations: sc.new_chunk(),
         color_spaces: sc.new_chunk(),
         destinations: sc.new_chunk(),
@@ -184,20 +179,15 @@ impl ChunkContainer {
 
     let instance_id = stable_hash_base64(pdf.as_bytes());
 
-    let document_id = if let Some(metadata) = &self.metadata {
-      if let Some(document_id) = &metadata.document_id {
-        stable_hash_base64(&(sc.serialize_settings().pdf_version().as_str(), document_id))
-      } else if metadata.title.is_some() && metadata.authors.is_some() {
+    let document_id = match &self.metadata {
+      Some(metadata) if metadata.title.is_some() && metadata.authors.is_some() => {
         stable_hash_base64(&(
           sc.serialize_settings().pdf_version().as_str(),
           &metadata.title,
           &metadata.authors,
         ))
-      } else {
-        instance_id.clone()
       }
-    } else {
-      instance_id.clone()
+      _ => instance_id.clone(),
     };
 
     let mut xmp = XmpWriter::new();
@@ -229,7 +219,6 @@ impl ChunkContainer {
     xmp.rendition_class(RenditionClass::Proof);
     sc.serialize_settings().pdf_version().write_xmp(&mut xmp);
 
-    let named_destinations = sc.global_objects.named_destinations.take();
     let embedded_files = sc.global_objects.embedded_files.take();
 
     // We only write a catalog if a page tree exists. Every valid PDF must have one
@@ -237,7 +226,6 @@ impl ChunkContainer {
     // useful to not write a document catalog if we don't actually need it for the test.
     if self.non_stream.page_tree.is_some()
       || self.non_stream.outline.is_some()
-      || self.non_stream.page_label_tree.is_some()
       || self.non_stream.destination_profiles.is_some()
       || self.non_stream.struct_tree_root.is_some()
     {
@@ -263,10 +251,6 @@ impl ChunkContainer {
 
       if let Some(meta_ref) = meta_ref {
         catalog.metadata(meta_ref);
-      }
-
-      if let Some(pl) = &self.non_stream.page_label_tree {
-        catalog.pair(Name(b"PageLabels"), remapper[&pl.0]);
       }
 
       if let Some(oi) = &self.non_stream.destination_profiles {
@@ -296,28 +280,9 @@ impl ChunkContainer {
         .serialize_settings()
         .validators()
         .requires_display_doc_title();
-      let text_direction = self.metadata.as_ref().and_then(|m| m.text_direction);
 
-      if write_doc_title || text_direction.is_some() {
-        let mut vp = catalog.viewer_preferences();
-
-        if write_doc_title {
-          vp.display_doc_title(true);
-        }
-
-        if let Some(dir) = text_direction {
-          vp.direction(dir.to_pdf());
-        }
-      }
-
-      let page_layout = self.metadata.as_ref().and_then(|m| m.page_layout);
-      if let Some(layout) = page_layout {
-        // TwoPageLeft and TwoPageRight are only available PDF 1.5+
-        if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf15
-          || !matches!(layout, PageLayout::TwoPageLeft | PageLayout::TwoPageRight)
-        {
-          catalog.page_layout(layout.to_pdf());
-        }
+      if write_doc_title {
+        catalog.viewer_preferences().display_doc_title(true);
       }
 
       if let Some(ol) = &self.non_stream.outline {
@@ -329,43 +294,13 @@ impl ChunkContainer {
       let write_embedded_files = self.non_stream.embedded_files.len() != 0
         || validators.requires_embedded_files_when_empty();
 
-      if !named_destinations.is_empty() || write_embedded_files {
-        // Cannot use pdf-writer API here because it requires Ref's, while
-        // we write our destinations directly into the array.
+      if write_embedded_files {
         let mut names = catalog.names();
+        let mut embedded_files_name_tree = names.embedded_files();
+        let mut embedded_name_entries = embedded_files_name_tree.names();
 
-        if !named_destinations.is_empty() {
-          let mut dest_name_tree = names.destinations();
-          let mut dest_name_entries = dest_name_tree.names();
-
-          // "The Names entries in the leaf (or root) nodes shall
-          // contain the tree’s keys and their associated values,
-          // arranged in key-value pairs and shall be sorted lexically
-          // in ascending order by key. Shorter keys shall appear
-          // before longer ones beginning with the same byte sequence.
-          // Any encoding of the keys may be used as long as it is
-          // self-consistent; keys shall be compared for equality on
-          // a simple byte-by-byte basis."
-          let mut sorted = named_destinations.into_iter().collect::<Vec<_>>();
-          // Note that named destinations are guaranteed to be unique,
-          // hence just comparing by the name is enough.
-          sorted.sort_unstable_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
-
-          for (name, (dest_ref, _)) in sorted {
-            dest_name_entries.insert(Str(name.as_bytes()), remapper[&dest_ref]);
-          }
-
-          dest_name_entries.finish();
-          dest_name_tree.finish();
-        }
-
-        if write_embedded_files {
-          let mut embedded_files_name_tree = names.embedded_files();
-          let mut embedded_name_entries = embedded_files_name_tree.names();
-
-          for (name, _ref) in &embedded_files {
-            embedded_name_entries.insert(Str(name.as_bytes()), remapper[_ref]);
-          }
+        for (name, _ref) in &embedded_files {
+          embedded_name_entries.insert(Str(name.as_bytes()), remapper[_ref]);
         }
       }
 
@@ -457,11 +392,9 @@ impl Visit for NonStreamChunks {
   fn visit(&self, sc: &mut SerializeContext, f: &mut impl FnMut(&Chunk)) -> KrillaResult<()> {
     self.page_tree.visit(sc, f)?;
     self.outline.visit(sc, f)?;
-    self.page_label_tree.visit(sc, f)?;
     self.destination_profiles.visit(sc, f)?;
     self.struct_tree_root.visit(sc, f)?;
     self.struct_elements.visit(sc, f)?;
-    self.page_labels.visit(sc, f)?;
     self.annotations.visit(sc, f)?;
     self.color_spaces.visit(sc, f)?;
     self.destinations.visit(sc, f)?;

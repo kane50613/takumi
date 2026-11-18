@@ -189,15 +189,6 @@ impl Tag {
     Self(*tag)
   }
 
-  /// Try to create a new tag from a string.
-  ///
-  /// Return `None` if the string is not 4 bytes in size.
-  pub fn try_from_str(s: &str) -> Option<Self> {
-    let tag: [u8; 4] = s.as_bytes().try_into().ok()?;
-
-    Some(Self(tag))
-  }
-
   /// Return the value of the tag.
   pub fn get(&self) -> &[u8; 4] {
     &self.0

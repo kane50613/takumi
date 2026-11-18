@@ -132,12 +132,7 @@ impl ContentBuilder {
   }
 
   #[track_caller]
-  pub(crate) fn start_marked_content_with_properties(
-    &mut self,
-    sc: &mut SerializeContext,
-    mcid: Option<i32>,
-    tag: ContentTag,
-  ) {
+  pub(crate) fn start_marked_content_with_properties(&mut self, mcid: i32, tag: ContentTag) {
     self.start_marked_content_prelude();
 
     let mut mc = self
@@ -145,14 +140,8 @@ impl ContentBuilder {
       .begin_marked_content_with_properties(tag.name());
     let mut properties = mc.properties();
 
-    if let Some(mcid) = mcid {
-      properties.pairs([(Name(b"MCID"), mcid)]);
-    }
-
-    // Page height extracted from transform and passed to function to allow
-    // its dependants to flip the y-axis, mirroring Krilla conventions.
-    let page_height = self.root_transform.ty();
-    tag.write_properties(sc, properties, page_height);
+    properties.pairs([(Name(b"MCID"), mcid)]);
+    tag.write_properties(properties);
   }
 
   #[track_caller]
@@ -1179,19 +1168,12 @@ impl ContentBuilder {
     fn set_solid_fn(content: &mut Content, color_space: ContentColorSpace, color: &Color) {
       match color_space {
         ContentColorSpace::Device => match color {
-          Color::Regular(crate::krilla::color::RegularColor::Rgb(r)) => {
+          Color::Rgb(r) => {
             let comps = r.to_pdf_color();
             content.set_fill_rgb(comps[0], comps[1], comps[2]);
           }
-          Color::Regular(crate::krilla::color::RegularColor::Luma(l)) => {
+          Color::Luma(l) => {
             content.set_fill_gray(l.to_pdf_color());
-          }
-          Color::Regular(crate::krilla::color::RegularColor::Cmyk(c)) => {
-            let comps = c.to_pdf_color();
-            content.set_fill_cmyk(comps[0], comps[1], comps[2], comps[3]);
-          }
-          Color::Special(_) => {
-            panic!("Device color space cannot be used with special colors")
           }
         },
         ContentColorSpace::Named(n) => {
@@ -1227,19 +1209,12 @@ impl ContentBuilder {
     fn set_solid_fn(content: &mut Content, color_space: ContentColorSpace, color: &Color) {
       match color_space {
         ContentColorSpace::Device => match color {
-          Color::Regular(crate::krilla::color::RegularColor::Rgb(r)) => {
+          Color::Rgb(r) => {
             let comps = r.to_pdf_color();
             content.set_stroke_rgb(comps[0], comps[1], comps[2]);
           }
-          Color::Regular(crate::krilla::color::RegularColor::Luma(l)) => {
+          Color::Luma(l) => {
             content.set_stroke_gray(l.to_pdf_color());
-          }
-          Color::Regular(crate::krilla::color::RegularColor::Cmyk(c)) => {
-            let comps = c.to_pdf_color();
-            content.set_stroke_cmyk(comps[0], comps[1], comps[2], comps[3]);
-          }
-          Color::Special(_) => {
-            panic!("Device color space cannot be used with special colors")
           }
         },
         ContentColorSpace::Named(n) => {

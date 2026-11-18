@@ -1,12 +1,5 @@
-//! Creating and using bitmap images.
-//!
-//! krilla allows you to add bitmap images to your PDF very easily.
-//! The currently supported formats include
-//! - PNG
-//! - JPG
-//! - GIF
-//! - WEBP
-//! - Custom image formats via [`CustomImage`]
+//! Bitmap images: JPEG bytes embedded as they came, the IDAT data of a non-interlaced
+//! grayscale, RGB, or indexed PNG passed through, other PNGs and WebP decoded, and raw RGBA.
 
 mod png;
 
@@ -132,27 +125,6 @@ impl Repr {
   }
 }
 
-/// A trait for custom images, which you can use if the
-/// current methods provided by krilla (JPEG/PNG/WEBP/GIF) images
-/// are not suitable for your own purpose.
-///
-/// Note that a struct implementing this trait should be cheap to
-/// hash and clone, otherwise performance might be bad!
-pub trait CustomImage: Hash + Clone + Send + Sync + 'static {
-  /// Return the raw bytes of the color channel.
-  fn color_channel(&self) -> &[u8];
-  /// Return the raw bytes of the alpha channel, if available.
-  fn alpha_channel(&self) -> Option<&[u8]>;
-  /// Return the bits per component of the image.
-  fn bits_per_component(&self) -> BitsPerComponent;
-  /// Return the dimensions of the image.
-  fn size(&self) -> (u32, u32);
-  /// Return the ICC profile of the image, if available.
-  fn icc_profile(&self) -> Option<&[u8]>;
-  /// Return the color space of the image.
-  fn color_space(&self) -> ImageColorspace;
-}
-
 struct ImageMetadata {
   size: (u32, u32),
   color_space: ImageColorspace,
@@ -235,40 +207,6 @@ impl Image {
     })))
   }
 
-  /// Create a new bitmap image from a `.jpg` file with custom ICC profile.
-  #[doc(hidden)]
-  pub fn from_jpeg_with_icc(
-    data: Data,
-    icc_profile: Option<Data>,
-    interpolate: bool,
-  ) -> Result<Image, String> {
-    let hash = data.as_ref().sip_hash();
-    let mut metadata = jpeg_metadata(data.as_ref())?;
-    let icc_profile =
-      icc_profile.and_then(|d| get_icc_profile_type(d.as_ref(), metadata.color_space));
-    metadata.icc = icc_profile;
-
-    Ok(Self(Arc::new(ImageRepr {
-      inner: Deferred::new(move || decode_jpeg(data)),
-      metadata,
-      sip: hash,
-      interpolate,
-    })))
-  }
-
-  /// Create a new bitmap image from a `.gif` file.
-  pub fn from_gif(data: Data, interpolate: bool) -> Result<Image, String> {
-    let hash = data.as_ref().sip_hash();
-    let metadata = gif_metadata(data.as_ref())?;
-
-    Ok(Self(Arc::new(ImageRepr {
-      inner: Deferred::new(move || decode_gif(data)),
-      metadata,
-      sip: hash,
-      interpolate,
-    })))
-  }
-
   /// Create a new bitmap image from a `.webp` file.
   ///
   /// Returns `None` if krilla was unable to parse the file.
@@ -278,50 +216,6 @@ impl Image {
 
     Ok(Self(Arc::new(ImageRepr {
       inner: Deferred::new(move || decode_webp(data)),
-      metadata,
-      sip: hash,
-      interpolate,
-    })))
-  }
-
-  /// Create a new image from a custom image.
-  ///
-  /// Panics if the dimensions of the image and the length of the
-  /// data doesn't match.
-  pub fn from_custom<T: CustomImage>(image: T, interpolate: bool) -> Result<Image, String> {
-    let hash = (image.clone(), interpolate).sip_hash();
-    let metadata = ImageMetadata {
-      size: image.size(),
-      color_space: image.color_space(),
-      has_alpha: image.alpha_channel().is_some(),
-      bits_per_component: image.bits_per_component(),
-      icc: image
-        .icc_profile()
-        .and_then(|d| get_icc_profile_type(d, image.color_space())),
-    };
-
-    Ok(Self(Arc::new(ImageRepr {
-      inner: Deferred::new(move || {
-        let bytes_per_component = (image.bits_per_component().as_u8() / 8) as u32;
-        let color_channel_len = bytes_per_component
-          * image.color_space().num_components() as u32
-          * metadata.size.0
-          * metadata.size.1;
-        let color_channel = image.color_channel();
-        assert_eq!(color_channel.len(), color_channel_len as usize);
-
-        let alpha_channel_len = bytes_per_component * metadata.size.0 * metadata.size.1;
-        let alpha_channel = image.alpha_channel();
-        if let Some(alpha_channel) = alpha_channel {
-          assert_eq!(alpha_channel.len(), alpha_channel_len as usize);
-        }
-
-        Ok(Repr::Sampled(SampledRepr {
-          color_channel: deflate_encode(color_channel),
-          alpha_channel: image.alpha_channel().map(deflate_encode),
-          bits_per_component: image.bits_per_component(),
-        }))
-      }),
       metadata,
       sip: hash,
       interpolate,
@@ -698,40 +592,6 @@ fn decode_jpeg(data: Data) -> Result<Repr, String> {
     // JPEGs shouldn't be able to have a different color space?
     Err("image has an unknown color space".to_string())
   }
-}
-
-fn decode_gif(data: Data) -> Result<Repr, String> {
-  let mut decoder = gif::DecodeOptions::new();
-  decoder.set_color_output(gif::ColorOutput::RGBA);
-  let mut decoder = decoder
-    .read_info(data.as_ref())
-    .map_err(|e| e.to_string().to_ascii_lowercase())?;
-  let first_frame = decoder
-    .read_next_frame()
-    .map_err(|e| e.to_string())?
-    .ok_or("GIF image seems to be empty".to_string())?;
-
-  let (color_channel, alpha_channel, bits_per_component) =
-    handle_u8_image(first_frame.buffer.as_ref(), ColorSpace::RGBA);
-
-  Ok(Repr::Sampled(SampledRepr {
-    color_channel,
-    alpha_channel,
-    bits_per_component,
-  }))
-}
-
-fn gif_metadata(data: &[u8]) -> Result<ImageMetadata, String> {
-  let size = imagesize::blob_size(data).map_err(|e| e.to_string().to_ascii_lowercase())?;
-
-  Ok(ImageMetadata {
-    // We always decode GIFs using RGBA, see `decode_gif`
-    has_alpha: true,
-    bits_per_component: BitsPerComponent::Eight,
-    size: (size.width as u32, size.height as u32),
-    color_space: ImageColorspace::Rgb,
-    icc: None,
-  })
 }
 
 fn webp_metadata(data: &[u8]) -> Result<ImageMetadata, String> {
