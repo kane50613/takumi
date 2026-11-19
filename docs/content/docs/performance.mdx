@@ -94,7 +94,18 @@ glibc raises its mmap threshold after a large block is freed, so later canvases 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
+These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862). It used the `node:24-bookworm-slim` image on Linux arm64 and rendered 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first.
+
+### Alpine and other musl images
+
+The glibc settings above do nothing on musl. Preload [mimalloc](https://github.com/microsoft/mimalloc) to replace the allocator for the whole process:
+
+```bash title="mimalloc on Alpine"
+apk add mimalloc2-insecure
+LD_PRELOAD=/usr/lib/libmimalloc-insecure.so.2 node server.js
+```
+
+In [PR #2517](https://github.com/kane50613/takumi/pull/2517), mimalloc raised four renders at a time from 259 to 546 a second, and peak RSS from 144 MiB to 178 MiB. The `mimalloc2` package without `-insecure` is a hardened build and slower.
 
 ## Keep network requests out of repeated work
 
