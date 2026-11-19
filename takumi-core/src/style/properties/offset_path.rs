@@ -608,16 +608,15 @@ fn sample_bezpath(
     return None;
   }
 
-  // A percentage skips the clamp `to_px` applies for layout, which would cut a long path short.
-  let raw = f64::from(match distance {
-    Length::Percentage(_) => distance.to_px_pre_dpr(sizing, total as f32),
-    _ => distance.to_px(sizing, total as f32),
-  });
-  let mut remaining = if closed {
-    raw.rem_euclid(total)
+  // Blink's `ComputedStyle::CalculatePointAndTangentOnPath`: the distance resolves against the
+  // `float` path length, without layout's clamp, and wraps or clamps to that same length.
+  let length = total as f32;
+  let distance = distance.to_px_unclamped(sizing, length);
+  let mut remaining = f64::from(if closed {
+    distance.rem_euclid(length)
   } else {
-    raw.clamp(0.0, total)
-  };
+    distance.clamp(0.0, length)
+  });
 
   for (segment, length) in segments.iter().zip(&lengths) {
     if *length <= 0.0 {
@@ -826,6 +825,26 @@ mod tests {
     );
 
     assert!((point.x / 5e19 - 1.0).abs() < 1e-3, "x = {}", point.x);
+  }
+
+  /// A `calc()` with a percentage resolves against a huge path's whole length too.
+  #[test]
+  fn samples_a_calc_percentage_of_a_huge_line() {
+    let point = sample_at(
+      "path('M 0 0 L 100000000000000000000 0')",
+      Length::from_css_str("calc(50% + 0px)").unwrap(),
+    );
+
+    assert!((point.x / 5e19 - 1.0).abs() < 1e-3, "x = {}", point.x);
+  }
+
+  /// A closed path wraps a full-length percentage back to its start, against the length it resolved
+  /// the percentage from.
+  #[test]
+  fn wraps_a_full_closed_loop_to_its_start() {
+    let point = sample_at("path('M 0 0 L 10000000001 0 Z')", Length::Percentage(100.0));
+
+    assert!(point.x.abs() < 1.0, "x = {}", point.x);
   }
 
   /// A long segment still finds a point a pixel along it to within a pixel.

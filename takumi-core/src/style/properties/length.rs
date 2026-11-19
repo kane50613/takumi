@@ -386,7 +386,7 @@ impl<'i> FromCss<'i> for Length {
 }
 
 impl Length {
-  pub(crate) fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
+  fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
       Length::Px(value) => value,
@@ -487,11 +487,17 @@ impl Length {
 
   /// Resolves to device pixels, applying the device-pixel ratio to absolute units.
   pub fn to_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
+    clamp_px_for_integer_cast(self.to_px_unclamped(sizing, percentage_full_px))
+  }
+
+  /// [`Self::to_px`] without the clamp to what layout's integer pixels hold, Blink's
+  /// `FloatValueForLength`.
+  pub(crate) fn to_px_unclamped(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     let value = self.to_px_pre_dpr(sizing, percentage_full_px);
 
     // Only absolute units carry a device-pixel-ratio factor; relative units
     // already resolve against device-pixel bases.
-    let value = match self {
+    match self {
       Length::Px(_)
       | Length::Cm(_)
       | Length::Mm(_)
@@ -500,9 +506,7 @@ impl Length {
       | Length::Pt(_)
       | Length::Pc(_) => sizing.to_device(value),
       _ => value,
-    };
-
-    clamp_px_for_integer_cast(value)
+    }
   }
 
   /// Blink's `MinimumValueForLength`: this length in layout units against `maximum`, `auto` as
