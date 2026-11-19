@@ -134,23 +134,7 @@ export function GET() {
 
 Emoji detection follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image. Add `U+FE0E` after an emoji to keep the text glyph.
 
-#### Manual extraction
-
-The `extractEmojis` helper does the splitting. It replaces each emoji with an image node that points at the CDN. On your own renderer, call it before [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with your other images.
-
-```tsx twoslash title="Extract emoji before rendering"
-import { extractEmojis } from "takumi-js/helpers/emoji";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { Renderer } from "takumi-js/node";
-
-let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
-node = extractEmojis(node, "twemoji");
-
-const renderer = new Renderer();
-const prepared = await renderer.prepare(node, { width: 1200, height: 630 });
-
-const image = await renderer.render(prepared, { format: "webp" });
-```
+A renderer from `@takumi-rs/core` or `@takumi-rs/wasm` does not split emoji out of the text. Call `extractEmojis` from `@takumi-rs/helpers/emoji` on the node tree before its [`prepare()`](#prepare-on-your-own-renderer), which then fetches the emoji with the other images.
 
 ### COLR / bitmap fonts
 
@@ -208,7 +192,7 @@ const image = await render(element, {
 });
 ```
 
-`images`, `googleFonts`, and `fontFromUrl` take these options. A custom `data` loader makes its own requests, so they do not apply to it.
+`images` and `googleFonts` take these options. A font URL string in `fonts` fetches with the defaults. A custom `data` loader makes its own requests, so the options do not apply to it.
 
 | Option     | Default            | Effect                                                            |
 | :--------- | :----------------- | :---------------------------------------------------------------- |
@@ -273,12 +257,15 @@ A `data:` URI in an `<img>` or a CSS `url()` uses the same decode cache, keyed b
 
 The decode cache belongs to the renderer and has a byte budget, 64 MiB by default. Each entry counts its decoded size. When the cache is full, it evicts the least recently used entry. SVG sources, their rasterized pixels, and parsed stylesheets share the same budget. A workload with a different image every render does not grow memory. It misses the cache and decodes each time.
 
-Set the budget when you create the renderer. `0` turns caching off.
+The default renderer that `render` and `ImageResponse` share keeps the 64 MiB budget. To change it, create a renderer once at module level with `cacheMaxBytes` and pass it as `renderer`. `0` turns caching off.
 
-```ts twoslash title="Set the decode cache budget"
+```tsx twoslash title="Set the decode cache budget"
+import { render } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 
-const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
+const renderer = new Renderer({ cacheMaxBytes: 256 * 1024 * 1024 }); // [!code highlight]
+
+const image = await render(<img src="https://example.com/photo.png" />, { renderer });
 ```
 
 The per-image `cache` mode takes two values.

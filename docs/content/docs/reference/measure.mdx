@@ -3,7 +3,7 @@ title: measure()
 description: Measure the size, position, and text runs of laid-out nodes with measure() without painting.
 ---
 
-`measure()` lays out a tree and returns each box's size and position without painting it. Use it to fit a headline into a fixed width, or to place a badge next to a measured box.
+`measure()` lays out a tree and returns each box's size and position without painting it. Use it to place a badge next to a measured box. To fit a headline into a fixed width, set [`text-fit`](/docs/typography#fit-to-container) on it instead, which scales the text in one render.
 
 ```tsx twoslash title="Measure an element"
 import { measure } from "takumi-js";
@@ -13,32 +13,6 @@ const { width, height } = await measure(<span tw="text-xl">I'm a text node</span
 ```
 
 `measure()` takes the same input and options as `render()`: JSX, an HTML string, or a node tree, with `css`, `fonts`, and `images`. It runs on the same default renderer, so fonts loaded for rendering measure the same way. Without `width` and `height`, the root sizes to its content.
-
-To measure on a renderer you manage, pass it a node tree:
-
-```tsx twoslash tab="takumi-js/node" title="Measure with the native renderer"
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
-
-const renderer = new Renderer();
-const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
-
-const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
-//      ^?
-```
-
-```tsx twoslash tab="takumi-js/wasm" title="Measure with WebAssembly"
-import wasm, { init, Renderer } from "takumi-js/wasm";
-import { fromJsx } from "takumi-js/helpers/jsx";
-
-await init({ module_or_path: wasm });
-
-const renderer = new Renderer();
-const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
-
-const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
-//      ^?
-```
 
 Use `measure()` for sizes and positions. To draw the laid-out boxes and text yourself, use [`takumi-paint`](/docs/paint), which returns the shapes, text runs, and images to draw, in order, with every CSS value resolved.
 

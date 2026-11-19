@@ -215,32 +215,44 @@ Takumi reads the text after styles apply, so generated content and `text-transfo
 
 Before a subset downloads, font matching knows only the weight and style declared for it. A subset declared without them counts as normal, so a variable font's other weights only match it after it loads.
 
-### Preloading with `registerFont`
+### Reusing fonts across renders
 
-To load fonts before the first request, register them on a renderer. Then pass that renderer to each render. `registerFont` takes the same entries as `fonts` and returns the families it added.
+<span id="preloading-with-registerfont" />
 
-```tsx twoslash title="Preload a local font"
+`render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` share one renderer per process. The first render that lists a font loads it, and later renders that list the same entry reuse it. Define the `fonts` list once and pass it to every render:
+
+```tsx twoslash title="Share one fonts list"
 import { readFile } from "node:fs/promises";
-import { Renderer } from "takumi-js/node";
 import { ImageResponse } from "takumi-js/response";
 
-const inter = await readFile(new URL("./fonts/Inter.woff2", import.meta.url));
-const renderer = new Renderer();
-
-await renderer.registerFont({ name: "Inter", data: inter }); // [!code highlight]
+const fonts = [
+  "https://example.com/Inter.woff2",
+  { name: "Brand", data: await readFile(new URL("./fonts/Brand.woff2", import.meta.url)) },
+];
 
 export function GET() {
   return new ImageResponse(<div style={{ fontFamily: "Inter" }}>Hello Takumi</div>, {
     width: 1200,
     height: 630,
-    renderer, // [!code highlight]
+    fonts, // [!code highlight]
   });
 }
 ```
 
+The renderer recognizes an entry it already holds by a key:
+
+| Entry                      | Key                                                |
+| -------------------------- | -------------------------------------------------- |
+| URL string                 | The URL.                                           |
+| Raw bytes                  | The buffer object.                                 |
+| Descriptor with bytes      | The buffer object and the descriptor's fields.     |
+| Descriptor with a `data()` | Its `name`, `weight`, `style`, and `unicodeRange`. |
+
+A list defined at module level passes the same entries on every render, so the renderer finds each one by its key and loads nothing. A buffer read again inside the handler is a new key, so every render reads the file again and the renderer compares its bytes with the fonts it holds. A match reuses that decoded font, and the file decodes again only when no held font matches, such as after you release it.
+
 ### Releasing fonts
 
-A renderer keeps every font it loads. Release the ones you no longer need:
+A renderer keeps every font it loads. On a [renderer you create](/docs/images#prepare-on-your-own-renderer), release the ones you no longer need:
 
 ```ts
 renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
@@ -291,14 +303,26 @@ Set font axes with `font-variation-settings` and OpenType features with `font-fe
 </div>
 ```
 
-Register a variable font once, with no `weight`, to keep its axes live:
+List a variable font once, as one entry with no `weight`. That entry serves every weight and keeps the font's axes live:
 
-```tsx title="Register a variable font"
-// a `weight` here pins the file to that instance instead
-await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
+```tsx twoslash title="Load a variable font"
+import { render } from "takumi-js";
+
+const image = await render(
+  <div style={{ fontFamily: "Fraunces", fontWeight: 650 }}>Variable</div>,
+  {
+    // a `weight` here pins the file to that instance instead
+    fonts: [
+      {
+        name: "Fraunces",
+        data: () => fetch("https://example.com/Fraunces.woff2").then((res) => res.arrayBuffer()),
+      },
+    ],
+  },
+);
 ```
 
-`googleFonts` does this for you. A weight range or an `axes` entry fetches the variable file and leaves its axes free.
+Do not list the same file once per weight. Each entry is its own key, so each one fetches the file again before the renderer matches its bytes to the font it already holds. `googleFonts` loads a variable font this way. A weight range or an `axes` entry fetches the variable file once and leaves its axes free.
 
 <Callout>
   Which axes a file exposes depends on the build. Google Fonts fixes the axes you did not request at

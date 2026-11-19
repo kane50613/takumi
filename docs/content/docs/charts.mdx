@@ -19,7 +19,6 @@ This example draws a bar chart and saves it as a PNG. ECharts uses its SVG serve
 import * as echarts from "echarts";
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
-import { Renderer } from "takumi-js/node";
 import { writeFile } from "node:fs/promises";
 
 const chart = echarts.init(null, null, {
@@ -40,18 +39,13 @@ chart.setOption({
 const svg = chart.renderToSVGString();
 chart.dispose();
 
-const renderer = new Renderer();
-const fonts = await googleFonts(["Inter"]);
-
-await Promise.all(fonts.map((font) => renderer.registerFont(font)));
-
 const png = await render(
   <img
     src={svg}
     alt="Quarterly revenue: 320, 730, 550, and 910"
     style={{ width: 560, height: 360 }}
   />,
-  { width: 560, height: 360, renderer },
+  { width: 560, height: 360, fonts: googleFonts(["Inter"]) },
 );
 
 await writeFile("revenue.png", png);

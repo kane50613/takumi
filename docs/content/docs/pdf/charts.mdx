@@ -1,6 +1,6 @@
 ---
 title: Charts
-description: Embed an SVG chart in a PDF as vector graphics, register fonts for its labels, and describe its data for screen readers.
+description: Embed an SVG chart in a PDF as vector graphics, load fonts for its labels, and describe its data for screen readers.
 ---
 
 A chart in a PDF needs vector lines and shapes, fonts that cover its labels, and a description of its data. Embed the chart as SVG to keep its lines and shapes as vectors, and generate the SVG before rendering the document. For a complete ECharts example, see [Charts](/docs/charts#render-an-echarts-chart).
@@ -32,31 +32,20 @@ Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart 
 
 ## Fonts for chart labels
 
-<Callout type="warn">
-  `render()` loads only the font subsets that cover text in the document tree. It does not read text
-  inside an SVG image. If chart labels use characters the surrounding text does not, register their
-  fonts ahead of time.
-</Callout>
+`render()` reads the text inside an SVG image, so a font that only chart labels use still loads. Pass fonts that cover every label, tick, and legend entry through `fonts`:
 
-Fonts from `registerFont()` stay loaded for every render. [Fonts & images](/docs/pdf/assets) covers font loading in full.
-
-```tsx twoslash title="Register chart label fonts"
+```tsx twoslash title="Load chart label fonts"
 declare const svg: string;
 // ---cut---
-import { PdfRenderer } from "takumi-pdf";
-import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
+import { googleFonts } from "@takumi-rs/helpers";
 
-const chartText = "一月二月三月四月營收0123456789.,−-%";
-const renderer = new PdfRenderer();
-const fonts = subsetFonts({ fonts: await googleFonts(["Noto Sans TC"]), source: chartText });
-
-// [!code highlight]
-await Promise.all(fonts.map((font) => renderer.registerFont(font)));
-
-const pdf = await renderer.render(<img src={svg} alt="營收" style={{ width: 560, height: 360 }} />);
+const pdf = await render(<img src={svg} alt="營收" style={{ width: 560, height: 360 }} />, {
+  fonts: await googleFonts(["Noto Sans TC"]), // [!code highlight]
+});
 ```
 
-Include generated ticks and punctuation in `chartText`, not only your data labels. Set the chart library's font family to the registered name, here `"Noto Sans TC"`.
+Set the chart library's font family to the same name, here `"Noto Sans TC"`. [Fonts & images](/docs/pdf/assets) covers font loading in full.
 
 ## Vector output and text
 

@@ -156,7 +156,7 @@ const png = await render(
 );
 ```
 
-`fonts` also takes a font URL, raw bytes, or a descriptor. To load fonts before the first request, [register them on a `Renderer`](/docs/fonts#preloading-with-registerfont).
+`googleFonts` comes from `takumi-js/helpers`. `fonts` also takes a font URL, raw bytes, or a descriptor. Every render in the process shares one renderer, so define the list once and later renders reuse its fonts. See [Reusing fonts across renders](/docs/fonts#reusing-fonts-across-renders).
 
 ## Coming from satori
 
