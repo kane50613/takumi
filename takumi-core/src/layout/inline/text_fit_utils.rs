@@ -499,12 +499,6 @@ impl<'l, 'a, 'c> LineFitter<'l, 'a, 'c> {
         continue;
       }
 
-      // Approximate: Blink shapes an empty text result too, which `Ranges` forbids for segmented
-      // text, and its release build lets that pass as a shape of zero width.
-      if item.length() == 0 {
-        continue;
-      }
-
       let scaled_font = scaled_font(&font, scale_factor, context);
       let (shape_result, size_without_spacing) = self.fit_shaper.shape(
         item.item,
