@@ -329,7 +329,7 @@ jobs:
   # The targets nothing else in the pipeline reads; they take longer than every other job
   # put together, so only master builds them, right before it publishes.
   build-napi-platforms:
-    if: github.event_name != 'pull_request' || github.head_ref == 'ci/aarch64-gnu-host-cc'
+    if: github.event_name != 'pull_request'
     needs: build-helpers
     strategy:
       fail-fast: false
