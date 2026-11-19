@@ -3068,3 +3068,13 @@ fn test_measure_text_fit_skips_an_empty_text_result() {
 
   measure(node, create_test_viewport());
 }
+
+/// `measure_scale` shapes each text result without its fixed spacing first, and must not shape an
+/// empty one either.
+#[test]
+fn test_measure_text_fit_with_fixed_spacing_skips_an_empty_text_result() {
+  let html = r#"<div style="text-fit: grow per-line-all; letter-spacing: 1px; width: 400px">مرحبا <span>DATE</span> <span> </span></div>"#;
+  let node = Node::from_html(html, FromHtmlOptions::default()).unwrap();
+
+  measure(node, create_test_viewport());
+}
