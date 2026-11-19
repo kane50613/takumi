@@ -3,6 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import type { SharedProps } from "fumadocs-ui/contexts/search";
 import { lazy, Suspense, useEffect, useState } from "react";
+import type { SearchResultsProps } from "./results";
 
 const loadResults = () => import("./results");
 const Results = lazy(loadResults);
@@ -11,7 +12,7 @@ const Results = lazy(loadResults);
  * Fumapress's static Orama search dialog, loaded on first use instead of with every page. Until
  * then an empty dialog root answers the search triggers, which open it through `dialogHandle`.
  */
-export function SearchDialog(props: SharedProps) {
+export function SearchDialog(props: SearchResultsProps) {
   const [used, setUsed] = useState(props.open);
 
   if (props.open && !used) {
