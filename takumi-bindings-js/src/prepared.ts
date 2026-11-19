@@ -212,15 +212,15 @@ function unseen<T>(items: T[], seen: Set<T>): T[] {
   return fresh;
 }
 
-/** Fetches each of `urls` and hands it to the renderer leased to `lease`, returning the ones that failed. */
 /**
  * The store a render's downloads go through. A caller's own `fetch` may send its credentials, so
  * its downloads skip the store the renderers share.
  */
 function downloadStore(fetch: FetchOptions["fetch"]) {
-  return fetch === undefined ? defaultStore(globalThis.fetch) : null;
+  return fetch === undefined ? defaultStore() : null;
 }
 
+/** Fetches each of `urls` and hands it to the renderer leased to `lease`, returning the ones that failed. */
 async function loadFontFiles<TFamily extends RegisteredFamilyLike>(
   registry: FontRegistry<TFamily>,
   urls: string[],

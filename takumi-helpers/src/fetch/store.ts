@@ -75,7 +75,7 @@ const defaultStores = new WeakMap<FetchLike, MemoryStore>();
  *
  * @internal
  */
-export function defaultStore(fetch: FetchLike): MemoryStore {
+export function defaultStore(fetch: FetchLike = globalThis.fetch): MemoryStore {
   let store = defaultStores.get(fetch);
 
   if (!store) {

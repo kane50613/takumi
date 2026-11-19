@@ -3,7 +3,7 @@ title: Caching
 description: What Takumi keeps between renders, which renderer keeps it, and how to size, inspect, skip, or share it.
 ---
 
-Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and a store keeps the bytes it downloads. This page covers both layers, how to size or skip each one, and how to see what a renderer holds.
+Takumi keeps decoded images, fonts, glyphs, and parsed styles between renders, so content that repeats costs less the second time. It keeps them in two layers. Each renderer keeps decoded work in its own memory, and a store keeps the bytes it downloads.
 
 ## What a renderer keeps
 

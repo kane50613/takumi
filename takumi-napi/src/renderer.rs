@@ -9,7 +9,7 @@ use takumi_bindings_common::{
   renderer::{CacheStats, RendererOptions},
   source_cache::SourceCache,
 };
-use takumi_core::{Cache, Fonts};
+use takumi_core::Cache;
 
 use crate::{
   JsBytes, NodeSource, RegisteredFamily, deserialize_with_tracing,
@@ -138,11 +138,6 @@ impl RendererState {
     }
 
     Some(listed)
-  }
-
-  /// The fonts for a render, with the `@font-face` files its document `failed` to download.
-  pub(crate) fn fonts_for_render(&self, failed: Option<&[String]>) -> Arc<Fonts> {
-    self.fonts.for_render(failed)
   }
 }
 

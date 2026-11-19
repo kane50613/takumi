@@ -29,7 +29,7 @@ const renderer = new Renderer({
 
 #### Migration
 
-`cacheMaxBytes`, `fontCacheMaxBytes`, and `FontCacheOptions` are deprecated. `fontCacheMaxBytes` still bounds the fonts that renders' `fonts` lists keep. In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes` is deprecated, and only `0` still changes anything.
+`cacheMaxBytes`, `fontCacheMaxBytes`, and `FontCacheOptions` are deprecated. In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes` is deprecated, and only `0` still changes anything.
 
 ```diff
 - setGlyphCacheMaxBytes(0);

@@ -86,7 +86,6 @@ impl Renderer {
 
     Ok(Renderer {
       fonts: FontStore::new(cache.clone()).map_err(map_error)?,
-
       cache,
       sources: SourceCache::default(),
     })

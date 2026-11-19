@@ -420,17 +420,12 @@ impl Pool {
     let lifecycle = PoolLifecycle::default();
 
     Self {
-      // ~4 KiB average entry, as glyphs and masks outnumber the rest ⇒ an item-count hint.
-      store: store(options.max_bytes, 4 << 10, &lifecycle),
+      store: store(options.max_bytes, &lifecycle),
       max_bytes: options.max_bytes,
       kept: options.kept(),
       high: AtomicU64::new(0),
       lifecycle,
     }
-  }
-
-  fn counts(&self) -> &PerKind<KindCounts> {
-    &self.lifecycle.counts
   }
 
   /// Evicts what the pool holds past its size, as an entry that was pinned when it was kept no
@@ -471,7 +466,7 @@ impl Pool {
       held[key.kind()] += ByBytes.weight(&key, &entry);
     }
 
-    PerKind::from_fn(|kind| self.counts()[kind].stats(held[kind]))
+    PerKind::from_fn(|kind| self.lifecycle.counts[kind].stats(held[kind]))
   }
 }
 
@@ -505,7 +500,7 @@ impl<V: Kept> KindStore<V> {
   }
 
   fn counts(&self) -> &KindCounts {
-    &self.pool.counts()[V::KIND]
+    &self.pool.lifecycle.counts[V::KIND]
   }
 
   /// The bytes the whole cache keeps.
@@ -699,10 +694,10 @@ impl Lifecycle<PoolKey, Weighed<PoolEntry>> for PoolLifecycle {
   }
 }
 
-/// A store holding at most `max_bytes`, sized for entries of about `entry_bytes`, with the pool's
-/// `lifecycle`.
-fn store(max_bytes: u64, entry_bytes: u64, lifecycle: &PoolLifecycle) -> PoolStore {
-  let estimated_items = (max_bytes / entry_bytes).max(1) as usize;
+/// A store holding at most `max_bytes`, with the pool's `lifecycle`.
+fn store(max_bytes: u64, lifecycle: &PoolLifecycle) -> PoolStore {
+  // ~4 KiB average entry, as glyphs and masks outnumber the rest ⇒ an item-count hint.
+  let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
   let parallelism = available_parallelism().map_or(1, |n| n.get() as u64);
   let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
   let shards = if shards.is_power_of_two() {

@@ -228,7 +228,6 @@ impl PdfRenderer {
 
     Ok(PdfRenderer {
       fonts: FontStore::new(cache.clone()).map_err(map_error)?,
-
       cache,
       sources: SourceCache::default(),
       bands: SourceCache::default(),

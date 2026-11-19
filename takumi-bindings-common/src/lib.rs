@@ -51,7 +51,7 @@ use registrations::{FontRegistrations, RenderLeases, Retention};
 use renderer::CacheStats;
 use serde::Serialize;
 #[cfg(feature = "wasm")]
-use serde_wasm_bindgen::{Serializer, from_value, to_value};
+use serde_wasm_bindgen::{from_value, to_value};
 use source_cache::{ParsedSource, SourceCache};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsCast, JsValue};
@@ -211,11 +211,11 @@ impl FontStore {
   /// What the cache holds, as the binding's JavaScript type `T`.
   #[cfg(feature = "wasm")]
   pub fn cache_stats_value<T: JsCast>(&self) -> Result<T, js_sys::Error> {
-    let stats = CacheStats::new(&self.cache)
-      .serialize(&Serializer::new().serialize_missing_as_null(true))
-      .map_err(js_error)?;
-
-    Ok(stats.unchecked_into())
+    Ok(
+      to_value(&CacheStats::new(&self.cache))
+        .map_err(js_error)?
+        .unchecked_into(),
+    )
   }
 
   fn book(&self) -> MutexGuard<'_, FontBook> {

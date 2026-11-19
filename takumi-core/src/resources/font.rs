@@ -1657,18 +1657,13 @@ mod tests {
 
   /// `bytes` registered under `family`, returning their source.
   fn register_source(fonts: &mut Fonts, bytes: Vec<u8>, family: &str) -> RegisteredSource {
-    register_resource(
-      fonts,
-      FontResource::new(bytes).override_info(FontOverride {
+    let resource = FontResource::new(bytes)
+      .override_info(FontOverride {
         family_name: Some(family.into()),
         ..Default::default()
-      }),
-    )
-  }
-
-  /// `resource` registered, returning its source.
-  fn register_resource(fonts: &mut Fonts, resource: FontResource) -> RegisteredSource {
-    let resource = resource.into_resolved().unwrap();
+      })
+      .into_resolved()
+      .unwrap();
     let source = resource.registered_source().unwrap();
 
     fonts.register(resource).unwrap();

@@ -70,7 +70,7 @@ function storeFor(
     return store;
   }
 
-  return isEmojiImageUrl(url) ? defaultStore(fetch ?? globalThis.fetch) : null;
+  return isEmojiImageUrl(url) ? defaultStore(fetch) : null;
 }
 
 /**

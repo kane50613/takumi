@@ -101,11 +101,6 @@ function textParameter(text: string): string | undefined {
   return characters && encoded <= MAX_TEXT_LENGTH ? characters : undefined;
 }
 
-/** The store the downloads made with `options` share. */
-function storeOf(options: FetchOptions): MemoryStore {
-  return defaultStore(options.fetch ?? globalThis.fetch);
-}
-
 // Plain parameters, since relating the ~2000-member GoogleFontFamily union overflows tsc (TS2590).
 function familyValue(
   family: string,
@@ -397,7 +392,7 @@ export function fontFromUrl(
 ): { key: string; data: () => Promise<ArrayBuffer> } {
   return {
     key: url,
-    data: () => fetchBytes(url, { ...options, store: storeOf(options) }),
+    data: () => fetchBytes(url, { ...options, store: defaultStore(options.fetch) }),
   };
 }
 
@@ -420,7 +415,7 @@ export async function googleFonts(
     return [];
   }
 
-  const store = storeOf(options);
+  const store = defaultStore(options.fetch);
   const { cache, cacheMode, ...fetchOptions } = options;
   const text = options.text === undefined ? undefined : textParameter(options.text);
   const policy = text ? "none" : cacheMode;

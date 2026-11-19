@@ -86,17 +86,13 @@ struct CacheMemoryStats {
   high: f64,
 }
 
-/// What one kind of data holds and how its lookups went, in JavaScript numbers.
+/// What one kind of data holds and how its lookups went.
 #[derive(Serialize)]
-pub struct CacheKindStats {
-  /// The bytes held now.
-  pub current: f64,
-  /// Lookups that found an entry.
-  pub hits: f64,
-  /// Lookups that found none.
-  pub misses: f64,
-  /// Entries released for space.
-  pub evictions: f64,
+struct CacheKindStats {
+  current: f64,
+  hits: f64,
+  misses: f64,
+  evictions: f64,
 }
 
 impl From<PoolMemoryStats> for CacheMemoryStats {
