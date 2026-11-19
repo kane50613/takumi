@@ -386,7 +386,7 @@ impl<'i> FromCss<'i> for Length {
 }
 
 impl Length {
-  fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
+  pub(crate) fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
       Length::Px(value) => value,

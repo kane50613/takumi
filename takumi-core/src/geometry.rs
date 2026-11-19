@@ -2,7 +2,6 @@
 
 use std::ops::{Add, Sub};
 
-#[cfg(feature = "svg")]
 use kurbo::PathSeg;
 #[cfg(feature = "svg")]
 use tiny_skia::PathSegment;
@@ -822,9 +821,15 @@ impl Placement {
   }
 }
 
+/// The finest share of a segment's control polygon its length is measured to. kurbo's root search
+/// takes about `log2(length / accuracy)` steps and shifts a `u64` by that count, so a finer accuracy
+/// on a long segment overflows, as it did for a fuzzer's path quintillions of pixels long. This
+/// stays above what `f64` resolves at that length anyway.
+const ARCLEN_PRECISION_LIMIT: f64 = 1.0 / (1u64 << 50) as f64;
+
 /// How closely to measure the length of `segment`: `finest`, or `relative` of its control polygon
-/// when that is coarser, so that a long segment costs no more than a short one.
-#[cfg(feature = "svg")]
+/// when that is coarser, so that a long segment costs no more than a short one. `relative` below
+/// [`ARCLEN_PRECISION_LIMIT`] measures as finely as `f64` allows.
 pub(crate) fn arclen_accuracy(segment: PathSeg, finest: f64, relative: f64) -> f64 {
   let polygon = match segment {
     PathSeg::Line(line) => line.p0.distance(line.p1),
@@ -834,5 +839,5 @@ pub(crate) fn arclen_accuracy(segment: PathSeg, finest: f64, relative: f64) -> f
     }
   };
 
-  (polygon * relative).max(finest)
+  (polygon * relative.max(ARCLEN_PRECISION_LIMIT)).max(finest)
 }

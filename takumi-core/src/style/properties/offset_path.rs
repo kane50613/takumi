@@ -10,7 +10,7 @@ use kurbo::{
 };
 
 use crate::{
-  geometry::{Point, Size},
+  geometry::{Point, Size, arclen_accuracy},
   style::{
     Angle, Animatable, BasicShape, Color, FromCss, Length, MakeComputed, ParseResult,
     ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
@@ -601,14 +601,18 @@ fn sample_bezpath(
 
   let lengths: Vec<f64> = segments
     .iter()
-    .map(|segment| segment.arclen(ARCLEN_ACCURACY))
+    .map(|segment| segment.arclen(arclen_accuracy(*segment, ARCLEN_ACCURACY, 0.0)))
     .collect();
   let total: f64 = lengths.iter().sum();
   if total <= 0.0 {
     return None;
   }
 
-  let raw = f64::from(distance.to_px(sizing, total as f32));
+  // A percentage skips the clamp `to_px` applies for layout, which would cut a long path short.
+  let raw = f64::from(match distance {
+    Length::Percentage(_) => distance.to_px_pre_dpr(sizing, total as f32),
+    _ => distance.to_px(sizing, total as f32),
+  });
   let mut remaining = if closed {
     raw.rem_euclid(total)
   } else {
@@ -620,7 +624,7 @@ fn sample_bezpath(
       continue;
     }
     if remaining <= *length {
-      let t = segment.inv_arclen(remaining, ARCLEN_ACCURACY);
+      let t = segment.inv_arclen(remaining, arclen_accuracy(*segment, ARCLEN_ACCURACY, 0.0));
       return Some(point_and_tangent(*segment, t));
     }
     remaining -= *length;
@@ -786,6 +790,53 @@ mod tests {
   fn resolve_uses_tangent() {
     assert_eq!(OffsetRotate::Auto(Angle::zero()).resolve(1.0), 1.0);
     assert_eq!(OffsetRotate::Fixed(Angle::zero()).resolve(1.0), 0.0);
+  }
+
+  /// The point `distance` along `path` within a 200 px box.
+  fn sample_at(path: &str, distance: Length) -> Point<f32> {
+    let size = Size {
+      width: 200.0,
+      height: 200.0,
+    };
+
+    OffsetPath::from_css_str(path)
+      .unwrap()
+      .sample(distance, &OffsetPosition::Normal, &test_sizing(), size)
+      .unwrap()
+      .0
+  }
+
+  /// A path whose length overflowed kurbo's root search at a fixed accuracy, as a fuzzer found.
+  #[test]
+  fn samples_a_path_whose_coordinates_are_huge() {
+    let point = sample_at(
+      "path('M 80 489999999999999999990 C 360 60, 840 60, 1120 480')",
+      Length::Percentage(50.0),
+    );
+
+    assert!(point.y.is_finite() && point.y > 1e19, "y = {}", point.y);
+  }
+
+  /// A percentage of a path longer than layout lengths reach resolves against its whole length.
+  #[test]
+  fn samples_the_middle_of_a_huge_line() {
+    let point = sample_at(
+      "path('M 0 0 L 100000000000000000000 0')",
+      Length::Percentage(50.0),
+    );
+
+    assert!((point.x / 5e19 - 1.0).abs() < 1e-3, "x = {}", point.x);
+  }
+
+  /// A long segment still finds a point a pixel along it to within a pixel.
+  #[test]
+  fn samples_a_pixel_along_a_long_segment() {
+    let point = sample_at(
+      "path('M 0 0 C 100000000 0 100000000 0 100000000 0')",
+      Length::Px(1.0),
+    );
+
+    assert!((point.x - 1.0).abs() < 0.5, "x = {}", point.x);
   }
 
   #[test]
