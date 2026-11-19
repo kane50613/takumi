@@ -18,6 +18,8 @@ const config: UserConfig = defineConfig({
     neverBundle: ["#backend"],
   },
   format: ["esm", "cjs"],
+  // `require("takumi-js/wasm")` keeps the names it re-exports beside its default.
+  cjsDefault: false,
   dts: true,
   publint: {
     enabled: "ci-only",
