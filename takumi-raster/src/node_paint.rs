@@ -788,35 +788,24 @@ struct VisibleFill {
 
 impl VisibleFill {
   /// The pixels of a `size` source that `box_to_source` maps this fill onto, with a pixel of margin
-  /// for filtering, or none when they miss the source. A rotated or skewed fill keeps the whole
-  /// source, since shifting its sampling by the window would round differently.
+  /// for filtering, or none when they miss the source. A fill that scales, rotates, or skews keeps
+  /// the whole source, since its filter reaches past a pixel of margin and shifting its sampling by
+  /// the window would round differently.
   fn source_window(&self, box_to_source: Affine, size: Size<u32>) -> Option<Placement> {
     let canvas_to_source = box_to_source * self.canvas_to_box;
 
-    if canvas_to_source.b != 0.0 || canvas_to_source.c != 0.0 {
+    if !canvas_to_source.only_translation() {
       return Placement::from_bounds(0, 0, size.width as i32, size.height as i32);
     }
 
-    let left = self.placement.left as f32;
-    let top = self.placement.top as f32;
-    let right = self.placement.right() as f32;
-    let bottom = self.placement.bottom() as f32;
-    let corners = [(left, top), (right, top), (left, bottom), (right, bottom)]
-      .map(|(x, y)| canvas_to_source.transform_point(x, y));
-    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-
-    for (x, y) in corners {
-      min_x = min_x.min(x);
-      min_y = min_y.min(y);
-      max_x = max_x.max(x);
-      max_y = max_y.max(y);
-    }
+    let x = canvas_to_source.x;
+    let y = canvas_to_source.y;
 
     Placement::from_bounds(
-      (min_x.floor() as i32 - 1).max(0),
-      (min_y.floor() as i32 - 1).max(0),
-      (max_x.ceil() as i32 + 1).min(size.width as i32),
-      (max_y.ceil() as i32 + 1).min(size.height as i32),
+      ((self.placement.left as f32 + x).floor() as i32 - 1).max(0),
+      ((self.placement.top as f32 + y).floor() as i32 - 1).max(0),
+      ((self.placement.right() as f32 + x).ceil() as i32 + 1).min(size.width as i32),
+      ((self.placement.bottom() as f32 + y).ceil() as i32 + 1).min(size.height as i32),
     )
   }
 }
