@@ -109,7 +109,7 @@ impl PageFrame {
 
     Ok(Self {
       size,
-      page_size: KrillaSize::from_wh(size.width * PT_PER_PX, size.height * PT_PER_PX)
+      page_size: PdfSize::from_wh(size.width * PT_PER_PX, size.height * PT_PER_PX)
         .ok_or(PdfError::InvalidPageSize)?,
       margin: Rect {
         top: origin.y,
