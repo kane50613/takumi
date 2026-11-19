@@ -17,12 +17,12 @@
     "takumi-js": "workspace:*"
   },
   "devDependencies": {
-    "@sveltejs/adapter-vercel": "^7.0.0",
-    "@sveltejs/kit": "^3.0.0",
-    "@tailwindcss/vite": "^4.3.3",
-    "svelte": "^5.57.1",
-    "svelte-check": "^4.7.6",
-    "tailwindcss": "^4.3.3",
+    "@sveltejs/adapter-vercel": "^7.0.3",
+    "@sveltejs/kit": "^3.2.0",
+    "@tailwindcss/vite": "catalog:",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
+    "tailwindcss": "catalog:",
     "typescript": "^6.0.3",
     "vite": "catalog:"
   }
