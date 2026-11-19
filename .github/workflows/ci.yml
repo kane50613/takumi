@@ -253,10 +253,10 @@ jobs:
     strategy:
       matrix:
         settings:
-          # `--use-napi-cross` pins libc at 2.31 on the gnu targets (cross-rs docs).
+          # The `.2.17` suffix is the glibc version zig links the gnu targets against.
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: bun run build --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: bun run build --target x86_64-unknown-linux-gnu.2.17 -x
 
     name: Build @takumi-rs/core for ${{ matrix.settings.target }}
     runs-on: ${{ matrix.settings.host }}
@@ -279,7 +279,7 @@ jobs:
           build-std: true
 
       - name: Install cargo-zigbuild
-        if: ${{ contains(matrix.settings.target, 'musl') }}
+        if: ${{ contains(matrix.settings.build, ' -x') }}
         run: pip install cargo-zigbuild
 
       - name: Download helpers artifact
@@ -347,11 +347,9 @@ jobs:
           - host: macos-15-intel
             target: x86_64-apple-darwin
             build: bun run build --target x86_64-apple-darwin
-          # napi-cross links against glibc 2.17, but its gcc 4.8.5 lacks the NEON intrinsics libwebp
-          # uses, so C compiles with the runner's gcc (https://github.com/napi-rs/napi-rs/pull/3678).
           - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            build: TARGET_CC=gcc bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: bun run build --target aarch64-unknown-linux-gnu.2.17 -x
           - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             build: bun run build --target aarch64-unknown-linux-musl -x
