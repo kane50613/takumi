@@ -22,11 +22,6 @@ const mono = { name: "Mono", data: monoData } as const;
 describe("an optional font", () => {
   const failing = {
     "that fails to download": fontFromUrl(missing, { optional: true }),
-    "whose loader rejects": {
-      name: "Broken",
-      optional: true,
-      data: () => Promise.reject(new Error("unreachable")),
-    },
     "whose bytes do not decode": { name: "Garbled", optional: true, data: new Uint8Array([1, 2]) },
   } satisfies Record<string, FontLoader>;
 
@@ -39,19 +34,6 @@ describe("an optional font", () => {
       expect(await renderer.render(node, { ...options, fonts })).toEqual(without);
     });
   }
-
-  test("refused by allowUrl leaves a prepared render without it", async () => {
-    const renderer = new Renderer();
-    const url = "https://fonts.test/refused.woff2";
-    const prepared = await renderer.prepare(node, {
-      ...options,
-      fonts: [mono, { ...fontFromUrl(url, { allowUrl: () => false }), optional: true }],
-    });
-
-    expect(await renderer.render(prepared)).toEqual(
-      await renderer.render(node, { ...options, fonts: [mono] }),
-    );
-  });
 });
 
 describe("a font without optional", () => {

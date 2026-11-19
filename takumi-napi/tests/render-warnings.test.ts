@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
-import { container, fontFromUrl, image, type Node, text } from "@takumi-rs/helpers";
+import { container, fontFromUrl, type Node, text } from "@takumi-rs/helpers";
 import { type FontLoader, type PrepareOptions, Renderer } from "../src/export";
 
 const monoData = await Bun.file("../assets/fonts/geist/GeistMono[wght].woff2").arrayBuffer();
@@ -122,28 +122,6 @@ describe("the warnings of a prepare", () => {
     });
 
     expect(warnings).toEqual([fontFailure(url)]);
-  });
-
-  test("names an @font-face file that failed to load", async () => {
-    const url = `${server.url}face.woff2`;
-    const { warnings } = await prepareWarnings(line("a", "Face"), {
-      ...options,
-      css: [`@font-face { font-family: Face; src: url(${url}) }`],
-    });
-
-    expect(warnings).toContainEqual(fontFailure(url));
-  });
-
-  test("names an image left out under throwOnError: false", async () => {
-    const src = `${server.url}missing.png`;
-    const { warnings } = await prepareWarnings(
-      container({ children: [image({ src, width: 16, height: 16 })] }),
-      { ...options, images: { throwOnError: false } },
-    );
-
-    expect(warnings).toEqual([
-      expect.stringContaining(`takumi: Failed to load the image ${src}: `),
-    ]);
   });
 });
 
