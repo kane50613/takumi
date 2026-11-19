@@ -47,7 +47,7 @@ export function warnUndrawn(
     const them = missingCharacters.length > 1 ? "them" : "it";
 
     warn(
-      `No font draws "${shown}"${rest}. Add a font that covers ${them} to \`fonts\`, or return one from \`onMissingGlyphs\`.`,
+      `No font draws "${shown}"${rest}. Add a font that covers ${them} to \`fonts\`, or return one from \`loadFallbackFonts\`.`,
     );
   }
 

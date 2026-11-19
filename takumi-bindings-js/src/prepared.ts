@@ -51,7 +51,7 @@ export type PrepareExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   images?: PrepareImagesInput;
   signal?: AbortSignal;
-  onMissingGlyphs?: MissingGlyphsHandler;
+  loadFallbackFonts?: FallbackFontsLoader;
 };
 
 /**
@@ -78,17 +78,17 @@ export function splitExtras<T extends SourceExtras>({
   images,
   signal,
   fontFamilies,
-  onMissingGlyphs,
+  loadFallbackFonts,
   ...layout
 }: T): SplitExtras<T> {
   return {
-    extras: { fonts, images, signal, fontFamilies, onMissingGlyphs },
+    extras: { fonts, images, signal, fontFamilies, loadFallbackFonts },
     layout,
   };
 }
 
 /** Returns fonts for the characters no font of a render draws, which then load as part of its `fonts`. */
-export type MissingGlyphsHandler = (characters: string[]) => Awaitable<FontLoader[] | undefined>;
+export type FallbackFontsLoader = (characters: string[]) => Awaitable<FontLoader[] | undefined>;
 
 /**
  * Public `prepare` options for a backend whose binding options are {@link TInternal}.
@@ -170,7 +170,7 @@ type PreparedState<TSource, TLayout> = {
   source: TSource;
   layout: TLayout;
   fonts: FontLoader[] | undefined;
-  /** `fonts` came from `onMissingGlyphs` alone, so they join the registered fallback chain. */
+  /** `fonts` came from `loadFallbackFonts` alone, so they join the registered fallback chain. */
   implicitFamilies: boolean;
   /** `fonts` and every listed font a read loaded, which the render forgets once it settles if they use `cache: "none"`. */
   loadedFonts: FontLoader[] | undefined;
@@ -332,7 +332,7 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
   needs: SourceReader,
   fetchMissing: boolean,
 ): Promise<PreparedState<TSource, TLayout>> {
-  const { fonts, fontFamilies, images = [], signal, onMissingGlyphs } = extras;
+  const { fonts, fontFamilies, images = [], signal, loadFallbackFonts } = extras;
 
   signal?.throwIfAborted();
 
@@ -461,8 +461,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
       const subset = loads ? resolvedFonts?.filter((_, id) => loads.includes(id)) : resolvedFonts;
       const kept = subset && registry.without(subset, failedFontFiles);
 
-      // Without a fetch, a read checks what no font draws only for `onMissingGlyphs`.
-      if (!fetchMissing && !onMissingGlyphs) {
+      // Without a fetch, a read checks what no font draws only for `loadFallbackFonts`.
+      if (!fetchMissing && !loadFallbackFonts) {
         return {
           fonts: kept,
           fontFamilies,
@@ -481,7 +481,8 @@ async function collect<TFamily extends RegisteredFamilyLike, TSource, TLayout>(
             ? await readLoaded(kept, fontFamilies)
             : (reached ?? (await readWithImages()));
       const characters = coverage?.missingCharacters ?? [];
-      const added = characters.length > 0 ? ((await onMissingGlyphs?.([...characters])) ?? []) : [];
+      const added =
+        characters.length > 0 ? ((await loadFallbackFonts?.([...characters])) ?? []) : [];
 
       signal?.throwIfAborted();
 

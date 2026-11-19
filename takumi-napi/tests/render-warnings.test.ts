@@ -84,7 +84,7 @@ describe("the warnings of a prepare", () => {
     const { warnings } = await prepareWarnings(line("a中 b中文"), options);
 
     expect(warnings).toEqual([
-      'takumi: No font draws "中文". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.',
+      'takumi: No font draws "中文". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.',
     ]);
   });
 
@@ -125,18 +125,18 @@ describe("the warnings of a prepare", () => {
   });
 });
 
-describe("onMissingGlyphs", () => {
+describe("loadFallbackFonts", () => {
   test("loads the fonts it returns into the render, which then raises no warning", async () => {
     const renderer = new Renderer();
-    const onMissingGlyphs = mock((_characters: string[]) => [cjk]);
+    const loadFallbackFonts = mock((_characters: string[]) => [cjk]);
     const without = await renderer.render(line("a中"), options);
     const { prepared, warnings } = await prepareWarnings(
       line("a中"),
-      { ...options, onMissingGlyphs },
+      { ...options, loadFallbackFonts },
       renderer,
     );
 
-    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(loadFallbackFonts.mock.calls).toEqual([[["中"]]]);
     expect(warnings).toEqual([]);
     expect(await renderer.render(prepared)).not.toEqual(without);
     expect(await renderer.render(prepared)).toEqual(
@@ -146,12 +146,12 @@ describe("onMissingGlyphs", () => {
 
   test("runs for a render without prepare", async () => {
     const renderer = new Renderer();
-    const onMissingGlyphs = mock(() => [cjk]);
+    const loadFallbackFonts = mock(() => [cjk]);
 
-    expect(await renderer.render(line("a中"), { ...options, onMissingGlyphs })).toEqual(
+    expect(await renderer.render(line("a中"), { ...options, loadFallbackFonts })).toEqual(
       await renderer.render(line("a中"), { ...options, fonts: [cjk] }),
     );
-    expect(onMissingGlyphs).toHaveBeenCalledTimes(1);
+    expect(loadFallbackFonts).toHaveBeenCalledTimes(1);
   });
 
   test("joins an explicit fontFamilies with the families of the fonts it returns", async () => {
@@ -159,7 +159,7 @@ describe("onMissingGlyphs", () => {
       ...options,
       fontFamilies: ["Mono"],
       fonts: [{ name: "Mono", data: monoData }],
-      onMissingGlyphs: () => [cjk],
+      loadFallbackFonts: () => [cjk],
     });
 
     expect(warnings).toEqual([]);
@@ -168,12 +168,12 @@ describe("onMissingGlyphs", () => {
   test("is not called when every character is covered, and keeps what stays uncovered", async () => {
     const covered = mock(() => undefined);
 
-    await new Renderer().prepare(line("abc"), { ...options, onMissingGlyphs: covered });
+    await new Renderer().prepare(line("abc"), { ...options, loadFallbackFonts: covered });
     expect(covered).not.toHaveBeenCalled();
 
     const { warnings } = await prepareWarnings(line("a中"), {
       ...options,
-      onMissingGlyphs: () => [{ name: "Mono", data: monoData }],
+      loadFallbackFonts: () => [{ name: "Mono", data: monoData }],
     });
 
     expect(missingOf(warnings)).toEqual(["中"]);
@@ -182,7 +182,7 @@ describe("onMissingGlyphs", () => {
   test("leaves the warning's characters alone when it changes the list it receives", async () => {
     const { warnings } = await prepareWarnings(line("a中"), {
       ...options,
-      onMissingGlyphs: (characters) => {
+      loadFallbackFonts: (characters) => {
         characters.splice(0);
 
         return undefined;
@@ -204,7 +204,7 @@ describe("onMissingGlyphs", () => {
       ],
       fontFamilies: ["Mono"],
       fonts: [{ name: "Mono", data: monoData }],
-      onMissingGlyphs: () => [{ name: "Hook", data: cjkData, weight: 400 }],
+      loadFallbackFonts: () => [{ name: "Hook", data: cjkData, weight: 400 }],
     });
 
     expect(hookRequests).toBe(1);
@@ -213,11 +213,11 @@ describe("onMissingGlyphs", () => {
 });
 
 describe("a render without prepare", () => {
-  test("prints what it could not draw when it passes onMissingGlyphs", async () => {
+  test("prints what it could not draw when it passes loadFallbackFonts", async () => {
     const { warnings } = await printing(() =>
       new Renderer().render(line("a中", "Missing"), {
         ...options,
-        onMissingGlyphs: () => undefined,
+        loadFallbackFonts: () => undefined,
       }),
     );
 

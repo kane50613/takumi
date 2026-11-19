@@ -7,7 +7,7 @@ import {
 } from "@takumi-rs/helpers";
 import { defaultStore, fetchImagesSettled } from "@takumi-rs/helpers/renderer";
 import type { JsonSource } from "./node-source";
-import type { ListedFont, MissingGlyphsHandler, PrepareExtras } from "./prepared";
+import type { ListedFont, FallbackFontsLoader, PrepareExtras } from "./prepared";
 import { warnFontLoadFailed } from "./warning";
 import { unicodeRangeOf } from "./unicode-range";
 
@@ -145,7 +145,7 @@ type RenderExtras = {
   fonts?: FontLoader[] | Promise<FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
-  onMissingGlyphs?: MissingGlyphsHandler;
+  loadFallbackFonts?: FallbackFontsLoader;
 };
 
 /**
