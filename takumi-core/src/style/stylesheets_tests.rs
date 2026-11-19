@@ -4,14 +4,15 @@ use cssparser::Parser;
 use serde_json::{from_value, json};
 
 use super::{
-  CssWideKeyword, LonghandId, PropertyId, PropertyMask, ShorthandId, StyleDeclarationBlock,
-  stylesheets_vars::resolve_var_references,
+  CssWideKeyword, DeclarationOrigin, LonghandId, PropertyId, PropertyMask, ShorthandId,
+  StyleDeclarationBlock, stylesheets_vars::resolve_var_references,
 };
 use crate::{
   geometry::Size,
   style::{
-    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
+    ComputedStyle, CssInput, CustomProperties, DeferredDeclaration, IgnoredDeclaration,
+    IgnoredReason, SizingContext, Style, StyleBaseData, StyleBoxData, StyleDeclaration,
+    StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
@@ -26,14 +27,26 @@ fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style
 
 fn parse_declarations(name: &str, css: &str) -> StyleDeclarationBlock {
   let mut parser = Parser::new(css);
-  let declarations_result = StyleDeclarationBlock::parse(name, &mut parser);
+  let declarations_result =
+    StyleDeclarationBlock::parse(name, &mut parser, DeclarationOrigin::StyleSheet);
   assert!(declarations_result.is_ok());
   declarations_result.unwrap_or_default()
 }
 
 fn parse_declarations_is_err(name: &str, css: &str) -> bool {
   let mut parser = Parser::new(css);
-  StyleDeclarationBlock::parse(name, &mut parser).is_err()
+  StyleDeclarationBlock::parse(name, &mut parser, DeclarationOrigin::StyleSheet).is_err()
+}
+
+/// `style` with the `style`-object declaration of `property` an invalid `value` dropped.
+fn dropped(mut style: Style, property: &str, value: &str) -> Style {
+  style.declarations.ignored.push(IgnoredDeclaration::new(
+    property,
+    value,
+    IgnoredReason::InvalidValue,
+    DeclarationOrigin::StyleObject,
+  ));
+  style
 }
 
 /// An invalid value drops its declaration, as a browser drops one in a `style` attribute, and the
@@ -42,7 +55,11 @@ fn parse_declarations_is_err(name: &str, css: &str) -> bool {
 fn an_invalid_value_drops_only_its_declaration() {
   assert_eq!(
     from_value::<Style>(json!({ "width": "10px", "height": "-1.5%" })).ok(),
-    Some(Style::default().width(Length::Px(10.0)))
+    Some(dropped(
+      Style::default().width(Length::Px(10.0)),
+      "height",
+      "-1.5%"
+    ))
   );
 }
 
@@ -138,11 +155,11 @@ fn an_inline_value_parses_entirely() {
   );
   assert_eq!(
     from_value::<Style>(json!({ "width": "55px zzz" })).ok(),
-    Some(Style::default())
+    Some(dropped(Style::default(), "width", "55px zzz"))
   );
   assert_eq!(
     from_value::<Style>(json!({ "width": "55px 99px" })).ok(),
-    Some(Style::default())
+    Some(dropped(Style::default(), "width", "55px 99px"))
   );
 }
 
@@ -202,7 +219,7 @@ fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
   );
   assert_eq!(
     from_value::<Style>(json!({ "width": "55px !nope" })).ok(),
-    Some(Style::default())
+    Some(dropped(Style::default(), "width", "55px !nope"))
   );
   Ok(())
 }

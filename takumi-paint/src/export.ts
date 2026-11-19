@@ -41,6 +41,7 @@ export type {
   FontCacheOptions,
   Glyph,
   Gradient,
+  IgnoredDeclaration,
   ImagePaint,
   ImageSource,
   Matrix,

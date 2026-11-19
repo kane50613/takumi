@@ -2,6 +2,7 @@ import { lazy } from "@takumi-rs/bindings-js";
 import type {
   ElementInfo,
   Glyph,
+  IgnoredDeclaration,
   ImageSource,
   Matrix,
   RawDrawable,
@@ -162,6 +163,8 @@ export interface PaintTree {
   readonly nodes: readonly PaintNode[];
   /** The steps a renderer takes, in paint order. */
   readonly steps: readonly PaintStep[];
+  /** The declarations and at-rules the style parser dropped, each once. */
+  readonly ignoredDeclarations: readonly IgnoredDeclaration[];
   /**
    * The tree as plain JSON, for `JSON.stringify` or a hand-off between processes. Font files are
    * left out.
@@ -205,6 +208,7 @@ export class PaintTreeView implements PaintTree {
   readonly fonts: readonly Font[];
   readonly root: BoxNode;
   readonly nodes: readonly PaintNode[];
+  readonly ignoredDeclarations: readonly IgnoredDeclaration[];
   readonly #raw: RawPaintTree;
   readonly #files: ReleasableFiles;
   readonly #listing: Listing;
@@ -218,6 +222,7 @@ export class PaintTreeView implements PaintTree {
     this.#files = files;
     this.width = raw.width;
     this.height = raw.height;
+    this.ignoredDeclarations = raw.ignoredDeclarations ?? [];
     this.fonts = raw.fonts.map((font, index) => ({
       ...font,
       data: lazy(() => files.fontData(index) ?? new Uint8Array()),

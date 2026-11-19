@@ -63,7 +63,7 @@ use takumi_core::{
     cache::Cache,
     font::{FontError, FontOverride, FontResource, FontSource, RegisteredFamily},
   },
-  style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
+  style::{CssSource, CssSourceError, IgnoredDeclaration, KeyframesRule, Lang, StyleSheet},
   viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 
@@ -527,6 +527,7 @@ pub struct NeedsOutput {
   loaded_font_files: Vec<String>,
   missing_characters: Vec<char>,
   unresolved_families: Vec<String>,
+  ignored_declarations: Vec<IgnoredDeclaration>,
 }
 
 impl NeedsOutput {
@@ -539,6 +540,7 @@ impl NeedsOutput {
       loaded_font_files: needs.loaded_font_files.into_iter().collect(),
       missing_characters: needs.missing_characters,
       unresolved_families: needs.unresolved_families,
+      ignored_declarations: needs.ignored_declarations,
     }
   }
 }

@@ -51,6 +51,15 @@ impl<'de> CssInputParseError<'de> {
     }
   }
 
+  /// The input as text, as [`CssInput::into_string`] gives it.
+  pub(crate) fn value(&self) -> Cow<'_, str> {
+    match self {
+      Self::Value { value, .. } => Cow::Borrowed(value),
+      Self::NumberType { number, .. } => Cow::Owned(number.to_string()),
+      Self::UnexpectedType { .. } => Cow::Borrowed(""),
+    }
+  }
+
   pub(crate) fn message(&self, property_name: &str) -> String {
     let mut message = String::new();
     let value_kind = match self {

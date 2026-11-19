@@ -298,6 +298,20 @@ export type RenderNeeds = {
   missingCharacters: string[];
   /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
   unresolvedFamilies: string[];
+  /** The declarations and at-rules the style parser dropped, each once. */
+  ignoredDeclarations: IgnoredDeclaration[];
+};
+
+/** A declaration or at-rule the style parser dropped. */
+export type IgnoredDeclaration = {
+  /** The property as written, or the at-rule's name with its `@`. */
+  property: string;
+  /** The value as written, or the at-rule's prelude. */
+  value: string;
+  /** Why it was dropped. */
+  reason: "unknown-property" | "invalid-value" | "unknown-at-rule";
+  /** Where it was written. */
+  origin: "style-attribute" | "style-sheet" | "style-object";
 };
 
 export type AnimationScene = {

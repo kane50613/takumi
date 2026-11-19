@@ -67,6 +67,32 @@ fn the_outline_names_each_node_where_it_lands_and_what_fills_it() {
 }
 
 #[test]
+fn the_outline_lists_the_css_the_parser_dropped() {
+  let html = r#"<style>@container (width > 400px) { p { color: red } } p { writing-mode: vertical-rl }</style><p style="filter: blurry(4px)">x</p>"#;
+  let outline = paint_html("ignored", html, &[]);
+  let json = paint_html("ignored-json", html, &["--format", "json"]);
+
+  assert!(
+    outline.ends_with(
+      "ignored\n  @container (width > 400px) unknown-at-rule style-sheet\n  writing-mode: vertical-rl unknown-property style-sheet\n  filter: blurry(4px) invalid-value style-attribute\n"
+    ),
+    "{outline}"
+  );
+  let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+  assert_eq!(
+    parsed["ignoredDeclarations"][2],
+    serde_json::json!({
+      "property": "filter",
+      "value": "blurry(4px)",
+      "reason": "invalid-value",
+      "origin": "style-attribute",
+    })
+  );
+  assert!(!paint("plain", &[]).contains("ignored"));
+}
+
+#[test]
 fn each_detail_adds_to_the_one_before() {
   let drawables = paint("drawables", &["--detail", "drawables"]);
   let full = paint("full", &["--detail", "full"]);

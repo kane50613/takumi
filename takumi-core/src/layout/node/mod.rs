@@ -5,6 +5,7 @@ mod input;
 use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
 use serde::Deserialize;
+use thin_vec::ThinVec;
 
 pub(crate) use self::image::is_image_reference;
 pub use self::image::resolve_image;
@@ -19,7 +20,8 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{
-    Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule, tw::TailwindCache,
+    Direction, IgnoredDeclaration, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule,
+    tw::TailwindCache,
   },
   viewport::Viewport,
 };
@@ -71,6 +73,8 @@ pub(crate) struct NodeMetadata {
   pub presentation: Option<Box<Style>>,
   /// The styling properties for this node.
   pub style: Option<Box<Style>>,
+  /// The declarations parsing dropped from `style`, kept after the cascade takes it.
+  pub ignored: ThinVec<IgnoredDeclaration>,
   /// The tailwind properties for this node.
   pub tw: Option<TailwindValues>,
   /// The text direction for this node.
@@ -424,6 +428,7 @@ impl Node {
       preset,
       presentation,
       style,
+      ignored: _,
       tw,
       dir: _,
       lang: _,
@@ -657,10 +662,16 @@ impl Node {
 
     self.push_image_size_preset(&mut preset);
 
+    let mut inline = self.metadata.style.take();
+
+    if let Some(inline) = &mut inline {
+      self.metadata.ignored = take(&mut inline.declarations.ignored);
+    }
+
     NodeStyleLayers {
       preset,
       presentation: self.metadata.presentation.take(),
-      inline: self.metadata.style.take(),
+      inline,
       dir: self.metadata.dir.take(),
       lang: self.metadata.lang.take(),
     }

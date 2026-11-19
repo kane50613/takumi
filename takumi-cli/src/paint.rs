@@ -33,7 +33,8 @@ Each line of the text format is one node, indented under its parent:
 area, and `draws nothing` text or an image that paints no pixel, as `visibility: hidden` leaves
 it. An element `opacity: 0` hides has no node, and is listed under `not painted`. An element
 with `display: none` makes no box and is not listed, unless it is the root element, which is
-listed under `not painted`.")]
+listed under `not painted`. Each declaration or at-rule the style parser dropped is listed under
+`ignored`, with why and where it was written.")]
 pub(crate) struct PaintArgs {
   #[command(flatten)]
   pub(crate) input: InputArgs,
@@ -175,6 +176,17 @@ impl PaintProduct {
           UnpaintedReason::OpacityZero => "opacity: 0",
           UnpaintedReason::DisplayNone => "display: none",
         }
+      );
+    }
+    if !document.ignored_declarations.is_empty() {
+      outline.text.push_str("ignored\n");
+    }
+    for declaration in &document.ignored_declarations {
+      let _ = writeln!(
+        outline.text,
+        "  {declaration} {} {}",
+        declaration.reason.as_str(),
+        declaration.origin.as_str()
       );
     }
     if self.detail == Detail::Full {

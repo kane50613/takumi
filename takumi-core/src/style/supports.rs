@@ -3,7 +3,7 @@ use cssparser::*;
 
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
-  style::StyleDeclarationBlock,
+  style::{DeclarationOrigin, StyleDeclarationBlock},
 };
 
 fn parse_supports_declaration<'i>(
@@ -11,7 +11,8 @@ fn parse_supports_declaration<'i>(
 ) -> Result<bool, ParseError<StyleSheetParseError>> {
   let name = input.expect_ident_cloned()?;
   input.expect_colon()?;
-  let declaration = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
+  let declaration = StyleDeclarationBlock::parse(&name, input, DeclarationOrigin::StyleSheet)
+    .map_err(ParseError::into)?;
   Ok(!declaration.declarations.is_empty() && input.is_exhausted())
 }
 
