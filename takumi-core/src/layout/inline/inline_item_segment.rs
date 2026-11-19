@@ -141,6 +141,12 @@ impl InlineItemSegments {
     end_offset: usize,
     item_index: usize,
   ) -> ShapeResult {
+    // Approximate: Blink's `Ranges` checks for a non-empty range, though `FitLine` shapes the empty
+    // results `HandleEmptyText` adds, which its release build shapes to nothing, as this does.
+    if start_offset == end_offset {
+      return ShapeResult::new(start_offset as u32, 0, direction);
+    }
+
     let ranges: Vec<RunSegmenterRange> =
       self.ranges(start_offset, end_offset, item_index).collect();
 
