@@ -12,7 +12,7 @@ A render has coverage when every character it can receive draws in a font you ch
 1. **List what the text needs.** Collect the scripts, weights, and styles the template draws, counting the data it renders as well as its fixed text. A title from a CMS or a user can be in any language. Done when you have a list of script, weight, and style triples and know whether the text can contain emoji.
 
 2. **Choose a source for each family.**
-   - Google Fonts load through `googleFonts([...])` from `takumi-js`, or from `takumi-pdf` for a PDF. In `takumi-js`, pass the call to `fonts` without `await`. A render downloads only the subsets its text uses, so listing a CJK family costs nothing for a Latin title.
+   - Google Fonts load through `googleFonts([...])` from `takumi-js/helpers`. In `takumi-js`, pass the call to `fonts` without `await`. For a PDF, import it from `@takumi-rs/helpers` and spread the awaited result into `fonts`. A render downloads only the subsets its text uses, so listing a CJK family costs nothing for a Latin title.
    - A hosted file is a URL string in `fonts`, such as `"https://example.com/Inter.woff2"`.
    - A render that must work offline or in CI reads the file once at module level and passes the bytes.
 

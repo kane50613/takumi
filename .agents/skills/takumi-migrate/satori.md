@@ -5,7 +5,7 @@
 ## Swap
 
 - `new ImageResponse(...)` from `next/og` or `@vercel/og` becomes the same call from `takumi-js/response`.
-- `satori(...)` becomes `render(..., { format: "svg" })` from `takumi-js`, which returns the SVG as UTF-8 bytes.
+- `satori(...)` becomes `renderSvg(...)` from `takumi-js`, which returns the SVG as a string.
 - `satori` followed by resvg or sharp becomes one `render(...)` call that returns PNG, JPEG, or WebP.
 
 Pass `width` and `height` to every call. `next/og` defaults to 1200 × 630, while Takumi sizes an omitted dimension to the content.

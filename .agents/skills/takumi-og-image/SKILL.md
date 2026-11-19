@@ -11,7 +11,7 @@ Takumi lays out a template the way Chromium does, so write it as you would for a
 
 1. **Pick the entry.**
    - A route handler returns `new ImageResponse(node, options)` from `takumi-js/response`. Follow the setup in the framework's guide, listed at [frameworks.md](https://takumi.kane.tw/docs/frameworks.md).
-   - A script or server function awaits `render(node, options)` from `takumi-js`. For SVG, pass `format: "svg"`, which returns the document as UTF-8 bytes.
+   - A script or server function awaits `render(node, options)` from `takumi-js`. For SVG, call `renderSvg(node, options)`, which returns the document as a string.
    - An animated WebP, APNG, or GIF comes from `renderAnimation`. See [animation.md](https://takumi.kane.tw/docs/animation.md).
 
    Done when the code imports only from `takumi-js`, `takumi-js/response`, `takumi-js/node`, and, for a render that passes `module`, `takumi-js/wasm-url`. `takumi-js` loads its own backend, so wasm init code or an `@takumi-rs/*` import is a deployment problem for `takumi-deploy`.
