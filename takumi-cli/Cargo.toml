@@ -16,7 +16,6 @@ path = "src/main.rs"
 [dependencies]
 cap-std = "3"
 encoding_rs = "0.8"
-clap = { version = "4.6", features = ["derive"] }
 clap_complete = "4.6"
 cssparser.workspace = true
 data-url.workspace = true
@@ -26,6 +25,9 @@ url = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dependencies.clap]
+workspace = true
 
 [dependencies.takumi]
 path = "../takumi"
