@@ -347,9 +347,11 @@ jobs:
           - host: macos-15-intel
             target: x86_64-apple-darwin
             build: bun run build --target x86_64-apple-darwin
+          # napi-cross links against glibc 2.17, but its gcc 4.8.5 lacks the NEON intrinsics libwebp
+          # uses, so C compiles with the runner's gcc (https://github.com/napi-rs/napi-rs/pull/3678).
           - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            build: bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: TARGET_CC=gcc TARGET_CXX=g++ bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             build: bun run build --target aarch64-unknown-linux-musl -x
