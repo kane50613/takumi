@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
-import { getPageTreePeers } from "fumadocs-core/page-tree";
 import { lucideIconsPlugin } from "fumadocs-core/source/plugins/lucide-icons";
 import { Card, Cards } from "fumadocs-ui/components/card";
 import { Step, Steps } from "fumadocs-ui/components/steps";
@@ -149,18 +148,6 @@ export default defineConfig({
       async getMdxComponents(page) {
         const source = await this.getLoader();
 
-        function DocsCategory() {
-          return (
-            <Cards>
-              {getPageTreePeers(source.getPageTree(page.locale), page.url).map((peer) => (
-                <Card key={peer.url} title={peer.name} href={peer.url}>
-                  {peer.description}
-                </Card>
-              ))}
-            </Cards>
-          );
-        }
-
         return {
           ...defaultMdxComponents,
           ...Twoslash,
@@ -192,7 +179,6 @@ export default defineConfig({
           Accordions,
           TypeTable,
           Video,
-          DocsCategory,
         } satisfies Record<string, unknown>;
       },
     }),
