@@ -269,12 +269,19 @@ pub(super) fn header_dimensions(bytes: &[u8]) -> DecodeResult<(u32, u32)> {
 
 /// Bitmap dimensions from the format header; decodes no pixels.
 pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<DecodeResult<(u32, u32)>> {
-  match detect_image_format(bytes)? {
-    DetectedImageFormat::Png => Some(png_dimensions(bytes)),
-    DetectedImageFormat::Jpeg => Some(jpeg_dimensions(bytes)),
-    DetectedImageFormat::WebP => Some(webp_dimensions(bytes)),
-    DetectedImageFormat::Gif => None,
-  }
+  let dimensions = match detect_image_format(bytes)? {
+    DetectedImageFormat::Png => png_dimensions(bytes),
+    DetectedImageFormat::Jpeg => jpeg_dimensions(bytes),
+    DetectedImageFormat::WebP => webp_dimensions(bytes),
+    DetectedImageFormat::Gif => return None,
+  };
+
+  // A source that would not decode is rejected before a backend, such as the PDF writer that embeds
+  // the encoded bytes, sizes a buffer from its header.
+  Some(dimensions.and_then(|(width, height)| {
+    check_dimensions(width, height)?;
+    Ok((width, height))
+  }))
 }
 
 /// Decodes bitmap bytes down to `target`, never upscaling.
@@ -302,6 +309,23 @@ pub(super) fn rgba_buffer(data: Vec<u8>, (width, height): (u32, u32)) -> DecodeR
 #[cfg(all(test, any(feature = "png", feature = "webp")))]
 mod tests {
   use super::*;
+
+  /// A PNG whose header claims an edge past the limit, as a fuzzer found, is rejected from its header
+  /// alone.
+  #[cfg(feature = "png")]
+  #[test]
+  fn bitmap_dimensions_rejects_a_header_past_the_limit() {
+    let png = [
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 44, 162, 234, 110, 61, 56,
+      2, 8, 6, 0, 0, 0, 243, 76, 34, 254, 0, 0, 0, 8, 73, 68, 65, 84, 120, 156, 3, 0, 0, 0, 0, 1,
+      72, 6, 137, 210, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+
+    assert!(matches!(
+      bitmap_dimensions(&png),
+      Some(Err(DecodeError::OverBudget(..)))
+    ));
+  }
 
   #[cfg(feature = "webp")]
   #[test]
