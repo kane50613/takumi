@@ -17,7 +17,7 @@ use selectors::parser::{
 use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
 use crate::style::{
-  PageName, PropertySyntax,
+  DeclarationOrigin, IgnoredDeclaration, IgnoredReason, PageName, PropertySyntax,
   page_rule::{PageContext, PageDescriptors, PageKind, PageRule, PageSelector, PageStyles},
 };
 use crate::viewport::Viewport;
@@ -363,9 +363,19 @@ struct StyleSheetFragment {
   page_rules: Vec<PageRule>,
   declared_layers: Vec<LayerPath>,
   preflight: bool,
+  /// The declarations and at-rules parsing dropped.
+  ignored: Vec<IgnoredDeclaration>,
 }
 
 impl StyleSheetFragment {
+  /// A fragment that holds only the at-rule parsing dropped.
+  fn ignoring(at_rule: IgnoredDeclaration) -> Self {
+    Self {
+      ignored: vec![at_rule],
+      ..Self::default()
+    }
+  }
+
   fn extend(&mut self, other: Self) {
     self.rules.extend(other.rules);
     self.keyframes.extend(other.keyframes);
@@ -375,6 +385,7 @@ impl StyleSheetFragment {
     self.page_rules.extend(other.page_rules);
     self.declared_layers.extend(other.declared_layers);
     self.preflight |= other.preflight;
+    self.ignored.extend(other.ignored);
   }
 }
 
@@ -404,6 +415,13 @@ impl RuleDeclarations {
   fn is_empty(&self) -> bool {
     self.normal.declarations.is_empty() && self.important.declarations.is_empty()
   }
+
+  /// Moves out the declarations parsing dropped from both blocks.
+  fn take_ignored(&mut self) -> impl Iterator<Item = IgnoredDeclaration> {
+    take(&mut self.normal.ignored)
+      .into_iter()
+      .chain(take(&mut self.important.ignored))
+  }
 }
 
 /// What a nested rule inherits from the rules around it: the media queries and
@@ -416,15 +434,21 @@ struct NestingContext<'a> {
 }
 
 /// The items a rule or declaration list yields, with the invalid ones dropped
-/// when `lossy` and their errors kept otherwise.
+/// when `lossy`, each dropped declaration added to `ignored`, and their errors
+/// kept otherwise.
 fn recover<'i, T>(
   items: impl Iterator<Item = Result<T, (ParseError<StyleSheetParseError>, &'i str, SourceLocation)>>,
   lossy: bool,
+  ignored: &mut Vec<IgnoredDeclaration>,
 ) -> impl Iterator<Item = Result<T, ParseError<StyleSheetParseError>>> {
   items.filter_map(move |item| match item {
     Ok(item) => Some(Ok(item)),
     Err((_, source, location)) if lossy => {
       log_ignored(source, location);
+      ignored.extend(IgnoredDeclaration::invalid_value(
+        source,
+        DeclarationOrigin::StyleSheet,
+      ));
       None
     }
     Err((error, ..)) => Some(Err(error)),
@@ -467,7 +491,10 @@ macro_rules! impl_parser_traits {
   };
 }
 
-pub(crate) struct StyleDeclarationParser;
+/// Parses one declaration, recording a property takumi does not support as written in `origin`.
+pub(crate) struct StyleDeclarationParser {
+  pub(crate) origin: DeclarationOrigin,
+}
 
 impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   type Declaration = StyleDeclarationBlock;
@@ -479,7 +506,8 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     input: &mut Parser<'i>,
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let mut declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
+    let mut declarations =
+      StyleDeclarationBlock::parse(&name, input, self.origin).map_err(ParseError::into)?;
     if input.try_parse(parse_important).is_ok() {
       declarations.mark_important();
     }
@@ -504,7 +532,9 @@ impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
     input: &mut Parser<'i>,
     state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let mut parser = StyleDeclarationParser;
+    let mut parser = StyleDeclarationParser {
+      origin: DeclarationOrigin::StyleSheet,
+    };
     parser
       .parse_value(name, input, state)
       .map(Box::new)
@@ -582,7 +612,9 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
           ..StyleSheetFragment::default()
         }))
       }
-      AtRulePrelude::Unknown => Ok(StyleRuleBodyItem::Rules(StyleSheetFragment::default())),
+      AtRulePrelude::Unknown(at_rule) => Ok(StyleRuleBodyItem::Rules(
+        StyleSheetFragment::ignoring(*at_rule),
+      )),
       _ => Err(()),
     }
   }
@@ -612,7 +644,8 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
     input: &mut Parser<'i>,
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
+    let declarations = StyleDeclarationBlock::parse(&name, input, DeclarationOrigin::StyleSheet)
+      .map_err(ParseError::into)?;
     // !important flag is ignored in keyframe declartion.
     // Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@keyframes#!important_in_a_keyframe
     input.try_parse(parse_important).ok();
@@ -646,13 +679,16 @@ impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
   ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     let mut declaration_parser = KeyframeDeclarationParser;
     let mut declarations = StyleDeclarationBlock::default();
+    let mut ignored = Vec::new();
 
     for block in recover(
       RuleBodyParser::new(input, &mut declaration_parser),
       self.lossy,
+      &mut ignored,
     ) {
       declarations.append(block?);
     }
+    declarations.ignored.extend(ignored);
 
     Ok(KeyframeRule {
       offsets,
@@ -708,10 +744,12 @@ impl RuleParser {
   ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let lossy = self.lossy;
     let mut fragment = StyleSheetFragment::default();
+    let mut ignored = Vec::new();
 
-    for nested in recover(StyleSheetParser::new(input, self), lossy) {
+    for nested in recover(StyleSheetParser::new(input, self), lossy, &mut ignored) {
       fragment.extend(nested?);
     }
+    fragment.ignored.extend(ignored);
 
     Ok(fragment)
   }
@@ -737,7 +775,7 @@ enum AtRulePrelude {
   Apply(Box<StyleDeclarationBlock>),
   /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
-  Unknown,
+  Unknown(Box<IgnoredDeclaration>),
 }
 
 /// A style rule with its selectors and declaration blocks. Opaque: its
@@ -865,7 +903,9 @@ impl<'i> DeclarationParser<'i> for ThemeBlockParser<'_> {
     input: &mut Parser<'i>,
     state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let mut parser = StyleDeclarationParser;
+    let mut parser = StyleDeclarationParser {
+      origin: DeclarationOrigin::StyleSheet,
+    };
     parser
       .parse_value(name, input, state)
       .map(Box::new)
@@ -956,13 +996,20 @@ impl NestingContext<'_> {
     let mut declarations = RuleDeclarations::default();
     let mut fragment = StyleSheetFragment::default();
     let mut parser = ThemeBlockParser { context: self };
+    let mut ignored = Vec::new();
 
-    for item in recover(RuleBodyParser::new(input, &mut parser), self.lossy) {
+    for item in recover(
+      RuleBodyParser::new(input, &mut parser),
+      self.lossy,
+      &mut ignored,
+    ) {
       match item? {
         ThemeBodyItem::Declarations(block) => declarations.push(*block),
         ThemeBodyItem::Keyframes(keyframes) => fragment.extend(keyframes),
       }
     }
+    fragment.ignored.extend(declarations.take_ignored());
+    fragment.ignored.extend(ignored);
 
     if !declarations.is_empty() {
       fragment.rules.push(self.rule(selectors, declarations));
@@ -978,9 +1025,17 @@ impl NestingContext<'_> {
   ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let mut parser = KeyframeRuleParser { lossy: self.lossy };
     let mut keyframes = Vec::new();
+    let mut ignored = Vec::new();
 
-    for keyframe in recover(StyleSheetParser::new(input, &mut parser), self.lossy) {
+    for keyframe in recover(
+      StyleSheetParser::new(input, &mut parser),
+      self.lossy,
+      &mut ignored,
+    ) {
       keyframes.push(keyframe?);
+    }
+    for keyframe in &mut keyframes {
+      ignored.extend(take(&mut keyframe.declarations.ignored));
     }
 
     let mut rule = KeyframesRule::builder()
@@ -991,6 +1046,7 @@ impl NestingContext<'_> {
 
     Ok(StyleSheetFragment {
       keyframes: vec![rule],
+      ignored,
       ..StyleSheetFragment::default()
     })
   }
@@ -1006,11 +1062,17 @@ impl NestingContext<'_> {
       parent_selectors: selectors.clone(),
       context: self,
     };
+    let mut ignored = Vec::new();
 
-    for item in recover(RuleBodyParser::new(input, &mut parser), self.lossy) {
+    for item in recover(
+      RuleBodyParser::new(input, &mut parser),
+      self.lossy,
+      &mut ignored,
+    ) {
       match item? {
         StyleRuleBodyItem::Declarations(block) => declarations.push(*block),
         StyleRuleBodyItem::Rules(nested_rules) => {
+          fragment.ignored.extend(declarations.take_ignored());
           if !declarations.is_empty() {
             fragment
               .rules
@@ -1020,6 +1082,8 @@ impl NestingContext<'_> {
         }
       }
     }
+    fragment.ignored.extend(declarations.take_ignored());
+    fragment.ignored.extend(ignored);
 
     if !declarations.is_empty() {
       fragment.rules.push(self.rule(selectors, declarations));
@@ -1059,7 +1123,11 @@ impl NestingContext<'_> {
         .parse_style_rule_block(parent_selectors.clone(), input)
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
-      AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
+      AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      AtRulePrelude::Unknown(at_rule) => {
+        skip_block(input);
+        Ok(StyleSheetFragment::ignoring(*at_rule))
+      }
       AtRulePrelude::Theme => self.parse_theme_block(input),
       #[cfg(feature = "font-face")]
       AtRulePrelude::FontFace => Err(ParseError::custom(
@@ -1189,9 +1257,16 @@ fn parse_at_rule_prelude<'i>(
     return Ok(AtRulePrelude::Property(property_name));
   }
 
+  let start = input.position();
+
   while input.next().is_ok() {}
 
-  Ok(AtRulePrelude::Unknown)
+  Ok(AtRulePrelude::Unknown(Box::new(IgnoredDeclaration::new(
+    format!("@{name}"),
+    input.slice_from(start),
+    IgnoredReason::UnknownAtRule,
+    DeclarationOrigin::StyleSheet,
+  ))))
 }
 
 pub(crate) fn parse_layer_name<'i>(
@@ -1329,7 +1404,11 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Supports(true) => self
         .nested(self.current_layer.clone())
         .parse_fragment(input),
-      AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
+      AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      AtRulePrelude::Unknown(at_rule) => {
+        skip_block(input);
+        Ok(StyleSheetFragment::ignoring(*at_rule))
+      }
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
         property_rules: vec![parse_property_rule(name, input)?],
         ..StyleSheetFragment::default()
@@ -1375,7 +1454,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           ..StyleSheetFragment::default()
         })
       }
-      AtRulePrelude::Unknown => Ok(StyleSheetFragment::default()),
+      AtRulePrelude::Unknown(at_rule) => Ok(StyleSheetFragment::ignoring(*at_rule)),
       _ => Err(()),
     }
   }
@@ -1402,6 +1481,8 @@ pub struct StyleSheet {
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
   /// gate `tw` variants before the cascade runs and so resolve at parse time.
   pub(crate) breakpoints: BreakpointOverrides,
+  /// The declarations and at-rules parsing dropped, each once.
+  ignored: Box<[IgnoredDeclaration]>,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1612,6 +1693,11 @@ impl StyleSheet {
     names
   }
 
+  /// The declarations and at-rules parsing dropped, each once.
+  pub fn ignored_declarations(&self) -> &[IgnoredDeclaration] {
+    &self.ignored
+  }
+
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);
@@ -1693,6 +1779,7 @@ impl StyleSheet {
       mut page_rules,
       mut declared_layers,
       preflight,
+      ignored,
     } = fragment;
 
     if preflight {
@@ -1756,6 +1843,7 @@ impl StyleSheet {
       font_faces,
       page_rules,
       layer_count: layer_order.len(),
+      ignored: IgnoredDeclaration::unique(&ignored).into(),
     })
   }
 }

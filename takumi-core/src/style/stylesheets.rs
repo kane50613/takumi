@@ -8,10 +8,7 @@ use std::{
 
 use cssparser::{Parser, RuleBodyParser, SourceLocation, Token, match_ignore_ascii_case};
 use pastey::paste;
-use serde::{
-  Deserialize,
-  de::{Error as DeError, IgnoredAny},
-};
+use serde::{Deserialize, de::Error as DeError};
 use smallvec::{SmallVec, smallvec};
 use thin_vec::ThinVec;
 
@@ -19,7 +16,8 @@ use crate::{
   Error,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext,
+    CssInput, CssUnexpected, CssValueSeed, CustomProperties, DeclarationOrigin, IgnoredDeclaration,
+    IgnoredReason, SizingContext,
     properties::*,
     selector::{StyleDeclarationParser, log_ignored},
     unexpected_token,
@@ -796,15 +794,20 @@ macro_rules! define_style {
 
               while let Some(key) = map.next_key::<Cow<'de, str>>()? {
                 let property = PropertyId::from_camel_case(&key);
-                if matches!(property, PropertyId::Ignored) {
-                  map.next_value::<IgnoredAny>()?;
-                  continue;
-                }
-
                 let css_input = map.next_value_seed(CssValueSeed)?;
 
                 // `undefined` / `null` values are how JS callers express "no declaration".
                 if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
+                  continue;
+                }
+
+                if property == PropertyId::Ignored {
+                  style.declarations.ignored.push(IgnoredDeclaration::new(
+                    key,
+                    &css_input.to_string(),
+                    IgnoredReason::UnknownProperty,
+                    DeclarationOrigin::StyleObject,
+                  ));
                   continue;
                 }
 
@@ -826,6 +829,12 @@ macro_rules! define_style {
                     }
                     Err(error) => {
                       log::warn!(target: "takumi::style", "ignoring {}", error.message(&key));
+                      style.declarations.ignored.push(IgnoredDeclaration::new(
+                        key.as_ref(),
+                        &error.value(),
+                        IgnoredReason::InvalidValue,
+                        DeclarationOrigin::StyleObject,
+                      ));
                     }
                   }
                 }
@@ -2755,6 +2764,8 @@ pub struct StyleDeclarationBlock {
   important: ImportantBits,
   /// Properties that were marked with `!important`.
   pub importance: DeclarationImportance,
+  /// The declarations parsing dropped from this block.
+  pub(crate) ignored: ThinVec<IgnoredDeclaration>,
 }
 
 impl StyleDeclarationBlock {
@@ -2817,7 +2828,10 @@ impl StyleDeclarationBlock {
       return (self, Self::default());
     }
 
-    let mut normal = Self::default();
+    let mut normal = Self {
+      ignored: self.ignored,
+      ..Self::default()
+    };
     let mut important = Self::default();
 
     let flags = self.important;
@@ -2853,6 +2867,7 @@ impl StyleDeclarationBlock {
       .important
       .append(self.declarations.len(), &other.important);
     self.declarations.extend(other.declarations);
+    self.ignored.extend(other.ignored);
   }
 
   /// Iterates over the declarations in source order.
@@ -2911,13 +2926,31 @@ impl StyleDeclarationBlock {
   }
 
   /// Parses one declaration block for the given property name.
-  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(
+    name: &str,
+    input: &mut Parser<'i>,
+    origin: DeclarationOrigin,
+  ) -> ParseResult<'i, Self> {
     let property = PropertyId::from_kebab_case(name);
     let start = input.position();
 
+    if property == PropertyId::Ignored {
+      property.parse_declarations(name, input)?;
+
+      let mut block = Self::default();
+
+      block.ignored.push(IgnoredDeclaration::new(
+        name,
+        input.slice_from(start),
+        IgnoredReason::UnknownProperty,
+        origin,
+      ));
+      return Ok(block);
+    }
+
     // Detect var() up-front; otherwise a partial parse (e.g. `0 var(--y)`)
     // would commit before deferral. See #712.
-    if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
+    if property != PropertyId::Custom {
       let state = input.state();
       skip_to_bang(input);
       let specified_value = input.slice_from(start).trim();
@@ -2940,14 +2973,20 @@ impl StyleDeclarationBlock {
 
   /// Parses a declaration list as a `style` attribute is read, dropping only the declarations that fail.
   pub fn parse_loosy(input: &str) -> Self {
+    let origin = DeclarationOrigin::StyleAttribute;
     let mut parser = Parser::new(input);
-    let mut declaration_parser = StyleDeclarationParser;
+    let mut declaration_parser = StyleDeclarationParser { origin };
     let mut block = Self::default();
 
     for result in RuleBodyParser::new(&mut parser, &mut declaration_parser) {
       match result {
         Ok(declarations) => block.append(declarations),
-        Err((_, source, location)) => log_ignored(source, location),
+        Err((_, source, location)) => {
+          log_ignored(source, location);
+          block
+            .ignored
+            .extend(IgnoredDeclaration::invalid_value(source, origin));
+        }
       }
     }
     block
@@ -2959,7 +2998,9 @@ impl FromStr for StyleDeclarationBlock {
 
   fn from_str(input: &str) -> Result<Self, Self::Err> {
     let mut parser = Parser::new(input);
-    let mut declaration_parser = StyleDeclarationParser;
+    let mut declaration_parser = StyleDeclarationParser {
+      origin: DeclarationOrigin::StyleAttribute,
+    };
     let mut block = Self::default();
 
     for result in RuleBodyParser::new(&mut parser, &mut declaration_parser) {

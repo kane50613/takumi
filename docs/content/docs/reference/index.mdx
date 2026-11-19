@@ -116,7 +116,9 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | :------------------------------ | :--------------------------------- |
 | A name outside this list        | Dropped without an error           |
 | A `--custom` property           | Kept, and readable through `var()` |
-| A listed name, unparsable value | Fails the whole style object       |
+| A listed name, unparsable value | Dropped without an error           |
+
+A `takumi-paint` tree lists each dropped declaration in `ignoredDeclarations`, and `takumi paint` prints them under `ignored`.
 
 ### Layout & display
 

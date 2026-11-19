@@ -96,6 +96,34 @@ pub struct RenderNeeds {
   pub missing_characters: Vec<String>,
   /// The families `font-family` or `fontFamilies` names that no font provides, each once.
   pub unresolved_families: Vec<String>,
+  /// The declarations and at-rules the style parser dropped, each once.
+  pub ignored_declarations: Vec<IgnoredDeclaration>,
+}
+
+/// A declaration or at-rule the style parser dropped.
+#[napi(object)]
+pub struct IgnoredDeclaration {
+  /// The property as written, or the at-rule's name with its `@`.
+  pub property: String,
+  /// The value as written, or the at-rule's prelude.
+  pub value: String,
+  /// Why it was dropped.
+  #[napi(ts_type = "\"unknown-property\" | \"invalid-value\" | \"unknown-at-rule\"")]
+  pub reason: String,
+  /// Where it was written.
+  #[napi(ts_type = "\"style-attribute\" | \"style-sheet\" | \"style-object\"")]
+  pub origin: String,
+}
+
+impl From<takumi_core::style::IgnoredDeclaration> for IgnoredDeclaration {
+  fn from(declaration: takumi_core::style::IgnoredDeclaration) -> Self {
+    Self {
+      reason: declaration.reason.as_str().to_owned(),
+      origin: declaration.origin.as_str().to_owned(),
+      property: declaration.property,
+      value: declaration.value,
+    }
+  }
 }
 
 impl RenderNeeds {
@@ -118,6 +146,11 @@ impl RenderNeeds {
         .map(String::from)
         .collect(),
       unresolved_families: needs.unresolved_families,
+      ignored_declarations: needs
+        .ignored_declarations
+        .into_iter()
+        .map(Into::into)
+        .collect(),
     }
   }
 }

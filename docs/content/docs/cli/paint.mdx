@@ -78,6 +78,17 @@ not painted
 
 An element with `display: none` makes no box, so it appears nowhere in the output. The root element is the exception: `<html style="display: none">` is listed under `not painted` as `html display: none`.
 
+Each declaration or at-rule the style parser dropped follows, under `ignored`, with why it was dropped and where it was written. JSON lists the same entries as `ignoredDeclarations`.
+
+```
+ignored
+  @container (width > 400px) unknown-at-rule style-sheet
+  writing-mode: vertical-rl unknown-property style-attribute
+  filter: blurry(4px) invalid-value style-attribute
+```
+
+An element with `display: none` is not read, so a declaration only it uses is not listed.
+
 ## Ask for more
 
 `--detail` sets how much the output holds:

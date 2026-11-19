@@ -3,6 +3,8 @@
 
 use serde::Serialize;
 
+use crate::style::IgnoredDeclaration;
+
 /// `[r, g, b, a]`, each `0..=255`, in sRGB.
 pub type Rgba = [u8; 4];
 
@@ -648,6 +650,7 @@ pub struct Unpainted {
 
 /// A painted document.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PaintDocument {
   /// The canvas width.
   pub width: f32,
@@ -662,4 +665,7 @@ pub struct PaintDocument {
   /// The elements painting skips, in document order, none of which has a node.
   #[serde(skip_serializing_if = "Vec::is_empty")]
   pub unpainted: Vec<Unpainted>,
+  /// The declarations and at-rules the style parser dropped, each once.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub ignored_declarations: Vec<IgnoredDeclaration>,
 }

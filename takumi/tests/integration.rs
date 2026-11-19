@@ -8,6 +8,7 @@ mod font_face_tests;
 mod font_tests;
 mod form_control_tests;
 mod html_fixtures;
+mod ignored_declarations_tests;
 mod inline_svg;
 mod math_function_tests;
 mod measure_tests;

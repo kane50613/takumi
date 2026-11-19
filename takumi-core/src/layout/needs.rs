@@ -1,6 +1,6 @@
 //! What a render tree needs from outside before it renders, read from the styled tree.
 
-use std::{collections::BTreeSet, rc::Rc, sync::Arc};
+use std::{collections::BTreeSet, iter::from_fn, rc::Rc, sync::Arc};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -23,7 +23,7 @@ use crate::{
     font::Fonts,
     image::{ImageSource, is_svg_like},
   },
-  style::{BackgroundImage, Display, Float, FontVariantCaps, find_keyframes},
+  style::{BackgroundImage, Display, Float, FontVariantCaps, IgnoredDeclaration, find_keyframes},
   text::character::{treat_as_space, treat_as_zero_width_space},
 };
 use crate::{font_style::SizedFontStyle, fonts::font_description::FontDescription};
@@ -46,6 +46,8 @@ pub struct RenderNeeds {
   pub missing_characters: Vec<char>,
   /// The families the text's `font-family` stacks or the render's fallback name that no face provides.
   pub unresolved_families: Vec<String>,
+  /// The declarations and at-rules the style parser dropped from the stylesheet and the boxes' styles, each once.
+  pub ignored_declarations: Vec<IgnoredDeclaration>,
 }
 
 impl Extend<RenderNeeds> for RenderNeeds {
@@ -59,6 +61,12 @@ impl Extend<RenderNeeds> for RenderNeeds {
       for character in read.missing_characters {
         if !self.missing_characters.contains(&character) {
           self.missing_characters.push(character);
+        }
+      }
+
+      for declaration in read.ignored_declarations {
+        if !self.ignored_declarations.contains(&declaration) {
+          self.ignored_declarations.push(declaration);
         }
       }
 
@@ -118,9 +126,43 @@ impl RenderNode {
       || self.is_block_in_inline
   }
 
+  /// The declarations and at-rules the style parser dropped from the stylesheet and the boxes' styles, each once.
+  pub fn ignored_declarations(&self) -> Vec<IgnoredDeclaration> {
+    let mut stack = vec![self];
+    let nodes = from_fn(|| {
+      let node = stack.pop()?;
+
+      stack.extend(
+        node
+          .children
+          .iter()
+          .flat_map(|children| children.iter())
+          .rev(),
+      );
+      Some(node)
+    });
+
+    IgnoredDeclaration::unique(
+      self
+        .context
+        .stylesheet()
+        .ignored_declarations()
+        .iter()
+        .chain(
+          nodes
+            .filter_map(|node| node.node.as_ref())
+            .flat_map(|node| node.metadata.ignored.iter()),
+        ),
+    )
+  }
+
   /// What this render tree needs before it renders.
   pub fn needs(&self) -> RenderNeeds {
     let mut needs = NeedsCollector {
+      needs: RenderNeeds {
+        ignored_declarations: self.ignored_declarations(),
+        ..RenderNeeds::default()
+      },
       #[cfg(feature = "font-face")]
       loaded_font_files: self.context.fonts().loaded_font_files(),
       ..NeedsCollector::default()

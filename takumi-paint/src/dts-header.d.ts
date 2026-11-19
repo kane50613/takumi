@@ -423,6 +423,20 @@ export type RenderNeeds = {
   missingCharacters: string[];
   /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
   unresolvedFamilies: string[];
+  /** The declarations and at-rules the style parser dropped, each once. */
+  ignoredDeclarations: IgnoredDeclaration[];
+};
+
+/** A declaration or at-rule the style parser dropped. */
+export type IgnoredDeclaration = {
+  /** The property as written, or the at-rule's name with its `@`. */
+  property: string;
+  /** The value as written, or the at-rule's prelude. */
+  value: string;
+  /** Why it was dropped. */
+  reason: "unknown-property" | "invalid-value" | "unknown-at-rule";
+  /** Where it was written. */
+  origin: "style-attribute" | "style-sheet" | "style-object";
 };
 
 /** The tree as the wasm module serializes it, nodes and runs named by index. */
@@ -432,4 +446,6 @@ export type RawPaintTree = {
   readonly nodes: readonly RawPaintNode[];
   readonly fonts: readonly RawFont[];
   readonly steps: readonly RawPaintStep[];
+  /** The declarations and at-rules the style parser dropped, each once, left out when there are none. */
+  readonly ignoredDeclarations?: readonly IgnoredDeclaration[];
 };

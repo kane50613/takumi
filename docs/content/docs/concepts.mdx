@@ -43,7 +43,7 @@ The built-in parser applies no Tailwind Preflight by default, so elements keep t
 
 ### Strict style objects
 
-A property name outside the supported list is dropped without an error. A listed name with an unparsable value fails the whole style object. Only `writing-mode: horizontal-tb` is laid out. See the [reference](/docs/reference).
+A property name outside the supported list is dropped without an error, and so is a listed name whose value does not parse. The rest of the style still applies. Only `writing-mode: horizontal-tb` is laid out. To see what a render dropped, read `ignoredDeclarations` on a `takumi-paint` tree, or the `ignored` list that `takumi paint` prints. See the [reference](/docs/reference).
 
 ### Tables
 
