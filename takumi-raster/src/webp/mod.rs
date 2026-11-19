@@ -3,7 +3,7 @@ use std::{borrow::Borrow, io::Write, mem, ops::Range};
 use crate::{
   Result,
   error::{Error, WebPError},
-  write::{AnimatedWebpOptions, Bitmap},
+  write::{AnimatedWebpOptions, Bitmap, FrameRegion},
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -26,84 +26,27 @@ fn pixels_visibly_equal(a: &[u8; 4], b: &[u8; 4]) -> bool {
   a == b || (a[3] == 0 && b[3] == 0)
 }
 
-/// Sub-rectangle of the canvas an ANMF frame covers, with an even origin as the
-/// container stores offsets halved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct FrameRegion {
-  pub x: u32,
-  pub y: u32,
-  pub width: u32,
-  pub height: u32,
+/// The bounding box of visibly differing pixels between two images of equal size, with its origin
+/// rounded down to even as the ANMF container stores offsets halved, `None` when none differ.
+fn changed_region(previous: &Bitmap, current: &Bitmap) -> Option<FrameRegion> {
+  let changed = FrameRegion::changed(previous, current, pixels_visibly_equal)?;
+  let x = changed.x & !1;
+  let y = changed.y & !1;
+
+  Some(FrameRegion {
+    x,
+    y,
+    width: changed.x + changed.width - x,
+    height: changed.y + changed.height - y,
+  })
 }
 
+#[cfg(target_arch = "wasm32")]
 impl FrameRegion {
-  pub(super) fn full(width: u32, height: u32) -> Self {
-    Self {
-      x: 0,
-      y: 0,
-      width,
-      height,
-    }
-  }
-
-  /// The bounding box of visibly differing pixels between two images of equal size, `None` when
-  /// none differ.
-  pub(super) fn diff(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
-    let rows = previous.rows().zip(current.rows());
-
-    let mut top = None;
-    let mut bottom = 0;
-    let mut left = previous.width();
-    let mut right = 0;
-
-    for (row_index, (previous_row, current_row)) in rows.enumerate() {
-      if previous_row == current_row {
-        continue;
-      }
-
-      let mut differing = previous_row
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .zip(current_row.as_chunks::<4>().0)
-        .enumerate()
-        .filter(|(_, (previous_pixel, current_pixel))| {
-          !pixels_visibly_equal(previous_pixel, current_pixel)
-        });
-
-      let Some((first, _)) = differing.next() else {
-        continue;
-      };
-
-      let first = first as u32;
-      let last = differing
-        .next_back()
-        .map_or(first, |(index, _)| index as u32);
-
-      top.get_or_insert(row_index as u32);
-      bottom = row_index as u32;
-      left = left.min(first);
-      right = right.max(last);
-    }
-
-    let top = top?;
-    let x = left & !1;
-    let y = top & !1;
-
-    Some(Self {
-      x,
-      y,
-      width: right + 1 - x,
-      height: bottom + 1 - y,
-    })
-  }
-
-  #[cfg(target_arch = "wasm32")]
   pub(super) fn covers(&self, image: &Bitmap) -> bool {
     self.x == 0 && self.y == 0 && self.width == image.width() && self.height == image.height()
   }
 
-  #[cfg(target_arch = "wasm32")]
   pub(super) fn crop(&self, image: &Bitmap) -> Bitmap {
     image.crop(self.x, self.y, self.width, self.height)
   }
@@ -140,7 +83,7 @@ impl FramePlacement {
       same_dimensions && current.dimensions() == (canvas_width, canvas_height) && !options.dispose;
 
     if diffable {
-      let region = FrameRegion::diff(previous, current)?;
+      let region = changed_region(previous, current)?;
 
       // No-blend so the rectangle replaces the canvas; blending would compose the
       // two alphas instead of matching the source frame.
@@ -410,7 +353,7 @@ mod tests {
     changed.put_pixel(5, 3, [255, 0, 0, 255]);
     changed.put_pixel(7, 7, [0, 255, 0, 255]);
 
-    let region = FrameRegion::diff(&base, &changed).unwrap();
+    let region = changed_region(&base, &changed).unwrap();
     assert_eq!(
       region,
       FrameRegion {
@@ -426,7 +369,7 @@ mod tests {
   fn diff_of_identical_images_is_none() {
     let base = Bitmap::from_pixel(8, 8, [1, 2, 3, 255]);
 
-    assert_eq!(FrameRegion::diff(&base, &base.clone()), None);
+    assert_eq!(changed_region(&base, &base.clone()), None);
   }
 
   #[test]
@@ -437,7 +380,7 @@ mod tests {
     current.put_pixel(0, 0, [7, 8, 9, 0]);
     current.put_pixel(6, 6, [9, 9, 9, 255]);
 
-    let region = FrameRegion::diff(&previous, &current).unwrap();
+    let region = changed_region(&previous, &current).unwrap();
     assert_eq!(
       region,
       FrameRegion {
