@@ -163,6 +163,12 @@ export type Pdfa = "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4" | "4f";
 /** Structure-tree emission: off, on (default), or validated against an accessibility standard. */
 export type Tagged = boolean | "ua1" | "ua2";
 
+/** @internal The fonts one render sees, by the keys of its `fonts` list in order and the `@font-face` files and optional fonts that failed to load. */
+type FontScope = {
+  listed?: string[];
+  failed?: string[];
+};
+
 export type PdfRenderOptions = {
   /**
    * Fixed viewport for single-page output. Mutually exclusive with the paged
@@ -200,8 +206,8 @@ export type PdfRenderOptions = {
   cssVariables?: Record<string, string>;
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: string[];
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
   /** Document metadata written to the PDF's info dictionary. */
@@ -243,4 +249,8 @@ export type RenderNeeds = {
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */
   fonts: number[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };

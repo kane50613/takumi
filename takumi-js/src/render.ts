@@ -236,7 +236,9 @@ async function prepareScene<T extends PipelineOptions>(
     signal: options?.signal,
   });
 
-  return { renderer, prepared, output: { ...layout, signal: options?.signal } };
+  const { onMissingGlyphs: _, ...output } = layout;
+
+  return { renderer, prepared, output: { ...output, signal: options?.signal } };
 }
 
 /**

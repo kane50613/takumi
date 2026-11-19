@@ -49,7 +49,7 @@ use input::{Font, ListedFont, ListedFonts, RegisteredFont, load_font};
 use registrations::{FontRegistrations, RenderLeases, Retention};
 #[cfg(feature = "wasm")]
 use renderer::CacheStats;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "wasm")]
 use serde_wasm_bindgen::{from_value, to_value};
 use source_cache::{ParsedSource, SourceCache};
@@ -83,6 +83,17 @@ pub fn default_fonts() -> Result<Fonts, FontError> {
   }))
 }
 
+/// The fonts one render sees, as a document's one `FontFaceSet` holds its faces and marks the
+/// ones that failed.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct FontScope {
+  /// The keys of the render's `fonts` list, in order.
+  pub listed: Vec<String>,
+  /// The `@font-face` files and optional fonts of the render that failed to load.
+  pub failed: Vec<String>,
+}
+
 /// A renderer's registered fonts, the registrations that added them, and the leases its renders
 /// hold, for every binding. A change publishes a new registry, so a render keeps the fonts it
 /// started with.
@@ -96,9 +107,6 @@ pub struct FontStore {
 struct FontBook {
   fonts: Arc<Fonts>,
   registrations: FontRegistrations,
-  /// The keys the render that ordered its fonts last listed, whose fonts every registry handed to a
-  /// render adds again last, a later key over an earlier one.
-  listed: Vec<String>,
   leases: RenderLeases,
 }
 
@@ -109,7 +117,6 @@ impl FontStore {
       book: Mutex::new(FontBook {
         fonts: Arc::new(default_fonts()?),
         registrations: FontRegistrations::default(),
-        listed: Vec::new(),
         leases: RenderLeases::default(),
       }),
       cache,
@@ -121,40 +128,41 @@ impl FontStore {
     Arc::clone(&self.book().fonts)
   }
 
-  /// The registry for a render, with the `@font-face` files its document `failed` to download.
-  pub fn for_render(&self, failed: Option<&[String]>) -> Arc<Fonts> {
+  /// The registry for a render in `scope`, with its listed fonts added as
+  /// [`FontRegistrations::listing`] adds them and its failed files and fonts recorded.
+  pub fn for_render(&self, scope: &FontScope) -> Arc<Fonts> {
     self.release_evicted();
 
-    let failed = failed.unwrap_or_default();
     let fonts = {
       let book = self.book();
 
-      book.registrations.listing(&book.fonts, &book.listed)
+      book.registrations.listing(&book.fonts, &scope.listed)
     };
 
-    if failed.is_empty() {
+    if scope.failed.is_empty() {
       fonts
     } else {
-      Arc::new(fonts.with_failed_font_files(failed))
+      Arc::new(fonts.with_failed_font_files(&scope.failed))
     }
   }
 
-  /// The registry for a needs pass, with each listed font still loading registered as pending.
+  /// The registry for a needs pass in `scope`, with each listed font still loading registered as
+  /// pending.
   pub fn for_needs(
     &self,
     families: &mut Option<Vec<String>>,
     listed: Option<&ListedFonts>,
-    failed: Option<&[String]>,
+    scope: &FontScope,
   ) -> Arc<Fonts> {
     let Some(listed) = listed else {
-      return self.for_render(failed);
+      return self.for_render(scope);
     };
 
     if families.is_none() {
       families.clone_from(&listed.families);
     }
 
-    Arc::new(listed.fonts(&self.for_render(failed)))
+    Arc::new(listed.fonts(&self.for_render(scope)))
   }
 
   /// A render's `fonts` list read against the fonts this store holds.
@@ -261,7 +269,7 @@ impl FontStore {
 
     if pin {
       return self
-        .update(|_, registrations| Ok(registrations.pin(&self.cache, key)))
+        .update(|fonts, registrations| Ok(registrations.pin(fonts, &self.cache, key)))
         .unwrap_or_default();
     }
 
@@ -397,12 +405,6 @@ impl FontStore {
       .unwrap_or_default()
   }
 
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, in every registry handed to a render from now on.
-  pub fn order_fonts(&self, keys: &[String]) {
-    self.book().listed = keys.to_vec();
-  }
-
   /// Goes back to the embedded system fonts alone.
   pub fn reset(&self) -> Result<(), FontError> {
     self.update(|fonts, registrations| {
@@ -523,6 +525,8 @@ pub struct NeedsOutput {
   fonts: Vec<usize>,
   font_files: Vec<String>,
   loaded_font_files: Vec<String>,
+  missing_characters: Vec<char>,
+  unresolved_families: Vec<String>,
 }
 
 impl NeedsOutput {
@@ -533,6 +537,8 @@ impl NeedsOutput {
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
       loaded_font_files: needs.loaded_font_files.into_iter().collect(),
+      missing_characters: needs.missing_characters,
+      unresolved_families: needs.unresolved_families,
     }
   }
 }

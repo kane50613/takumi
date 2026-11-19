@@ -27,8 +27,9 @@ Use it to build node trees or load fonts yourself. For JSX or HTML input, `rende
 <sup>1</sup> `render` keeps only the subsets the text uses. See [Fonts &
 text](/docs/fonts#from-google-fonts).
 
-<sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits). Without them, pass the
-URL string in `fonts` instead.
+<sup>2</sup> `options` takes the [fetch limits](/docs/images#fetch-limits), and `optional`, which
+lets a render go on [without the font](/docs/fonts#fonts-that-may-fail) when it fails to load.
+Without options, pass the URL string in `fonts` instead.
 
 <sup>3</sup> `subsetFonts` is no longer needed, since a render keeps the subsets its text uses, the
 text inside SVG images included.

@@ -38,7 +38,7 @@ use crate::{
     css_font_selector::CssFontSelector,
     css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData,
-    font_description::FontSelectionDescription,
+    font_description::{FontFallbackKey, FontSelectionDescription},
     font_face::{FaceData, FontFace, FontFaceDescriptors, FontMetricsOverride, PendingSource},
     font_height::FontHeight,
     system_fonts::SystemFonts,
@@ -364,6 +364,10 @@ pub(crate) struct FontRegistry {
   revision: u64,
   /// What fonts resolved to, by their byte length before resolving, while a face holds it.
   resolved_sources: FxHashMap<usize, Vec<ResolvedSource>>,
+  /// The decoded faces of every font loaded, while a face holds them, so fonts of the same bytes
+  /// share them whether or not the registry holds the fonts, as Blink's `FontCache` shares font
+  /// data among documents.
+  typefaces: Vec<Weak<FontCustomPlatformData>>,
   /// The `@font-face` files the host has loaded or failed to, by URL.
   #[cfg(feature = "font-face")]
   font_files: HashMap<Arc<str>, FontFile>,
@@ -419,6 +423,42 @@ impl FontRegistry {
       .selector
       .get_font_data(font_description, family, false)
       .or_else(|| self.system_fonts.get_font_data(font_description, family))
+  }
+
+  /// Each usable face of `data` under `descriptors`, sharing the decoded faces of a font loaded
+  /// from the same bytes.
+  fn load_faces(
+    &mut self,
+    data: &SharedBytes,
+    id: u64,
+    descriptors: &FontFaceDescriptors,
+  ) -> Vec<Arc<FontFace>> {
+    let faces: Vec<Arc<FontFace>> =
+      FontFace::from_data(data, id, descriptors, |index| self.typeface(id, index))
+        .into_iter()
+        .map(Arc::new)
+        .collect();
+
+    self
+      .typefaces
+      .retain(|typeface| typeface.strong_count() > 0);
+
+    for typeface in faces.iter().filter_map(|face| face.custom_platform_data()) {
+      if self.typeface(typeface.id, typeface.index).is_none() {
+        self.typefaces.push(Arc::downgrade(typeface));
+      }
+    }
+
+    faces
+  }
+
+  /// The decoded face at `index` of the data `id` names, while a face holds it.
+  fn typeface(&self, id: u64, index: u32) -> Option<Arc<FontCustomPlatformData>> {
+    self
+      .typefaces
+      .iter()
+      .filter_map(Weak::upgrade)
+      .find(|typeface| typeface.id == id && typeface.index == index)
   }
 
   /// Adds `font`'s faces after every registered face.
@@ -499,6 +539,40 @@ impl Fonts {
           .collect()
       })
       .collect()
+  }
+
+  /// The families `key` names that no face, loaded or pending, provides. Generic keywords resolve
+  /// through the fallback families, so they never count.
+  pub(crate) fn missing_families<'k>(
+    &self,
+    key: &'k FontFallbackKey,
+  ) -> impl Iterator<Item = &'k str> + use<'_, 'k> {
+    key.family.tokens().iter().filter_map(|token| match token {
+      FontFamilyToken::Owned(name) if !self.has_family(name, &key.selection) => Some(name.as_str()),
+      _ => None,
+    })
+  }
+
+  /// The families the render falls back through, as its `fontFamilies` names them, that no face
+  /// provides.
+  pub(crate) fn missing_fallback_families<'a>(
+    &'a self,
+    description: &'a FontSelectionDescription,
+  ) -> impl Iterator<Item = &'a str> + 'a {
+    self
+      .fallback_families
+      .iter()
+      .flatten()
+      .filter(|family| !self.has_family(family, description))
+      .map(|family| &**family)
+  }
+
+  /// Whether a face, loaded or pending, provides `family`.
+  fn has_family(&self, family: &str, description: &FontSelectionDescription) -> bool {
+    self
+      .registry
+      .get_font_data(description, family, false)
+      .is_some()
   }
 
   /// The faces system font fallback picks from: the fallback families, then the system fonts, each
@@ -649,10 +723,9 @@ impl Fonts {
       ..
     } = font;
     let (data, id) = source.into_sfnt_with_id()?;
+    let registry = Arc::make_mut(&mut self.registry);
 
     if let Some(origin) = origin {
-      let registry = Arc::make_mut(&mut self.registry);
-
       registry.resolved_sources.retain(|_, sources| {
         sources.retain(ResolvedSource::is_held);
         !sources.is_empty()
@@ -676,7 +749,7 @@ impl Fonts {
     digest.update(generic_family.unwrap_or_default().as_bytes());
 
     Ok(LoadedFont {
-      faces: self.registry.selector.load(&data, id, &descriptors),
+      faces: registry.load_faces(&data, id, &descriptors),
       generic_family,
       digest: digest.digest(),
     })
@@ -1736,6 +1809,25 @@ mod tests {
       source_ids(&listed, "Shared"),
       [id(geist_mono_bytes()), latin.id()]
     );
+  }
+
+  /// One file loaded twice under two weights, neither registered.
+  #[test]
+  fn fonts_loaded_from_the_same_bytes_share_their_decoded_faces() {
+    let mut fonts = Fonts::default();
+    let regular = load(&mut fonts, geist_bytes(), "Shared");
+    let bold = fonts
+      .load(
+        FontResource::new(geist_bytes()).override_info(FontOverride {
+          family_name: Some("Shared".into()),
+          weight: Some(700.0),
+          ..Default::default()
+        }),
+      )
+      .unwrap();
+    let typeface = |font: &LoadedFont| Arc::clone(font.faces[0].custom_platform_data().unwrap());
+
+    assert!(Arc::ptr_eq(&typeface(&regular), &typeface(&bold)));
   }
 
   #[test]

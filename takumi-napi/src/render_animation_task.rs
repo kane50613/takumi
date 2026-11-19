@@ -49,7 +49,7 @@ impl AnimationInput {
 
     Ok(Self {
       scenes: Some(scenes),
-      fonts: state.fonts.for_render(options.failed_font_files.as_deref()),
+      fonts: state.fonts.for_render(&options.font_scope),
       state,
       options,
     })

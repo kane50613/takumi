@@ -17,7 +17,7 @@ use takumi_raster::{
 };
 use takumi_svg::SvgOptions;
 
-use crate::{device_pixel_ratio, input::ImageSource, parse_lang, time_ms};
+use crate::{FontScope, device_pixel_ratio, input::ImageSource, parse_lang, time_ms};
 
 /// Options for rendering an image or an SVG document.
 #[derive(Deserialize, Default)]
@@ -52,8 +52,9 @@ pub struct RenderOptions {
   pub keyframes: Option<Vec<KeyframesRule>>,
   /// The families the render falls back through, in order.
   pub font_families: Option<Vec<String>>,
-  /// The `@font-face` files the render's `prepare` failed to download.
-  pub failed_font_files: Option<Vec<String>>,
+  /// The fonts the render lists and the ones that failed.
+  #[serde(default)]
+  pub font_scope: FontScope,
   /// The BCP-47 language of the root.
   pub lang: Option<String>,
 }
@@ -144,8 +145,9 @@ pub struct RenderAnimationOptions<S> {
   pub keyframes: Option<Vec<KeyframesRule>>,
   /// The families the render falls back through, in order.
   pub font_families: Option<Vec<String>>,
-  /// The `@font-face` files the render's `prepare` failed to download.
-  pub failed_font_files: Option<Vec<String>>,
+  /// The fonts the render lists and the ones that failed.
+  #[serde(default)]
+  pub font_scope: FontScope,
   /// The BCP-47 language of the root.
   pub lang: Option<String>,
 }

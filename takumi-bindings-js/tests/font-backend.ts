@@ -18,7 +18,6 @@ export const fontBackend = (): {
     cachedFontFile: Mock<(url: string, _lease: number) => boolean>;
     leaseFonts: Mock<() => number>;
     releaseFonts: Mock<(lease: number) => void>;
-    orderFonts: Mock<(keys: string[]) => void>;
     dropFonts: Mock<(keys: string[]) => string[]>;
   };
   fonts: FontRegistry<HeldFamily>;
@@ -50,7 +49,6 @@ export const fontBackend = (): {
     releaseFonts: mock((lease: number) => {
       leases.delete(lease);
     }),
-    orderFonts: mock((_keys: string[]) => {}),
     // A held key leased by an open render stays, as the backend keeps a file a render leases.
     dropFonts: mock((keys: string[]) => {
       const dropped = leases.size > 0 ? [] : keys;

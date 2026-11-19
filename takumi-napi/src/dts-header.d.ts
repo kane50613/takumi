@@ -116,6 +116,12 @@ export interface ImageSource {
 /** Output format for static images. */
 export type OutputFormat = "webp" | "png" | "jpeg" | "ico" | "raw";
 
+/** @internal The fonts one render sees, by the keys of its `fonts` list in order and the `@font-face` files and optional fonts that failed to load. */
+type FontScope = {
+  listed?: Array<string>;
+  failed?: Array<string>;
+};
+
 /** Options for rendering a sequential scene animation. */
 export interface RenderAnimationOptions {
   /** The scenes to render sequentially. */
@@ -161,8 +167,8 @@ export interface RenderAnimationOptions {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: Array<string>;
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: Array<string>;
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }
@@ -212,8 +218,8 @@ export interface RenderOptions {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: Array<string>;
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: Array<string>;
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }
@@ -246,8 +252,8 @@ export interface SvgRenderOptions {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: Array<string>;
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: Array<string>;
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 }

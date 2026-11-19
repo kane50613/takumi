@@ -19,6 +19,7 @@ import {
   prepareSource,
   needsArgs,
   readSource,
+  splitExtras,
   renderPrepared,
   toNativeSource,
 } from "@takumi-rs/bindings-js";
@@ -39,6 +40,7 @@ export type {
   FontLoader,
   ImageLoader,
   ImagesInput,
+  MissingGlyphsHandler,
   OutputFormatOptions,
   PrepareImagesInput,
 } from "@takumi-rs/bindings-js";
@@ -75,15 +77,11 @@ export class Renderer {
 
   /** Reads what `source` needs under `options`, then loads its font subsets and fetches its images. */
   prepare(source: Node | string, options?: PrepareOptions): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, ...layout } = options ?? {};
+    const { extras, layout } = splitExtras(options ?? {});
     const native = toNativeSource(source);
 
-    return prepareSource(
-      this.fonts,
-      native,
-      layout,
-      { fonts, images, signal, fontFamilies },
-      (request) => this.inner.needs(native, ...needsArgs(layout, request), signal),
+    return prepareSource(this.fonts, native, layout, extras, (request) =>
+      this.inner.needs(native, ...needsArgs(layout, request), extras.signal),
     );
   }
 
@@ -134,15 +132,11 @@ export class Renderer {
     source: Node | string,
     options: RenderOptions | SvgRenderOptions,
   ): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, ...layout } = options;
+    const { extras, layout } = splitExtras(options);
     const native = toNativeSource(source);
 
-    return readSource(
-      this.fonts,
-      native,
-      layout,
-      { fonts, images, signal, fontFamilies },
-      (request) => this.inner.needs(native, ...needsArgs(layout, request), signal),
+    return readSource(this.fonts, native, layout, extras, (request) =>
+      this.inner.needs(native, ...needsArgs(layout, request), extras.signal),
     );
   }
 
@@ -176,16 +170,17 @@ export class Renderer {
     options: PrepareAnimationOptions | RenderAnimationOptions,
     collect: typeof prepareSource,
   ): Promise<PreparedAnimation> {
-    const { fonts, images, signal, fontFamilies, scenes, ...layout } = options;
+    const {
+      extras,
+      layout: { scenes, ...layout },
+    } = splitExtras(options);
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
 
-    return collect(
-      this.fonts,
-      sources,
-      layout,
-      { fonts, images, signal, fontFamilies },
-      (request) =>
-        this.inner.animationNeeds(...needsArgs({ ...layout, scenes: sources }, request), signal),
+    return collect(this.fonts, sources, layout, extras, (request) =>
+      this.inner.animationNeeds(
+        ...needsArgs({ ...layout, scenes: sources }, request),
+        extras.signal,
+      ),
     );
   }
 

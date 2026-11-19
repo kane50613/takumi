@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import ImageResponse from "../src/response";
 import { render } from "../src";
 import type { Node } from "@takumi-rs/helpers";
@@ -45,6 +45,48 @@ describe("ImageResponse", () => {
     expect(response.headers.get("content-type")).toBe("image/png");
 
     expect(await response.arrayBuffer()).toBeDefined();
+  });
+
+  test("prints what the render could not draw, and resolves ready", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const response = new ImageResponse(<div style={{ fontFamily: "Missing" }}>Hello 中</div>, {
+      width: 100,
+      height: 100,
+    });
+
+    await response.arrayBuffer();
+
+    const warnings = warn.mock.calls.map(([message]) => String(message));
+
+    warn.mockRestore();
+
+    expect(await response.ready).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.stringContaining('takumi: No font draws "中".'),
+      expect.stringContaining('takumi: No font provides the family "Missing".'),
+    ]);
+  });
+
+  test("loads the fonts onMissingGlyphs returns", async () => {
+    const cjk = await Bun.file(
+      "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    ).arrayBuffer();
+    const onMissingGlyphs = mock((_characters: string[]) => [{ name: "Noto Sans TC", data: cjk }]);
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const response = new ImageResponse(<div>Hello 中</div>, {
+      width: 100,
+      height: 100,
+      onMissingGlyphs,
+    });
+
+    await response.arrayBuffer();
+
+    const warnings = warn.mock.calls;
+
+    warn.mockRestore();
+
+    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(warnings).toEqual([]);
   });
 
   test("should set content-type", async () => {
