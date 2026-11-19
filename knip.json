@@ -16,7 +16,12 @@
         "app/playground/worker.ts",
         "tests/**/*.test.{ts,tsx}"
       ],
-      "ignore": ["public/**", "app/playground/templates/**", "src/app.css"],
+      "ignore": [
+        "public/**",
+        "app/playground/templates/**",
+        "app/registry/image/og-route.tsx",
+        "src/app.css"
+      ],
       "ignoreDependencies": [
         "@takumi-rs/core",
         "@takumi-rs/helpers",
