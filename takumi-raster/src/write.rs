@@ -736,12 +736,15 @@ where
   }
 }
 
+/// The longest GIF delay, in hundredths of a second, that browsers raise to 100ms.
+const BROWSER_RAISED_GIF_DELAY: u16 = 1;
+
 /// Frames with each run of equal images made one frame shown for the run's summed delay.
 ///
 /// Each frame rounds its own delay to GIF89a's Delay Time (section 23, hundredths of a second), as
-/// it would shown alone, and a run splits where the sum would pass `u16::MAX`. Approximate: browsers
-/// raise a delay of 10ms or less to 100ms, so a run of such frames plays shorter than the frames
-/// would one by one.
+/// it would shown alone, and a run splits where the sum would pass `u16::MAX`. A frame of 10ms or
+/// less ends the run, since browsers raise such a delay to 100ms and the merged frame would play
+/// shorter than the frames would one by one.
 struct HeldFrames<I> {
   frames: I,
   /// The frame shown and its delay so far, in hundredths of a second.
@@ -762,7 +765,9 @@ impl<I: Iterator<Item = Result<AnimationFrame>>> Iterator for HeldFrames<I> {
 
       match &mut self.held {
         Some((held, held_delay))
-          if held.image.dimensions() == frame.image.dimensions()
+          if *held_delay > BROWSER_RAISED_GIF_DELAY
+            && delay > BROWSER_RAISED_GIF_DELAY
+            && held.image.dimensions() == frame.image.dimensions()
             && held_delay.checked_add(delay).is_some()
             && held.image.as_raw() == frame.image.as_raw() =>
         {
@@ -1345,10 +1350,12 @@ mod tests {
       mk_frame(red.clone(), 34),
       mk_frame(red.clone(), 33),
       mk_frame(green.clone(), 33),
-      mk_frame(green, 34),
+      mk_frame(green.clone(), 34),
       mk_frame(red, 100),
       mk_frame(blue.clone(), 400_000),
       mk_frame(blue, 400_000),
+      mk_frame(green.clone(), 10),
+      mk_frame(green, 10),
     ];
     let mut bytes = Vec::new();
 
@@ -1378,6 +1385,8 @@ mod tests {
         (10, vec![255, 0, 0, 255]),
         (40_000, vec![0, 0, 255, 255]),
         (40_000, vec![0, 0, 255, 255]),
+        (1, vec![0, 255, 0, 255]),
+        (1, vec![0, 255, 0, 255]),
       ]
     );
   }
