@@ -37,12 +37,12 @@ pub(super) enum FontFile {
 /// Each registry is weighed by the bytes of the font files its rules' faces hold.
 pub(crate) type DocumentRegistries = KindStore<Arc<FontRegistry>>;
 
-/// What a document's faces are made of: the registry they extend, and each face's descriptors
-/// and the source it reaches, as written.
+/// What a document's faces are made of: the registry they extend, and each face's descriptors,
+/// the source it reaches as written, and the id of the file that source loaded.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct DocumentKey {
   base: u64,
-  faces: Vec<(String, String)>,
+  faces: Vec<(String, String, Option<u64>)>,
 }
 
 impl Fonts {
@@ -73,7 +73,6 @@ impl Fonts {
       })
       .unwrap_or(data);
 
-    registry.revise();
     registry
       .font_files
       .insert(url.into(), FontFile::Loaded { data, id });
@@ -87,10 +86,7 @@ impl Fonts {
       return false;
     }
 
-    let registry = Arc::make_mut(&mut self.registry);
-
-    registry.revise();
-    registry.font_files.remove(url);
+    Arc::make_mut(&mut self.registry).font_files.remove(url);
 
     true
   }
@@ -164,6 +160,7 @@ impl FontsSnapshot {
           (
             format!("{:?}", source.rule.descriptors),
             format!("{:?}", source.src),
+            source.file_id(),
           )
         })
         .collect(),
@@ -238,6 +235,14 @@ impl FontRegistry {
 }
 
 impl RuleSource<'_> {
+  /// The id of the loaded file the source draws with, none for a face it shares or awaits.
+  fn file_id(&self) -> Option<u64> {
+    match self.data {
+      SourceData::File(_, id) => Some(id),
+      SourceData::Local(_) | SourceData::Pending(_) => None,
+    }
+  }
+
   /// The bytes of the loaded file the source draws with, none for a face it shares or awaits.
   fn file_bytes(&self) -> usize {
     match self.data {

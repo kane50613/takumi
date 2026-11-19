@@ -204,3 +204,40 @@ fn failed_files_move_a_rule_on_only_in_the_fonts_they_fail_in() {
     urls(["missing.woff2"])
   );
 }
+
+#[test]
+fn a_reloaded_file_reuses_the_document_s_faces() {
+  let cache = Cache::default();
+  let css = format!("@font-face {{ font-family: Face; src: url({MANROPE}); }}");
+  let render = |fonts: &Fonts| {
+    let node = Node::text("a".to_string()).with_style(Style::default().with(
+      StyleDeclaration::font_family(FontFamily::from_css_str("Face").unwrap()),
+    ));
+
+    needs(
+      RenderOptions::builder()
+        .viewport(Viewport::new((400, 100)))
+        .node(node)
+        .fonts(fonts)
+        .stylesheet(StyleSheet::parse(&css).unwrap().into())
+        .cache(cache.clone())
+        .build(),
+    )
+  };
+  let mut fonts = loaded_fonts([MANROPE]);
+
+  render(&fonts);
+
+  let held = cache.stats().memory.current;
+
+  assert!(fonts.forget_font_file(MANROPE));
+  fonts
+    .load_font_file(
+      MANROPE,
+      FontSource::from(fs::read(repo_base_path(MANROPE)).unwrap()),
+    )
+    .unwrap();
+  render(&fonts);
+
+  assert_eq!(cache.stats().memory.current, held);
+}
