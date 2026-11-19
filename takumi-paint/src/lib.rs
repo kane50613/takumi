@@ -16,8 +16,10 @@ use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontCacheOptions, FontStore, NeedsOutput, append_css,
+  FontStore, NeedsOutput, append_css,
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
+  registrations::Retention,
+  renderer::RendererOptions,
   source::read_source,
   source_cache::SourceCache,
   stylesheet,
@@ -51,9 +53,12 @@ extern "C" {
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
-  /// JavaScript object holding the font cache budget.
-  #[wasm_bindgen(typescript_type = "FontCacheOptions")]
-  pub type FontCacheOptionsType;
+  /// JavaScript object holding the renderer options.
+  #[wasm_bindgen(typescript_type = "RendererOptions")]
+  pub type RendererOptionsType;
+  /// JavaScript object reporting what a renderer's caches hold.
+  #[wasm_bindgen(typescript_type = "CacheStats")]
+  pub type CacheStatsType;
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
@@ -160,17 +165,19 @@ impl Painter {
 impl Painter {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new(options: Option<FontCacheOptionsType>) -> Result<Painter, js_sys::Error> {
+  pub fn new(options: Option<RendererOptionsType>) -> Result<Painter, js_sys::Error> {
     WarningLog::print_to_console();
 
-    let options: FontCacheOptions = options
+    let options: RendererOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
+    let cache = options.cache();
+
     Ok(Painter {
-      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
-      cache: Cache::default(),
+      fonts: FontStore::new(cache.clone()).map_err(map_error)?,
+      cache,
       sources: SourceCache::default(),
     })
   }
@@ -183,36 +190,91 @@ impl Painter {
     font: FontType,
     key: Option<String>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.fonts.register_value(font, key.as_deref(), true)
+    self
+      .fonts
+      .register_value(font, key.as_deref(), Retention::Pinned, None)
   }
 
-  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
-  /// renderer's font cache is past its budget.
+  /// Registers a font a render's `fonts` list loaded under `key`, its file leased to `lease` and
+  /// evicted once no lease holds it and the renderer's cache needs the room.
   #[wasm_bindgen(js_name = cacheFont)]
   pub fn cache_font(
     &self,
     font: FontType,
     key: &str,
+    lease: Option<u32>,
   ) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    self.fonts.register_value(font, Some(key), false)
+    self
+      .fonts
+      .register_value(font, Some(key), Retention::Evictable, lease)
   }
 
-  /// The families a registration under `key` added, when the renderer still holds them; `pin`
-  /// keeps them from being released for space.
+  /// The families a registration under `key` added, while the renderer holds its file. Leases the
+  /// file to `lease`, or with `pin` keeps it from eviction for good.
   #[wasm_bindgen(js_name = cachedFonts)]
   pub fn cached_fonts(
     &self,
     key: &str,
     pin: bool,
+    lease: Option<u32>,
   ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
-    self.fonts.cached_value(key, pin)
+    self.fonts.cached_value(key, pin, lease)
   }
 
-  /// Loads the `@font-face` file `url` names, as `needs` reported it, released for space once the
-  /// renderer's font cache is past its budget.
+  /// Loads the `@font-face` file `url` names, as `needs` reported it, leased to `lease` and evicted
+  /// once no lease holds it and the renderer's cache needs the room.
   #[wasm_bindgen(js_name = cacheFontFile)]
-  pub fn cache_font_file(&self, url: &str, data: Vec<u8>) -> Result<(), js_sys::Error> {
-    self.fonts.cache_font_file(url, data).map_err(map_error)
+  pub fn cache_font_file(
+    &self,
+    url: &str,
+    data: Vec<u8>,
+    lease: Option<u32>,
+  ) -> Result<(), js_sys::Error> {
+    self
+      .fonts
+      .cache_font_file(url, data, lease)
+      .map_err(map_error)
+  }
+
+  /// Whether the renderer still holds the `@font-face` file `url`, leasing it to `lease` when it
+  /// does.
+  #[wasm_bindgen(js_name = cachedFontFile)]
+  pub fn cached_font_file(&self, url: &str, lease: u32) -> bool {
+    self.fonts.cached_font_file(url, lease)
+  }
+
+  /// Opens a set of leases that keeps the font files a render uses from eviction until
+  /// `releaseFonts`.
+  #[wasm_bindgen(js_name = leaseFonts)]
+  pub fn lease_fonts(&self) -> u32 {
+    self.fonts.lease_fonts()
+  }
+
+  /// Releases the leases of the set `lease` names, evicting what no longer fits.
+  #[wasm_bindgen(js_name = releaseFonts)]
+  pub fn release_fonts(&self, lease: u32) {
+    self.fonts.release_fonts(lease);
+  }
+
+  /// Forgets the fonts registered under `keys` whose files no render leases, as a font with
+  /// `cache: "none"` asks once its render settles, returning those keys and the ones nothing is
+  /// registered under.
+  #[wasm_bindgen(js_name = dropFonts)]
+  pub fn drop_fonts(&self, keys: Vec<String>) -> Vec<String> {
+    self.fonts.drop_fonts(&keys)
+  }
+
+  /// Gives the faces registered under `keys` precedence in their families, a later key over an
+  /// earlier one, as a render's `fonts` list orders them.
+  #[wasm_bindgen(js_name = orderFonts)]
+  pub fn order_fonts(&self, keys: Vec<String>) {
+    self.fonts.order_fonts(&keys);
+  }
+
+  /// What the renderer's caches hold and how their lookups went since it was created.
+  #[wasm_bindgen(js_name = cacheStats)]
+  pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
+    self.fonts.cache_stats_value()
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning

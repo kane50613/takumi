@@ -1,11 +1,20 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
 import type { FontLoader } from "../src/renderer";
-import type { Node } from "@takumi-rs/helpers";
+import { googleFonts, type Node } from "@takumi-rs/helpers";
 import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);
+
+afterEach(() => mock.restore());
+
+/** Answers the global `fetch` with `fetch`, which goes through the shared store as a caller's own `fetch` would not. */
+const answerFetch = (fetch: (input: string | URL | Request) => Promise<Response>) => {
+  spyOn(globalThis, "fetch").mockImplementation(
+    Object.assign(fetch, { preconnect: globalThis.fetch.preconnect }),
+  );
+};
 const textNode = (text: string): Node => ({ type: "text", text });
 
 const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
@@ -187,6 +196,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
       [{ src: "a", data: bytes(), cache: undefined }],
       ["Explicit"],
       expect.any(Function),
+      undefined,
     );
   });
 
@@ -197,7 +207,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function));
+    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function), undefined);
   });
 
   test("the characters the backend reads drive font subsetting", async () => {
@@ -207,7 +217,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: [font] }, textNode("0"));
 
-    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function));
+    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function), undefined);
   });
 });
 
@@ -275,6 +285,69 @@ describe("@font-face files", () => {
   });
 });
 
+describe("@font-face files a prepared render loaded", () => {
+  const url = "https://fonts.test/face.woff2";
+  const prepare = async (
+    fonts: ReturnType<typeof fontBackend>["fonts"],
+    fetch: (input: string | URL | Request) => Promise<Response>,
+  ) => {
+    answerFetch(fetch);
+
+    return prepareSource(fonts, textNode("a"), {}, {}, () => ({
+      images: [],
+      fonts: [],
+      fontFiles: [url],
+    }));
+  };
+
+  test("stay leased while the render runs", async () => {
+    const { fonts, backend, leases } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const prepared = await prepare(fonts, fetch);
+    let leased: number[] = [];
+
+    await renderPrepared(fonts, prepared, {}, () => {
+      leased = [...leases];
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(backend.cachedFontFile).toHaveBeenCalledWith(url, leased[0]);
+  });
+
+  test("load again from the store when the renderer evicted them since prepare", async () => {
+    const { fonts, files, backend } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const prepared = await prepare(fonts, fetch);
+
+    files.clear();
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(backend.cacheFontFile).toHaveBeenCalledTimes(2);
+    expect(files.has(url)).toBe(true);
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toBeUndefined();
+  });
+
+  test("move their rule on when loading them again fails", async () => {
+    const { fonts, files } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    // A caller's own `fetch` skips the shared store, so loading the file again downloads it.
+    const prepared = await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
+      images: [],
+      fonts: [],
+      fontFiles: [url],
+    }));
+
+    files.clear();
+    fetch.mockImplementation(async () => new Response(null, { status: 404 }));
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual([url]);
+  });
+});
+
 test("prepare loads each @font-face file once even when the cache releases it", async () => {
   const { fonts } = fontBackend();
   const fetch = mock(async () => new Response(bytes()));
@@ -334,4 +407,208 @@ test("a render loads listed subsets but leaves @font-face files to prepare", asy
   expect(reads).toHaveBeenCalledTimes(2);
   expect(fetch).not.toHaveBeenCalled();
   fetch.mockRestore();
+});
+
+describe("fonts with cache none", () => {
+  const latin: [number, number][] = [[0x20, 0x7e]];
+  const font = (name: string, cache?: "auto" | "none") => ({
+    name,
+    unicodeRange: latin,
+    data: () => bytes(),
+    cache,
+  });
+
+  test("are dropped once the render that loaded them settles", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const once = font("Noto", "none");
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.dropFonts).toHaveBeenCalledTimes(1);
+    expect(held.size).toBe(0);
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(2);
+  });
+
+  test("a subset a read loaded but the render left out goes too", async () => {
+    const { held, fonts } = fontBackend();
+    // The first read reaches Sans, which lacks the glyph its range claims, so later reads reach Serif.
+    const reads = mock(({ fonts: listed = [] }: { fonts?: ListedFont[] }) => ({
+      images: [],
+      fonts: listed[0] && held.has(listed[0].key) ? [1] : [0],
+    }));
+
+    await renderPrepared(
+      fonts,
+      await readSource(
+        fonts,
+        textNode("a"),
+        {},
+        { fonts: [font("Sans", "none"), font("Serif", "none")] },
+        reads,
+      ),
+      {},
+      () => undefined,
+    );
+
+    expect(reads).toHaveBeenCalledTimes(3);
+    expect(held.size).toBe(0);
+  });
+
+  test("a googleFonts text subset goes under auto, and a range subset stays", async () => {
+    const css = (family: string) =>
+      `/* latin */ @font-face { font-family: '${family}'; font-weight: 400; src: url(https://fonts.test/${family}.woff2) format('woff2'); unicode-range: U+0000-00FF; }`;
+    const fetch = mock(async (url: string) => {
+      const requested = new URL(url);
+
+      return new Response(
+        requested.pathname === "/css2"
+          ? css(requested.searchParams.get("text") ? "Title" : "Body")
+          : bytes(),
+      );
+    });
+    const { held, fonts } = fontBackend();
+    const [title] = await googleFonts({ families: ["Title"], text: "a", fetch });
+    const [body] = await googleFonts({ families: ["Body"], fetch });
+
+    expect(title?.cache).toBe("none");
+    expect(body?.cache).toBeUndefined();
+
+    await render(fonts, { fonts: [title, body].flatMap((font) => font ?? []) }, textNode("a"));
+
+    expect([...held.keys()]).toEqual([expect.stringMatching(/^Body /)]);
+  });
+
+  test("use a font the renderer holds without dropping it", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const kept = font("Inter");
+
+    await render(fonts, { fonts: [kept] }, textNode("a"));
+    await render(fonts, { fonts: [font("Inter", "none")] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(1);
+    expect(backend.dropFonts).not.toHaveBeenCalled();
+    expect(held.size).toBe(1);
+  });
+
+  test("stay while another render leases them, and go with the last one", async () => {
+    const { held, backend, fonts } = fontBackend();
+    const once = font("Noto", "none");
+    const lease = backend.leaseFonts();
+
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+
+    backend.releaseFonts(lease);
+    await render(fonts, { fonts: [once] }, textNode("a"));
+
+    expect(backend.cacheFont).toHaveBeenCalledTimes(1);
+    expect(held.size).toBe(0);
+  });
+
+  test("are kept once a render without the policy uses them", async () => {
+    const { held, fonts } = fontBackend();
+    const kept = font("Inter");
+    const lease = fonts.leased(() =>
+      render(fonts, { fonts: [font("Inter", "none")] }, textNode("a")),
+    );
+
+    await render(fonts, { fonts: [kept] }, textNode("a"));
+    await lease;
+    await render(fonts, { fonts: [font("Inter", "none")] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+  });
+
+  test("go with the last render to settle, though it lists other fonts", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const later = render(
+      fonts,
+      { fonts: [{ ...font("Inter", "none"), data: () => loading.promise.then(bytes) }] },
+      textNode("a"),
+    );
+
+    await render(fonts, { fonts: [font("Noto", "none")] }, textNode("a"));
+
+    expect(held.size).toBe(1);
+
+    loading.resolve();
+    await later;
+
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when prepare is aborted after loading them", async () => {
+    const { held, fonts } = fontBackend();
+    const controller = new AbortController();
+    const aborting = {
+      ...font("Noto", "none"),
+      data: () => {
+        controller.abort(new Error("cancelled"));
+
+        return bytes();
+      },
+    };
+    const prepared = prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { fonts: [aborting], signal: controller.signal },
+      ({ fonts: listed }) => ({ images: [], fonts: fontsFor("a", listed) }),
+    );
+
+    await expect(prepared).rejects.toThrow("cancelled");
+    expect(held.size).toBe(0);
+  });
+
+  test("are dropped when they finish loading after their render failed", async () => {
+    const { held, fonts } = fontBackend();
+    const loading = Promise.withResolvers<void>();
+    const failed = render(
+      fonts,
+      {
+        fonts: [
+          { ...font("Noto", "none"), data: () => Promise.reject(new Error("unreachable")) },
+          { ...font("Inter", "none"), data: () => loading.promise.then(bytes) },
+        ],
+      },
+      textNode("a"),
+    );
+
+    await expect(failed).rejects.toThrow("unreachable");
+    loading.resolve();
+    await Bun.sleep(0);
+
+    expect(held.size).toBe(0);
+  });
+});
+
+describe("the download store", () => {
+  const url = "https://images.test/a.png";
+  const read = () => ({ images: [url], fonts: [] });
+
+  test("serves an image a later render asks for again", async () => {
+    const fetch = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+
+    answerFetch(fetch);
+    await prepareSource(fonts, textNode("a"), {}, {}, read);
+    await prepareSource(fonts, textNode("a"), {}, {}, read);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps nothing a caller's own fetch downloads", async () => {
+    const fetch = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, read);
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, read);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

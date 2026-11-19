@@ -21,7 +21,7 @@ use super::{
   font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
   font_face_cache::{FontFaceCache, fold_family_name, insert_family},
 };
-use crate::resources::font::SharedBytes;
+use crate::resources::font::{RegisteredSource, SharedBytes};
 
 /// Blink's `CSSFontSelector`.
 #[derive(Clone, Debug, Default)]
@@ -36,43 +36,41 @@ pub(crate) struct CssFontSelector {
 }
 
 impl CssFontSelector {
-  /// Registers each usable face of `data` under `descriptors`, and returns them.
-  pub(crate) fn register(
-    &mut self,
+  /// Each usable face of `data` under `descriptors`, added nowhere yet, sharing the decoded face
+  /// a registration of the same bytes made.
+  pub(crate) fn load(
+    &self,
     data: &SharedBytes,
     id: u64,
     descriptors: &FontFaceDescriptors,
-    generic_family: Option<&str>,
   ) -> Vec<Arc<FontFace>> {
-    let mut faces = Vec::new();
+    FontFace::from_data(data, id, descriptors, |index| self.typeface(id, index))
+      .into_iter()
+      .map(Arc::new)
+      .collect()
+  }
 
-    for font_face in FontFace::from_data(data, id, descriptors, |index| self.typeface(id, index)) {
-      if let Some(font_face) = self.promote(&font_face) {
-        faces.push(font_face);
-
-        continue;
-      }
-
-      let font_face = Arc::new(font_face);
-
-      self.font_face_cache.add_font_face(Arc::clone(&font_face));
-      self.font_faces.push(Arc::clone(&font_face));
-      insert_family(&mut self.fallback_families, &font_face.family);
-
-      if let Some(generic_family) = generic_family {
-        insert_family(
-          self
-            .generic_font_family_settings
-            .entry(fold_family_name(generic_family))
-            .or_default(),
-          &font_face.family,
-        );
-      }
-
-      faces.push(font_face);
+  /// Adds `font_face` after every other face, listing its family under `generic_family`, or moves
+  /// the face registered with its family, data, and descriptors there, as registering it anew
+  /// places it.
+  pub(crate) fn add(&mut self, font_face: &Arc<FontFace>, generic_family: Option<&str>) {
+    if self.promote(font_face) {
+      return;
     }
 
-    faces
+    self.font_face_cache.add_font_face(Arc::clone(font_face));
+    self.font_faces.push(Arc::clone(font_face));
+    insert_family(&mut self.fallback_families, &font_face.family);
+
+    if let Some(generic_family) = generic_family {
+      insert_family(
+        self
+          .generic_font_family_settings
+          .entry(fold_family_name(generic_family))
+          .or_default(),
+        &font_face.family,
+      );
+    }
   }
 
   /// Registers a face of `descriptors`' family with no data yet, which matching finds loading
@@ -130,6 +128,16 @@ impl CssFontSelector {
     let key = fold_family_name(family);
 
     self.remove_font_faces(|font_face| fold_family_name(&font_face.family) == key)
+  }
+
+  /// Removes the faces `family` draws from `source`, keeping its other faces; false when it has
+  /// none.
+  pub(crate) fn unregister_source(&mut self, family: &str, source: &RegisteredSource) -> bool {
+    let key = fold_family_name(family);
+
+    self.remove_font_faces(|font_face| {
+      font_face.is_from(source) && fold_family_name(&font_face.family) == key
+    })
   }
 
   /// Removes the faces `is_removed` picks, and from each family list the families left without a
@@ -190,23 +198,27 @@ impl CssFontSelector {
   }
 
   /// Moves the face registered with `font_face`'s family, data, and descriptors after every other
-  /// face, as registering it anew would place it.
-  fn promote(&mut self, font_face: &FontFace) -> Option<Arc<FontFace>> {
-    let typeface = font_face.custom_platform_data()?;
+  /// face, as registering it anew would place it; false when none is registered.
+  fn promote(&mut self, font_face: &FontFace) -> bool {
+    let Some(typeface) = font_face.custom_platform_data() else {
+      return false;
+    };
     let family = fold_family_name(&font_face.family);
-    let position = self.font_faces.iter().position(|registered| {
+    let Some(position) = self.font_faces.iter().position(|registered| {
       registered.custom_platform_data().is_some_and(|registered| {
         registered.id == typeface.id && registered.index == typeface.index
       }) && fold_family_name(&registered.family) == family
         && registered.descriptors == font_face.descriptors
-    })?;
+    }) else {
+      return false;
+    };
     let registered = self.font_faces.remove(position);
 
     self.font_face_cache.remove_font_face(&registered);
     self.font_face_cache.add_font_face(Arc::clone(&registered));
-    self.font_faces.push(Arc::clone(&registered));
+    self.font_faces.push(registered);
 
-    Some(registered)
+    true
   }
 
   /// The families system fallback walks before the system fonts, in registration order.
@@ -270,7 +282,24 @@ mod tests {
   ) -> Vec<Arc<FontFace>> {
     let (data, id) = FontCustomPlatformData::read_asset(path);
 
-    selector.register(&data, id, descriptors, None)
+    register_data(selector, &data, id, descriptors, None)
+  }
+
+  /// Each usable face of `data` under `descriptors`, added to `selector`.
+  fn register_data(
+    selector: &mut CssFontSelector,
+    data: &SharedBytes,
+    id: u64,
+    descriptors: &FontFaceDescriptors,
+    generic_family: Option<&str>,
+  ) -> Vec<Arc<FontFace>> {
+    let faces = selector.load(data, id, descriptors);
+
+    for font_face in &faces {
+      selector.add(font_face, generic_family);
+    }
+
+    faces
   }
 
   fn named(family: &str) -> FontFaceDescriptors {
@@ -467,7 +496,7 @@ mod tests {
     let mut selector = CssFontSelector::default();
     let (data, id) = FontCustomPlatformData::read_asset(GEIST_MONO);
 
-    selector.register(&data, id, &named("Code"), Some("monospace"));
+    register_data(&mut selector, &data, id, &named("Code"), Some("monospace"));
 
     let description = request(400.0, NORMAL_SLOPE_VALUE);
 
@@ -531,7 +560,7 @@ mod tests {
     for _ in 0..3 {
       let (data, id) = FontCustomPlatformData::read_asset(GEIST);
 
-      selector.register(&data, id, &named("Cycle"), None);
+      register_data(&mut selector, &data, id, &named("Cycle"), None);
 
       assert!(Arc::strong_count(&data) > 1);
       assert!(selector.unregister_family("cycle"));

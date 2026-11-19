@@ -6,7 +6,7 @@
 use crate::sort_key::sort_by_key;
 use std::sync::Arc;
 
-use quick_cache::sync::Cache as Store;
+use rustc_hash::FxHashMap;
 use skrifa::{FontRef, raw::TableProvider};
 
 use super::{FontError, FontRegistry, FontSource, Fonts, FontsSnapshot, SharedBytes};
@@ -16,7 +16,7 @@ use crate::{
     font_custom_platform_data::{FontCustomPlatformData, UNITS_PER_EM_RANGE},
     font_face::{FontFace, PendingSource},
   },
-  resources::cache::{ByBytes, Weighed, store},
+  resources::cache::{KindStore, Weighed},
   style::{
     StyleSheet,
     font_face_rule::{FontFaceRule, FontFaceSrc},
@@ -34,27 +34,15 @@ pub(super) enum FontFile {
 /// The registries the `@font-face` rules of recent renders made, which a [`Cache`](crate::Cache)
 /// keeps so the same rules over the same fonts reuse their decoded faces. A file
 /// [`Fonts::forget_font_file`] releases stays held until the registries holding it are evicted.
-pub(crate) struct DocumentRegistries {
-  /// Each registry weighed by the bytes of the font files its rules' faces hold.
-  store: Store<DocumentKey, Weighed<Arc<FontRegistry>>, ByBytes>,
-}
+/// Each registry is weighed by the bytes of the font files its rules' faces hold.
+pub(crate) type DocumentRegistries = KindStore<Arc<FontRegistry>>;
 
-impl DocumentRegistries {
-  /// A cache holding registries whose font files total at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    Self {
-      // ~256 KiB of font files per document ⇒ an item-count hint for the budget.
-      store: store(max_bytes, 256 << 10),
-    }
-  }
-}
-
-/// What a document's faces are made of: the registry they extend, and each face's descriptors
-/// and the source it reaches, as written.
+/// What a document's faces are made of: the registry they extend, and each face's descriptors,
+/// the source it reaches as written, and the id of the file that source loaded.
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct DocumentKey {
+pub(crate) struct DocumentKey {
   base: u64,
-  faces: Vec<(String, String)>,
+  faces: Vec<(String, String, Option<u64>)>,
 }
 
 impl Fonts {
@@ -75,8 +63,16 @@ impl Fonts {
     }
 
     let registry = Arc::make_mut(&mut self.registry);
+    // Files with the same bytes share one copy, so a host that charges a file by its id charges what it holds.
+    let data = registry
+      .font_files
+      .values()
+      .find_map(|file| match file {
+        FontFile::Loaded { data, id: held } if *held == id => Some(Arc::clone(data)),
+        _ => None,
+      })
+      .unwrap_or(data);
 
-    registry.revise();
     registry
       .font_files
       .insert(url.into(), FontFile::Loaded { data, id });
@@ -90,12 +86,22 @@ impl Fonts {
       return false;
     }
 
-    let registry = Arc::make_mut(&mut self.registry);
-
-    registry.revise();
-    registry.font_files.remove(url);
+    Arc::make_mut(&mut self.registry).font_files.remove(url);
 
     true
+  }
+
+  /// The URLs of the loaded `@font-face` files, by the id of their data.
+  pub(crate) fn loaded_font_files(&self) -> FxHashMap<u64, Vec<Arc<str>>> {
+    let mut files: FxHashMap<u64, Vec<Arc<str>>> = FxHashMap::default();
+
+    for (url, file) in &self.registry.font_files {
+      if let FontFile::Loaded { id, .. } = file {
+        files.entry(*id).or_default().push(Arc::clone(url));
+      }
+    }
+
+    files
   }
 
   /// These fonts with each of `urls` failed to load, as one document's downloads did. The revision
@@ -154,14 +160,14 @@ impl FontsSnapshot {
           (
             format!("{:?}", source.rule.descriptors),
             format!("{:?}", source.src),
+            source.file_id(),
           )
         })
         .collect(),
     };
     let bytes = sources.iter().map(RuleSource::file_bytes).sum();
     let registry = registries
-      .store
-      .get_or_insert_with(&key, || {
+      .get_or_insert_with(key, || {
         let mut registry = (**base).clone();
 
         for source in sources {
@@ -174,7 +180,7 @@ impl FontsSnapshot {
 
         Ok::<_, ()>(Weighed::new(Arc::new(registry), bytes))
       })
-      .map_or_else(|()| Arc::clone(base), |cached| cached.value);
+      .unwrap_or_else(|()| Arc::clone(base));
 
     Self(Fonts {
       registry,
@@ -229,6 +235,14 @@ impl FontRegistry {
 }
 
 impl RuleSource<'_> {
+  /// The id of the loaded file the source draws with, none for a face it shares or awaits.
+  fn file_id(&self) -> Option<u64> {
+    match self.data {
+      SourceData::File(_, id) => Some(id),
+      SourceData::Local(_) | SourceData::Pending(_) => None,
+    }
+  }
+
   /// The bytes of the loaded file the source draws with, none for a face it shares or awaits.
   fn file_bytes(&self) -> usize {
     match self.data {
@@ -270,4 +284,35 @@ fn is_usable_font(data: &SharedBytes) -> bool {
       && font.maxp().is_ok()
       && font.cmap().is_ok()
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{fs, path::Path, sync::Arc};
+
+  use super::*;
+
+  #[test]
+  fn files_with_the_same_bytes_share_one_copy() {
+    let bytes = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/geist/geist-latin-wght-300-800.ttf"),
+    )
+    .unwrap();
+    let mut fonts = Fonts::default();
+
+    fonts
+      .load_font_file("a.ttf", FontSource::from(bytes.clone()))
+      .unwrap();
+    fonts
+      .load_font_file("b.ttf", FontSource::from(bytes))
+      .unwrap();
+
+    let data = |url: &str| match &fonts.registry.font_files[url] {
+      FontFile::Loaded { data, .. } => Arc::clone(data),
+      FontFile::Failed => panic!("{url} failed"),
+    };
+
+    assert!(Arc::ptr_eq(&data("a.ttf"), &data("b.ttf")));
+  }
 }

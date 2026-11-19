@@ -3,13 +3,12 @@
 
 use std::ops::RangeInclusive;
 
-use quick_cache::sync::Cache as Store;
 use smallvec::SmallVec;
 
 use crate::{
   geometry::{PathCommand, Point},
   resources::{
-    cache::{ByBytes, Weighed, store},
+    cache::{KindStore, Weighed},
     glyph::ResolvedOutlineGlyph,
   },
   sort_key::sort_by_key,
@@ -100,24 +99,18 @@ const NO_SKIP_INK_BLOCKS: &[RangeInclusive<u32>] = &[
 ];
 
 /// The intercepts a [`Cache`](crate::Cache) keeps, by outline signature and band.
-pub(crate) struct InterceptCache {
-  store: Store<(u64, u32, u32), Weighed<Spans>, ByBytes>,
-}
+pub(crate) type InterceptCache = KindStore<Spans>;
+
+/// An outline's signature, and the bits of its band's top and bottom.
+pub(crate) type InterceptKey = (u64, u32, u32);
 
 impl InterceptCache {
-  /// A cache holding at most `max_bytes`.
-  pub(crate) fn new(max_bytes: u64) -> Self {
-    Self {
-      store: store(max_bytes, size_of::<Spans>() as u64),
-    }
-  }
-
   /// The intercepts of `outline` between `top` and `bottom`.
   fn intercepts(&self, outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> Spans {
     let key = (outline.cache_signature(), top.to_bits(), bottom.to_bits());
 
-    if let Some(cached) = self.store.get(&key) {
-      return cached.value;
+    if let Some(spans) = self.get(key) {
+      return spans;
     }
 
     let paths = outline.paths();
@@ -133,9 +126,7 @@ impl InterceptCache {
       0
     };
 
-    self
-      .store
-      .insert(key, Weighed::new(spans.clone(), size_of::<Spans>() + heap));
+    self.insert(key, Weighed::new(spans.clone(), size_of::<Spans>() + heap));
     spans
   }
 }
@@ -334,11 +325,9 @@ fn flatten_cubic(
 
 #[cfg(test)]
 mod tests {
-  use super::{
-    InterceptCache, NO_SKIP_INK_BLOCKS, remaining_spans, skip_ink_ranges, skips_ink,
-    text_intercepts,
-  };
+  use super::{NO_SKIP_INK_BLOCKS, remaining_spans, skip_ink_ranges, skips_ink, text_intercepts};
   use crate::{
+    Cache,
     geometry::{PathCommand, Point},
     resources::glyph::{ResolvedOutlineGlyph, outline_ink},
     text::character::{CJK_IDEOGRAPH_OR_SYMBOL_RANGES, CJK_IDEOGRAPHS_OR_SYMBOLS},
@@ -456,7 +445,7 @@ mod tests {
     // side, so the line loses 0..7.
     let glyph = outline(rect(2.0, -10.0, 5.0, 10.0), 1);
     let ranges = skip_ink_ranges(
-      &InterceptCache::new(1 << 20),
+      Cache::default().intercepts(),
       [(point(0.0, 0.0), &glyph)].into_iter(),
       -2.0,
       2.0,
@@ -472,7 +461,7 @@ mod tests {
 
     assert!(
       skip_ink_ranges(
-        &InterceptCache::new(1 << 20),
+        Cache::default().intercepts(),
         [(point(0.0, 0.0), &glyph)].into_iter(),
         -0.5,
         0.5,

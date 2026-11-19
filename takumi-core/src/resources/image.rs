@@ -964,15 +964,16 @@ impl ImageError {
   }
 }
 
-/// Cache policy for a decoded image, applied per [`Cache::decode_image`] call.
-#[derive(Clone, Copy, Default, Deserialize)]
+/// Whether a cache keeps data: a decoded image per [`Cache::decode_image`] call, or a kind of data
+/// per [`CacheOptions`](crate::resources::cache::CacheOptions).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum ImageCacheMode {
-  /// Cache the decoded image for reuse (evictable).
+  /// Keep it for reuse, until it is evicted.
   #[default]
   Auto,
-  /// Skip the decoded-image cache.
+  /// Keep none of it.
   None,
 }
 

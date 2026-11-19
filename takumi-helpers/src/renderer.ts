@@ -5,8 +5,11 @@ import {
   LIST_MARKER_CHARACTERS,
   subsetFonts,
 } from "./fonts";
+import type { CacheMode } from "./types";
 import { unicodeRangeOf } from "./unicode-range";
 
+export { fetchImages } from "./fetch/images";
+export { defaultStore } from "./fetch/store";
 export { type JsonSource, toNativeSource } from "./node-source";
 
 /**
@@ -67,9 +70,9 @@ export type Font = FontDetails | ByteBuf;
  * Cache policy for a decoded image. Defaults to `"auto"`.
  *
  * @internal
- * @deprecated Will be removed in v3.
+ * @deprecated Use `CacheMode`.
  */
-export type ImageCacheMode = "auto" | "none";
+export type ImageCacheMode = CacheMode;
 
 /**
  * An image source with its URL and raw bytes, matching each backend's generated `ImageSource`.

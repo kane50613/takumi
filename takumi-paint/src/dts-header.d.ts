@@ -1,4 +1,24 @@
-import type { CssInput, Node } from "@takumi-rs/helpers";
+import type {
+  CacheMode,
+  CacheKindStats,
+  CacheMemoryStats,
+  CacheOptions,
+  CacheStats,
+  CssInput,
+  FontCacheOptions,
+  Node,
+  RendererOptions,
+} from "@takumi-rs/helpers";
+
+export type {
+  CacheMode,
+  CacheKindStats,
+  CacheMemoryStats,
+  CacheOptions,
+  CacheStats,
+  FontCacheOptions,
+  RendererOptions,
+};
 
 export type ByteBuf = Uint8Array | ArrayBuffer;
 
@@ -402,15 +422,4 @@ export type RawPaintTree = {
   readonly nodes: readonly RawPaintNode[];
   readonly fonts: readonly RawFont[];
   readonly steps: readonly RawPaintStep[];
-};
-
-export type FontCacheOptions = {
-  /**
-   * Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
-   * recently used families are released and load again when a render lists them. Fonts from
-   * `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
-   * render keeps the fonts it started with.
-   * @default unbounded
-   */
-  fontCacheMaxBytes?: number;
 };
