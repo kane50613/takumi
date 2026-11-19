@@ -280,7 +280,7 @@ jobs:
 
       - name: Install cargo-zigbuild
         if: ${{ contains(matrix.settings.build, ' -x') }}
-        run: pip install cargo-zigbuild
+        run: pip install cargo-zigbuild==0.24.1 ziglang==0.17.1
 
       - name: Download helpers artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
