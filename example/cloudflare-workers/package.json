@@ -16,7 +16,7 @@
   "devDependencies": {
     "@types/react": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^5.0.0",
-    "wrangler": "^4.129.0"
+    "vitest": "^5.1.0",
+    "wrangler": "^4.160.1"
   }
 }

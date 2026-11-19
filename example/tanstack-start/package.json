@@ -9,11 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.54.4",
-    "@tanstack/react-router": "^1.170.32",
-    "@tanstack/react-router-ssr-query": "^1.167.2",
-    "@tanstack/react-start": "^1.168.49",
-    "@tanstack/router-plugin": "^1.168.35",
+    "@cloudflare/vite-plugin": "^1.69.0",
+    "@tanstack/react-router": "^1.170.46",
+    "@tanstack/react-router-ssr-query": "^1.167.3",
+    "@tanstack/react-start": "^1.169.5",
+    "@tanstack/router-plugin": "^1.169.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -25,6 +25,6 @@
     "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.0"
   }
 }
