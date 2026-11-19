@@ -98,14 +98,14 @@ These figures come from one test setup, described in [PR #1862](https://github.c
 
 ### Alpine and other musl images
 
-The glibc settings above do nothing on musl, whose allocator maps and unmaps every large buffer a render frees. Preload [mimalloc](https://github.com/microsoft/mimalloc) to replace the allocator for the whole process, the Takumi binding included:
+The glibc settings above do nothing on musl. Preload [mimalloc](https://github.com/microsoft/mimalloc) to replace the allocator for the whole process:
 
 ```bash title="mimalloc on Alpine"
 apk add mimalloc2-insecure
 LD_PRELOAD=/usr/lib/libmimalloc-insecure.so.2 node server.js
 ```
 
-The `mimalloc2` package installs the hardened build, which trades some speed for heap checks. In [PR #2517](https://github.com/kane50613/takumi/pull/2517), its author measured 259 renders a second with musl's allocator and 546 with mimalloc linked into the binding, four at a time on Node.js 24, Alpine 3.24, and Linux arm64. Peak RSS rose from 144 MiB to 178 MiB. Measure your own server, since a preloaded build has different settings.
+In [PR #2517](https://github.com/kane50613/takumi/pull/2517), mimalloc raised four renders at a time from 259 to 546 a second, and peak RSS from 144 MiB to 178 MiB. The `mimalloc2` package without `-insecure` is a hardened build and slower.
 
 ## Keep network requests out of repeated work
 
