@@ -10,7 +10,7 @@ Build an Open Graph image from a node tree and return it from a Nitro route. The
     ### Install Takumi
 
     ```npm
-    npm i takumi-js @takumi-rs/helpers
+    npm i takumi-js
     ```
 
   </Step>
@@ -21,7 +21,7 @@ Build an Open Graph image from a node tree and return it from a Nitro route. The
 
     ```ts title="routes/og.png.ts"
     import { defineHandler } from "nitro";
-    import { container, text } from "@takumi-rs/helpers";
+    import { container, text } from "takumi-js/helpers";
     import ImageResponse from "takumi-js/response";
 
     export default defineHandler((event) => {
