@@ -67,16 +67,18 @@ describe("ImageResponse", () => {
     ]);
   });
 
-  test("loads the fonts onMissingGlyphs returns", async () => {
+  test("loads the fonts loadFallbackFonts returns", async () => {
     const cjk = await Bun.file(
       "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
     ).arrayBuffer();
-    const onMissingGlyphs = mock((_characters: string[]) => [{ name: "Noto Sans TC", data: cjk }]);
+    const loadFallbackFonts = mock((_characters: string[]) => [
+      { name: "Noto Sans TC", data: cjk },
+    ]);
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const response = new ImageResponse(<div>Hello 中</div>, {
       width: 100,
       height: 100,
-      onMissingGlyphs,
+      loadFallbackFonts,
     });
 
     await response.arrayBuffer();
@@ -85,7 +87,7 @@ describe("ImageResponse", () => {
 
     warn.mockRestore();
 
-    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(loadFallbackFonts.mock.calls).toEqual([[["中"]]]);
     expect(warnings).toEqual([]);
   });
 

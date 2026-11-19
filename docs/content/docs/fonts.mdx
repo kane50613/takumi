@@ -349,20 +349,20 @@ A render that cannot draw something as its source asks goes on without it and pr
 - Each image left out under [`throwOnError: false`](/docs/images#failed-fetches).
 
 ```txt
-takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
 ```
 
 Generic keywords such as `sans-serif` never count as unresolved, since they resolve to the fonts you load. Emoji that `takumi-js` draws as images never count as missing characters. Spaces and invisible characters, such as a zero-width joiner, do not count either.
 
 Takumi prints every warning each time a render raises it, and has no option to silence them. A renderer's `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again. To collect the warnings somewhere else, wrap `console.warn`, as [Handle warnings](/docs/troubleshooting#handle-warnings) shows.
 
-A renderer's `render()` called without `prepare()` checks for missing characters and unresolved families only when the render passes `onMissingGlyphs`.
+A renderer's `render()` called without `prepare()` checks for missing characters and unresolved families only when the render passes `loadFallbackFonts`.
 
 Takumi finds these warnings before layout, with the same font matching that draws the text. It checks one character at a time, so a character that shaping draws from a decomposed form, such as an accented letter built from a base letter and a combining mark, can still show up as missing.
 
 ### Load fonts for missing characters
 
-`onMissingGlyphs` loads fonts only for text that needs them. When the render finds characters no font draws, it calls the function once with those characters in document order. The fonts it returns load as part of the render's `fonts`, and the render reads the text again with them. Characters that stay uncovered still print the warning.
+`loadFallbackFonts` loads fonts only for text that needs them. When the render finds characters no font draws, it calls the function once with those characters in document order. The fonts it returns load as part of the render's `fonts`, and the render reads the text again with them. Characters that stay uncovered still print the warning.
 
 ```tsx twoslash title="Load a CJK font only when the text needs it"
 import { render } from "takumi-js";
@@ -373,7 +373,7 @@ declare const title: string;
 const image = await render(<div>{title}</div>, {
   width: 1200,
   height: 630,
-  onMissingGlyphs: (characters) =>
+  loadFallbackFonts: (characters) =>
     googleFonts({ families: ["Noto Sans JP"], text: characters.join("") }), // [!code highlight]
 });
 ```

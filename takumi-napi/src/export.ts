@@ -40,7 +40,7 @@ export type {
   FontLoader,
   ImageLoader,
   ImagesInput,
-  MissingGlyphsHandler,
+  FallbackFontsLoader,
   OutputFormatOptions,
   PrepareImagesInput,
 } from "@takumi-rs/bindings-js";

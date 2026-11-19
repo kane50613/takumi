@@ -24,7 +24,7 @@ export type {
   KeyframesRuleList,
   MeasuredNode,
   MeasuredTextRun,
-  MissingGlyphsHandler,
+  FallbackFontsLoader,
   OutputFormat,
 } from "@takumi-rs/core";
 export { cacheStats } from "./cache";

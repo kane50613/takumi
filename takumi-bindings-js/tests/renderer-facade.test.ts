@@ -831,7 +831,7 @@ describe("the warnings of a prepare", () => {
     await prepareSource(fonts, textNode("中"), {}, {}, () => missing(["中"]));
 
     expect(warnings()).toEqual([
-      'takumi: No font draws "中". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.',
+      'takumi: No font draws "中". Add a font that covers it to `fonts`, or return one from `loadFallbackFonts`.',
       'takumi: No font provides the family "Absent". Add a font named "Absent" to `fonts`, or correct the name.',
     ]);
   });
@@ -882,11 +882,11 @@ describe("the warnings of a prepare", () => {
       ...missing(images.length > 0 ? ["中"] : []),
       images: ["https://images.test/text.svg"],
     }));
-    const onMissingGlyphs = mock((_characters: string[]) => undefined);
+    const loadFallbackFonts = mock((_characters: string[]) => undefined);
 
-    await prepareSource(fonts, textNode("a"), {}, { images: { fetch }, onMissingGlyphs }, reads);
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch }, loadFallbackFonts }, reads);
 
-    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(loadFallbackFonts.mock.calls).toEqual([[["中"]]]);
   });
 
   test("loads the @font-face files that text in a downloaded image names", async () => {
@@ -904,7 +904,7 @@ describe("the warnings of a prepare", () => {
     expect(fetch.mock.calls.map(([input]) => String(input))).toContain(face);
   });
 
-  test("onMissingGlyphs loads a font under the key of one that failed", async () => {
+  test("loadFallbackFonts loads a font under the key of one that failed", async () => {
     const { fonts, held } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
     const replacement = { key: "cjk", name: "CJK", data: mock(bytes) };
@@ -920,7 +920,7 @@ describe("the warnings of a prepare", () => {
       fonts,
       textNode("中"),
       {},
-      { fonts: [failing], onMissingGlyphs: () => [replacement] },
+      { fonts: [failing], loadFallbackFonts: () => [replacement] },
       reads,
     );
 
@@ -928,7 +928,7 @@ describe("the warnings of a prepare", () => {
     expect(missingOf(warnings())).toEqual([]);
   });
 
-  test("onMissingGlyphs fonts join the registered chain when the render names no fonts", async () => {
+  test("loadFallbackFonts fonts join the registered chain when the render names no fonts", async () => {
     const { fonts, held } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
     const call = mock(
@@ -938,7 +938,7 @@ describe("the warnings of a prepare", () => {
       fonts,
       textNode("中"),
       {},
-      { onMissingGlyphs: () => [{ key: "cjk", name: "CJK", data: bytes }] },
+      { loadFallbackFonts: () => [{ key: "cjk", name: "CJK", data: bytes }] },
       reads,
     );
 
@@ -949,10 +949,10 @@ describe("the warnings of a prepare", () => {
     expect(call.mock.calls[0]?.[1].fontScope.listed).toEqual(["cjk"]);
   });
 
-  test("onMissingGlyphs adds its fonts to the render and reads once more", async () => {
+  test("loadFallbackFonts adds its fonts to the render and reads once more", async () => {
     const { fonts, held } = fontBackend();
     const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
-    const onMissingGlyphs = mock((_characters: string[]) => [
+    const loadFallbackFonts = mock((_characters: string[]) => [
       { key: "cjk", name: "CJK", data: bytes },
     ]);
     const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
@@ -961,13 +961,13 @@ describe("the warnings of a prepare", () => {
       fonts,
       textNode("中"),
       {},
-      { fonts: [{ name: "Latin", data: bytes }], fontFamilies: ["Latin"], onMissingGlyphs },
+      { fonts: [{ name: "Latin", data: bytes }], fontFamilies: ["Latin"], loadFallbackFonts },
       reads,
     );
 
     await renderPrepared(fonts, prepared, {}, call);
 
-    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(loadFallbackFonts.mock.calls).toEqual([[["中"]]]);
     expect(missingOf(warnings())).toEqual([]);
     expect(reads).toHaveBeenCalledTimes(3);
     expect(call.mock.calls[0]?.[1].fontFamilies).toEqual(["Latin", "CJK"]);
@@ -1001,7 +1001,7 @@ describe("a render's warnings", () => {
 
     expect(warnings()).toEqual([
       expect.stringContaining("takumi: Failed to load the font face.woff2: "),
-      'takumi: No font draws "中文". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.',
+      'takumi: No font draws "中文". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.',
       'takumi: No font provides the family "Absent". Add a font named "Absent" to `fonts`, or correct the name.',
       expect.stringContaining(`takumi: Failed to load the image ${image}: `),
     ]);
@@ -1010,7 +1010,7 @@ describe("a render's warnings", () => {
   test("print again on each render", async () => {
     const warnings = printed();
     const message =
-      'takumi: No font draws "鬱". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.';
+      'takumi: No font draws "鬱". Add a font that covers it to `fonts`, or return one from `loadFallbackFonts`.';
 
     for (let render = 0; render < 2; render++) {
       await prepareSource(fontBackend().fonts, textNode("鬱"), {}, {}, () => ({

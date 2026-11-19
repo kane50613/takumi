@@ -236,7 +236,7 @@ async function prepareScene<T extends PipelineOptions>(
     signal: options?.signal,
   });
 
-  const { onMissingGlyphs: _, ...output } = layout;
+  const { loadFallbackFonts: _, ...output } = layout;
 
   return { renderer, prepared, output: { ...output, signal: options?.signal } };
 }
