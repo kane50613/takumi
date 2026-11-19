@@ -22,7 +22,7 @@ use crate::resources::image_decoder::decode_png;
 use crate::{
   geometry::{PathCommand as Command, Placement, Point},
   resources::{
-    glyph_cache::ENTRY_OVERHEAD,
+    cache::ENTRY_OVERHEAD,
     image_buffer::{ImageBuffer, rgba_len},
   },
   style::{Affine, Color},

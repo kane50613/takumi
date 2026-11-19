@@ -529,6 +529,7 @@ impl<'c> CanvasDevice<'c> {
             let signature = outline.cache_signature();
 
             coverages.push(cached_glyph_mask(
+              self.canvas.glyphs(),
               signature,
               outline.paths(),
               transform,
@@ -536,6 +537,7 @@ impl<'c> CanvasDevice<'c> {
             ));
             if let Some(text_stroke) = text_stroke {
               coverages.push(cached_glyph_mask(
+                self.canvas.glyphs(),
                 signature,
                 outline.paths(),
                 transform,

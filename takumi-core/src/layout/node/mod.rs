@@ -2,12 +2,7 @@ mod container;
 mod image;
 mod input;
 
-use std::{
-  cell::RefCell,
-  collections::BTreeMap,
-  mem::take,
-  sync::{Arc, Weak},
-};
+use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
 use serde::Deserialize;
 
@@ -20,10 +15,12 @@ use crate::{
   context::RenderContext,
   layout::{inline::InlineContentKind, length_utils::NaturalSize},
   resources::{
-    image::{ImageError, ImageResult, ImageSource},
+    image::{ImageCacheMode, ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule},
+  style::{
+    Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule, tw::TailwindCache,
+  },
   viewport::Viewport,
 };
 
@@ -168,7 +165,7 @@ impl ImageSourceInput {
   pub fn resolve(&self, context: &RenderContext) -> ImageResult {
     match self {
       Self::Url(src) => resolve_image(src, context),
-      Self::Buffer(data) => ImageSource::from_bytes_lazy(data, 0, Weak::new()),
+      Self::Buffer(data) => context.cache().decode_image(data, ImageCacheMode::Auto),
       Self::Rgba(raw) => Ok(raw.source.clone()),
       Self::Loaded(source) => Ok(source.clone()),
     }
@@ -833,9 +830,17 @@ impl Node {
       .flat_map(|attributes| attributes.iter().map(|(name, _)| name.as_ref()))
   }
 
-  /// The rules the element's `tw` utilities compile to, in the order they were written.
-  pub(crate) fn tw_rules(&self) -> impl Iterator<Item = &Arc<TwRule>> {
-    self.metadata.tw.iter().flat_map(|tw| tw.rules().iter())
+  /// The rules the element's `tw` utilities compile to through `cache`, in the order they were
+  /// written.
+  pub(crate) fn tw_rules<'n>(
+    &'n self,
+    cache: &TailwindCache,
+  ) -> impl Iterator<Item = &'n Arc<TwRule>> {
+    self
+      .metadata
+      .tw
+      .iter()
+      .flat_map(move |tw| tw.rules(Some(cache)).iter())
   }
 }
 
@@ -995,6 +1000,7 @@ mod matching_tests {
   use std::collections::BTreeMap;
 
   use crate::{
+    Cache,
     layout::node::Node,
     matching::{MatchedDeclarationsView, match_stylesheets_view},
     style::{ComputedStyle, Length, Style, StyleSheet},
@@ -1058,7 +1064,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1081,7 +1092,12 @@ mod matching_tests {
     );
 
     for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
-      let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::new(viewport));
+      let matched = match_stylesheets_view(
+        &root,
+        &[&stylesheet],
+        Viewport::new(viewport),
+        Cache::default().tailwind(),
+      );
       assert_eq!(
         computed_style_from_matches(matched[0].element())
           .box_data
@@ -1105,7 +1121,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -1131,7 +1152,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1146,7 +1172,12 @@ mod matching_tests {
     let root = container_with_class("card");
     let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1173,7 +1204,12 @@ mod matching_tests {
       "#,
     ]);
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1194,7 +1230,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_style_from_matches(matched[0].element())
@@ -1221,7 +1262,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 5);
     assert_eq!(
       computed_style_from_matches(matched[2].element())
@@ -1270,7 +1316,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_style_from_matches(matched[1].element())
@@ -1290,7 +1341,12 @@ mod matching_tests {
   fn test_repro_mixed_importance_bug() {
     let stylesheet = parse_stylesheet(".test { width: 10px; height: 20px !important; }");
     let root = Node::container([]).with_class_name("test");
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
 
     assert_eq!(matched[0].element().unlayered_normal()[0].len(), 1);
     assert!(
@@ -1311,7 +1367,12 @@ mod matching_tests {
       Node::container([Node::text("x")]).with_class_name("box"),
       Node::container([Node::container([])]).with_class_name("box"),
     ]);
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     let matches_empty = |index: usize| !matched[index].element().unlayered_normal().is_empty();
 
     assert!(matches_empty(1));
@@ -1330,7 +1391,12 @@ mod matching_tests {
       "#,
     );
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
 
     assert!(!matched[0].element().unlayered_normal().is_empty());
@@ -1343,7 +1409,12 @@ mod matching_tests {
     let root = Node::image("data:image/png;base64,iVBOR").with_class_name("logo");
     let stylesheet = parse_stylesheet(r#".logo::before { content: "x"; }"#);
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());
@@ -1354,7 +1425,12 @@ mod matching_tests {
     let root = Node::container([]).with_class_name("card");
     let stylesheet = parse_stylesheet(r#".card::placeholder { color: red; }"#);
 
-    let matched = match_stylesheets_view(&root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      &root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     assert_eq!(matched.len(), 1);
     assert!(matched[0].before().is_none());
     assert!(matched[0].after().is_none());

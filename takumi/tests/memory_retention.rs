@@ -20,7 +20,7 @@ use takumi::{
 };
 use takumi_core::{
   geometry::Size,
-  resources::{image::ResourceCache, image_buffer::ImageBuffer},
+  resources::{cache::Cache, image_buffer::ImageBuffer},
 };
 use test_utils::{CONTEXT, create_test_viewport};
 
@@ -79,19 +79,17 @@ fn content() -> Node {
   .with_style(Style::default().with(StyleDeclaration::display(Display::Flex)))
 }
 
-fn render_once(cache: &ResourceCache, photo_png: &[u8]) {
+fn render_once(cache: &Cache, photo_png: &[u8]) {
   let images: HashMap<Arc<str>, ImageSource> = [
     (
       Arc::from("logo.svg"),
       cache
-        .get_or_decode(SVG_LOGO.as_bytes(), ImageCacheMode::Auto)
+        .decode_image(SVG_LOGO.as_bytes(), ImageCacheMode::Auto)
         .unwrap(),
     ),
     (
       Arc::from("photo.png"),
-      cache
-        .get_or_decode(photo_png, ImageCacheMode::Auto)
-        .unwrap(),
+      cache.decode_image(photo_png, ImageCacheMode::Auto).unwrap(),
     ),
   ]
   .into();
@@ -101,7 +99,7 @@ fn render_once(cache: &ResourceCache, photo_png: &[u8]) {
     .node(content())
     .fonts(&CONTEXT)
     .images(images)
-    .stylesheet(cache.get_or_parse_stylesheet(vec![CSS.to_string()]))
+    .stylesheet(cache.parse_stylesheet(vec![CSS.to_string()]))
     .build();
 
   render(options).unwrap();
@@ -121,7 +119,7 @@ fn repeated_renders_keep_live_bytes_flat() {
     .unwrap()
     .encode_png()
     .unwrap();
-  let cache = ResourceCache::default();
+  let cache = Cache::default();
 
   for _ in 0..WARMUP_RENDERS {
     render_once(&cache, &photo_png);
@@ -169,8 +167,8 @@ fn unique_text_renders_stay_near_glyph_cache_budget() {
 
   let _guard = MEASURE_LOCK.lock().unwrap();
 
-  let cache = ResourceCache::default();
-  let stylesheet = cache.get_or_parse_stylesheet(vec![UNIQUE_TEXT_CSS.to_string()]);
+  let cache = Cache::default();
+  let stylesheet = cache.parse_stylesheet(vec![UNIQUE_TEXT_CSS.to_string()]);
   let viewport = Viewport::new((2400, 1260));
   let render_card = |index: usize| {
     let options = RenderOptions::builder()
