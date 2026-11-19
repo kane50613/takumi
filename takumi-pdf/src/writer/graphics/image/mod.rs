@@ -19,7 +19,7 @@ use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::error::WriterError;
 use crate::writer::graphics::color::DEVICE_GRAY;
-use crate::writer::graphics::color::{cmyk, luma, rgb};
+use crate::writer::graphics::color::{DeviceColorSpace, luma, rgb};
 use crate::writer::graphics::icc::{GenericICCProfile, ICCBasedColorSpace, ICCProfile};
 use crate::writer::serialize::{MaybeDeviceColorSpace, SerializeContext};
 use crate::writer::stream::{FilterStreamBuilder, deflate_encode};
@@ -310,13 +310,14 @@ impl Image {
       let cs = match self.color_space() {
         ImageColorspace::Rgb => rgb::color_space(sc.serialize_settings().no_device_cs).into(),
         ImageColorspace::Luma => luma::color_space(sc.serialize_settings().no_device_cs).into(),
-        ImageColorspace::Cmyk => match cmyk::color_space(&sc.serialize_settings()) {
-          None => {
+        // A device-independent PDF, such as PDF/A, needs a CMYK profile no image is given.
+        ImageColorspace::Cmyk => {
+          if sc.serialize_settings().no_device_cs {
             sc.register_validation_error(ValidationError::MissingCMYKProfile);
-            crate::writer::color::DeviceColorSpace::Cmyk.into()
           }
-          Some(cs) => cs.into(),
-        },
+
+          DeviceColorSpace::Cmyk.into()
+        }
       };
 
       sc.register_colorspace(chunk_container, cs)

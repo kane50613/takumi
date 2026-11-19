@@ -3,8 +3,7 @@
 //! # Color spaces
 //!
 //! Paint colors come in two models, RGB and Luma, each with its own color type. CMYK has no
-//! color type: it is only the color space CMYK JPEGs draw in, which [`cmyk::color_space`]
-//! picks.
+//! color type: it is only the device color space CMYK JPEGs draw in.
 //!
 //! # Representation of colors
 //!
@@ -39,7 +38,6 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use crate::writer::graphics::icc::ICCBasedColorSpace;
 use crate::writer::serialize::SerializeContext;
 
 /// The PDF name for the device RGB color space.
@@ -137,23 +135,6 @@ pub mod luma {
   }
 }
 
-/// The CMYK color space, which CMYK JPEGs draw in.
-pub mod cmyk {
-  use crate::writer::SerializeSettings;
-  use crate::writer::color::{CieBasedColorSpace, ColorSpace, DeviceColorSpace};
-  use crate::writer::graphics::icc::ICCBasedColorSpace;
-
-  pub(crate) fn color_space(ss: &SerializeSettings) -> Option<ColorSpace> {
-    if ss.no_device_cs {
-      ss.clone()
-        .cmyk_profile
-        .map(|p| CieBasedColorSpace::Cmyk(ICCBasedColorSpace::<4>(p.clone())).into())
-    } else {
-      Some(DeviceColorSpace::Cmyk.into())
-    }
-  }
-}
-
 /// RGB colors.
 pub mod rgb {
   use crate::writer::color::{CieBasedColorSpace, ColorSpace, DeviceColorSpace};
@@ -217,6 +198,7 @@ pub(crate) enum ColorSpace {
 pub(crate) enum DeviceColorSpace {
   Rgb,
   Gray,
+  /// The space CMYK JPEGs draw in.
   Cmyk,
 }
 
@@ -230,7 +212,6 @@ impl From<DeviceColorSpace> for ColorSpace {
 pub(crate) enum CieBasedColorSpace {
   Srgb,
   Luma,
-  Cmyk(ICCBasedColorSpace<4>),
 }
 
 impl From<CieBasedColorSpace> for ColorSpace {

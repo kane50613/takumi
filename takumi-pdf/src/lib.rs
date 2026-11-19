@@ -168,6 +168,8 @@ mod window;
 #[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
 mod subsetter;
 #[allow(missing_docs, clippy::all, clippy::redundant_closure_for_method_calls)]
+// The writer's raster image half has no caller without the `images` feature.
+#[cfg_attr(not(feature = "images"), allow(dead_code, unused_imports))]
 mod writer;
 
 use takumi_core::{
