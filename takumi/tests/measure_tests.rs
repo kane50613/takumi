@@ -3040,3 +3040,31 @@ fn test_measure_block_in_inline_content_goes_beside_a_float() {
   assert_close(narrowed.transform[4], 100.0);
   assert_close(narrowed.width, 200.0);
 }
+
+/// A line `text-fit` grows can hold an empty text result, such as a run of collapsed spaces, which
+/// fitting must not shape. The input is a fuzzer finding, minimized.
+#[test]
+fn test_measure_text_fit_skips_an_empty_text_result() {
+  let html = r##"<!doctype html
+    color: rgb(255, 255,  "
+    >
+      <div
+        style="
+           text-align: center;
+          text-fit: grow;
+          text-overflow: ellips   height: 1.5;
+          text-align: center;
+  ov;
+            zb(37, 99, 235);
+   <!doctype html>
+<html>
+  <head>
+  et="width: max-cofill=%22white%22 letterext-anchor=%22middle%22>مرح, 255);
+      "
+       <span style="font-sizloca.5px; letter-spacing: 2px; color: #78716c">DATE</span>
+        </div>
+        <div style="display: flex; flex-directio#1c1917        </">Dd"##;
+  let node = Node::from_html(html, FromHtmlOptions::default()).unwrap();
+
+  measure(node, create_test_viewport());
+}
