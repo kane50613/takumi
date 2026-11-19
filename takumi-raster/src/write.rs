@@ -852,9 +852,10 @@ where
     // A held frame still writes its own `fcTL`, so the count in `acTL` stays the caller's.
     let region = match &previous {
       None => FrameRegion::full(width, height),
-      Some(previous) => {
-        FrameRegion::changed(&previous.borrow().image, image).unwrap_or(FrameRegion::ORIGIN)
-      }
+      Some(previous) => FrameRegion::changed(&previous.borrow().image, image, |before, after| {
+        before == after
+      })
+      .unwrap_or(FrameRegion::ORIGIN),
     };
 
     writer
@@ -905,11 +906,11 @@ where
 
 /// The pixels of the canvas a frame of an animation replaces.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct FrameRegion {
-  x: u32,
-  y: u32,
-  width: u32,
-  height: u32,
+pub(crate) struct FrameRegion {
+  pub(crate) x: u32,
+  pub(crate) y: u32,
+  pub(crate) width: u32,
+  pub(crate) height: u32,
 }
 
 impl FrameRegion {
@@ -922,7 +923,7 @@ impl FrameRegion {
   };
 
   /// The whole canvas, `width` by `height`.
-  fn full(width: u32, height: u32) -> Self {
+  pub(crate) fn full(width: u32, height: u32) -> Self {
     Self {
       x: 0,
       y: 0,
@@ -931,9 +932,13 @@ impl FrameRegion {
     }
   }
 
-  /// The smallest region outside which `current` holds the bytes `previous` does, both the same
-  /// size, or `None` when they hold the same bytes throughout.
-  fn changed(previous: &Bitmap, current: &Bitmap) -> Option<Self> {
+  /// The smallest region outside which every pixel of `current` is `same` as in `previous`, both the
+  /// same size, or `None` when none differ.
+  pub(crate) fn changed(
+    previous: &Bitmap,
+    current: &Bitmap,
+    same: impl Fn(&[u8; 4], &[u8; 4]) -> bool,
+  ) -> Option<Self> {
     let mut rows: Option<(u32, u32)> = None;
     let (mut left, mut right) = (current.width(), 0);
 
@@ -948,7 +953,7 @@ impl FrameRegion {
         .iter()
         .zip(after.as_chunks::<4>().0)
         .enumerate()
-        .filter(|(_, (before, after))| before != after)
+        .filter(|(_, (before, after))| !same(before, after))
         .map(|(column, _)| column as u32);
       let Some(first) = differing.next() else {
         continue;

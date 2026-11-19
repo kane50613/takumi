@@ -7,8 +7,8 @@ use rayon::prelude::*;
 use crate::{
   Result,
   error::WebPError,
-  webp::{EncodedFrame, FrameRegion, U24_MAX, UniqueFrame, write_riff_container},
-  write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
+  webp::{EncodedFrame, U24_MAX, UniqueFrame, write_riff_container},
+  write::{AnimatedWebpOptions, AnimationFrame, Bitmap, FrameRegion, Quality},
 };
 
 /// The VP8L effort, below 25 to skip libwebp's slowest searches for 40% less time.
