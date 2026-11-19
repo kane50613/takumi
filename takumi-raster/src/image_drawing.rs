@@ -30,7 +30,6 @@ fn process_image_for_object_fit(
   crop_origin: Point<f32>,
   crop: Size<f32>,
 ) -> Result<Option<PreparedImage>> {
-  let (source_width, source_height) = image.dimensions();
   let clipped = ReplacedPlacement {
     offset: placement.offset - crop_origin,
     size: placement.size,
@@ -105,13 +104,18 @@ fn process_image_for_object_fit(
       context,
     )?,
   };
-  let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
-    Affine::IDENTITY
-  } else {
-    Affine::scale(
-      source_width / placement.size.width,
-      source_height / placement.size.height,
-    ) * Affine::translation(clipped.crop.x, clipped.crop.y)
+  // One division from the drawn buffer's size, so a buffer decoded at the placement's size maps
+  // back through exactly the identity.
+  let logical_to_source = match &rendered {
+    RenderedImage::Sampled { source, .. }
+      if placement.size.width != 0.0 && placement.size.height != 0.0 =>
+    {
+      Affine::scale(
+        source.width() as f32 / placement.size.width,
+        source.height() as f32 / placement.size.height,
+      ) * Affine::translation(clipped.crop.x, clipped.crop.y)
+    }
+    _ => Affine::IDENTITY,
   };
 
   Ok(Some(PreparedImage {
@@ -183,13 +187,11 @@ pub(crate) fn draw_image(
       width,
       height,
       algorithm,
-      source_scale,
+      ..
     } => {
       let Ok(pixmap) = PixmapRef::try_from(source.as_ref()) else {
         return Ok(());
       };
-      let logical_to_source =
-        Affine::scale(source_scale.0, source_scale.1) * prepared.logical_to_source;
 
       if let Some(clip) = rounded_clip {
         ImageRect::new(offset, width as f32, height as f32).draw_clipped(
@@ -197,7 +199,7 @@ pub(crate) fn draw_image(
           context,
           clip,
           pixmap.into(),
-          logical_to_source,
+          prepared.logical_to_source,
           algorithm,
         )?;
         return Ok(());
@@ -209,7 +211,7 @@ pub(crate) fn draw_image(
         BorderProperties::default(),
         context.transform * image_to_box,
         SamplingOptions {
-          logical_to_source,
+          logical_to_source: prepared.logical_to_source,
           algorithm,
         },
         BlendMode::Normal,

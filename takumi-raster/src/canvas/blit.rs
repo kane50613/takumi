@@ -671,7 +671,10 @@ pub(crate) fn overlay_sampled_paint_source(
     return;
   }
 
+  // Tiny-skia samples a translate-only pattern nearest-neighbour, so a fractional translation keeps
+  // the bilinear composite below.
   let direct_identity_mapping = options.border.is_zero()
+    && !options.transform.only_translation()
     && sampling.logical_to_source.is_identity()
     && size.width == source.width()
     && size.height == source.height();
