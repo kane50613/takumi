@@ -262,7 +262,7 @@ export type FontBackend<TFamily extends RegisteredFamilyLike> = {
   /** The families a registration under `key` added while the backend holds them; `pin` keeps them. */
   cachedFonts(key: string, pin: boolean): TFamily[] | null | undefined;
   /** Loads the `@font-face` file `url` names, released for space past the budget. */
-  cacheFontFile(url: string, data: ArrayBuffer | Uint8Array): Awaitable<void>;
+  cacheFontFile(url: string, data: Uint8Array): Awaitable<void>;
 };
 
 /**
