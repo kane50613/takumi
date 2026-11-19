@@ -17,7 +17,7 @@
     "test": "bun --filter '*' test --silent",
     "build": "bun --filter '*' run build",
     "fmt": "cargo fmt --all && oxfmt --write",
-    "lint": "oxlint --format=github && oxfmt --check",
+    "lint": "oxlint --format=github && oxfmt --check && bun scripts/check-skills.mts",
     "lint:fix": "oxlint --fix && oxfmt --write",
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",

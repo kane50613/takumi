@@ -162,6 +162,16 @@ const png = await render(
 
 A bare `<div>` lays out as a block, as in a browser. Keep explicit Flexbox styles when you move a Satori template, and compare the output. `renderSvg()` returns SVG like `satori()` does. `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/migration/satori).
 
+## Coding agents
+
+Takumi ships skills that walk a coding agent through common jobs, such as an Open Graph route, fonts for other scripts, a deploy, or a migration from satori. Install them into your project:
+
+```sh
+npx skills add kane50613/takumi
+```
+
+Agents can also read these docs as Markdown. [`/llms.txt`](https://takumi.kane.tw/llms.txt) lists every page, and adding `.md` to a page's URL returns its Markdown.
+
 ## Next steps
 
 <Cards>
