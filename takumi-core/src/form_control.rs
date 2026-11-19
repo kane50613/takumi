@@ -268,7 +268,7 @@ mod tests {
   use std::time::{Duration, Instant};
 
   use super::*;
-  use crate::{matching::match_stylesheets_view, style::StyleSheet, viewport::Viewport};
+  use crate::{Cache, matching::match_stylesheets_view, style::StyleSheet, viewport::Viewport};
 
   fn element(tag: &str, id: &str, attributes: &[(&str, &str)], children: Vec<Node>) -> Node {
     with_metadata(Node::container(children), tag, id, attributes)
@@ -302,7 +302,12 @@ mod tests {
     }
 
     let stylesheet = StyleSheet::parse(&format!("{selector} {{ width: 1px }}")).unwrap();
-    let matched = match_stylesheets_view(root, &[&stylesheet], Viewport::default());
+    let matched = match_stylesheets_view(
+      root,
+      &[&stylesheet],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
     tree_order(root)
       .iter()
       .zip(&matched)

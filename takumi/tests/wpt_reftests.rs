@@ -49,7 +49,7 @@ use takumi_core::{
     page_container::{PageContainers, PageFragment},
     page_sizes::{PageBox, PageRules, PageSizer},
   },
-  resources::image::ResourceCache,
+  resources::cache::Cache,
   scene::Scene,
   style::{PageName, page_rule::PageContext},
   viewport::MediaTarget,
@@ -864,7 +864,7 @@ struct Runner {
   /// Where a failing test's rendering and its reference's go, as PNG.
   dump: Option<PathBuf>,
   fonts: Fonts,
-  images: ResourceCache,
+  images: Cache,
   /// The digest of each reference document, filled by the first exact comparison against it.
   references: HashMap<ReferenceDocument, OnceLock<Result<u128, String>>>,
 }
@@ -895,7 +895,7 @@ impl Runner {
       verbose: env::var_os("WPT_VERBOSE").is_some(),
       dump: env::var_os("WPT_DUMP").map(PathBuf::from),
       fonts,
-      images: ResourceCache::default(),
+      images: Cache::default(),
       references: HashMap::new(),
     }
   }
@@ -1148,10 +1148,7 @@ impl Runner {
     let images: HashMap<Arc<str>, ImageSource> = sources
       .filter_map(|(url, base)| {
         let data = fs::read(self.resolve(base, url)).ok()?;
-        let image = self
-          .images
-          .get_or_decode(&data, ImageCacheMode::Auto)
-          .ok()?;
+        let image = self.images.decode_image(&data, ImageCacheMode::Auto).ok()?;
 
         Some((Arc::from(url), image))
       })

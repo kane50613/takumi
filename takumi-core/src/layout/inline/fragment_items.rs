@@ -381,7 +381,7 @@ impl FragmentItems {
     let resolved = &mut self.face_glyphs[face];
 
     if let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) {
-      context.fonts().resolve_glyphs_into(
+      context.cache().glyphs().resolve_into(
         resolved,
         run.face(),
         font,
@@ -608,6 +608,7 @@ impl FragmentItems {
         .filter(|rect| layer.is_none_or(|layer| rect.layer == Some(layer)))
         .collect(),
       background_fragments,
+      cache: context.cache().clone(),
     })
   }
 }

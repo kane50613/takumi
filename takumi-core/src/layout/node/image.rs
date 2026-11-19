@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use crate::{
   context::RenderContext,
@@ -7,10 +7,7 @@ use crate::{
     node::{ImageData, ImageSourceInput, Node, NodeKind},
   },
   layout_unit::LayoutUnit,
-  resources::image::{
-    ImageCacheMode, ImageError, ImageResult, ImageSource, ResourceCache, decode_data_uri,
-    is_svg_like,
-  },
+  resources::image::{ImageCacheMode, ImageError, ImageResult, decode_data_uri, is_svg_like},
   style::{FromCssStr, Length, Style, StyleDeclaration},
 };
 
@@ -148,40 +145,21 @@ pub(crate) fn size_attribute(tag: &str, value: &str) -> Option<Length> {
 
 const DATA_URI_PREFIX: &str = "data:";
 
-/// The image a `data:` URI holds, decoded through `cache` when the render has one.
-fn parse_data_uri_image(src: &str, cache: Option<&ResourceCache>) -> ImageResult {
-  let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
-
-  decode_cached(&decoded.bytes, cache, |bytes| {
-    ImageSource::from_bytes_lazy(bytes, 0, Weak::new())
-  })
-}
-
-/// `bytes` decoded through `cache` when the render has one, and by `uncached` otherwise.
-fn decode_cached(
-  bytes: &[u8],
-  cache: Option<&ResourceCache>,
-  uncached: fn(&[u8]) -> ImageResult,
-) -> ImageResult {
-  match cache {
-    Some(cache) => cache.get_or_decode(bytes, ImageCacheMode::Auto),
-    None => uncached(bytes),
-  }
-}
-
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.
 pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
-    return parse_data_uri_image(src, context.resource_cache());
+    let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
+
+    return context
+      .cache()
+      .decode_image(&decoded.bytes, ImageCacheMode::Auto);
   }
 
   if is_svg_like(src) {
     #[cfg(feature = "svg-sizing")]
-    return decode_cached(
-      src.as_bytes(),
-      context.resource_cache(),
-      ImageSource::from_bytes,
-    );
+    return context
+      .cache()
+      .decode_image(src.as_bytes(), ImageCacheMode::Auto);
     #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
@@ -225,20 +203,37 @@ mod tests {
   use serde_json::from_value;
 
   #[cfg(any(feature = "svg", feature = "png"))]
-  use super::parse_data_uri_image;
-  #[cfg(feature = "svg")]
-  use crate::{Fonts, context::RenderContext, style::SizingContext, viewport::Viewport};
+  use super::resolve_image;
+  #[cfg(any(feature = "svg", feature = "png"))]
+  use crate::{
+    Fonts, context::RenderContext, resources::cache::Cache, style::SizingContext,
+    viewport::Viewport,
+  };
   use crate::{
     layout::node::{ImageData, ImageSourceInput},
     resources::{image::ImageSource, image_buffer::ImageBuffer},
   };
 
+  /// A context with an empty cache.
+  #[cfg(any(feature = "svg", feature = "png"))]
+  fn context() -> RenderContext {
+    RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .cache(Cache::default())
+      .build()
+  }
+
   #[cfg(feature = "svg")]
   #[test]
   fn parse_data_uri_svg_with_unescaped_hash() {
-    let source = parse_data_uri_image(
+    let source = resolve_image(
       "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10' fill='#f00'/></svg>",
-      None,
+      &context(),
     )
     .unwrap();
 
@@ -250,7 +245,7 @@ mod tests {
   fn a_data_uri_decodes_once_per_cache() {
     use std::sync::Arc;
 
-    use crate::resources::image::{ResourceCache, to_data_url};
+    use crate::resources::image::to_data_url;
 
     let png = ImageBuffer::from_rgba_bytes(vec![255; 4 * 4 * 4], 4, 4)
       .unwrap()
@@ -258,9 +253,9 @@ mod tests {
       .unwrap();
 
     let uri = to_data_url("image/png", &png);
-    let cache = ResourceCache::default();
-    let first = parse_data_uri_image(&uri, Some(&cache)).unwrap();
-    let second = parse_data_uri_image(&uri, Some(&cache)).unwrap();
+    let context = context();
+    let first = resolve_image(&uri, &context).unwrap();
+    let second = resolve_image(&uri, &context).unwrap();
 
     assert_matches!(
       (first, second),
@@ -273,19 +268,7 @@ mod tests {
   fn inline_svg_parses_once_per_cache() {
     use std::sync::Arc;
 
-    use super::resolve_image;
-    use crate::resources::image::ResourceCache;
-
-    let fonts = Fonts::default();
-    let context = RenderContext::builder()
-      .fonts(fonts.snapshot())
-      .sizing(
-        SizingContext::builder()
-          .viewport(Viewport::new((1200, 630)))
-          .build(),
-      )
-      .resource_cache(Some(ResourceCache::default()))
-      .build();
+    let context = context();
     let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10'/></svg>";
     let first = resolve_image(svg, &context).unwrap();
     let second = resolve_image(svg, &context).unwrap();

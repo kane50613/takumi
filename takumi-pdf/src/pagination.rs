@@ -366,7 +366,7 @@ mod tests {
   use std::rc::Rc;
 
   use takumi_core::html::{FromHtmlOptions, from_html};
-  use takumi_core::scene::PagedScene;
+  use takumi_core::{Cache, scene::PagedScene};
 
   use super::*;
   use crate::{
@@ -472,7 +472,7 @@ mod tests {
       fonts: &fonts,
       stylesheet: Default::default(),
       images: Rc::default(),
-      resource_cache: Default::default(),
+      cache: Cache::shared(),
       font_families: None,
       lang: None,
     };
@@ -538,7 +538,7 @@ mod tests {
       fonts: &fonts,
       stylesheet: Default::default(),
       images: Rc::default(),
-      resource_cache: Default::default(),
+      cache: Cache::shared(),
       font_families: None,
       lang: None,
     };

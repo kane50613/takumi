@@ -7,7 +7,11 @@ use takumi_core::{
   Error, Fonts,
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::image::{ImageSource as DecodedImage, ResourceCache},
+  resources::{
+    cache::{Cache, CacheOptions},
+    glyph_cache,
+    image::ImageSource as DecodedImage,
+  },
   style::{CssSource, FontFamily, KeyframesRule, StyleSheet},
   viewport::Viewport,
 };
@@ -23,7 +27,7 @@ use crate::{device_pixel_ratio, input::ImageSource, parse_lang, time_ms};
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RendererOptions {
-  /// Byte budget shared by every cached resource. `0` disables caching.
+  /// The budget of decoded images and of parsed stylesheets, each. `0` keeps neither.
   pub cache_max_bytes: Option<f64>,
   /// Bytes of decoded fonts that renders' `fonts` lists may keep registered.
   pub font_cache_max_bytes: Option<f64>,
@@ -39,6 +43,25 @@ impl RendererOptions {
   pub fn font_cache_bytes(&self) -> Option<u64> {
     self.font_cache_max_bytes.map(bytes)
   }
+
+  /// The cache a renderer built with these options keeps, with the glyph budget the last
+  /// [`set_glyph_cache_max_bytes`] set.
+  pub fn cache(&self) -> Cache {
+    CacheOptions::builder()
+      .images(self.cache_bytes().unwrap_or(CacheOptions::DEFAULT_IMAGES))
+      .stylesheets(
+        self
+          .cache_bytes()
+          .unwrap_or(CacheOptions::DEFAULT_STYLESHEETS),
+      )
+      .build()
+  }
+}
+
+/// Sets the glyph budget of the renderers created after this call, from a JavaScript byte count.
+pub fn set_glyph_cache_max_bytes(value: f64) {
+  #[allow(deprecated)]
+  glyph_cache::set_glyph_cache_max_bytes(bytes(value) as usize);
 }
 
 /// A JavaScript byte count, negative ones read as zero.
@@ -103,7 +126,7 @@ impl RenderOptions {
         .font_families(self.font_families.clone().map(FontFamily::from_names))
         .lang(parse_lang(self.lang.as_deref())?)
         .images(draw.images)
-        .resource_cache(draw.cache.clone())
+        .cache(draw.cache.clone())
         .stylesheet(draw.stylesheet)
         .fonts(draw.fonts)
         .node(node)
@@ -121,6 +144,7 @@ impl RenderOptions {
         .font_families(self.font_families.clone().map(FontFamily::from_names))
         .lang(parse_lang(self.lang.as_deref())?)
         .images(draw.images)
+        .cache(draw.cache.clone())
         .stylesheet(draw.stylesheet)
         .fonts(draw.fonts)
         .node(node)
@@ -132,7 +156,7 @@ impl RenderOptions {
 /// What a render draws with besides its options: the fonts, the stylesheet, and the images.
 pub struct Draw<'f> {
   pub fonts: &'f Fonts,
-  pub cache: &'f ResourceCache,
+  pub cache: &'f Cache,
   pub stylesheet: Arc<StyleSheet>,
   pub images: HashMap<Arc<str>, DecodedImage>,
 }
@@ -199,7 +223,7 @@ impl<S> RenderAnimationOptions<S> {
             .font_families(font_families.clone())
             .lang(lang)
             .images(draw.images.clone())
-            .resource_cache(draw.cache.clone())
+            .cache(draw.cache.clone())
             .stylesheet(Arc::clone(&draw.stylesheet))
             .fonts(draw.fonts)
             .node(node)

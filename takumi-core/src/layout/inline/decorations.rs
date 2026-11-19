@@ -7,6 +7,7 @@ use crate::{
   layout::intercept::{Spans, skip_ink_ranges},
   layout_unit::LayoutUnit,
   resources::{
+    cache::Cache,
     font::PrimaryFontMetrics,
     glyph::{ResolvedGlyph, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
@@ -506,6 +507,7 @@ impl ShapedRun {
   /// `TextPainter::ClipDecorationsStripe` cuts them from the unscaled glyphs.
   pub(crate) fn decorations(
     &self,
+    cache: &Cache,
     resolved_glyphs: &ResolvedGlyphs,
     layout: ComputedLayout,
     placement: &DecorationPlacement,
@@ -537,6 +539,7 @@ impl ShapedRun {
       let outlines = outlines.get_or_insert_with(|| self.ink_outlines(resolved_glyphs, content));
 
       decoration.skips = skip_ink_ranges(
+        cache.intercepts(),
         outlines.iter().copied(),
         glyph_baseline + band.top - placement.baseline,
         glyph_baseline + band.bottom - placement.baseline,
