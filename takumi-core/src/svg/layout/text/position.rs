@@ -4,7 +4,8 @@ use crate::sort_key::sort_by_key;
 use std::rc::Rc;
 
 use kurbo::{
-  CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, Point as KurboPoint, QuadBez, Vec2,
+  CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathSeg, Point as KurboPoint,
+  QuadBez, Vec2,
 };
 
 use super::{
@@ -13,7 +14,7 @@ use super::{
   shape::{FontFaces, GlyphCluster, PositionedGlyph, ResolvedFont},
 };
 use crate::{
-  geometry::{PathCommand, Point, Rect},
+  geometry::{PathCommand, Point, Rect, arclen_accuracy},
   style::{Affine, Angle, TextDecorationLines},
   svg::approx_eq::ApproxEq,
 };
@@ -61,13 +62,17 @@ struct DecorationSpan {
 /// How closely the curves of a `textPath` are measured, in user units.
 const ARCLEN_ACCURACY: f64 = 0.1;
 
-/// How closely `curve` is measured: [`ARCLEN_ACCURACY`], loosened for a long curve so that its
-/// cost stays bounded by the ratio rather than by its size.
-fn arclen_accuracy(curve: &CubicBez) -> f64 {
-  let polygon =
-    curve.p0.distance(curve.p1) + curve.p1.distance(curve.p2) + curve.p2.distance(curve.p3);
+/// How much of a `textPath` curve's control polygon its measuring may be off by, so that the cost
+/// stays bounded by the ratio rather than by its size.
+const ARCLEN_RELATIVE_ACCURACY: f64 = 1e-4;
 
-  (polygon * 1e-4).max(ARCLEN_ACCURACY)
+/// How closely `curve` is measured.
+fn curve_accuracy(curve: &CubicBez) -> f64 {
+  arclen_accuracy(
+    PathSeg::Cubic(*curve),
+    ARCLEN_ACCURACY,
+    ARCLEN_RELATIVE_ACCURACY,
+  )
 }
 
 /// A point of a `textPath` a cluster sits on, and the direction of the path there.
@@ -359,7 +364,7 @@ impl TextPathShape {
     let ends = curves
       .iter()
       .map(|curve| {
-        length += curve.arclen(arclen_accuracy(curve));
+        length += curve.arclen(curve_accuracy(curve));
         length
       })
       .collect();
@@ -388,7 +393,7 @@ impl TextPathShape {
       .checked_sub(1)
       .map_or(0.0, |previous| self.ends[previous]);
     let position = curve
-      .inv_arclen(offset - start, arclen_accuracy(curve))
+      .inv_arclen(offset - start, curve_accuracy(curve))
       .clamp(0.0, 1.0);
     let point = curve.eval(position);
     let derivative = curve.deriv().eval(position);

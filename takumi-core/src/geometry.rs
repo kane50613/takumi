@@ -3,6 +3,8 @@
 use std::ops::{Add, Sub};
 
 #[cfg(feature = "svg")]
+use kurbo::PathSeg;
+#[cfg(feature = "svg")]
 use tiny_skia::PathSegment;
 use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
@@ -818,4 +820,19 @@ impl Placement {
       self.bottom().clamp(0, size.height as i32),
     )
   }
+}
+
+/// How closely to measure the length of `segment`: `finest`, or `relative` of its control polygon
+/// when that is coarser, so that a long segment costs no more than a short one.
+#[cfg(feature = "svg")]
+pub(crate) fn arclen_accuracy(segment: PathSeg, finest: f64, relative: f64) -> f64 {
+  let polygon = match segment {
+    PathSeg::Line(line) => line.p0.distance(line.p1),
+    PathSeg::Quad(quad) => quad.p0.distance(quad.p1) + quad.p1.distance(quad.p2),
+    PathSeg::Cubic(cubic) => {
+      cubic.p0.distance(cubic.p1) + cubic.p1.distance(cubic.p2) + cubic.p2.distance(cubic.p3)
+    }
+  };
+
+  (polygon * relative).max(finest)
 }
