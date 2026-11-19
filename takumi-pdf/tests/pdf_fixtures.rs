@@ -7592,3 +7592,20 @@ fn text_shows_per_page(pdf: &[u8]) -> Vec<Vec<Vec<u8>>> {
     })
     .collect()
 }
+
+/// A PNG whose header claims billions of pixels, as a fuzzer found, fails to load instead of
+/// aborting the process when the writer sizes a buffer from that header.
+#[test]
+fn png_claiming_billions_of_pixels_renders_without_it() {
+  let fonts = fonts();
+  let html = r#"<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAsoupuPTgCCAYAAADzTCL+AAAACElEQVR4nAMAAAAAAUgGidIAAAAASUVORK5CYII=">"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse oversized png"))
+      .viewport(Viewport::new((200, 200)))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(pdf.is_ok(), "{:?}", pdf.err());
+}
