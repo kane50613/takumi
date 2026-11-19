@@ -14,6 +14,8 @@ import {
   resolveDocument,
   sheetsOf,
   toNativeSource,
+  splitExtras,
+  type SourceExtras,
   WasmRenderer,
 } from "@takumi-rs/bindings-js";
 import initWasm, {
@@ -102,7 +104,9 @@ export type PrepareOptions = Omit<PaintOptions, "images"> & {
 /** A document {@link Painter.prepare} readied, with its fonts and images loaded. */
 export type PreparedSource = Prepared<
   Node | string | JsonSource,
-  Omit<PaintOptions, "fonts" | "images" | "fontFamilies" | "css"> & { css?: CssInput[] }
+  Omit<PaintOptions, keyof SourceExtras | "css"> & {
+    css?: CssInput[];
+  }
 >;
 
 /** What the wasm side reads `input` as: HTML as written, a tree as JSON when it can, or JSX rendered. */
@@ -133,16 +137,15 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
 
   /** Reads what a node tree, JSX, or HTML needs under `options`, then loads its font subsets and fetches its images. */
   async prepare(node: NodeInput, options: PrepareOptions = {}): Promise<PreparedSource> {
-    const { fonts, images, signal, fontFamilies, css, ...rest } = options;
+    const {
+      extras,
+      layout: { css, ...rest },
+    } = splitExtras(options);
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-    return prepareSource(
-      this.fonts,
-      main.node,
-      layout,
-      { fonts, images, signal, fontFamilies },
-      (request) => this.inner.needs(main.node, ...needsArgs(layout, request)),
+    return prepareSource(this.fonts, main.node, layout, extras, (request) =>
+      this.inner.needs(main.node, ...needsArgs(layout, request)),
     );
   }
 
@@ -159,11 +162,14 @@ export class Painter extends WasmRenderer<RegisteredFamily, PainterInternal> {
   }
 
   private async read(node: NodeInput, options: PaintOptions): Promise<PreparedSource> {
-    const { fonts, images, css, fontFamilies, ...rest } = options;
+    const {
+      extras,
+      layout: { css, ...rest },
+    } = splitExtras(options);
     const main = await resolveNode(node);
     const layout = { ...rest, css: sheetsOf(css, main.css) };
 
-    return readSource(this.fonts, main.node, layout, { fonts, images, fontFamilies }, (request) =>
+    return readSource(this.fonts, main.node, layout, extras, (request) =>
       this.inner.needs(main.node, ...needsArgs(layout, request)),
     );
   }

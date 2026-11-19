@@ -107,6 +107,22 @@ type WasmRendererClass<R> = RendererClass<R> & {
   renderAsDataUrl: ResolvesTo<ReturnOf<R, "renderAsDataUrl">, string>;
 };
 
+/** Whether `T` is known and leaves out the font scope the wrapper sets for each render. */
+type HidesFontScope<T> =
+  Known<T> extends false
+    ? false
+    : [Extract<keyof T, "fontScope" | "fontKeys" | "failedFontFiles">] extends [never]
+      ? true
+      : false;
+
+type PublicOptions<Render, Svg, Animation, Prepare, PrepareAnimation> = {
+  render: HidesFontScope<Render>;
+  renderSvg: HidesFontScope<Svg>;
+  renderAnimation: HidesFontScope<Animation>;
+  prepare: HidesFontScope<Prepare>;
+  prepareAnimation: HidesFontScope<PrepareAnimation>;
+};
+
 export type Checks = [
   Expect<Passes<RenderFunctions<typeof js>>>,
   Expect<Passes<RenderFunctions<typeof jsRequire>>>,
@@ -116,4 +132,48 @@ export type Checks = [
   Expect<Passes<RendererClass<InstanceOf<typeof coreRequire, "Renderer">>>>,
   Expect<Passes<WasmRendererClass<InstanceOf<typeof wasm, "Renderer">>>>,
   Expect<Passes<WasmRendererClass<InstanceOf<typeof wasmRequire, "Renderer">>>>,
+  Expect<
+    Passes<
+      PublicOptions<
+        core.RenderOptions,
+        core.SvgRenderOptions,
+        core.RenderAnimationOptions,
+        core.PrepareOptions,
+        core.PrepareAnimationOptions
+      >
+    >
+  >,
+  Expect<
+    Passes<
+      PublicOptions<
+        coreRequire.RenderOptions,
+        coreRequire.SvgRenderOptions,
+        coreRequire.RenderAnimationOptions,
+        coreRequire.PrepareOptions,
+        coreRequire.PrepareAnimationOptions
+      >
+    >
+  >,
+  Expect<
+    Passes<
+      PublicOptions<
+        wasm.RenderOptions,
+        wasm.SvgRenderOptions,
+        wasm.RenderAnimationOptions,
+        wasm.PrepareOptions,
+        wasm.PrepareAnimationOptions
+      >
+    >
+  >,
+  Expect<
+    Passes<
+      PublicOptions<
+        wasmRequire.RenderOptions,
+        wasmRequire.SvgRenderOptions,
+        wasmRequire.RenderAnimationOptions,
+        wasmRequire.PrepareOptions,
+        wasmRequire.PrepareAnimationOptions
+      >
+    >
+  >,
 ];

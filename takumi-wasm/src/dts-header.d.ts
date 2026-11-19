@@ -61,6 +61,12 @@ export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 export type ImageCacheMode = "auto" | "none";
 
+/** @internal The fonts one render sees, by the keys of its `fonts` list in order and the `@font-face` files and optional fonts that failed to load. */
+type FontScope = {
+  listed?: string[];
+  failed?: string[];
+};
+
 export type RenderOptions = {
   /**
    * The width of the image. If not provided, the width will be automatically calculated based on the content.
@@ -126,8 +132,8 @@ export type RenderOptions = {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: string[];
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };
@@ -188,8 +194,8 @@ export type RenderAnimationOptions = {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: string[];
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
 };
@@ -288,6 +294,10 @@ export type RenderNeeds = {
   fontFiles: string[];
   /** The URLs of the loaded `@font-face` files the render draws with, sorted. */
   loadedFontFiles: string[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };
 
 export type AnimationScene = {

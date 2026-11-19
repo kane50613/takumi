@@ -14,14 +14,17 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+#[cfg(feature = "font-face")]
+use super::font_custom_platform_data::FontCustomPlatformData;
 use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
-  font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
   font_face::{FaceData, FontFace, FontFaceDescriptors, PendingSource},
   font_face_cache::{FontFaceCache, fold_family_name, insert_family},
 };
-use crate::resources::font::{RegisteredSource, SharedBytes};
+use crate::resources::font::RegisteredSource;
+#[cfg(feature = "font-face")]
+use crate::resources::font::SharedBytes;
 
 /// Blink's `CSSFontSelector`.
 #[derive(Clone, Debug, Default)]
@@ -36,20 +39,6 @@ pub(crate) struct CssFontSelector {
 }
 
 impl CssFontSelector {
-  /// Each usable face of `data` under `descriptors`, added nowhere yet, sharing the decoded face
-  /// a registration of the same bytes made.
-  pub(crate) fn load(
-    &self,
-    data: &SharedBytes,
-    id: u64,
-    descriptors: &FontFaceDescriptors,
-  ) -> Vec<Arc<FontFace>> {
-    FontFace::from_data(data, id, descriptors, |index| self.typeface(id, index))
-      .into_iter()
-      .map(Arc::new)
-      .collect()
-  }
-
   /// Adds `font_face` after every other face, listing its family under `generic_family`, or moves
   /// the face registered with its family, data, and descriptors there, as registering it anew
   /// places it.
@@ -186,8 +175,9 @@ impl CssFontSelector {
       .map_or(&[], Vec::as_slice)
   }
 
-  /// The decoded face at `index` of the data `id` names, under any family, so registering the same
-  /// bytes again shares one face and its shaping tables.
+  /// The decoded face at `index` of the data `id` names, under any family, so an `@font-face` file
+  /// with the same bytes shares one face and its shaping tables.
+  #[cfg(feature = "font-face")]
   fn typeface(&self, id: u64, index: u32) -> Option<Arc<FontCustomPlatformData>> {
     self
       .font_faces
@@ -255,11 +245,17 @@ mod tests {
 
   use super::*;
   use crate::{
-    fonts::font_selection_types::{
-      FontSelectionRequest, FontSelectionValue, ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE,
-      NORMAL_WIDTH_VALUE,
+    fonts::{
+      font_custom_platform_data::FontCustomPlatformData,
+      font_selection_types::{
+        FontSelectionRequest, FontSelectionValue, ITALIC_SLOPE_VALUE, NORMAL_SLOPE_VALUE,
+        NORMAL_WIDTH_VALUE,
+      },
     },
-    resources::unicode_range::{UnicodeRange, UnicodeRangeSet},
+    resources::{
+      font::SharedBytes,
+      unicode_range::{UnicodeRange, UnicodeRangeSet},
+    },
   };
 
   const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
@@ -293,7 +289,10 @@ mod tests {
     descriptors: &FontFaceDescriptors,
     generic_family: Option<&str>,
   ) -> Vec<Arc<FontFace>> {
-    let faces = selector.load(data, id, descriptors);
+    let faces: Vec<Arc<FontFace>> = FontFace::from_data(data, id, descriptors, |_| None)
+      .into_iter()
+      .map(Arc::new)
+      .collect();
 
     for font_face in &faces {
       selector.add(font_face, generic_family);

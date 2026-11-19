@@ -172,13 +172,6 @@ impl Renderer {
     self.fonts.drop_fonts(&keys)
   }
 
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[wasm_bindgen(js_name = orderFonts)]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.fonts.order_fonts(&keys);
-  }
-
   /// What the renderer's caches hold and how their lookups went since it was created.
   #[wasm_bindgen(js_name = cacheStats)]
   pub fn cache_stats(&self) -> Result<CacheStatsType, js_sys::Error> {
@@ -217,7 +210,7 @@ impl Renderer {
     );
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(&options.font_scope);
     self.render_internal(&fonts, node, options, images)
   }
 
@@ -269,7 +262,7 @@ impl Renderer {
       options.keyframes.take().unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(&options.font_scope);
     let draw = Draw {
       fonts: &fonts,
       cache: &self.cache,
@@ -301,7 +294,7 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(&options.font_scope);
     let render_options = raster_options(&self.cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -335,7 +328,7 @@ impl Renderer {
     let fonts = self.fonts.for_needs(
       &mut options.font_families,
       listed.as_ref(),
-      options.failed_font_files.as_deref(),
+      &options.font_scope,
     );
     let render_options = raster_options(&self.cache, &fonts, node, options, images)?;
 
@@ -370,7 +363,7 @@ impl Renderer {
     };
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(&options.font_scope);
     let buffer = self.render_internal(&fonts, node, options, images)?;
 
     let mut data_uri = String::new();
@@ -398,7 +391,7 @@ impl Renderer {
     let fonts = self.fonts.for_needs(
       &mut options.font_families,
       listed.as_ref(),
-      options.failed_font_files.as_deref(),
+      &options.font_scope,
     );
     let needs = self
       .animation_scenes(&fonts, options)?
@@ -427,7 +420,7 @@ impl Renderer {
       .format
       .unwrap_or_default()
       .raster(options.quality, options.lossless);
-    let fonts = self.fonts.for_render(options.failed_font_files.as_deref());
+    let fonts = self.fonts.for_render(&options.font_scope);
     let scenes = self
       .animation_scenes(&fonts, options)?
       .into_iter()

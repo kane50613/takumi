@@ -92,6 +92,10 @@ pub struct RenderNeeds {
   pub font_files: Vec<String>,
   /// The URLs of the loaded `@font-face` files the render draws with, sorted.
   pub loaded_font_files: Vec<String>,
+  /// The characters no font in their fallback chain draws, each once in document order.
+  pub missing_characters: Vec<String>,
+  /// The families `font-family` or `fontFamilies` names that no font provides, each once.
+  pub unresolved_families: Vec<String>,
 }
 
 impl RenderNeeds {
@@ -108,6 +112,12 @@ impl RenderNeeds {
       images: needs.images.into_iter().collect(),
       font_files: needs.font_files.into_iter().collect(),
       loaded_font_files: needs.loaded_font_files.into_iter().collect(),
+      missing_characters: needs
+        .missing_characters
+        .into_iter()
+        .map(String::from)
+        .collect(),
+      unresolved_families: needs.unresolved_families,
     }
   }
 }
@@ -275,13 +285,6 @@ impl Renderer {
   #[napi(js_name = "dropFonts")]
   pub fn drop_fonts(&self, keys: Vec<String>) -> Vec<String> {
     self.state.fonts.drop_fonts(&keys)
-  }
-
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[napi(js_name = "orderFonts")]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.state.fonts.order_fonts(&keys);
   }
 
   fn load_font(

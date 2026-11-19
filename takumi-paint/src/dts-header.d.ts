@@ -63,6 +63,12 @@ export type ImageInput = {
   cache?: ImageCacheMode;
 };
 
+/** @internal The fonts one render sees, by the keys of its `fonts` list in order and the `@font-face` files and optional fonts that failed to load. */
+type FontScope = {
+  listed?: string[];
+  failed?: string[];
+};
+
 export type PaintOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
   width?: number;
@@ -76,8 +82,8 @@ export type PaintOptions = {
   css?: CssInput[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
-  /** @internal The `@font-face` files `prepare` failed to download. */
-  failedFontFiles?: string[];
+  /** @internal The fonts the render lists and the ones that failed to load. */
+  fontScope?: FontScope;
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
 };
@@ -413,6 +419,10 @@ export type RenderNeeds = {
   images: string[];
   /** The ids of the listed fonts the render loads, sorted. */
   fonts: number[];
+  /** The characters no font in their fallback chain draws, each once in document order. */
+  missingCharacters: string[];
+  /** The families `font-family` or `fontFamilies` names that no font provides, each once. */
+  unresolvedFamilies: string[];
 };
 
 /** The tree as the wasm module serializes it, nodes and runs named by index. */

@@ -2,7 +2,7 @@
 //! image resolution it drives.
 
 use serde::Deserialize;
-use takumi_bindings_common::input::ImageSource;
+use takumi_bindings_common::{FontScope, input::ImageSource};
 use takumi_core::{
   layout::node::Node,
   style::{Color, ColorInput, CssSource, FromCssStr},
@@ -207,8 +207,9 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) css: Option<Vec<CssSource>>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub(crate) font_families: Option<Vec<String>>,
-  /// The `@font-face` files the render's `prepare` failed to download.
-  pub(crate) failed_font_files: Option<Vec<String>>,
+  /// The fonts the render lists and the ones that failed.
+  #[serde(default)]
+  pub(crate) font_scope: FontScope,
   /// Default BCP-47 language tag applied to the root.
   pub(crate) lang: Option<String>,
   /// Document metadata written to the PDF's info dictionary.

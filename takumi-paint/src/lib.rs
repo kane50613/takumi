@@ -16,7 +16,7 @@ use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, NeedsOutput, append_css,
+  FontScope, FontStore, NeedsOutput, append_css,
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
   registrations::Retention,
   renderer::RendererOptions,
@@ -86,8 +86,9 @@ struct RenderOptions {
   images: Option<Vec<ImageSource>>,
   css: Option<Vec<CssSource>>,
   font_families: Option<Vec<String>>,
-  /// The `@font-face` files the paint's `prepare` failed to download.
-  failed_font_files: Option<Vec<String>>,
+  /// The fonts the render lists and the ones that failed.
+  #[serde(default)]
+  font_scope: FontScope,
   lang: Option<String>,
 }
 
@@ -135,11 +136,9 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let fonts = self.fonts.for_needs(
-      &mut options.font_families,
-      listed,
-      options.failed_font_files.as_deref(),
-    );
+    let fonts = self
+      .fonts
+      .for_needs(&mut options.font_families, listed, &options.font_scope);
     Ok(run(
       PaintTreeOptions::builder()
         .viewport(
@@ -262,13 +261,6 @@ impl Painter {
   #[wasm_bindgen(js_name = dropFonts)]
   pub fn drop_fonts(&self, keys: Vec<String>) -> Vec<String> {
     self.fonts.drop_fonts(&keys)
-  }
-
-  /// Gives the faces registered under `keys` precedence in their families, a later key over an
-  /// earlier one, as a render's `fonts` list orders them.
-  #[wasm_bindgen(js_name = orderFonts)]
-  pub fn order_fonts(&self, keys: Vec<String>) {
-    self.fonts.order_fonts(&keys);
   }
 
   /// What the renderer's caches hold and how their lookups went since it was created.

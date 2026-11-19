@@ -204,6 +204,28 @@ Shrink the viewport. 8192 × 8192 is the largest square that fits. A zero-sized 
 
 Give the tree a height that resolves. A percentage height in a paged render has nothing to resolve against, so the content grows until the page limit stops it.
 
+## Handle warnings
+
+A log line that starts with `takumi: ` is a warning. The render finished, but it went without something its source asks for, such as a font, a family, an image, or a CSS property takumi does not support. [What a render could not draw](/docs/fonts#what-a-render-could-not-draw) lists the font and image warnings. Takumi prints every warning through `console.warn`, so a warning that repeats across renders prints each time.
+
+Takumi has no option to take the warnings or silence them. To send them to your error tracker, wrap `console.warn` before you render:
+
+```ts twoslash title="Send warnings to Sentry"
+declare const Sentry: {
+  captureMessage(message: string, context: { level: "warning" }): void;
+};
+// ---cut---
+const warn = console.warn;
+
+console.warn = (...data: unknown[]) => {
+  if (typeof data[0] === "string" && data[0].startsWith("takumi: ")) {
+    Sentry.captureMessage(data[0], { level: "warning" });
+  }
+
+  warn(...data);
+};
+```
+
 ## Node.js
 
 ### TypeError: fetch failed

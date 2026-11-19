@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { prepareSource, readSource, renderPrepared } from "../src/prepared";
 import type { ListedFont, PrepareExtras } from "../src/prepared";
-import type { FontLoader } from "../src/renderer";
-import { googleFonts, type Node } from "@takumi-rs/helpers";
+import type { FontLoader, FontScope } from "../src/renderer";
+import { fontFromUrl, googleFonts, type Node } from "@takumi-rs/helpers";
 import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);
@@ -16,6 +16,17 @@ const answerFetch = (fetch: (input: string | URL | Request) => Promise<Response>
   );
 };
 const textNode = (text: string): Node => ({ type: "text", text });
+
+/** The warnings among `messages` about characters no font draws. */
+const missingOf = (messages: string[]) =>
+  messages.filter((message) => message.startsWith("takumi: No font draws"));
+
+/** Silences `console.warn`, returning a function that lists the messages it received. */
+const printed = () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+  return () => warn.mock.calls.map(([message]) => String(message));
+};
 
 const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
   name,
@@ -196,7 +207,7 @@ describe("readSource and renderPrepared resource forwarding", () => {
       [{ src: "a", data: bytes(), cache: undefined }],
       ["Explicit"],
       expect.any(Function),
-      undefined,
+      { files: undefined, implicitFamilies: false },
     );
   });
 
@@ -207,7 +218,10 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function), undefined);
+    expect(resolve).toHaveBeenCalledWith([font], [], undefined, expect.any(Function), {
+      files: undefined,
+      implicitFamilies: false,
+    });
   });
 
   test("the characters the backend reads drive font subsetting", async () => {
@@ -217,7 +231,10 @@ describe("readSource and renderPrepared resource forwarding", () => {
 
     await render(fonts, { fonts: [font] }, textNode("0"));
 
-    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function), undefined);
+    expect(resolve).toHaveBeenCalledWith([], [], undefined, expect.any(Function), {
+      files: undefined,
+      implicitFamilies: false,
+    });
   });
 });
 
@@ -232,7 +249,11 @@ describe("shared Renderer body", () => {
     await backend.measure(node, { fonts: [font] });
 
     for (const call of [backend.inner.render, backend.inner.renderSvg, backend.inner.measure]) {
-      expect(call).toHaveBeenCalledWith(node, { fontFamilies: ["Fam"], images: [] }, undefined);
+      expect(call).toHaveBeenCalledWith(
+        node,
+        { fontFamilies: ["Fam"], fontScope: { listed: ["Fam:::65-90:"] }, images: [] },
+        undefined,
+      );
     }
   });
 
@@ -252,7 +273,12 @@ describe("shared Renderer body", () => {
     await backend.renderAnimation({ scenes, fonts: [fontA, fontB] });
 
     expect(backend.inner.renderAnimation).toHaveBeenCalledWith(
-      { scenes, fontFamilies: ["A", "B"], images: [] },
+      {
+        scenes,
+        fontFamilies: ["A", "B"],
+        fontScope: { listed: ["A:::65-65:", "B:::66-66:"] },
+        images: [],
+      },
       undefined,
     );
   });
@@ -266,14 +292,14 @@ describe("@font-face files", () => {
         ? new Response(null, { status: 404 })
         : new Response(bytes()),
     );
-    const reads = mock(({ failedFontFiles = [] }: { failedFontFiles?: string[] }) => ({
+    const reads = mock(({ fontScope: { failed = [] } }: { fontScope: FontScope }) => ({
       images: [],
       fonts: [],
-      fontFiles: failedFontFiles.includes("https://fonts.test/missing.woff2")
+      fontFiles: failed.includes("https://fonts.test/missing.woff2")
         ? ["https://fonts.test/face.woff2"]
         : ["https://fonts.test/missing.woff2"],
     }));
-    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const call = mock((_source: unknown, _options: { fontScope: FontScope }) => undefined);
 
     const prepared = await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
 
@@ -281,7 +307,7 @@ describe("@font-face files", () => {
 
     expect(backend.cacheFontFile).toHaveBeenCalledTimes(1);
     expect(files.has("https://fonts.test/face.woff2")).toBe(true);
-    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual(["https://fonts.test/missing.woff2"]);
+    expect(call.mock.calls[0]?.[1].fontScope.failed).toEqual(["https://fonts.test/missing.woff2"]);
   });
 });
 
@@ -317,7 +343,7 @@ describe("@font-face files a prepared render loaded", () => {
   test("load again from the store when the renderer evicted them since prepare", async () => {
     const { fonts, files, backend } = fontBackend();
     const fetch = mock(async () => new Response(bytes()));
-    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const call = mock((_source: unknown, _options: { fontScope: FontScope }) => undefined);
     const prepared = await prepare(fonts, fetch);
 
     files.clear();
@@ -326,13 +352,13 @@ describe("@font-face files a prepared render loaded", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(backend.cacheFontFile).toHaveBeenCalledTimes(2);
     expect(files.has(url)).toBe(true);
-    expect(call.mock.calls[0]?.[1].failedFontFiles).toBeUndefined();
+    expect(call.mock.calls[0]?.[1].fontScope.failed).toBeUndefined();
   });
 
   test("move their rule on when loading them again fails", async () => {
     const { fonts, files } = fontBackend();
     const fetch = mock(async () => new Response(bytes()));
-    const call = mock((_source: unknown, _options: { failedFontFiles?: string[] }) => undefined);
+    const call = mock((_source: unknown, _options: { fontScope: FontScope }) => undefined);
     // A caller's own `fetch` skips the shared store, so loading the file again downloads it.
     const prepared = await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, () => ({
       images: [],
@@ -344,7 +370,7 @@ describe("@font-face files a prepared render loaded", () => {
     fetch.mockImplementation(async () => new Response(null, { status: 404 }));
     await renderPrepared(fonts, prepared, {}, call);
 
-    expect(call.mock.calls[0]?.[1].failedFontFiles).toEqual([url]);
+    expect(call.mock.calls[0]?.[1].fontScope.failed).toEqual([url]);
   });
 });
 
@@ -610,5 +636,390 @@ describe("the download store", () => {
     await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, read);
 
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("fonts listed as URLs", () => {
+  const url = "https://fonts.test/listed.woff2";
+  const reads = () => ({ images: [], fonts: [] });
+  const prepare = (
+    fonts: ReturnType<typeof fontBackend>["fonts"],
+    images: NonNullable<PrepareExtras["images"]>,
+  ) => prepareSource(fonts, textNode("a"), {}, { fonts: [url], images }, reads);
+
+  test("download with the render's fetch", async () => {
+    const global = mock(async () => new Response(bytes()));
+    const fetch = mock(async (_input: string | URL | Request) => new Response(bytes()));
+    const { fonts, held } = fontBackend();
+
+    answerFetch(global);
+    await prepare(fonts, { fetch });
+
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([url]);
+    expect(global).not.toHaveBeenCalled();
+    expect(held.has(url)).toBe(true);
+  });
+
+  test("are refused by the render's allowUrl", async () => {
+    const global = mock(async () => new Response(bytes()));
+    const { fonts } = fontBackend();
+
+    answerFetch(global);
+
+    await expect(prepare(fonts, { allowUrl: () => false })).rejects.toThrow(
+      `URL blocked by allowUrl policy: ${url}`,
+    );
+    expect(global).not.toHaveBeenCalled();
+  });
+});
+
+describe("optional fonts", () => {
+  const font = (name: string) => ({ name, data: () => bytes() });
+  const reads = () => ({ images: [], fonts: [] });
+  const broken = (name: string) => ({
+    name,
+    optional: true,
+    data: mock(() => Promise.reject(new Error(`${name} is unreachable`))),
+  });
+
+  test("leave a render that goes on without them", async () => {
+    const { fonts } = fontBackend();
+    const missing = broken("Missing");
+    const call = mock((_source: unknown, _options: object) => undefined);
+
+    await renderPrepared(
+      fonts,
+      await readSource(fonts, textNode("a"), {}, { fonts: [font("Inter"), missing] }, reads),
+      {},
+      call,
+    );
+
+    expect(call.mock.calls[0]?.[1]).toEqual({
+      fontFamilies: ["Inter"],
+      fontScope: {
+        listed: [expect.stringMatching(/^Inter/), expect.stringMatching(/^Missing/)],
+        failed: [expect.stringMatching(/^Missing/)],
+      },
+      images: [],
+    });
+  });
+
+  test("that fail during a default render without prepare print a warning", async () => {
+    const { fonts } = fontBackend();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    await renderPrepared(
+      fonts,
+      await readSource(fonts, textNode("a"), {}, { fonts: [broken("DefaultPath")] }, reads),
+      {},
+      () => undefined,
+    );
+
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      expect.stringContaining("Failed to load the font"),
+    ]);
+  });
+
+  test("that fail with a cause that has no text form still raise a warning", async () => {
+    const { fonts } = fontBackend();
+    const cause: unknown = Object.create(null);
+    const warnings = printed();
+    const opaque = { name: "Opaque", optional: true, data: () => Promise.reject(cause) };
+
+    await renderPrepared(
+      fonts,
+      await readSource(fonts, textNode("a"), {}, { fonts: [opaque] }, reads),
+      {},
+      () => undefined,
+    );
+
+    expect(warnings()).toEqual([expect.stringContaining("a value that has no text form")]);
+  });
+
+  test("that a needs pass reaches are not loaded again once they failed", async () => {
+    const { fonts } = fontBackend();
+    const latin: [number, number][] = [[0x20, 0x7e]];
+    const missing = { ...broken("Missing"), unicodeRange: latin };
+    const call = mock((_source: unknown, _options: object) => undefined);
+    const listedReads = ({ fonts: listed }: { fonts?: ListedFont[] }) => ({
+      images: [],
+      fonts: fontsFor("a", listed),
+    });
+
+    await renderPrepared(
+      fonts,
+      await prepareSource(fonts, textNode("a"), {}, { fonts: [missing] }, listedReads),
+      {},
+      call,
+    );
+
+    expect(missing.data).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0]?.[1]).toMatchObject({ fontFamilies: [], images: [] });
+  });
+
+  test("that fail leave their characters to the next listed family", async () => {
+    const { fonts } = fontBackend();
+    const latin: [number, number][] = [[0x20, 0x7e]];
+    const missing = { ...broken("Missing"), unicodeRange: latin };
+    const inter = { name: "Inter", unicodeRange: latin, data: mock(bytes) };
+    const call = mock((_source: unknown, _options: object) => undefined);
+    // As the needs pass does, the first named family that claims a character serves it.
+    const firstReads = ({ fonts: listed = [] }: { fonts?: ListedFont[] }) => ({
+      images: [],
+      fonts: fontsFor("a", listed)
+        .filter((id) => listed[id]?.name !== undefined)
+        .slice(0, 1),
+    });
+
+    await renderPrepared(
+      fonts,
+      await prepareSource(fonts, textNode("a"), {}, { fonts: [missing, inter] }, firstReads),
+      {},
+      call,
+    );
+
+    expect(inter.data).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0]?.[1]).toMatchObject({ fontFamilies: ["Inter"], images: [] });
+  });
+
+  test("that fail during a render load again in the next one", async () => {
+    const { fonts, held } = fontBackend();
+    const data = mock(async () => bytes());
+    const flaky = { name: "Flaky", optional: true, data };
+    const prepared = await prepareSource(fonts, textNode("a"), {}, { fonts: [flaky] }, reads);
+
+    data.mockImplementation(() => Promise.reject(new Error("gone")));
+    held.clear();
+    await renderPrepared(fonts, prepared, {}, () => undefined);
+    await renderPrepared(fonts, prepared, {}, () => undefined);
+
+    expect(data).toHaveBeenCalledTimes(3);
+  });
+
+  test("refused by allowUrl leave the render without them", async () => {
+    const { fonts, held } = fontBackend();
+    const url = "https://fonts.test/refused.woff2";
+    const refused = { ...fontFromUrl(url, { allowUrl: () => false }), optional: true };
+
+    await prepareSource(fonts, textNode("a"), {}, { fonts: [refused] }, reads);
+
+    expect(held.size).toBe(0);
+  });
+
+  test("without optional still reject the render", async () => {
+    const { fonts } = fontBackend();
+    const { optional: _, ...required } = broken("Required");
+
+    await expect(render(fonts, { fonts: [required] }, textNode("a"))).rejects.toThrow(
+      "Required is unreachable",
+    );
+  });
+});
+
+describe("the warnings of a prepare", () => {
+  const missing = (characters: string[]) => ({
+    images: [],
+    fonts: [],
+    missingCharacters: characters,
+    unresolvedFamilies: ["Absent"],
+  });
+
+  test("holds what the last read found no font for", async () => {
+    const { fonts } = fontBackend();
+    const warnings = printed();
+
+    await prepareSource(fonts, textNode("中"), {}, {}, () => missing(["中"]));
+
+    expect(warnings()).toEqual([
+      'takumi: No font draws "中". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.',
+      'takumi: No font provides the family "Absent". Add a font named "Absent" to `fonts`, or correct the name.',
+    ]);
+  });
+
+  test("reads again once the fonts the render lists are loaded", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock((_request: object) => missing(held.size > 0 ? [] : ["中"]));
+    const warnings = printed();
+
+    await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { fonts: [{ name: "CJK", data: bytes }] },
+      reads,
+    );
+
+    expect(missingOf(warnings())).toEqual([]);
+    expect(reads.mock.calls.at(-1)).toEqual([
+      { images: [], fontFamilies: ["CJK"], fontScope: { listed: ["CJK::::"] } },
+    ]);
+  });
+
+  test("names the images left out under throwOnError: false and the @font-face files that failed", async () => {
+    const { fonts } = fontBackend();
+    const fetch = mock(async () => new Response(null, { status: 404 }));
+    const warnings = printed();
+
+    await prepareSource(
+      fonts,
+      textNode("a"),
+      {},
+      { images: { fetch, throwOnError: false } },
+      () => ({ images: ["https://images.test/a.png"], fonts: [], fontFiles: ["face.woff2"] }),
+    );
+
+    expect(warnings()).toEqual([
+      expect.stringContaining("takumi: Failed to load the font face.woff2: "),
+      expect.stringContaining("takumi: Failed to load the image https://images.test/a.png: "),
+    ]);
+  });
+
+  test("finds missing characters in the images it downloaded", async () => {
+    const { fonts } = fontBackend();
+    const fetch = mock(async () => new Response(bytes()));
+    // Text inside an SVG image is read only once the image is in the request.
+    const reads = mock(({ images = [] }: { images?: unknown[] }) => ({
+      ...missing(images.length > 0 ? ["中"] : []),
+      images: ["https://images.test/text.svg"],
+    }));
+    const onMissingGlyphs = mock((_characters: string[]) => undefined);
+
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch }, onMissingGlyphs }, reads);
+
+    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+  });
+
+  test("loads the @font-face files that text in a downloaded image names", async () => {
+    const { fonts } = fontBackend();
+    const face = "https://fonts.test/svg-face.woff2";
+    const fetch = mock(async (_input: string | URL | Request) => new Response(bytes()));
+    const reads = mock(({ images = [] }: { images?: unknown[] }) => ({
+      ...missing([]),
+      images: ["https://images.test/text.svg"],
+      fontFiles: images.length > 0 ? [face] : [],
+    }));
+
+    await prepareSource(fonts, textNode("a"), {}, { images: { fetch } }, reads);
+
+    expect(fetch.mock.calls.map(([input]) => String(input))).toContain(face);
+  });
+
+  test("onMissingGlyphs loads a font under the key of one that failed", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
+    const replacement = { key: "cjk", name: "CJK", data: mock(bytes) };
+    const failing = {
+      key: "cjk",
+      name: "CJK",
+      optional: true,
+      data: () => Promise.reject(new Error("down")),
+    };
+    const warnings = printed();
+
+    await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { fonts: [failing], onMissingGlyphs: () => [replacement] },
+      reads,
+    );
+
+    expect(replacement.data).toHaveBeenCalled();
+    expect(missingOf(warnings())).toEqual([]);
+  });
+
+  test("onMissingGlyphs fonts join the registered chain when the render names no fonts", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
+    const call = mock(
+      (_source: unknown, _options: { fontFamilies?: string[]; fontScope: FontScope }) => undefined,
+    );
+    const prepared = await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { onMissingGlyphs: () => [{ key: "cjk", name: "CJK", data: bytes }] },
+      reads,
+    );
+
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(held.has("cjk")).toBe(true);
+    expect(call.mock.calls[0]?.[1].fontFamilies).toBeUndefined();
+    expect(call.mock.calls[0]?.[1].fontScope.listed).toEqual(["cjk"]);
+  });
+
+  test("onMissingGlyphs adds its fonts to the render and reads once more", async () => {
+    const { fonts, held } = fontBackend();
+    const reads = mock(() => missing(held.has("cjk") ? [] : ["中"]));
+    const onMissingGlyphs = mock((_characters: string[]) => [
+      { key: "cjk", name: "CJK", data: bytes },
+    ]);
+    const call = mock((_source: unknown, _options: { fontFamilies?: string[] }) => undefined);
+    const warnings = printed();
+    const prepared = await prepareSource(
+      fonts,
+      textNode("中"),
+      {},
+      { fonts: [{ name: "Latin", data: bytes }], fontFamilies: ["Latin"], onMissingGlyphs },
+      reads,
+    );
+
+    await renderPrepared(fonts, prepared, {}, call);
+
+    expect(onMissingGlyphs.mock.calls).toEqual([[["中"]]]);
+    expect(missingOf(warnings())).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(3);
+    expect(call.mock.calls[0]?.[1].fontFamilies).toEqual(["Latin", "CJK"]);
+  });
+});
+
+describe("a render's warnings", () => {
+  const image = "https://images.test/a.png";
+  const failing = mock(async () => new Response(null, { status: 404 }));
+  /** Reads `characters` as drawn by no font, and an image and a `@font-face` file the fetch fails. */
+  const reads = (characters: string[]) => () => ({
+    images: [image],
+    fonts: [],
+    fontFiles: ["face.woff2"],
+    missingCharacters: characters,
+    unresolvedFamilies: ["Absent"],
+  });
+  const prepare = (characters: string[]) =>
+    prepareSource(
+      fontBackend().fonts,
+      textNode("a"),
+      {},
+      { images: { fetch: failing, throwOnError: false } },
+      reads(characters),
+    );
+
+  test("print one for each thing the render could not draw", async () => {
+    const warnings = printed();
+
+    await prepare(["中", "文"]);
+
+    expect(warnings()).toEqual([
+      expect.stringContaining("takumi: Failed to load the font face.woff2: "),
+      'takumi: No font draws "中文". Add a font that covers them to `fonts`, or return one from `onMissingGlyphs`.',
+      'takumi: No font provides the family "Absent". Add a font named "Absent" to `fonts`, or correct the name.',
+      expect.stringContaining(`takumi: Failed to load the image ${image}: `),
+    ]);
+  });
+
+  test("print again on each render", async () => {
+    const warnings = printed();
+    const message =
+      'takumi: No font draws "鬱". Add a font that covers it to `fonts`, or return one from `onMissingGlyphs`.';
+
+    for (let render = 0; render < 2; render++) {
+      await prepareSource(fontBackend().fonts, textNode("鬱"), {}, {}, () => ({
+        images: [],
+        fonts: [],
+        missingCharacters: ["鬱"],
+      }));
+    }
+
+    expect(warnings()).toEqual([message, message]);
   });
 });

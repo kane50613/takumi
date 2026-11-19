@@ -1,6 +1,6 @@
 //! Blink's [`FontFallbackList`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc), resolving every family up front; approximate, see #2001.
 
-use std::{cell::OnceCell, rc::Rc, slice};
+use std::{cell::OnceCell, rc::Rc};
 
 use super::{
   font_cache::FontCache,
@@ -140,20 +140,9 @@ impl FontFallbackList {
 
   /// Logs the families `key` names that no loaded face has, with the family text falls back to.
   fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&SimpleFontData>) {
-    let missing: Vec<String> = key
-      .family
-      .tokens()
-      .iter()
-      .filter_map(|token| match token {
-        FontFamilyToken::Owned(name)
-          if fonts
-            .font_group(slice::from_ref(token), &key.selection)
-            .is_empty() =>
-        {
-          Some(format!("{name:?}"))
-        }
-        _ => None,
-      })
+    let missing: Vec<String> = fonts
+      .missing_families(key)
+      .map(|name| format!("{name:?}"))
       .collect();
 
     if missing.is_empty() {
