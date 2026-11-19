@@ -16,7 +16,10 @@ use super::{
     NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE, RangeType,
   },
 };
-use crate::resources::{font::SharedBytes, unicode_range::UnicodeRangeSet};
+use crate::resources::{
+  font::{RegisteredSource, SharedBytes},
+  unicode_range::UnicodeRangeSet,
+};
 
 /// The `@font-face` descriptors a face registers with; `None` is `auto`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -170,6 +173,14 @@ impl FontFace {
       FontFaceSource::Binary(custom_platform_data) => Some(custom_platform_data),
       FontFaceSource::Pending(_) => None,
     }
+  }
+
+  /// Whether registering `source` added it.
+  pub(crate) fn is_from(&self, source: &RegisteredSource) -> bool {
+    self.descriptors == source.descriptors
+      && self
+        .custom_platform_data()
+        .is_some_and(|typeface| typeface.id == source.id)
   }
 
   /// The capabilities of an `auto` descriptor: the face's own, or Blink's `normal` while pending.

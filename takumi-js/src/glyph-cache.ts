@@ -7,8 +7,11 @@ let maxBytes: number | undefined;
 let loaded: GlyphCacheBackend | undefined;
 
 /**
- * Sets the byte budget of the process-wide glyph caches, 8 MiB by default and `0` to stop caching.
- * Call it before the first render. Raise it for CJK text, whose glyphs outgrow the default.
+ * Keeps no glyphs when `bytes` is `0`, and glyphs again otherwise, in the renderers created after
+ * this call. Glyphs share the renderer's `cache.maxBytes` with every other kind of data, so a
+ * size no longer bounds them apart. Call it before the first render.
+ *
+ * @deprecated Pass `cache: { glyphs: "none" }` to a `Renderer` from `takumi-js/node`.
  */
 export function setGlyphCacheMaxBytes(bytes: number): void {
   maxBytes = bytes;

@@ -28,8 +28,8 @@ const counted = (name: string, data: ArrayBuffer) => {
 };
 
 describe("fontCacheMaxBytes", () => {
-  test("releases the font renders used least recently, and loads it again when a render lists it", async () => {
-    const renderer = new Renderer({ fontCacheMaxBytes: 1 });
+  test("of 0 releases each font once its render settles, and loads it again when a render lists it", async () => {
+    const renderer = new Renderer({ fontCacheMaxBytes: 0 });
     const mono = counted("Mono", monoData);
     const sans = counted("Sans", sansData);
 
@@ -39,6 +39,17 @@ describe("fontCacheMaxBytes", () => {
 
     expect(mono.loads).toBe(2);
     expect(Buffer.compare(again, first)).toBe(0);
+  });
+
+  test("keeps none of them when cache.fonts is none", async () => {
+    const renderer = new Renderer({ cache: { fonts: "none" } });
+    const mono = counted("Mono", monoData);
+
+    await renderer.render(node("Mono"), { ...options, fonts: [mono] });
+    await renderer.render(node("Sans"), { ...options, fonts: [counted("Sans", sansData)] });
+    await renderer.render(node("Mono"), { ...options, fonts: [mono] });
+
+    expect(mono.loads).toBe(2);
   });
 
   test("keeps fonts from registerFont", async () => {

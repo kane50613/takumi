@@ -108,7 +108,7 @@ pub mod prelude {
     Cache, Error, Fonts, Result,
     layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
     resources::{
-      cache::CacheOptions,
+      cache::{CacheKindStats, CacheMemoryStats, CacheOptions, CacheStats},
       font::{FontError, FontOverride, FontResource, FontSource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
       unicode_range::{UnicodeRange, UnicodeRangeSet},

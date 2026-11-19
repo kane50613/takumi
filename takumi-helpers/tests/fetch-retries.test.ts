@@ -23,14 +23,12 @@ test("recovers from a transient Google Fonts timeout", async () => {
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-test("retries a font server error before sharing the CSS result", async () => {
+test("retries a font server error before keeping the CSS result", async () => {
   const fetch = mock()
     .mockResolvedValueOnce(new Response(null, { status: 503 }))
     .mockResolvedValue(new Response(fontCss));
-  const [first, second] = await Promise.all([
-    googleFonts({ families: ["Inter"], fetch }),
-    googleFonts({ families: ["Inter"], fetch }),
-  ]);
+  const first = await googleFonts({ families: ["Inter"], fetch });
+  const second = await googleFonts({ families: ["Inter"], fetch });
   expect(first).toHaveLength(1);
   expect(second.map((font) => font.key)).toEqual(first.map((font) => font.key));
   expect(fetch).toHaveBeenCalledTimes(2);

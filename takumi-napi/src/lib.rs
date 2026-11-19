@@ -43,6 +43,7 @@ use serde::de::DeserializeOwned;
 use takumi_bindings_common::{
   append_css,
   input::{FontOptions, node_from_json},
+  renderer::set_default_glyph_mode,
   source_cache::{ParsedSource, SourceCache, SourceKind},
   stylesheet,
 };
@@ -53,15 +54,13 @@ use takumi_core::{
   style::{CssSource, KeyframesRule, StyleSheet},
 };
 
-/// Sets the byte budget of the resolved-glyph and glyph-mask cache of each
-/// `Renderer` created after this call; `0` stops caching. Defaults to 8 MiB.
+/// Keeps no glyphs in each `Renderer` created after this call when `bytes` is `0`, and glyphs again
+/// otherwise. Glyphs share the renderer's `cache.maxBytes` with every other kind of data.
 ///
-/// Raise it for scripts with large glyph sets: a CJK outline runs a few
-/// kilobytes, so the default holds around a thousand of them and a page of
-/// Chinese re-rasterizes glyphs it just evicted.
+/// @deprecated Use `new Renderer({ cache: { glyphs: "none" } })`.
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
-  takumi_bindings_common::options::set_glyph_cache_max_bytes(bytes);
+  set_default_glyph_mode(bytes);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.

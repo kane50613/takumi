@@ -3,7 +3,8 @@
 use serde::Deserialize;
 pub use takumi_bindings_common::{
   input::{Font, ImageSource},
-  options::{AnimationOutputFormat, OutputFormat, RenderOptions, RendererOptions},
+  options::{AnimationOutputFormat, OutputFormat, RenderOptions},
+  renderer::RendererOptions,
 };
 use wasm_bindgen::prelude::*;
 
@@ -17,6 +18,10 @@ extern "C" {
   /// JavaScript object representing renderer construction options.
   #[wasm_bindgen(typescript_type = "RendererOptions")]
   pub type RendererOptionsType;
+
+  /// JavaScript object reporting what a renderer's caches hold.
+  #[wasm_bindgen(typescript_type = "CacheStats")]
+  pub type CacheStatsType;
 
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "RenderOptions")]
