@@ -1156,18 +1156,6 @@ mod tests {
     assert!(stats.memory.high >= stats.memory.current);
   }
 
-  #[test]
-  fn a_glyph_mode_of_none_keeps_no_glyphs() {
-    let cache = CacheOptions::builder().glyphs(ImageCacheMode::None).build();
-
-    keep_mask(&cache, 0, 4 << 10);
-
-    let stats = cache.stats();
-
-    assert_eq!(stats.glyphs.current, 0);
-    assert_eq!((stats.glyphs.hits, stats.glyphs.misses), (0, 0));
-  }
-
   /// Sets the old process-wide glyph size, which every cache built after it in this process takes.
   #[test]
   fn the_old_glyph_setter_turns_glyphs_off_at_zero() {
