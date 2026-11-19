@@ -45,6 +45,7 @@ use crate::{
     tree::{LayoutTree, RenderNode, TableBoxStyle},
   },
   layout_unit::{BoxStrut, LayoutUnit},
+  sort_key::sort_by,
   style::{
     BorderCollapse, BoxSizing, CaptionSide, Direction, Display, EmptyCells, Length,
     Size as StyleSize, TableLayout as StyleTableLayout, Visibility,
@@ -886,7 +887,7 @@ impl<'t, 'r> TableLayoutAlgorithm<'t, 'r> {
       rows.rows.push(row_constraint);
     }
 
-    rowspan_cells.sort_by(RowspanCell::distribution_order);
+    sort_by(&mut rowspan_cells, RowspanCell::distribution_order);
     for cell in &rowspan_cells {
       distribute_rowspan_cell_to_rows(cell, self.spacing.1, &mut rows.rows);
     }

@@ -23,6 +23,7 @@ use crate::{
   },
   painter::OwnContent,
   shadow::SizedShadow,
+  sort_key::sort_by,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
@@ -2042,7 +2043,7 @@ fn nest_in_layers(
 /// `visits` in the order a visit pushes its children: the last in tree order first, so the first
 /// pops first.
 fn in_visit_order(mut visits: Vec<StackingContextBuildVisit>) -> Vec<StackingContextBuildVisit> {
-  visits.sort_by(|a, b| b.path.cmp(&a.path));
+  sort_by(&mut visits, |a, b| b.path.cmp(&a.path));
   visits
 }
 

@@ -3,7 +3,7 @@
 //! sorts them.
 
 use crate::sort_key::sort_by_key;
-use std::cmp::{Ordering, Reverse};
+use std::cmp::Reverse;
 
 use selectors::parser::Selector;
 use smallvec::SmallVec;
@@ -79,11 +79,6 @@ pub(crate) struct TwRule {
 }
 
 impl TwRule {
-  /// Stable-sorts `rules` by `compare`, a function pointer so that every caller shares one sort.
-  pub(crate) fn sort(rules: &mut [&Self], compare: fn(&Self, &Self) -> Ordering) {
-    rules.sort_by(|left, right| compare(left, right));
-  }
-
   /// The rule a class compiles to: its variants, then the utility, `!` marking it important at
   /// either end, as Tailwind's `parseCandidate` reads one.
   pub(super) fn parse(source: &str) -> Option<Self> {

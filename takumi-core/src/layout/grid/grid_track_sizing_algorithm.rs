@@ -4,6 +4,7 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+use crate::sort_key::sort_by;
 use crate::{
   layout::{
     content_alignment::{ContentAlignment, ContentDistribution, ContentPosition},
@@ -832,7 +833,7 @@ impl GridTrackSizingAlgorithm {
       return 0.0;
     }
 
-    flexible_sets.sort_by(|left, right| {
+    sort_by(&mut flexible_sets, |left, right| {
       let left_ratio = left.base_size.raw_value() as f32 * right.flex_factor();
       let right_ratio = right.base_size.raw_value() as f32 * left.flex_factor();
 

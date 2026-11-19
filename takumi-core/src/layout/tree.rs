@@ -53,6 +53,7 @@ use crate::{
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
+  sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
@@ -1154,7 +1155,7 @@ impl<'r> LayoutTree<'r> {
     if box_children.len() == state.box_children.len() {
       return;
     }
-    box_children.sort_by(|(a, _), (b, _)| {
+    sort_by(&mut box_children, |(a, _), (b, _)| {
       (a.render_index, a.inline_path.as_deref()).cmp(&(b.render_index, b.inline_path.as_deref()))
     });
     #[cfg(feature = "fragmentation")]

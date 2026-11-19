@@ -21,6 +21,7 @@ use serde::{Deserialize, Deserializer, de::Error as DeError};
 pub(crate) use variant::{Breakpoint, BreakpointOverrides};
 use xxhash_rust::xxh3::xxh3_64;
 
+use crate::sort_key::sort_by;
 use crate::{
   resources::cache::{ENTRY_OVERHEAD, KindStore, Weighed},
   style::*,
@@ -49,7 +50,7 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
 fn cascade_order<'r>(rules: impl IntoIterator<Item = &'r TwRule>) -> Vec<&'r TwRule> {
   let mut rules: Vec<&TwRule> = rules.into_iter().collect();
 
-  TwRule::sort(&mut rules, |left, right| {
+  sort_by(&mut rules, |left, right| {
     (left.important, &left.order).cmp(&(right.important, &right.order))
   });
   rules
