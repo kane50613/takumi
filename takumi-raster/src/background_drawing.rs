@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
     BackgroundLayer, BoxBackgroundPaintContext, FillLayers, ImageTiling,
   },
@@ -647,6 +647,7 @@ pub(crate) fn render_tile(
 pub(crate) fn tile_layers(
   layers: &[BackgroundLayer<'_>],
   paint: Rect<f32>,
+  visible: Rect<f32>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
   let mut resolved = Vec::with_capacity(layers.len());
@@ -655,10 +656,17 @@ pub(crate) fn tile_layers(
     let tiling = layer.tiling;
 
     if !lands_on_pixels(&tiling) {
-      if let Some(pattern) = rasterize_pattern(layer.image, &tiling, context)? {
+      let Some(pixels) = visible_pixels(tiling.dest, visible) else {
+        continue;
+      };
+
+      if let Some(pattern) = rasterize_pattern(layer.image, &tiling, pixels, context)? {
         resolved.push(TileLayer::whole(
           BackgroundTile::Pixmap(Arc::new(pattern)),
-          tiling.dest.top_left(),
+          Point {
+            x: tiling.dest.left + pixels.left as f32,
+            y: tiling.dest.top + pixels.top as f32,
+          },
           layer.blend_mode,
         ));
       }
@@ -693,6 +701,22 @@ pub(crate) fn tile_layers(
   Ok(resolved)
 }
 
+/// The pixels of `dest`, counted on its own grid, that `paint` covers, as a shader filling `dest`
+/// under the box's clip draws only those.
+fn visible_pixels(dest: Rect<f32>, paint: Rect<f32>) -> Option<Placement> {
+  // Whole pixels by which `outer` reaches past `inner`.
+  let overhang = |outer: f32, inner: f32| (outer - inner).max(0.0).floor() as i32;
+  let width = (dest.right - dest.left).round() as i32;
+  let height = (dest.bottom - dest.top).round() as i32;
+
+  Placement::from_bounds(
+    overhang(paint.left, dest.left),
+    overhang(paint.top, dest.top),
+    width - overhang(dest.right, paint.right),
+    height - overhang(dest.bottom, paint.bottom),
+  )
+}
+
 /// Whether every tile of `tiling` covers whole pixels of its `dest`, so a tile rendered on its own
 /// pixel grid blits.
 fn lands_on_pixels(tiling: &ImageTiling) -> bool {
@@ -706,16 +730,16 @@ fn lands_on_pixels(tiling: &ImageTiling) -> bool {
     && whole(tiling.phase.y - tiling.dest.top)
 }
 
-/// Paints `image` tiled over `tiling`'s `dest` as Skia's shaders do, after Blink's
+/// Paints `image` tiled over the `pixels` of `tiling`'s `dest` as Skia's shaders do, after Blink's
 /// `GeneratedImage::DrawPattern`.
 fn rasterize_pattern(
   image: &BackgroundImage,
   tiling: &ImageTiling,
+  pixels: Placement,
   context: &RenderContext,
 ) -> Result<Option<Pixmap>> {
   let dest = tiling.dest;
-  let width = (dest.right - dest.left).round() as u32;
-  let height = (dest.bottom - dest.top).round() as u32;
+  let (width, height) = (pixels.width, pixels.height);
   let Some(size) = IntSize::from_wh(width, height) else {
     return Ok(None);
   };
@@ -800,13 +824,15 @@ fn rasterize_pattern(
   let mut data = vec![0; len];
 
   for (j, row) in data.chunks_exact_mut(width as usize * 4).enumerate() {
-    let v = (dest.top + j as f32 + 0.5 - tiling.phase.y).rem_euclid(step.height);
+    let v =
+      (dest.top + (pixels.top as usize + j) as f32 + 0.5 - tiling.phase.y).rem_euclid(step.height);
 
     if v >= tiling.tile.height {
       continue;
     }
     for (i, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-      let u = (dest.left + i as f32 + 0.5 - tiling.phase.x).rem_euclid(step.width);
+      let u = (dest.left + (pixels.left as usize + i) as f32 + 0.5 - tiling.phase.x)
+        .rem_euclid(step.width);
 
       if u >= tiling.tile.width {
         continue;
@@ -895,6 +921,12 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
   let snapped = SnappedBox::new(paint_offset, layout.size);
   let offset = snapped.offset();
   let size = snapped.size().map(|x| x as u32);
+  let mask_box = Rect {
+    left: offset.x,
+    top: offset.y,
+    right: offset.x + snapped.size().width,
+    bottom: offset.y + snapped.size().height,
+  };
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
       context
@@ -906,12 +938,8 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
       &BoxBackgroundPaintContext::mask(layout.size, paint_offset),
       context,
     ),
-    Rect {
-      left: offset.x,
-      top: offset.y,
-      right: offset.x + snapped.size().width,
-      bottom: offset.y + snapped.size().height,
-    },
+    mask_box,
+    mask_box,
     context,
   )?;
 
@@ -962,12 +990,19 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
   }))
 }
 
-/// The `background-image` layers only.
+/// The `background-image` layers only, rendered where they cover `visible`, a part of the border
+/// box.
 pub(crate) fn background_image_layers(
   background: &BoxBackground<'_>,
+  visible: Rect<f32>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
-  tile_layers(&background.layers, background.border_box(), context)
+  tile_layers(
+    &background.layers,
+    background.border_box(),
+    visible,
+    context,
+  )
 }
 
 /// The `background-image` layers under a `background-color` layer.
@@ -975,7 +1010,7 @@ pub(crate) fn collect_background_layers(
   background: &BoxBackground<'_>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
-  let mut layers = background_image_layers(background, context)?;
+  let mut layers = background_image_layers(background, background.border_box(), context)?;
 
   if let Some(color) = background.color {
     layers.insert(
