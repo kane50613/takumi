@@ -20,6 +20,7 @@ use super::{Container, Fill, Scope, Stroke, Styled, SvgLayout};
 use crate::{
   geometry::PathCommand,
   style::{AlignmentBaseline, BaselineShift, Direction, DominantBaseline, TextAnchor},
+  svg::HostReads,
 };
 
 /// The characters of a `text` element, ready to lay out.
@@ -154,6 +155,11 @@ struct Decorations {
 impl SvgLayout<'_> {
   /// Lays out the `text` element into `parent`.
   pub(super) fn convert_text(&mut self, text: &Styled, scope: &Scope, parent: &mut Container) {
+    self.read(HostReads {
+      color: false,
+      fonts: true,
+    });
+
     let tree = TextTree::new(self, scope, text);
     let positions = tree.character_positions(self, scope);
     let mut faces = FontFaces::default();

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <rect x="0" y="0" width="400" height="200" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M0 0H96V96H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 8 52)" clip-path="url(#cp0)">
+    <g style="isolation:isolate">
+      <g transform="matrix(4 0 0 4 0 0)">
+        <path d="M22 12c0 5.52-4.48 10-10 10s-10-4.48-10-10 4.48-10 10-10 10 4.48 10 10Z" fill="#ef4444"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp1">
+    <path d="M0 0H96V96H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 152 52)" clip-path="url(#cp1)">
+    <g style="isolation:isolate">
+      <g transform="matrix(4 0 0 4 0 0)">
+        <path d="M22 12c0 5.52-4.48 10-10 10s-10-4.48-10-10 4.48-10 10-10 10 4.48 10 10Z" fill="#000"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp2">
+    <path d="M0 0H96V96H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 296 52)" clip-path="url(#cp2)">
+    <g style="isolation:isolate">
+      <g transform="matrix(4 0 0 4 0 0)">
+        <path d="M22 12c0 5.52-4.48 10-10 10s-10-4.48-10-10 4.48-10 10-10 10 4.48 10 10Z" fill="#000"/>
+      </g>
+    </g>
+  </g>
+</svg>

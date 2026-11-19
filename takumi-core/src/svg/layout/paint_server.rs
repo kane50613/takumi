@@ -353,11 +353,7 @@ impl SvgLayout<'_> {
       previous_offset = offset;
 
       let styled = self.styled_in_place(stop);
-      let color = styled
-        .style()
-        .svg_stop_data
-        .stop_color
-        .resolve(styled.context.current_color);
+      let color = self.resolve_color(&styled, styled.style().svg_stop_data.stop_color);
       let opacity =
         f32::from(color.0[3]) / 255.0 * styled.style().svg_stop_data.stop_opacity.0.clamp(0.0, 1.0);
 

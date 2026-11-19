@@ -142,6 +142,10 @@ name = "svg"
 harness = false
 
 [[bench]]
+name = "shared_cache"
+harness = false
+
+[[bench]]
 name = "text"
 harness = false
 

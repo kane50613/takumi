@@ -597,6 +597,7 @@ impl MediaQueryList {
       viewport,
       container_size: Size::NONE,
       container_read: Default::default(),
+      font_read: None,
       font_size: viewport.font_size,
       root_font_size: None,
       line_height: viewport.font_size,
