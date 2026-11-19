@@ -184,7 +184,7 @@ pub(crate) struct CanvasDevice<'c> {
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// The span background strips already rasterized, reused on every line.
-  strip_tiles: FxHashMap<(usize, u32, u32, u32, u32), Option<BackgroundTile>>,
+  strip_tiles: FxHashMap<StripTileKey, Option<BackgroundTile>>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -604,20 +604,40 @@ impl<'c> CanvasDevice<'c> {
     box_to_source: Affine,
     algorithm: ImageScalingAlgorithm,
   ) {
-    let Some(canvas_to_box) = self.transform.invert() else {
-      return;
-    };
-    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
-    let Some((mask, placement)) = self.clipped(coverage, false) else {
-      return;
-    };
+    if let Some(fill) = self.visible_fill(shape, transform) {
+      self.composite_fill(fill, source, box_to_source, algorithm);
+    }
+  }
 
-    self.canvas.composite_mask_source(
-      &mask,
+  /// The coverage of `shape` under `transform` that the clips leave, and the canvas pixels it
+  /// covers, or none when nothing of it shows.
+  fn visible_fill(&self, shape: &FillShape, transform: Affine) -> Option<VisibleFill> {
+    let canvas_to_box = self.transform.invert()?;
+    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    let (mask, placement) = self.clipped(coverage, false)?;
+
+    Some(VisibleFill {
+      mask,
       placement,
+      canvas_to_box,
+    })
+  }
+
+  /// Composites `source` through `fill`, whose pixels `box_to_source` finds from the box's
+  /// coordinates.
+  fn composite_fill(
+    &mut self,
+    fill: VisibleFill,
+    source: PaintSource<'_>,
+    box_to_source: Affine,
+    algorithm: ImageScalingAlgorithm,
+  ) {
+    self.canvas.composite_mask_source(
+      &fill.mask,
+      fill.placement,
       source,
       MaskSamplingOptions {
-        canvas_to_source: box_to_source * canvas_to_box,
+        canvas_to_source: box_to_source * fill.canvas_to_box,
         sample_bias: Point { x: 0.5, y: 0.5 },
         algorithm,
       },
@@ -756,6 +776,40 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 }
 
+/// A strip background's id, size, and subpixel origin, then the window of it a fill shows.
+type StripTileKey = ((usize, u32, u32, u32, u32), (i32, i32, u32, u32));
+
+/// The part of a fill the clips leave, with the canvas pixels it covers.
+struct VisibleFill {
+  mask: Vec<u8>,
+  placement: Placement,
+  canvas_to_box: Affine,
+}
+
+impl VisibleFill {
+  /// The pixels of a `size` source that `box_to_source` maps this fill onto, with a pixel of margin
+  /// for filtering, or none when they miss the source. A fill that scales, rotates, or skews keeps
+  /// the whole source, since its filter reaches past a pixel of margin and shifting its sampling by
+  /// the window would round differently.
+  fn source_window(&self, box_to_source: Affine, size: Size<u32>) -> Option<Placement> {
+    let canvas_to_source = box_to_source * self.canvas_to_box;
+
+    if !canvas_to_source.only_translation() {
+      return Placement::from_bounds(0, 0, size.width as i32, size.height as i32);
+    }
+
+    let x = canvas_to_source.x;
+    let y = canvas_to_source.y;
+
+    Placement::from_bounds(
+      ((self.placement.left as f32 + x).floor() as i32 - 1).max(0),
+      ((self.placement.top as f32 + y).floor() as i32 - 1).max(0),
+      ((self.placement.right() as f32 + x).ceil() as i32 + 1).min(size.width as i32),
+      ((self.placement.bottom() as f32 + y).ceil() as i32 + 1).min(size.height as i32),
+    )
+  }
+}
+
 impl GlyphDevice for CanvasDevice<'_> {
   fn fill_background_layers(
     &mut self,
@@ -781,30 +835,50 @@ impl GlyphDevice for CanvasDevice<'_> {
       fraction.x.to_bits(),
       fraction.y.to_bits(),
     );
+    let box_to_strip = Affine::translation(-origin.x.floor(), -origin.y.floor());
+    let Some(fill) = self.visible_fill(clip, transform) else {
+      return;
+    };
+    // Only the strip pixels under the fill show, as Blink's shader fills the strip under its clip.
+    let Some(window) = fill.source_window(box_to_strip, size) else {
+      return;
+    };
+    let key = (key, (window.left, window.top, window.width, window.height));
     let tile = match self.strip_tiles.remove(&key) {
       Some(tile) => tile,
-      None => background_image_layers(&background.background, context)
-        .and_then(|layers| {
-          rasterize_layers(
-            layers,
-            size,
-            context,
-            BorderProperties::default(),
-            Affine::translation(fraction.x, fraction.y),
-          )
-        })
-        .unwrap_or_else(|error| {
-          self.error.get_or_insert(error);
-          None
-        }),
+      None => background_image_layers(
+        &background.background,
+        Rect {
+          left: window.left as f32 - fraction.x,
+          top: window.top as f32 - fraction.y,
+          right: window.right() as f32 - fraction.x,
+          bottom: window.bottom() as f32 - fraction.y,
+        },
+        context,
+      )
+      .and_then(|layers| {
+        rasterize_layers(
+          layers,
+          Size::new(window.width, window.height),
+          context,
+          BorderProperties::default(),
+          Affine::translation(
+            fraction.x - window.left as f32,
+            fraction.y - window.top as f32,
+          ),
+        )
+      })
+      .unwrap_or_else(|error| {
+        self.error.get_or_insert(error);
+        None
+      }),
     };
 
     if let Some(tile) = &tile {
-      self.fill_shape_with_source(
-        clip,
-        transform,
+      self.composite_fill(
+        fill,
         tile.into(),
-        Affine::translation(-origin.x.floor(), -origin.y.floor()),
+        Affine::translation(-window.left as f32, -window.top as f32) * box_to_strip,
         context.style.misc_inherited_data.image_rendering,
       );
     }
@@ -900,7 +974,7 @@ pub(crate) fn draw_background(
       }
     }
     BackgroundClipArea::BorderBox(border_radius) => {
-      let layers = background_image_layers(&background, context)?;
+      let layers = background_image_layers(&background, background.border_box(), context)?;
 
       if border_radius.is_zero() && layers.iter().all(TileLayer::blits) {
         blit_background_tiles(&layers, background.border_box(), context, canvas);
@@ -934,7 +1008,7 @@ pub(crate) fn draw_background(
       let layers = if isolated {
         collect_background_layers(&background, context)?
       } else {
-        background_image_layers(&background, context)?
+        background_image_layers(&background, background.border_box(), context)?
       };
 
       draw_clipped_background(clip, offset, layers, context, canvas)?;
