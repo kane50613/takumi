@@ -16,7 +16,7 @@ A render has coverage when every character it can receive draws in a font you ch
    - A hosted file is a URL string in `fonts`, such as `"https://example.com/Inter.woff2"`.
    - A render that must work offline or in CI reads the file once at module level and passes the bytes.
 
-   List a variable font once, without `weight`, so it serves its whole axis. Done when each triple from step 1 maps to an entry, each variable font appears once, and the `fonts` list is a module-level constant.
+   List a variable font once, without `weight`, so it serves its whole axis. A render draws only with the fonts its own `fonts` lists and those from `registerFont`, so every render that needs a family lists it. Done when each triple from step 1 maps to an entry, each variable font appears once, and the `fonts` list is a module-level constant.
 
 3. **Name the families in CSS.** Write each loaded family into the `font-family` stack of the text it draws, in the fallback order described in the "Fallback chain" section. A Tailwind `font-mono` or `font-serif` reaches a font only through its `generic` field. Done when each family name in the CSS matches the name of a loaded font.
 

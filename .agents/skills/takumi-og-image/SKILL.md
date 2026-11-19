@@ -24,7 +24,7 @@ Takumi lays out a template the way Chromium does, so write it as you would for a
 
 5. **Pass images by URL or key.** Takumi fetches the remote `<img src>` and `background-image` URLs a template draws. Pass local bytes as `images: [{ src: "logo", data }]` and write `src="logo"`. When user input can reach a URL, set `images.allowUrl`, and keep `images.timeout` below the route's own time limit. [images.md](https://takumi.kane.tw/docs/images.md) covers both. Done when every image reaches the template as a URL or an `images` key, and every URL that user input reaches passes through `allowUrl`.
 
-6. **Use the shared renderer.** `render` and `ImageResponse` share one renderer per process. Create a `Renderer` from `takumi-js/node` only to change `cacheMaxBytes` or `fontCacheMaxBytes`, and then create it once at module level and pass it as `renderer`. Done when the code uses the shared renderer, or one module-level `Renderer` that sets one of those budgets.
+6. **Use the shared renderer.** `render` and `ImageResponse` share one renderer per process. Create a `Renderer` from `takumi-js/node` only to set its `cache` options, and then create it once at module level and pass it as `renderer`. Done when the code uses the shared renderer, or one module-level `Renderer` that sets `cache`.
 
 7. **Handle errors on `ready`.** `ImageResponse` streams its body, so a `try`/`catch` around `new ImageResponse(...)` never sees a render error. Await `response.ready` to send a fallback, or pass `onError` to log, as [reference/image-response.md](https://takumi.kane.tw/docs/reference/image-response.md) shows. Done when every `ImageResponse` error path awaits `response.ready` or passes `onError`, and every `render`, `renderAnimation`, and `measure` call is awaited.
 
