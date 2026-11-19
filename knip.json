@@ -13,6 +13,7 @@
         "waku.config.ts",
         "source.config.ts",
         "press.config.tsx",
+        "app/components/mdx.tsx",
         "app/playground/worker.ts",
         "tests/**/*.test.{ts,tsx}"
       ],

@@ -20,7 +20,7 @@ export default defineConfig({
       tsconfigPaths: true,
       dedupe: ["fumadocs-ui", "fumadocs-core"],
     },
-    plugins: [press(), mdx(), tailwindcss()],
+    plugins: [press({ components: "./app/components/mdx.tsx" }), mdx(), tailwindcss()],
     environments: {
       rsc: {
         build: {

@@ -22,9 +22,9 @@ The plugin is part of Fumapress's `recommended` preset, which is on by default. 
 </Callout>
 
 ```tsx title="press.config.tsx"
-import { defineConfig } from "fumapress";
+import { createPress } from "fumapress";
 
-export default defineConfig({
+export default createPress(content).config({
   site: {
     baseUrl: "https://example.com", // [!code ++]
   },
@@ -33,41 +33,42 @@ export default defineConfig({
 
 ## Customize the image
 
-Add `takumiPlugin` yourself to pass options. A plugin you list replaces the preset's copy.
+Pass `ogImage` to `recommendedPreset()` to set options. It takes the options of `takumiPlugin()`, and `ogImage: false` turns the images off.
 
 ```tsx title="press.config.tsx"
-import { defineConfig } from "fumapress";
-import { takumiPlugin } from "fumapress/plugins/takumi"; // [!code ++]
+import { createPress, recommendedPreset } from "fumapress"; // [!code ++]
 
-export default defineConfig({
-  // ...
-}).plugins(takumiPlugin()); // [!code ++]
+export default createPress(content).config({
+  preset: recommendedPreset({ ogImage: { width: 1200 } }), // [!code ++]
+});
 ```
 
-`generate` returns the image for one page. It runs with the app context as `this`, so `this.siteConfig` and the loaders are available. This example uses the docs card from `fumadocs-ui/og/takumi` with a Google font:
+`getImage` returns the image for one page. It runs with the app context as `this`, so `this.siteConfig` and the loaders are available. This example uses the docs card from `fumadocs-ui/og/takumi` with a Google font:
 
 ```tsx title="press.config.tsx"
 import { generate as generateOgNode } from "fumadocs-ui/og/takumi";
-import { takumiPlugin } from "fumapress/plugins/takumi";
+import { recommendedPreset } from "fumapress";
 import { googleFonts } from "takumi-js/helpers";
 
-takumiPlugin({
-  generate(page) {
-    return {
-      node: generateOgNode({
-        title: page.data.title,
-        description: page.data.description,
-        site: this.siteConfig.name,
-      }),
-      options: {
-        fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
-      },
-    };
+recommendedPreset({
+  ogImage: {
+    getImage(page) {
+      return {
+        node: generateOgNode({
+          title: page.data.title,
+          description: page.data.description,
+          site: this.siteConfig.name,
+        }),
+      };
+    },
+    options: {
+      fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
+    },
   },
 });
 ```
 
-`generate` returns:
+`getImage` returns:
 
 | Field     | Type                            | Role                                      |
 | --------- | ------------------------------- | ----------------------------------------- |
@@ -80,21 +81,21 @@ These come from `TakumiOptions` in `fumapress/plugins/takumi`:
 
 | Option     | Default                               | Notes                                                      |
 | ---------- | ------------------------------------- | ---------------------------------------------------------- |
-| `generate` | A built-in title and description card | `(page) => { node, options? }` <sup>1</sup>                |
+| `getImage` | A built-in title and description card | `(page) => { node, options? }` <sup>1</sup>                |
 | `options`  | None                                  | `ImageResponse` options shared by every image <sup>2</sup> |
 | `width`    | `1200`                                | Image width, also written to `og:image:width`              |
 | `height`   | `630`                                 | Image height, also written to `og:image:height`            |
-| `basePath` | `/` (static) or `/_takumi` (dynamic)  | Route prefix for image URLs                                |
+| `path`     | `/` (static) or `/_takumi` (dynamic)  | Route prefix for image URLs                                |
 
-<sup>1</sup> Inside `generate`, `this` is the app context.
+<sup>1</sup> Inside `getImage`, `this` is the app context.
 
-<sup>2</sup> `generate` overrides them per page.
+<sup>2</sup> `getImage` overrides them per page.
 
 The plugin always encodes WebP, so `format` is not an option.
 
 ### Image paths
 
-Image paths follow page slugs. A page at `/docs/styles` gets `/docs/styles.webp` under `basePath`, and a section index gets `index.webp`. With i18n, the locale segment comes first.
+Image paths follow page slugs. A page at `/docs/styles` gets `/docs/styles.webp` under `path`, and a section index gets `index.webp`. With i18n, the locale segment comes first.
 
 ## Fonts
 

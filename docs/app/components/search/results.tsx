@@ -1,7 +1,6 @@
 "use client";
 
-import { useDocsSearch } from "fumadocs-core/search/client";
-import { staticClient } from "fumadocs-core/search/client/orama-static";
+import { useStaticSearch } from "fumadocs-core/search/client/orama-static";
 import {
   SearchDialog,
   SearchDialogClose,
@@ -12,18 +11,15 @@ import {
   SearchDialogList,
   SearchDialogOverlay,
 } from "fumadocs-ui/components/dialog/search";
+import type { StaticOptions } from "fumadocs-core/search/client/orama-static";
 import type { SharedProps } from "fumadocs-ui/contexts/search";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
 
-// Mirrors fumapress/dist/components/orama-search-static.js, which the package does not export.
-export default function SearchResults(props: SharedProps) {
-  const { locale } = useI18n();
-  const { search, setSearch, query } = useDocsSearch({
-    client: staticClient({ locale, from: "/api/search" }),
-  });
+export type SearchResultsProps = SharedProps & Pick<StaticOptions, "from" | "locale">;
 
+// Mirrors the dialog of oramaSearchPlugin(), which the package does not export.
+export default function SearchResults({ from, locale, ...props }: SearchResultsProps) {
   return (
-    <SearchDialog search={search} onSearchChange={setSearch} isLoading={query.isLoading} {...props}>
+    <SearchDialog {...props} {...useStaticSearch({ from, locale })}>
       <SearchDialogOverlay />
       <SearchDialogContent>
         <SearchDialogHeader>
@@ -31,7 +27,7 @@ export default function SearchResults(props: SharedProps) {
           <SearchDialogInput />
           <SearchDialogClose />
         </SearchDialogHeader>
-        <SearchDialogList items={query.data !== "empty" ? query.data : null} />
+        <SearchDialogList />
       </SearchDialogContent>
     </SearchDialog>
   );
