@@ -11,6 +11,7 @@ use super::{
   outlines::Outlines,
   record::Recorder,
 };
+use crate::sort_key::sort_by;
 use crate::{
   context::RenderContext,
   error::{Error, Result},
@@ -736,7 +737,7 @@ impl Walker {
       .collect();
 
     for node in &mut self.nodes {
-      node.children.sort_by(|a, b| order[*a].cmp(&order[*b]));
+      sort_by(&mut node.children, |a, b| order[*a].cmp(&order[*b]));
     }
   }
 }

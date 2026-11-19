@@ -1,5 +1,7 @@
-//! Stable sorting by keys packed into one integer, so every call site shares a single
-//! instantiation of the standard library's sort and pays only for its key and a permutation.
+//! Stable sorting by keys packed into one integer, or by a comparison, so every call site shares a
+//! single instantiation of the standard library's sort and pays only for its key and a permutation.
+
+use std::cmp::Ordering;
 
 /// A sort key that packs into at most 128 bits, in the order the key sorts.
 pub(crate) trait SortKey: Copy {
@@ -167,6 +169,25 @@ pub(crate) fn sort_by_key<T, K: SortKey>(items: &mut [T], mut key: impl FnMut(&T
 
   keyed.sort_unstable();
   permute(items, &mut keyed);
+}
+
+/// Stable-sorts `items` by `compare`.
+pub(crate) fn sort_by<T>(items: &mut [T], compare: impl Fn(&T, &T) -> Ordering) {
+  if items.len() < 2 {
+    return;
+  }
+
+  let mut order: Vec<(u128, u32)> = (0..items.len() as u32).map(|index| (0, index)).collect();
+
+  sort_order(&mut order, &|left, right| {
+    compare(&items[left as usize], &items[right as usize])
+  });
+  permute(items, &mut order);
+}
+
+/// Stable-sorts `order` by `compare` on the indices it holds, the one sort every comparison shares.
+fn sort_order(order: &mut [(u128, u32)], compare: &dyn Fn(u32, u32) -> Ordering) {
+  order.sort_by(|left, right| compare(left.1, right.1));
 }
 
 /// Moves `items[order[i].1]` to `items[i]`, walking each cycle of the permutation once.

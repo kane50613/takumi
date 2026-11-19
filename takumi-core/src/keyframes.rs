@@ -6,6 +6,7 @@ use serde::{
   de::{self, MapAccess, SeqAccess, Visitor},
 };
 
+use crate::sort_key::sort_by;
 use crate::style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock};
 
 struct StageMap(Vec<(String, StyleDeclarationBlock)>);
@@ -107,7 +108,7 @@ where
   while let Some(entry) = access.next_entry::<String, V>()? {
     entries.push(entry);
   }
-  entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+  sort_by(&mut entries, |(left, _), (right, _)| left.cmp(right));
   Ok(entries)
 }
 

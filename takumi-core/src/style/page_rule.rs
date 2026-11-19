@@ -8,6 +8,7 @@ use cssparser::{
   RuleBodyItemParser, RuleBodyParser, Token, match_ignore_ascii_case,
 };
 
+use crate::sort_key::sort_by;
 use crate::{
   context::RenderContext,
   error::StyleSheetParseError,
@@ -849,7 +850,7 @@ impl PageRule {
       ));
     }
 
-    ranked.sort_by_key(|&(rank, ..)| rank);
+    sort_by(&mut ranked, |(left, ..), (right, ..)| left.cmp(right));
     ranked
       .into_iter()
       .map(|(_, important, rule)| (important, rule))

@@ -13,6 +13,7 @@ use selectors::{
 };
 use smallvec::SmallVec;
 
+use crate::sort_key::sort_by;
 use crate::{
   form_control::{
     InputType, has_attribute, is_disableable_form_control, is_element, is_mutable_text_control,
@@ -1333,7 +1334,7 @@ fn tw_rule_order(arena: &StyleArena<'_>, tailwind: &TailwindCache) -> FxHashMap<
 
   let mut sorted: Vec<&TwRule> = rules.into_values().collect();
 
-  TwRule::sort(&mut sorted, |left, right| left.order.cmp(&right.order));
+  sort_by(&mut sorted, |left, right| left.order.cmp(&right.order));
   sorted
     .into_iter()
     .enumerate()
