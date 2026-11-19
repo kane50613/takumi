@@ -1,5 +1,7 @@
 //! The scene walker that emits boxes, text and images onto a writer surface.
 
+#[cfg(all(feature = "svg", feature = "images"))]
+use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
 
 use rustc_hash::FxHashMap;
@@ -42,8 +44,6 @@ use takumi_core::{
 
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
-#[cfg(all(feature = "svg", feature = "images"))]
-use crate::svg::SvgPainter;
 #[cfg(feature = "images")]
 use crate::writer::{geom::Size as PdfSize, image::Image as PdfImage};
 use crate::{
@@ -75,6 +75,10 @@ use crate::{
     text::{Font, Tag},
   },
 };
+#[cfg(all(feature = "svg", feature = "images"))]
+use crate::{svg::SvgPainter, writer::xobject::XObject};
+#[cfg(all(feature = "svg", feature = "images"))]
+use takumi_core::resources::image::SvgPicture;
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
@@ -118,6 +122,24 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) lang: Option<&'a str>,
   #[cfg(feature = "images")]
   images: RasterizedImages,
+  /// How the document has drawn each SVG picture so far, by its key.
+  #[cfg(all(feature = "svg", feature = "images"))]
+  pictures: RefCell<FxHashMap<u64, PictureDraws>>,
+}
+
+/// How a document has drawn one SVG picture. Approximate: Chromium's PDF output, through Skia's
+/// [`SkPDFDevice`](https://github.com/google/skia/blob/main/src/pdf/SkPDFDevice.cpp), shares only
+/// raster images and writes a vector drawing again at each draw, where takumi writes a repeated
+/// SVG once.
+#[cfg(all(feature = "svg", feature = "images"))]
+enum PictureDraws {
+  /// Drawn once, in place, so a picture the document shows once costs no form XObject.
+  Once,
+  /// Drawn more than once, each time by invoking this form XObject.
+  Shared(XObject),
+  /// Drawn in place each time, as a soft mask in it would wrap its form in a transparency group,
+  /// which blends its marks with each other before the blend mode it is drawn under.
+  InPlace,
 }
 
 impl<'a> DocumentState<'a> {
@@ -132,6 +154,8 @@ impl<'a> DocumentState<'a> {
       lang,
       #[cfg(feature = "images")]
       images: RasterizedImages::default(),
+      #[cfg(all(feature = "svg", feature = "images"))]
+      pictures: RefCell::default(),
     }
   }
 
@@ -864,7 +888,7 @@ impl Emitter<'_> {
       }
       #[cfg(feature = "images")]
       OwnContent::Image(image) => {
-        self.emit_image(image, &node.context, frame, surface);
+        self.emit_image(image, &node.image_context(&node.context), frame, surface);
         Ok(())
       }
       _ => Ok(()),
@@ -990,8 +1014,7 @@ impl Emitter<'_> {
     if viewport.width <= 0.0 || viewport.height <= 0.0 {
       return;
     }
-    let ops = svg.vector_ops(context, viewport);
-    let canvas = PdfRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+    let picture = svg.picture(context, viewport);
 
     surface.push_transform(&Transform::from_row(
       size.width / viewport.width,
@@ -1001,14 +1024,59 @@ impl Emitter<'_> {
       at.x,
       at.y,
     ));
+
+    // A color filter repaints the picture, so only an unfiltered one is shared.
+    match picture.key().filter(|_| self.color_filter.is_none()) {
+      Some(key) => match self.document.pictures.borrow_mut().entry(key) {
+        Entry::Vacant(entry) => {
+          entry.insert(PictureDraws::Once);
+          self.paint_picture(&picture, viewport, surface);
+        }
+        Entry::Occupied(mut entry) => {
+          let graphic = match entry.get() {
+            PictureDraws::Shared(graphic) => Some(graphic.clone()),
+            PictureDraws::InPlace => None,
+            PictureDraws::Once => {
+              let stream = draw_stream(surface, |content| {
+                self.paint_picture(&picture, viewport, content);
+              });
+              let graphic = (!stream.uses_mask).then(|| XObject::new(stream, false, false, None));
+
+              entry.insert(
+                graphic
+                  .clone()
+                  .map_or(PictureDraws::InPlace, PictureDraws::Shared),
+              );
+              graphic
+            }
+          };
+
+          match graphic {
+            Some(graphic) => surface.draw_xobject(graphic),
+            None => self.paint_picture(&picture, viewport, surface),
+          }
+        }
+      },
+      None => self.paint_picture(&picture, viewport, surface),
+    }
+
+    surface.pop();
+  }
+
+  #[cfg(all(feature = "svg", feature = "images"))]
+  /// Paints `picture`, laid out at `viewport`, clipped to its canvas.
+  fn paint_picture(&self, picture: &SvgPicture, viewport: Size<f32>, surface: &mut Surface) {
+    let canvas = PdfRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
     }
-    SvgPainter::new(self.color_filter.as_deref()).draw(surface, ops);
+
+    SvgPainter::new(self.color_filter.as_deref()).draw(surface, picture.ops());
+
     if canvas.is_some() {
       surface.pop();
     }
-    surface.pop();
   }
 
   /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content
@@ -1165,7 +1233,7 @@ impl Emitter<'_> {
       self.start_tagged_node(node, surface);
     }
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
-      self.emit_image(image, &node.context, frame, surface);
+      self.emit_image(image, &node.image_context(&node.context), frame, surface);
     }
     if tagged {
       surface.end_tagged();

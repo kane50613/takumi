@@ -166,6 +166,7 @@ mod tests {
       },
       container_size: Size::NONE,
       container_read: Default::default(),
+      font_read: None,
       font_size: 10.0,
       root_font_size: None,
       line_height: 0.0,

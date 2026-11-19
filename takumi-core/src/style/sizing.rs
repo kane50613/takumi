@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::{cell::Cell, rc::Rc};
 
 use typed_builder::TypedBuilder;
 
@@ -16,6 +16,10 @@ pub struct SizingContext {
   /// tell whether its result depends on one.
   #[builder(default, setter(skip))]
   pub(crate) container_read: Cell<bool>,
+  /// Set, for the layout that shares it, when a length resolves against the font metrics: `ch`,
+  /// `ex`, `lh`, or `rlh`.
+  #[builder(default, setter(skip))]
+  pub(crate) font_read: Option<Rc<Cell<bool>>>,
   /// The font size in pixels.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
@@ -87,6 +91,7 @@ impl SizingContext {
         .container_size
         .map(|size| size.map(|size| self.to_css(size))),
       container_read: Cell::new(false),
+      font_read: self.font_read.clone(),
       font_size: self.to_css(self.font_size),
       root_font_size: self.root_font_size.map(|size| self.to_css(size)),
       line_height: self.to_css(self.line_height),
@@ -135,11 +140,46 @@ impl SizingContext {
       .unwrap_or(self.to_device(self.viewport.font_size))
   }
 
+  /// A copy whose lengths, and those of every context made from it, set `read` when they resolve
+  /// against the font metrics.
+  #[cfg(feature = "svg")]
+  pub(crate) fn noting_font_reads(&self, read: Rc<Cell<bool>>) -> Self {
+    Self {
+      font_read: Some(read),
+      ..self.clone()
+    }
+  }
+
+  fn note_font_read(&self) {
+    if let Some(read) = &self.font_read {
+      read.set(true);
+    }
+  }
+
+  /// Device-pixel basis for the `lh` unit.
+  pub(crate) fn lh_basis(&self) -> f32 {
+    self.note_font_read();
+    self.line_height
+  }
+
   /// Device-pixel basis for the `rlh` unit.
   pub(crate) fn root_line_height_basis(&self) -> f32 {
+    self.note_font_read();
     self
       .root_line_height
       .unwrap_or(self.to_device(self.viewport.font_size))
+  }
+
+  /// Device-pixel basis for the `ch` unit.
+  pub(crate) fn ch_basis(&self) -> f32 {
+    self.note_font_read();
+    self.ch
+  }
+
+  /// Device-pixel basis for the `ex` unit.
+  pub(crate) fn ex_basis(&self) -> f32 {
+    self.note_font_read();
+    self.ex
   }
 
   /// Sets the nearest query container size (content box), in device pixels.

@@ -176,12 +176,15 @@ Animations with high frame rates could stall or play incorrectly. In v2, `render
 
 The sections below cover the subtler cases.
 
-### Before v2.6, `currentColor` in SVG images ignores the host color [#v20v25-currentcolor-in-svg-images-ignores-the-host-color]
+### `currentColor` in SVG takes the host color only in an `svg` element [#v20v25-currentcolor-in-svg-images-ignores-the-host-color]
 
-In v2.0 through v2.5, SVG image content uses its own `color` instead of inheriting the host element's color. Since v2.6, the host color is the fallback again, so `currentColor` resolves to an explicit `color` inside the SVG first, then the host color, then black.
+An `svg` element takes the `color` of the box it sits in, as in Chromium. That covers an inline `<svg>` in HTML, a JSX `<svg>`, and a `Node` whose tag name is `svg`. `currentColor` inside it resolves to an explicit `color` in the SVG first, then the host color, then black.
+
+An SVG drawn as an image, by `<img>`, `background-image`, or an `<image>` inside another SVG, is a document of its own. Its `currentColor` resolves to its own `color`, or to black. In v2.0 through v2.5, every SVG used only its own `color`. From v2.6 through v2.20, an SVG image took the host color too.
 
 <Callout type="info">
-  If you upgrade straight to v2.6 or later, keep icons that use `currentColor` as they are.
+  To keep an icon in its host's color, render it as an `svg` element, or give a `Node::image` the
+  tag name with `.with_tag_name("svg")`.
 </Callout>
 
 This change does not affect Takumi's own text, borders, shadows, or decorations.

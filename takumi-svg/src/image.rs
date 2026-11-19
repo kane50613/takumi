@@ -13,7 +13,7 @@ use takumi_core::{
   geometry::Size,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
   painter::{BoxFrame, BoxPainter, PaintDevice},
-  resources::image::{ImageSource, SvgOp, SvgSource, sniff_mime, to_data_url},
+  resources::image::{ImageSource, SvgOp, SvgPicture, SvgSource, sniff_mime, to_data_url},
   style::{Affine, FillRule, ImageScalingAlgorithm},
 };
 
@@ -21,15 +21,15 @@ use crate::{Frame, ImageKey, SvgDocument, render::DocumentDevice, svg_image::is_
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
-/// Emits an image node's content into the content box of the box `painter` paints at `frame`,
-/// clipped to the content box's curve or edge where it has to be.
+/// Emits an image node's content, drawn in `context`, into the content box of the box `painter`
+/// paints at `frame`, clipped to the content box's curve or edge where it has to be.
 pub(crate) fn emit_image(
   image: &ImageData,
+  context: &RenderContext,
   painter: &BoxPainter,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let context = painter.context();
   let content = Frame::content_box(frame);
 
   if content.w <= 0.0 || content.h <= 0.0 {
@@ -63,7 +63,15 @@ pub(crate) fn emit_image(
     (Some(ImageSource::Svg(svg)), Some(_)) => vector_ops(svg, context, replaced.container),
     _ => None,
   };
-  let Some(drawing) = vector.or_else(|| raster(&image.src, source.as_ref(), context, doc)) else {
+  let Some(drawing) = vector.or_else(|| {
+    raster(
+      &image.src,
+      source.as_ref(),
+      context,
+      replaced.container,
+      doc,
+    )
+  }) else {
     return Ok(());
   };
 
@@ -86,7 +94,10 @@ fn intrinsic_size(source: &ImageSource, context: &RenderContext) -> Option<(f32,
 /// What an image draws as in SVG output.
 pub(crate) enum Drawing {
   /// An SVG image's vector ops, drawn on `canvas`.
-  Ops { ops: Vec<SvgOp>, canvas: Frame },
+  Ops {
+    picture: Arc<SvgPicture>,
+    canvas: Frame,
+  },
   /// A `data:` URL for an `<image>`, with the key and pixel size it can be defined once under.
   Raster {
     href: Rc<str>,
@@ -114,41 +125,53 @@ impl Drawing {
       _ => None,
     };
 
-    vector.or_else(|| Self::raster_of(url, &source, context, doc))
+    vector.or_else(|| Self::raster_of(url, &source, context, image_size, doc))
   }
 
-  /// `source`, resolved from `src`, as a `data:` URL encoded once per document.
+  /// `source`, resolved from `src` and drawn at `viewport`, as a `data:` URL encoded once per
+  /// document.
   fn raster_of(
     src: &Arc<str>,
     source: &ImageSource,
     context: &RenderContext,
+    viewport: Size<f32>,
     doc: &mut SvgDocument,
   ) -> Option<Self> {
+    let svg = matches!(source, ImageSource::Svg(_));
     let key = ImageKey::Src {
       src: Arc::clone(src),
-      current_color: context.current_color.0,
+      current_color: (svg && context.is_svg_element()).then_some(context.current_color.0),
+      viewport: svg.then(|| [viewport.width.to_bits(), viewport.height.to_bits()]),
     };
-    let href = doc.image_href(&key, || loaded_data_url(source, context))?;
+    let href = doc.image_href(&key, || loaded_data_url(source, context, viewport))?;
+    // An SVG is defined at the size it is drawn, which its media queries and the color probe read.
+    let size = if svg {
+      (viewport.width > 0.0 && viewport.height > 0.0).then_some((viewport.width, viewport.height))
+    } else {
+      pixel_size(source)
+    };
 
     Some(Self::Raster {
       href,
-      definition: pixel_size(source).map(|size| (key, size)),
+      definition: size.map(|size| (key, size)),
     })
   }
 }
 
-/// The image `src` names, keyed by its `src` when it has one so a repeat reuses its encoding.
+/// The image `src` names, drawn at `viewport`, keyed by its `src` when it has one so a repeat
+/// reuses its encoding.
 fn raster(
   src: &ImageSourceInput,
   source: Option<&ImageSource>,
   context: &RenderContext,
+  viewport: Size<f32>,
   doc: &mut SvgDocument,
 ) -> Option<Drawing> {
   if let (ImageSourceInput::Url(url), Some(source)) = (src, source) {
-    return Drawing::raster_of(url, source, context, doc);
+    return Drawing::raster_of(url, source, context, viewport, doc);
   }
 
-  data_url(src, context).map(|href| Drawing::Raster {
+  data_url(src, context, viewport).map(|href| Drawing::Raster {
     href: href.into(),
     definition: None,
   })
@@ -178,11 +201,13 @@ fn pixel_size(source: &ImageSource) -> Option<(f32, f32)> {
 /// `svg`'s ops laid out at `viewport`, Blink's container size, when SVG elements can express every
 /// op.
 fn vector_ops(svg: &SvgSource, context: &RenderContext, viewport: Size<f32>) -> Option<Drawing> {
-  let ops = svg.vector_ops(context, viewport);
+  let picture = svg.picture(context, viewport);
 
-  (viewport.width > 0.0 && viewport.height > 0.0 && is_vector(&ops)).then(|| Drawing::Ops {
-    ops,
-    canvas: Frame::new(0.0, 0.0, viewport.width, viewport.height),
+  (viewport.width > 0.0 && viewport.height > 0.0 && is_vector(picture.ops())).then(|| {
+    Drawing::Ops {
+      picture,
+      canvas: Frame::new(0.0, 0.0, viewport.width, viewport.height),
+    }
   })
 }
 
@@ -190,7 +215,7 @@ impl SvgDocument {
   /// Draws `drawing` stretched over `rect`, an `<image>` keeping `aspect`.
   pub(crate) fn draw(&mut self, drawing: &Drawing, rect: Frame, aspect: &str) -> io::Result<()> {
     match drawing {
-      Drawing::Ops { ops, canvas } => self.svg_image(ops, *canvas, rect),
+      Drawing::Ops { picture, canvas } => self.svg_image(picture.ops(), *canvas, rect),
       Drawing::Raster {
         href,
         definition: Some((key, natural)),
@@ -219,7 +244,11 @@ impl SvgDocument {
   }
 }
 
-fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
+fn data_url(
+  src: &ImageSourceInput,
+  context: &RenderContext,
+  viewport: Size<f32>,
+) -> Option<String> {
   match src {
     // Embed the original encoded bytes losslessly. SVG markup resolves into a
     // parsed source first so the host `color` can reach `currentColor`.
@@ -227,20 +256,24 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
       "image/svg+xml" => src
         .resolve(context)
         .ok()
-        .and_then(|s| loaded_data_url(&s, context)),
+        .and_then(|s| loaded_data_url(&s, context, viewport)),
       mime => Some(to_data_url(mime, bytes)),
     },
-    ImageSourceInput::Loaded(source) => loaded_data_url(source, context),
+    ImageSourceInput::Loaded(source) => loaded_data_url(source, context, viewport),
     // Only resolvable when the render supplied a resource map (usually empty).
     ImageSourceInput::Url(_) => src
       .resolve(context)
       .ok()
-      .and_then(|s| loaded_data_url(&s, context)),
+      .and_then(|s| loaded_data_url(&s, context, viewport)),
     _ => None,
   }
 }
 
-fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<String> {
+fn loaded_data_url(
+  source: &ImageSource,
+  context: &RenderContext,
+  viewport: Size<f32>,
+) -> Option<String> {
   match source {
     ImageSource::Bitmap(buffer) => buffer
       .encode_png()
@@ -257,9 +290,7 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
     }
     ImageSource::Svg(svg) => Some(to_data_url(
       "image/svg+xml",
-      svg
-        .source_with_current_color(context.current_color)
-        .as_bytes(),
+      svg.embedded_source(context, viewport).as_bytes(),
     )),
     _ => None,
   }
