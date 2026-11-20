@@ -127,3 +127,28 @@ takumi paint card.html -o card.json --detail full
 ```
 
 The [paint reference](/docs/paint/reference) lists every field.
+
+## Check the tree in a script
+
+A script can read the JSON with `jq` and fail when a render is wrong. Each node's `bounds` is its rectangle on the canvas, and `element` names its `id`, `tagName`, and `className`.
+
+This check fails unless the element with the id `cta` lies fully inside the canvas:
+
+```sh
+takumi paint card.html -o card.json --width 1200 --height 630
+
+jq -e --arg id cta '
+  .width as $w | .height as $h
+  | [.nodes[] | select(.element.id == $id) | .bounds
+     | .x >= 0 and .y >= 0 and .x + .width <= $w and .y + .height <= $h]
+  | length > 0 and all
+' card.json
+```
+
+This one fails when the style parser dropped any declaration. The JSON leaves out `ignoredDeclarations` when nothing was dropped, so default it to an empty list:
+
+```sh
+jq -e '(.ignoredDeclarations // []) | length == 0' card.json
+```
+
+An element can make several nodes, such as its box and its text, so `all` requires every one to fit. A hidden element makes no node, and `length > 0` fails the check for it too. `jq -e` exits with `1` when the last value is `false`, which fails the script.
