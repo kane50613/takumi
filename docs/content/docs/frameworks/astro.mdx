@@ -1,6 +1,6 @@
 ---
 title: Astro
-description: Generate Open Graph images for every static Astro page at build time with astro-takumi.
+description: Generate Open Graph images for every static Astro page with astro-takumi, or render an Astro component to a PDF from an endpoint.
 ---
 
 [astro-takumi](https://github.com/vikas5914/astro-takumi) renders an Open Graph image for every page of an Astro site. During the build, it reads each emitted page and renders a React component or a [built-in preset](https://github.com/vikas5914/astro-takumi#presets) with Takumi. It writes each image next to its HTML file.
@@ -75,6 +75,49 @@ description: Generate Open Graph images for every static Astro page at build tim
 
   </Step>
 </Steps>
+
+## Render a PDF
+
+An endpoint can render an Astro component to a PDF with [`takumi-pdf`](/docs/pdf). The Container API turns the component into HTML.
+
+```npm
+npm i takumi-pdf
+```
+
+The Container API returns only the component's markup, and Astro moves a plain `<style>` block to the page head. Mark the block `is:inline` so it stays in the HTML. Inline styles are not scoped, so they apply to the whole PDF.
+
+```astro title="src/components/Invoice.astro"
+---
+const { id, total } = Astro.props;
+---
+
+<h1>Invoice {id}</h1>
+<p>Total: ${total}</p>
+
+<style is:inline>
+  h1 { font-family: Geist; }
+</style>
+```
+
+```ts title="src/pages/invoice.pdf.ts"
+import type { APIRoute } from "astro";
+import { experimental_AstroContainer as AstroContainer } from "astro/container";
+import { render } from "takumi-pdf";
+import Invoice from "../components/Invoice.astro";
+
+export const GET: APIRoute = async () => {
+  const container = await AstroContainer.create();
+  const html = await container.renderToString(Invoice, { props: { id: 1042, total: 1290 } });
+  const pdf = await render(html, {
+    size: "a4",
+    fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
+  });
+
+  return new Response(pdf, { headers: { "content-type": "application/pdf" } });
+};
+```
+
+With the default static output, `astro build` writes `dist/invoice.pdf` at build time. In server output, the endpoint renders on every request.
 
 ## Next steps
 
