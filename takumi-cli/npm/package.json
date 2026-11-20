@@ -1,0 +1,57 @@
+{
+  "name": "@takumi-rs/cli",
+  "version": "0.1.0",
+  "description": "Renders HTML and CSS to images, SVG, and PDF from the command line.",
+  "keywords": [
+    "cli",
+    "css",
+    "html",
+    "image",
+    "og-image",
+    "pdf",
+    "svg"
+  ],
+  "homepage": "https://takumi.kane.tw/docs/cli",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
+  "license": "(MIT OR Apache-2.0)",
+  "author": {
+    "name": "Kane Wang",
+    "email": "me@kane.tw",
+    "url": "https://kane.tw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-cli/npm"
+  },
+  "bin": {
+    "takumi": "bin/takumi.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "optionalDependencies": {
+    "@takumi-rs/cli-darwin-arm64": "workspace:*",
+    "@takumi-rs/cli-darwin-x64": "workspace:*",
+    "@takumi-rs/cli-linux-arm64": "workspace:*",
+    "@takumi-rs/cli-linux-x64": "workspace:*",
+    "@takumi-rs/cli-win32-arm64": "workspace:*",
+    "@takumi-rs/cli-win32-x64": "workspace:*"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,31 +1,73 @@
 ---
 title: Install and upgrade
-description: Install the takumi CLI as a prebuilt binary with cargo binstall or build it with cargo install, keep it up to date with takumi upgrade, and remove it.
+description: Install the takumi CLI from npm, as a prebuilt binary with cargo binstall, or build it with cargo install, keep it up to date, and remove it.
 ---
 
-Cargo installs the CLI in one of two ways. `cargo binstall` downloads a prebuilt binary in seconds, while `cargo install` builds takumi on your machine, which takes a few minutes and needs Rust 1.91 or later.
+Install takumi in one of three ways:
+
+| Way                                                                | Needs                    | Takes         |
+| ------------------------------------------------------------------ | ------------------------ | ------------- |
+| [npm](#install-from-npm)                                           | Node.js 18 or later      | Seconds       |
+| [`cargo binstall`](#install-a-prebuilt-binary-with-cargo-binstall) | Cargo and cargo-binstall | Seconds       |
+| [`cargo install`](#build-from-source)                              | Rust 1.91 or later       | A few minutes |
+
+## Install from npm
+
+`@takumi-rs/cli` runs takumi without Rust. Run it once with `npx`:
+
+```npm
+npx @takumi-rs/cli image card.html -o card.png --width 1200 --height 630
+```
+
+[Render from the command line](/docs/cli) explains `image` and its flags.
+
+To keep it in a project, add it as a dev dependency. The project's scripts can then call `takumi`:
+
+```npm
+npm i -D @takumi-rs/cli
+```
+
+To call `takumi` from any directory, install it globally instead:
+
+```npm
+npm i -g @takumi-rs/cli
+```
+
+The package ships a binary for each of these platforms:
+
+- macOS on x64 and arm64
+- Windows on x64 and arm64
+- Linux on x64 and arm64, statically linked so that it runs on glibc and musl systems such as Alpine
+
+The binary arrives as an optional dependency. If your package manager skips optional dependencies, such as `npm install --omit=optional`, `takumi` exits with an error that names the package it is missing. Install again without skipping them.
 
 ## Install Rust
 
-Both ways run through Cargo. Skip this step if `cargo --version` prints a version, and for `cargo install`, if it prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
+`cargo binstall` and `cargo install` both run through Cargo. Skip this step if `cargo --version` prints a version. `cargo install` needs version 1.91 or later.
+
+Install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-On Windows, download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs) instead. Run `rustup update` if you already have an older Rust.
+On Windows, download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs) instead.
 
-## Install a prebuilt binary
+If you already have an older Rust, update it with `rustup update`.
 
-[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the binary for your platform from the takumi release on GitHub and puts it in `~/.cargo/bin`:
+## Install a prebuilt binary with cargo binstall
+
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the binary from the takumi release on GitHub and puts it in `~/.cargo/bin`:
 
 ```sh
 cargo binstall takumi-cli
 ```
 
-If Cargo says `no such command: binstall`, install cargo-binstall by following [its instructions](https://github.com/cargo-bins/cargo-binstall#installation) first.
+If Cargo says `no such command: binstall`, install cargo-binstall first by following [its instructions](https://github.com/cargo-bins/cargo-binstall#installation).
 
-Releases carry binaries for macOS, Windows, and Linux, each on x64 and arm64. The Linux binary is statically linked, so it runs on both glibc and musl systems such as Alpine. When a release has no binary for your platform, `cargo binstall` builds takumi from source the way `cargo install` does, which needs Rust 1.91 or later. Check that it runs:
+Releases carry binaries for the same platforms as npm. On any other platform, `cargo binstall` builds takumi from source the way `cargo install` does, which needs Rust 1.91 or later.
+
+Check that it runs:
 
 ```sh
 takumi --version
@@ -63,13 +105,24 @@ cargo install --locked --path takumi-cli
 
 ## Upgrade
 
+Upgrade takumi the way you installed it:
+
+- From npm, install the newest release again: `npm i -D @takumi-rs/cli@latest` in a project, or `npm i -g @takumi-rs/cli@latest` for a global install. `npm update` stays within the version range in `package.json`, which does not cross a minor release before 1.0.
+- With `cargo binstall`, run `cargo binstall takumi-cli` again to download the newest release.
+- With `cargo install`, run `takumi upgrade`.
+
+### Upgrade an install from `cargo install`
+
 ```sh
 takumi upgrade
 ```
 
-`takumi upgrade` reinstalls takumi from the source Cargo recorded when you installed it, into the same directory. An install from crates.io moves to the newest release, and an install that followed a branch moves to that branch's latest commit. It never checks for updates on its own.
+`takumi upgrade` reinstalls takumi from the source Cargo recorded when you installed it, into the same directory:
 
-`takumi upgrade` does not upgrade an install from `cargo binstall`. Run `cargo binstall takumi-cli` again instead, which downloads the newest release.
+- An install from crates.io moves to the newest release.
+- An install that followed a branch moves to that branch's latest commit.
+
+It never checks for updates on its own.
 
 To see the `cargo install` command it would run without running it, add `--dry-run`:
 
@@ -83,7 +136,9 @@ takumi upgrade --dry-run
 - An install from a local clone upgrades after you pull the clone. The printed command rebuilds from it.
 - A binary that `cargo install` did not install, such as one copied from another machine, upgrades the way you installed it.
 
-On Windows, a running program cannot be replaced, so `takumi upgrade` prints the `cargo install` command and exits with code `1`. Run the command in PowerShell once takumi has exited. The commands takumi prints on Windows are quoted for PowerShell, and on other systems for a POSIX shell such as bash or zsh.
+On Windows, a running program cannot be replaced. `takumi upgrade` prints the `cargo install` command instead and exits with code `1`. Run the command in PowerShell once takumi has exited.
+
+The commands takumi prints are quoted for PowerShell on Windows, and for a POSIX shell such as bash or zsh elsewhere.
 
 A printed command leaves out the password in a Git URL, and the user name too unless the URL uses SSH. If the repository needs them, give them to Git another way, such as a credential helper, before you run the command.
 
@@ -114,8 +169,12 @@ Run the command again after `takumi upgrade`, so the script knows the new comman
 
 ## Uninstall
 
+Remove an install from npm with your package manager, such as `npm uninstall @takumi-rs/cli`.
+
+Remove an install from Cargo with `cargo uninstall`, whether `cargo binstall` or `cargo install` put it there:
+
 ```sh
 cargo uninstall takumi-cli
 ```
 
-This removes the `takumi` binary and Cargo's record of it, whichever source it came from.
+This removes the `takumi` binary and Cargo's record of it.

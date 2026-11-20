@@ -1,0 +1,36 @@
+{
+  "name": "@takumi-rs/cli-linux-x64",
+  "version": "0.1.0",
+  "description": "The takumi command-line binary for Linux on x64.",
+  "homepage": "https://takumi.kane.tw/docs/cli",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
+  "license": "(MIT OR Apache-2.0)",
+  "author": {
+    "name": "Kane Wang",
+    "email": "me@kane.tw",
+    "url": "https://kane.tw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-cli/npm/platforms/linux-x64"
+  },
+  "files": [
+    "takumi"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepublishOnly": "bun ../../scripts/stage.ts x86_64-unknown-linux-musl"
+  }
+}

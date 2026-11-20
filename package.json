@@ -10,6 +10,8 @@
     "takumi-image-response",
     "takumi-pdf-js",
     "takumi-paint",
+    "takumi-cli/npm",
+    "takumi-cli/npm/platforms/*",
     "docs",
     "example/*"
   ],

@@ -52,7 +52,7 @@ const refreshLockfile: TegamiPlugin = {
   },
 };
 
-type ReleaseGroup = "takumi" | "takumi-pdf" | "takumi-paint";
+type ReleaseGroup = "takumi" | "takumi-pdf" | "takumi-paint" | "takumi-cli";
 
 const releaseGroups: [ReleaseGroup, string[]][] = [
   [
@@ -70,6 +70,19 @@ const releaseGroups: [ReleaseGroup, string[]][] = [
   // reader installed.
   ["takumi-pdf", ["npm:takumi-pdf", "cargo:takumi-pdf"]],
   ["takumi-paint", ["npm:takumi-paint"]],
+  [
+    "takumi-cli",
+    [
+      "cargo:takumi-cli",
+      "npm:@takumi-rs/cli",
+      "npm:@takumi-rs/cli-darwin-arm64",
+      "npm:@takumi-rs/cli-darwin-x64",
+      "npm:@takumi-rs/cli-linux-arm64",
+      "npm:@takumi-rs/cli-linux-x64",
+      "npm:@takumi-rs/cli-win32-arm64",
+      "npm:@takumi-rs/cli-win32-x64",
+    ],
+  ],
 ];
 
 const packages = Object.fromEntries(
@@ -100,9 +113,15 @@ const paper = tegami({
     takumi: { syncBump: true, syncGitTag: true },
     "takumi-pdf": { syncBump: true },
     "takumi-paint": { syncBump: true },
+    "takumi-cli": { syncBump: true, syncGitTag: true },
   },
   packages,
-  npm: { client: "bun", updateLockFile: true, bumpDep },
+  npm: {
+    client: "bun",
+    updateLockFile: true,
+    bumpDep,
+    trustedPublish: { provider: "github", workflow: "ci.yml" },
+  },
 });
 
 void createCli(paper).parseAsync();
