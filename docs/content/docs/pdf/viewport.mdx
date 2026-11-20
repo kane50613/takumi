@@ -3,7 +3,7 @@ title: Single-page PDFs
 description: Render a one-page PDF at a fixed size or at the height of its content.
 ---
 
-Set `viewport` to render one page, such as a certificate, card, or receipt. With both dimensions set, the page works like an image render: percentage heights resolve against the viewport, and content outside it is clipped.
+Set `viewport` to render one page, such as a certificate, card, or label. Its size is in CSS px, 96 to the inch, so a 4 × 6 in label is 384 × 576. With both dimensions set, the page works like an image render: percentage heights resolve against the viewport, and content outside it is clipped.
 
 ```tsx twoslash title="Single-page viewport"
 import { render } from "takumi-pdf";

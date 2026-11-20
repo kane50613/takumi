@@ -17,9 +17,7 @@ export async function GET() {
 }
 ```
 
-Each framework guide shows its own route: [Next.js](/docs/frameworks/nextjs#render-a-pdf), [SvelteKit](/docs/frameworks/sveltekit#render-a-pdf), [TanStack Start](/docs/frameworks/tanstack-start#render-a-pdf), [Astro](/docs/frameworks/astro#render-a-pdf), and [Cloudflare Workers](/docs/frameworks/cloudflare-workers#render-a-pdf).
-
-Use the default import on Node.js, Bun, and Cloudflare Workers. For manual initialization, import `takumi-pdf/no-init`.
+The shape of the route depends on the framework, and a Worker answers from `fetch` instead. Each framework guide shows its own: [Next.js](/docs/frameworks/nextjs#render-a-pdf), [SvelteKit](/docs/frameworks/sveltekit#render-a-pdf), [TanStack Start](/docs/frameworks/tanstack-start#render-a-pdf), [Astro](/docs/frameworks/astro#render-a-pdf), and [Cloudflare Workers](/docs/frameworks/cloudflare-workers#render-a-pdf).
 
 ## Next.js
 
@@ -38,6 +36,20 @@ import init, { render } from "takumi-pdf/no-init";
 import wasmUrl from "takumi-pdf/wasm-url";
 
 await init({ module_or_path: wasmUrl });
+```
+
+Call `init()` once per page load and await it before the first render. `takumi-pdf/no-init` exports the same API as the default entry. To save the bytes as a file, wrap them in a `Blob`:
+
+```ts title="Download the PDF"
+import { render } from "takumi-pdf/no-init";
+
+const pdf = await render("<h1>Invoice 1042</h1>");
+const link = document.createElement("a");
+
+link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+link.download = "invoice.pdf";
+link.click();
+URL.revokeObjectURL(link.href);
 ```
 
 `takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`, and Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.

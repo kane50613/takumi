@@ -137,7 +137,7 @@ Tagged output maps the markup to `Table`, `TR`, `TH`, and `TD` structure element
 
 ## Batches
 
-A statement run renders the same template many times. Create one `PdfRenderer` and reuse it, so each font loads once for the whole batch. Here `accounts` holds your records, `Statement` is your template, and `save(id, pdf)` stores each result:
+A statement run renders the same template many times. Create one `PdfRenderer` and one `fonts` list outside the loop, so each font loads once for the whole batch. Bytes read again inside the loop count as a new font and are compared on every render. Pass a logo the same way, as `images` bytes fetched once. Here `accounts` holds your records, `Statement` is your template, and `save(id, pdf)` stores each result:
 
 ```tsx twoslash title="Render a batch of statements"
 import type { ReactNode } from "react";

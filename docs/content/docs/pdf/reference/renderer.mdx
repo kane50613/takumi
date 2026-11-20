@@ -22,7 +22,7 @@ A registered font stays until you remove it. A font listed in `fonts` is reused 
 | `prepare(input, options?)` | Loads a document's fonts and images, and returns a prepared document             |
 | `measure(input, options?)` | Returns the laid-out `{ width, height }` in CSS px                               |
 | `registerFont(font)`       | Registers a font that stays until you remove it                                  |
-| `unregisterFont(family)`   | Removes every face of a family                                                   |
+| `unregisterFont({ name })` | Removes every face of a family                                                   |
 | `clearFonts()`             | Removes every registered font except the bundled fallback                        |
 | `free()`                   | Releases the renderer's WebAssembly memory                                       |
 

@@ -55,30 +55,7 @@ const pdf = await render(invoice, {
 
 ## Electronic invoices
 
-For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. [Invoices](/docs/pdf/invoices#electronic-invoices) covers the rest of the setup.
-
-```tsx twoslash title="Electronic invoices"
-import type { ReactNode } from "react";
-declare const invoice: ReactNode;
-declare const xml: string;
-// ---cut---
-import { render } from "takumi-pdf";
-
-const pdf = await render(invoice, {
-  // [!code highlight]
-  pdfa: "3b",
-  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
-  attachments: [
-    {
-      name: "factur-x.xml",
-      data: xml,
-      mimeType: "application/xml",
-      description: "Factur-X invoice data",
-      relationship: "alternative",
-    },
-  ],
-});
-```
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. [Invoices](/docs/pdf/invoices#electronic-invoices) gives the file name, type, and relationship each profile requires, and the XMP metadata.
 
 The PDF/A-3 levels require three fields on each attachment:
 

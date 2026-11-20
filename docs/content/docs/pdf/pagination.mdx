@@ -92,7 +92,7 @@ const pdf = await render(
 
 ## Repeated table headers and footers
 
-A `<thead>` repeats at the top of each continuation page. A `<tfoot>` repeats below the last row on every page the table breaks across. Each section stays in one piece, with its spacing next to the body.
+A `<thead>` repeats at the top of each continuation page. A `<tfoot>` repeats below the last row on every page the table breaks across, so put a total that should print once, such as an invoice's, after the table instead. Each section stays in one piece, with its spacing next to the body.
 
 ```tsx twoslash title="Repeated table headers and footers"
 declare const rows: import("react").ReactNode;
