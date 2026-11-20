@@ -1846,6 +1846,7 @@ define_style! {
       list_style_image: ListStyleImage where inherit = true,
       list_style_type: ListStyleType where inherit = true,
       orphans: MinLines where inherit = true,
+      quotes: Quotes where inherit = true,
       tab_size: TabSize where inherit = true,
       text_fit: TextFit where inherit = true,
       text_indent: TextIndent where inherit = true,

@@ -34,6 +34,139 @@ pub enum ContentItem {
   /// `counter()` or `counters()`, resolved at render-tree-build time against the counters in
   /// scope.
   Counter(CounterFunction),
+  /// `open-quote`, `close-quote`, `no-open-quote`, or `no-close-quote`.
+  Quote(Quote),
+}
+
+/// A quote keyword of `content`, which writes a mark of `quotes` and moves the nesting depth.
+/// <https://drafts.csswg.org/css-content-3/#quote-values>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quote {
+  /// `open-quote`: the opening mark of the depth, then one level deeper.
+  Open,
+  /// `close-quote`: one level shallower, then the closing mark of that depth.
+  Close,
+  /// `no-open-quote`: one level deeper, with no mark.
+  NoOpen,
+  /// `no-close-quote`: one level shallower, with no mark.
+  NoClose,
+}
+
+impl Quote {
+  const KEYWORDS: [(&'static str, Quote); 4] = [
+    ("open-quote", Quote::Open),
+    ("close-quote", Quote::Close),
+    ("no-open-quote", Quote::NoOpen),
+    ("no-close-quote", Quote::NoClose),
+  ];
+
+  fn keyword(self) -> &'static str {
+    Self::KEYWORDS
+      .iter()
+      .find(|(_, quote)| *quote == self)
+      .map_or("", |(keyword, _)| keyword)
+  }
+}
+
+/// `quotes`: the marks `open-quote` and `close-quote` write at each nesting depth.
+/// <https://drafts.csswg.org/css-content-3/#quotes>
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub enum Quotes {
+  /// Approximate: Chromium takes the marks of the element's language, where this takes the
+  /// English `“` `”` and `‘` `’` in every language.
+  #[default]
+  Auto,
+  /// No marks, though the quote keywords still move the depth.
+  None,
+  /// An opening and a closing mark for each depth, the last pair serving every deeper one.
+  Pairs(Box<[(Arc<str>, Arc<str>)]>),
+}
+
+impl Quotes {
+  const AUTO: [(&'static str, &'static str); 2] =
+    [("\u{201C}", "\u{201D}"), ("\u{2018}", "\u{2019}")];
+
+  /// The mark that opens, or closes when `open` is false, the quote at `depth`.
+  pub fn mark(&self, depth: usize, open: bool) -> &str {
+    let pick = |pairs_len: usize| depth.min(pairs_len.saturating_sub(1));
+
+    match self {
+      Quotes::Auto => {
+        let (opening, closing) = Self::AUTO[pick(Self::AUTO.len())];
+
+        if open { opening } else { closing }
+      }
+      Quotes::None => "",
+      Quotes::Pairs(pairs) => {
+        pairs.get(pick(pairs.len())).map_or(
+          "",
+          |(opening, closing)| if open { opening } else { closing },
+        )
+      }
+    }
+  }
+}
+
+impl MakeComputed for Quotes {}
+
+impl Animatable for Quotes {}
+
+impl<'i> FromCss<'i> for Quotes {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("auto"))
+      .is_ok()
+    {
+      return Ok(Quotes::Auto);
+    }
+
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      return Ok(Quotes::None);
+    }
+
+    let mut pairs = Vec::new();
+
+    loop {
+      let opening: Arc<str> = input.expect_string()?.as_ref().into();
+      let closing: Arc<str> = input.expect_string()?.as_ref().into();
+
+      pairs.push((opening, closing));
+
+      if input.is_exhausted() {
+        break;
+      }
+    }
+
+    Ok(Quotes::Pairs(pairs.into_boxed_slice()))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "none", "<string> <string>"];
+}
+
+impl ToCss for Quotes {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Quotes::Auto => dest.write_str("auto"),
+      Quotes::None => dest.write_str("none"),
+      Quotes::Pairs(pairs) => {
+        for (index, (opening, closing)) in pairs.iter().enumerate() {
+          if index > 0 {
+            dest.write_str(" ")?;
+          }
+
+          serialize_string(opening, dest)?;
+          dest.write_str(" ")?;
+          serialize_string(closing, dest)?;
+        }
+
+        Ok(())
+      }
+    }
+  }
 }
 
 /// The most bytes one `counters()` writes, a resource limit: nested counters and a long separator
@@ -193,6 +326,11 @@ impl<'i> FromCss<'i> for ContentItem {
     let token = input.next()?.clone();
     match token {
       Token::QuotedString(value) => Ok(ContentItem::Text(value.as_ref().into())),
+      Token::Ident(ref name) => Quote::KEYWORDS
+        .iter()
+        .find(|(keyword, _)| name.eq_ignore_ascii_case(keyword))
+        .map(|&(_, quote)| ContentItem::Quote(quote))
+        .ok_or_else(|| unexpected_token!(Self, &token)),
       Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => input
         .parse_nested_block(AttrRef::from_css)
         .map(ContentItem::Attr),
@@ -206,7 +344,16 @@ impl<'i> FromCss<'i> for ContentItem {
     }
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["<string>", "<image>", "counter()", "counters()"];
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "<string>",
+    "<image>",
+    "counter()",
+    "counters()",
+    "open-quote",
+    "close-quote",
+    "no-open-quote",
+    "no-close-quote",
+  ];
 }
 
 impl<'i> FromCss<'i> for AttrRef {
@@ -242,6 +389,7 @@ impl ToCss for ContentItem {
       ContentItem::Image(image) => image.to_css(dest),
       ContentItem::Attr(attr) => attr.to_css(dest),
       ContentItem::Counter(counter) => counter.to_css(dest),
+      ContentItem::Quote(quote) => dest.write_str(quote.keyword()),
     }
   }
 }
@@ -387,7 +535,50 @@ mod tests {
 
   #[test]
   fn unsupported_keyword_is_rejected() {
-    assert!(ContentValue::from_css_str("open-quote").is_err());
-    assert!(ContentValue::from_css_str("\"x\" close-quote").is_err());
+    assert!(ContentValue::from_css_str("contents").is_err());
+    assert!(ContentValue::from_css_str("\"x\" open-quotes").is_err());
+  }
+
+  #[test]
+  fn parses_quote_keywords() {
+    assert_eq!(
+      parse("open-quote \"x\" no-close-quote"),
+      ContentValue::Items(
+        [
+          ContentItem::Quote(Quote::Open),
+          ContentItem::Text("x".into()),
+          ContentItem::Quote(Quote::NoClose),
+        ]
+        .into()
+      )
+    );
+    assert_eq!(
+      parse("close-quote no-open-quote").to_css_string(),
+      "close-quote no-open-quote"
+    );
+  }
+
+  #[test]
+  fn parses_quotes() {
+    assert_eq!(Quotes::from_css_str("auto"), Ok(Quotes::Auto));
+    assert_eq!(Quotes::from_css_str("none"), Ok(Quotes::None));
+    assert_eq!(
+      Quotes::from_css_str("\"«\" \"»\" \"<\" \">\""),
+      Ok(Quotes::Pairs(
+        [("«".into(), "»".into()), ("<".into(), ">".into())].into()
+      ))
+    );
+    assert!(Quotes::from_css_str("\"«\"").is_err());
+  }
+
+  #[test]
+  fn deeper_quotes_take_the_last_pair() {
+    let quotes = Quotes::from_css_str("\"P\" \"S\" \"A\" \"S\"").expect("parse");
+
+    assert_eq!(quotes.mark(0, true), "P");
+    assert_eq!(quotes.mark(1, true), "A");
+    assert_eq!(quotes.mark(5, false), "S");
+    assert_eq!(Quotes::Auto.mark(1, false), "\u{2019}");
+    assert_eq!(Quotes::None.mark(0, true), "");
   }
 }

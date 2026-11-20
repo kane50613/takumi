@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>content_quotes</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .quote::before {
+        content: open-quote;
+      }
+
+      .quote::after {
+        content: close-quote;
+      }
+
+      .guillemets {
+        quotes: "«" "»" "‹" "›";
+      }
+
+      .bare {
+        quotes: none;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        font: 20px Geist;
+      }
+
+      .skip::before {
+        content: no-open-quote;
+      }
+    </style>
+  </head>
+  <body style="width: 360px; height: 140px">
+    <div class="stack">
+      <div
+        ><span class="quote">Outer <span class="quote">inner</span> text</span></div
+      >
+      <div class="guillemets"
+        ><span class="quote">Outer <span class="quote">inner</span></span></div
+      >
+      <div class="bare"><span class="quote">No marks</span></div>
+      <div><span class="skip"></span><span class="quote">Second level</span></div>
+    </div>
+  </body>
+</html>

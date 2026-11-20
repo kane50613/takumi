@@ -15,7 +15,7 @@ use crate::{
     node::Node,
   },
   style::{
-    ComputedStyle, Contain, CounterChange, Display,
+    ComputedStyle, Contain, CounterChange, Display, Quote, Quotes,
     page_rule::{PAGE_COUNTER, PAGES_COUNTER},
   },
 };
@@ -264,9 +264,39 @@ pub(super) struct CountersAttachmentContext {
   page_object: Option<PageObject>,
   /// What `counter(pages)` reads in a page-margin box: the document's page count.
   pub(super) page_count: Option<i32>,
+  /// How many quotes `open-quote` has opened and `close-quote` not yet closed, in document order.
+  quote_depth: usize,
 }
 
 impl CountersAttachmentContext {
+  /// The mark `quote` writes from `quotes`, after moving the quote depth as it does.
+  /// <https://drafts.csswg.org/css-content-3/#quote-values>
+  pub(super) fn quote<'q>(&mut self, quote: Quote, quotes: &'q Quotes) -> &'q str {
+    match quote {
+      Quote::Open => {
+        self.quote_depth += 1;
+
+        quotes.mark(self.quote_depth - 1, true)
+      }
+      Quote::NoOpen => {
+        self.quote_depth += 1;
+
+        ""
+      }
+      Quote::Close if self.quote_depth > 0 => {
+        self.quote_depth -= 1;
+
+        quotes.mark(self.quote_depth, false)
+      }
+      Quote::NoClose => {
+        self.quote_depth = self.quote_depth.saturating_sub(1);
+
+        ""
+      }
+      Quote::Close => "",
+    }
+  }
+
   /// Enters the box of an element or a `::before` or `::after` whose style is `style`, after its
   /// parent and before its children.
   pub(super) fn enter_object(&mut self, style: &ComputedStyle, list_item: ListItemCounter) {

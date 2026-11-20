@@ -2201,6 +2201,9 @@ impl RenderNode {
 
           text.push_str(&counter.text(&values, pseudo_context.style.inherited_data.direction));
         }
+        ContentItem::Quote(quote) => {
+          text.push_str(counters.quote(quote, &pseudo_context.style.misc_inherited1_data.quotes))
+        }
         ContentItem::Image(image) => {
           flush(&mut text, &mut children);
           children.push(Self::anonymous_image_item(pseudo_context, *image));
