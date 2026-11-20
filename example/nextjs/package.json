@@ -12,7 +12,8 @@
     "next": "16.4.6",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "takumi-js": "workspace:*"
+    "takumi-js": "workspace:*",
+    "takumi-pdf": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

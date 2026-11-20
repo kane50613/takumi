@@ -1,6 +1,6 @@
 ---
 title: Next.js
-description: Generate Open Graph images from React components in Next.js App Router route handlers.
+description: Generate Open Graph images or PDFs from React components in Next.js App Router route handlers.
 ---
 
 Return an Open Graph image from a Next.js App Router route. `ImageResponse` from `takumi-js/response` renders a React component and answers with the image.
@@ -102,6 +102,40 @@ export default function Image() {
   );
 }
 ```
+
+## Render a PDF
+
+[`takumi-pdf`](/docs/pdf) renders the same kind of React component to a PDF. Import it from `takumi-pdf/next`, which loads its WebAssembly binary on the Node.js and Edge runtimes, so it needs no `serverExternalPackages` entry.
+
+```npm
+npm i takumi-pdf
+```
+
+```tsx title="app/invoice.pdf/Invoice.tsx"
+export default function Invoice({ id }: { id: number }) {
+  return (
+    <main style={{ padding: 48 }}>
+      <h1>Invoice {id}</h1>
+      <p>Total: $1,290</p>
+    </main>
+  );
+}
+```
+
+```tsx title="app/invoice.pdf/route.tsx"
+import { render } from "takumi-pdf/next";
+import Invoice from "./Invoice";
+
+export async function GET() {
+  const pdf = await render(<Invoice id={1042} />, { size: "a4" });
+
+  return new Response(pdf, {
+    headers: { "content-type": "application/pdf" },
+  });
+}
+```
+
+Content longer than a page flows onto the next one. See [Pagination](/docs/pdf/pagination) to control the breaks and [Headers & footers](/docs/pdf/headers) to repeat page numbers.
 
 ## Next steps
 

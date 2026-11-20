@@ -17,7 +17,8 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "takumi-js": "workspace:*"
+    "takumi-js": "workspace:*",
+    "takumi-pdf": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
