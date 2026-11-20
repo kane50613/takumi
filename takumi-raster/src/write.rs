@@ -236,13 +236,14 @@ impl Bitmap {
     self.data.as_chunks_mut().0[index] = pixel;
   }
 
-  /// The `width` by `height` region whose top-left pixel is `(x, y)`, or none when it does not fit.
+  /// The `width` by `height` region whose top-left pixel is `(x, y)`, or none when it is empty or
+  /// does not fit.
   pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Option<Self> {
     let fits = |start: u32, length: u32, limit: u32| {
       start.checked_add(length).is_some_and(|end| end <= limit)
     };
 
-    (fits(x, width, self.width) && fits(y, height, self.height))
+    (width > 0 && height > 0 && fits(x, width, self.width) && fits(y, height, self.height))
       .then(|| self.crop_inside(x, y, width, height))
   }
 
@@ -1605,7 +1606,7 @@ mod tests {
     );
   }
 
-  /// A region past an edge, or one whose end overflows, is no crop.
+  /// An empty region, one past an edge, or one whose end overflows is no crop.
   #[test]
   fn crop_refuses_a_region_that_does_not_fit() {
     let image = Bitmap::from_pixel(2, 2, [0, 0, 0, 255]);
@@ -1613,6 +1614,8 @@ mod tests {
     assert!(image.crop(1, 1, 2, 1).is_none());
     assert!(image.crop(1, 0, 2, 1).is_none());
     assert!(image.crop(u32::MAX, 0, 2, 1).is_none());
+    assert!(image.crop(2, 0, 0, 1).is_none());
+    assert!(image.crop(0, 0, 1, 0).is_none());
     assert!(image.crop(0, 0, 2, 2).is_some());
   }
 

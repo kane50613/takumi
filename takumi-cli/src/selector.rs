@@ -1,6 +1,7 @@
 //! `--selector`: the element whose box an image keeps. Approximate: it reads a compound of a type,
-//! `#id`, and `.class` selectors, where a browser's `querySelector` takes any selector, and finds
-//! only elements that paint a box, which an inline element without a background or border does not.
+//! `#id`, and `.class` selectors, where a browser's `querySelector` takes any selector, and it picks
+//! the first matching element that paints a box, which an inline element without a background or
+//! border does not, so a later match can stand in for it.
 
 use std::fmt::{self, Display, Formatter};
 
