@@ -208,6 +208,7 @@
       "name": "svelte",
       "dependencies": {
         "takumi-js": "workspace:*",
+        "takumi-pdf": "workspace:*",
       },
       "devDependencies": {
         "@sveltejs/adapter-vercel": "^7.0.3",
