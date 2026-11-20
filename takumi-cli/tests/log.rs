@@ -164,3 +164,25 @@ fn a_missing_font_names_its_flag() {
   assert!(!output.status.success());
   assert!(message.starts_with("error: `--font "), "{message}");
 }
+
+#[test]
+fn a_missing_output_directory_is_named() {
+  let dir = TempDir::new("log-missing-directory");
+
+  fs::write(dir.join("page.html"), "<p>One</p>").unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("nowhere/out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert!(!output.status.success());
+  assert!(
+    message.contains("nowhere does not exist. Create it before writing there."),
+    "{message}"
+  );
+}

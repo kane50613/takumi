@@ -186,8 +186,20 @@ impl OutputArgs {
     log::info!(target: "takumi::output", "writing {}", output.display());
 
     if !self.is_stdout() {
-      return fs::write(output, bytes)
-        .map_err(|error| format!("{}: {error}", output.display()).into());
+      return fs::write(output, bytes).map_err(|error| {
+        match output
+          .parent()
+          .filter(|parent| !parent.as_os_str().is_empty() && !parent.is_dir())
+        {
+          Some(parent) => format!(
+            "{}: the directory {} does not exist. Create it before writing there.",
+            output.display(),
+            parent.display()
+          ),
+          None => format!("{}: {error}", output.display()),
+        }
+        .into()
+      });
     }
 
     let mut stdout = io::stdout().lock();
