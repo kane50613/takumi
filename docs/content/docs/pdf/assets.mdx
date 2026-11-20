@@ -29,7 +29,7 @@ For offline renders, [bundle font files](/docs/fonts#fonts-in-ci-and-offline-ren
 
 ### Coverage
 
-The renderer does not read system fonts. Its only built-in font is Geist, a last-resort face for Latin text in one regular weight. Load a font file for real bold and other weights. By default, a character that no registered font covers fails the render, and the error names the character and its codepoint. Register fonts for every script you use. Google Fonts can split accented letters between its `latin` and `latin-ext` subsets.
+The renderer does not read system fonts. Its only built-in font is Geist, a variable last-resort face for Latin text in weights 300 to 800. By default, a character that no registered font covers fails the render, and the error names the character and its codepoint. Register fonts for every script you use. Google Fonts can split accented letters between its `latin` and `latin-ext` subsets.
 
 ### Family names
 
