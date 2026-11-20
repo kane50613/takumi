@@ -1078,6 +1078,16 @@ fn test_grid_cols_none() {
 }
 
 #[test]
+fn test_grid_cols_subgrid() {
+  assert_eq!(
+    parse_property("grid-cols-subgrid"),
+    expect([StyleDeclaration::grid_template_columns(Some(vec![
+      GridTemplateComponent::Subgrid
+    ]))])
+  );
+}
+
+#[test]
 fn test_col_auto_row_auto() {
   assert_eq!(
     parse_property("col-auto"),

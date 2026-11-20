@@ -106,12 +106,20 @@ pub(super) fn track_listing<'i>(
 }
 
 /// A `grid-template-rows` or `grid-template-columns` track list holding at least one track, and
-/// no `repeat()` unless `allows_repeat`.
+/// no `repeat()` or `subgrid` unless `allows_repeat`.
 fn track_list<'i>(
   input: &mut Parser<'i>,
   allows_repeat: bool,
 ) -> ParseResult<'i, GridTemplateComponents> {
   let components = GridTemplateComponents::from_css(input)?;
+
+  if components.first() == Some(&GridTemplateComponent::Subgrid) {
+    if !allows_repeat {
+      return Err(input.new_error_for_next_token());
+    }
+    return Ok(components);
+  }
+
   let has_track = components
     .iter()
     .any(|component| !matches!(component, GridTemplateComponent::LineNames(_)));
