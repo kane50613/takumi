@@ -892,6 +892,7 @@ css/css-break/zero-height-page-break-001-print.html
 !css/css-contain/contain-layout-ink-overflow-020.html
 !css/css-contain/contain-layout-overflow-001.html
 !css/css-contain/contain-layout-overflow-002.html
+!css/css-contain/contain-layout-select-001.tentative.html
 !css/css-contain/contain-layout-size-003.html
 !css/css-contain/contain-layout-suppress-baseline-001.html
 !css/css-contain/contain-layout-suppress-baseline-002.html
@@ -1186,7 +1187,6 @@ css/css-display/run-in/width-applies-to-011.xht
 !css/css-flexbox/overflow-area-001.html
 !css/css-flexbox/overflow-area-002.html
 !css/css-flexbox/overflow-top-left.html
-!css/css-flexbox/percentage-descendant-of-anonymous-flex-item.html
 !css/css-flexbox/percentage-heights-020.html
 !css/css-flexbox/percentage-heights-022.html
 !css/css-flexbox/percentage-heights-023.html
@@ -2905,7 +2905,6 @@ css/css-transforms/matrix/svg-matrix-069.html
 !css/css-transforms/preserve3d-and-flattening-z-order-006.html
 !css/css-transforms/preserve3d-and-flattening-z-order-007.html
 !css/css-transforms/preserve3d-and-flattening-z-order-008.html
-!css/css-transforms/preserve3d-button.html
 !css/css-transforms/preserve3d-overflow-percent.html
 !css/css-transforms/rotate/svg-rotate-3args-invalid-002.html
 !css/css-transforms/rotateY-180deg-with-overflow-scroll.html
