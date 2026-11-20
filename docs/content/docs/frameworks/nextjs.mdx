@@ -111,15 +111,23 @@ export default function Image() {
 npm i takumi-pdf
 ```
 
+```tsx title="app/invoice.pdf/Invoice.tsx"
+export default function Invoice({ id }: { id: number }) {
+  return (
+    <main style={{ padding: 48 }}>
+      <h1>Invoice {id}</h1>
+      <p>Total: $1,290</p>
+    </main>
+  );
+}
+```
+
 ```tsx title="app/invoice.pdf/route.tsx"
 import { render } from "takumi-pdf/next";
 import Invoice from "./Invoice";
 
 export async function GET() {
-  const pdf = await render(<Invoice id={1042} />, {
-    size: "a4",
-    fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
-  });
+  const pdf = await render(<Invoice id={1042} />, { size: "a4" });
 
   return new Response(pdf, {
     headers: { "content-type": "application/pdf" },

@@ -108,10 +108,7 @@ import Invoice from "../components/Invoice.astro";
 export const GET: APIRoute = async () => {
   const container = await AstroContainer.create();
   const html = await container.renderToString(Invoice, { props: { id: 1042, total: 1290 } });
-  const pdf = await render(html, {
-    size: "a4",
-    fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
-  });
+  const pdf = await render(html, { size: "a4" });
 
   return new Response(pdf, { headers: { "content-type": "application/pdf" } });
 };

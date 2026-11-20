@@ -75,6 +75,17 @@ Add a server file route that returns an `ImageResponse`. The example reads the t
 npm i takumi-pdf
 ```
 
+```tsx title="src/components/Invoice.tsx"
+export default function Invoice({ id }: { id: number }) {
+  return (
+    <main style={{ padding: 48 }}>
+      <h1>Invoice {id}</h1>
+      <p>Total: $1,290</p>
+    </main>
+  );
+}
+```
+
 ```tsx title="src/routes/invoice[.]pdf.tsx"
 import { createFileRoute } from "@tanstack/react-router";
 import { render } from "takumi-pdf";
@@ -84,10 +95,7 @@ export const Route = createFileRoute("/invoice.pdf")({
   server: {
     handlers: {
       async GET() {
-        const pdf = await render(<Invoice id={1042} />, {
-          size: "a4",
-          fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
-        });
+        const pdf = await render(<Invoice id={1042} />, { size: "a4" });
 
         return new Response(pdf, {
           headers: { "content-type": "application/pdf" },

@@ -89,6 +89,20 @@ The same component HTML renders to a PDF with [`takumi-pdf`](/docs/pdf). Install
 npm i takumi-pdf
 ```
 
+```svelte title="src/lib/components/Invoice.svelte"
+<script lang="ts">
+  let { id }: { id: number } = $props();
+</script>
+
+<svelte:options css="injected" />
+
+<h1>Invoice {id}</h1>
+
+<style>
+  h1 { color: #e11d48; }
+</style>
+```
+
 ```ts title="src/routes/invoice.pdf/+server.ts"
 import { render as renderSvelte } from "svelte/server";
 import { render } from "takumi-pdf";
@@ -99,10 +113,7 @@ export async function GET() {
     props: { id: 1042 },
   });
 
-  const pdf = await render(`${head}${body}`, {
-    size: "a4",
-    fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
-  });
+  const pdf = await render(`${head}${body}`, { size: "a4" });
 
   return new Response(pdf, {
     headers: { "content-type": "application/pdf" },

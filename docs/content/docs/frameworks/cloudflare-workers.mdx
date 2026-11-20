@@ -73,7 +73,7 @@ export default {
   async fetch(): Promise<Response> {
     const pdf = await render(
       `<style>h1 { font-family: Geist }</style><h1>Invoice 1042</h1><p>Total: $1,290</p>`,
-      { size: "a4", fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"] },
+      { size: "a4" },
     );
 
     return new Response(pdf, { headers: { "content-type": "application/pdf" } });
