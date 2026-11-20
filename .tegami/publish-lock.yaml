@@ -1,173 +1,122 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/cli\":\n    type: minor\n---\n\n# `npx @takumi-rs/cli` runs takumi without Rust\n\nThe `takumi` command is on npm as `@takumi-rs/cli`, with a prebuilt binary for macOS, Windows, and Linux on x64 and arm64.\n\n```sh\nnpx @takumi-rs/cli image card.html -o card.png --width 1200 --height 630\n```\n"
-    filename: cli-npm.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `grid-row` and `grid-column` resolve named lines\n\nA grid item placed by a line name, such as `grid-column: content-start / content-end` or `span gutter`, now lands on the named line. `span name` used to count as `span 1`, and `span 0` and negative spans are rejected, as in Chromium.\n\n```css\n.page {\n  display: grid;\n  grid-template-columns: [full-start] 1fr [content-start] 60ch [content-end] 1fr [full-end];\n}\n\n.wide {\n  grid-column: full;\n}\n```\n"
+    filename: grid-named-lines.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `<button>` draws as a button\n\nA `<button>` had no default style, so it laid out as inline text: `width` did nothing, a background drew only behind its text, and its label sat at the start. It now takes Chromium's default button style, an inline block with a centered label, `padding: 1px 6px`, a 2px outset border, and a light gray background, which an author's styles override. A disabled button fades as in Chromium.\n\n```html\n<button style=\"width: 200px; background: #4338ca; color: #fff\">Sign up</button>\n```\n\n```diff\n- A 79px box behind the label \"Sign up\", with the label at the start\n+ A 200px button with \"Sign up\" centered in it\n```\n"
-    filename: button-default-style.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Grids lay their items out in subgrids\n\n`grid-template-columns: subgrid` and `grid-template-rows: subgrid` used to lay out as `none`, so a nested grid sized its own tracks. A subgrid now takes the tracks it spans from its parent, its items size those tracks alongside the parent's, and its line names, areas, and `<line-name-list>` resolve against them. A subgrid's own `gap` replaces the parent's in its span.\n\n```css\n.cards {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n}\n.card {\n  display: grid;\n  grid-row: span 3;\n  grid-template-rows: subgrid;\n}\n```\n"
+    filename: grid-subgrid.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# An `@page` rule's `size` no longer warns as an unsupported property\n\n`size` in an `@page` rule, including the one `takumi pdf --page` writes, set the page size and also raised a warning, so `--deny-warnings` failed on a valid document. It now sets the page size without a warning.\n\n```diff\n  $ takumi pdf report.html -o report.pdf --page A4 --deny-warnings\n- warning: ignored the property `size` at line 1, column 6 of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.\n- error: `--deny-warnings` is set and the command raised 1 warning, so it wrote nothing.\n```\n"
-    filename: page-size-warning.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  takumi-cli:\n    type: minor\n---\n\n# `@media (prefers-color-scheme)` matches, and `takumi --color-scheme dark` renders the dark variant\n\n`prefers-color-scheme` used to match nothing. It now matches `light` by default, and `dark` when the viewport asks for it, so a page that keeps its dark colors in a `prefers-color-scheme: dark` rule renders them.\n\n```sh\ntakumi image email.html -o email-dark.png --width 600 --color-scheme dark\n```\n\n```rust\nlet viewport = Viewport::new((600, 400)).with_color_scheme(ColorScheme::Dark);\n```\n\n- `takumi image` and `takumi paint` take `--color-scheme light` or `dark`.\n- In Rust, `Viewport::with_color_scheme` sets it, and `ColorScheme` is in the prelude. `Viewport` gains the `color_scheme` field, so a `Viewport { .. }` literal needs it. `Viewport::new` and its `with_*` methods need no change.\n- A rule under `prefers-color-scheme: light` now applies by default, as in a browser.\n- `light-dark()` still takes its first color.\n\n#### Migration\n\nA `Viewport` struct literal names the new field, unless it copies the rest with `..`:\n\n```diff\n  let viewport = Viewport {\n    size: (1200, 630).into(),\n    font_size: 16.0,\n    device_pixel_ratio: 1.0,\n    media_target: MediaTarget::Screen,\n    unit_reference: None,\n+   color_scheme: ColorScheme::Light,\n  };\n```\n"
-    filename: color-scheme.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-cli:\n    type: patch\n---\n\n# Text fields and `--list-resources` no longer warn of a missing font\n\nA page with a text `<input>` warned that no face is loaded for `Arial`, since the default style of a text field named it, so `--deny-warnings` failed on any page with one. The default style now names `system-ui`, which draws in the same font when no Arial is loaded. `takumi --list-resources` no longer warns that an `@font-face` family is missing either.\n\n```diff\n  $ takumi image signup.html -o signup.png --deny-warnings\n- warning: no face is loaded for font-family \"Arial\", so text falls back to the next family that has one. Load the font, or check the name in font-family.\n```\n"
-    filename: form-control-font.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `dir`, `<bdi>`, and `<bdo>` isolate their text as in a browser\n\nAn element with a `dir` attribute and a `<bdi>` now isolate their text from the text around them, and a `<bdo>` overrides the order of its text. `dir=\"auto\"` and `<bdi>` also take their direction from their content. This follows the HTML default styles, so a date in a `<bdi>` or in an element with `dir=\"ltr\"` keeps its order next to Arabic text.\n\n```html\n<p dir=\"rtl\">التاريخ: <bdi>2026-11-19</bdi></p>\n```\n\n- Before, the date drew as `19-11-2026`, since the `<bdi>` did not isolate it from the Arabic before it.\n- Now it draws as `2026-11-19`, as in a browser.\n- A date with no isolating element still reorders after Arabic text, as it does in a browser.\n"
-    filename: html-dir-isolate.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# A `font-family` whose first family never loads now warns\n\nWhen no loaded face provides the first family a `font-family` names, takumi logs a warning that names it. The `takumi` CLI prints it and fails on it under `--deny-warnings`. The JS and WASM bindings keep their own warning for a family no font provides. Generic families, `-apple-system`, and `BlinkMacSystemFont` never warn, and missing later families stay at debug level.\n\n```sh\n$ takumi image card.html -o card.png\nwarning: no face is loaded for font-family \"Playfair Display\", so text falls back to the next family that has one. Load the font, or check the name in font-family.\n```\n"
-    filename: warn-missing-font-family.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: minor\n  takumi-raster:\n    type: minor\n---\n\n# `takumi image --selector` renders one element at its own size\n\n`--selector` keeps only the first element it matches and crops the image to that element's box, so a card or a slide renders without the page around it.\n\n```sh\ntakumi image page.html -o pricing.png --selector .pricing-card\n```\n\n- It takes a type, `#id`, and `.class` written together, such as `section.pricing-card`.\n- It writes PNG, JPEG, or WebP. An SVG output with `--selector` exits with code `2`.\n- No match fails with `no element matches`.\n- In Rust, `Bitmap::crop` is now public, and returns `None` for an empty region or one that does not fit the bitmap.\n\n```rust\nlet bitmap = Bitmap::from_raw(320, 256, vec![0; 320 * 256 * 4]).ok_or(\"invalid bitmap data\")?;\nlet card = bitmap.crop(40, 120, 280, 136).ok_or(\"the card lies outside the image\")?;\n```\n"
-    filename: cli-selector.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: patch\n---\n\n# `takumi` errors say how to fix more mistakes\n\n- An image too tall for the canvas names the most height the width and `--dpr` allow.\n- An HTML file that holds binary data says it is not HTML, where it suggested converting its encoding. A UTF-16 file is named as UTF-16, with an `iconv` command that converts it.\n- `--page` and `--margin` values takumi does not read come with examples of the values it does.\n- `--selector` names an inline element without a background or border only when one matches, and otherwise says no element matches.\n\n```diff\n  $ takumi image tall.html -o tall.png\n- error: the image would be 0px tall or over 64 megapixels at the content's height. Pass `--height`.\n+ error: the image would be 0px tall or over 64 megapixels at the content's height, which at 1200px wide and `--dpr 1` allows at most 55924px. Pass `--height`.\n```\n"
-    filename: cli-error-messages.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: patch\n---\n\n# `takumi paint` keeps the break between wrapped lines\n\nA text that wrapped onto several lines used to print with its lines run together, so `Takumi CLI, tested by an agent` wrapped after `tested` printed as `\"Takumi CLI, testedby an agent\"`. Each line break now prints as `\\n`.\n\n```diff\n- text p 8,8 284x82 \"Takumi CLI, testedby an agent\" Geist 32px #000000\n+ text p 8,8 284x82 \"Takumi CLI, tested\\nby an agent\" Geist 32px #000000\n```\n"
-    filename: paint-text-line-breaks.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: patch\n---\n\n# `takumi` names standard input, `--font`, and a missing directory in what it prints\n\n`--log info` names standard input for `-`, where it printed the URL of the working directory. A `--font` file that is missing or not a font fails with an error that starts with the flag. An output in a directory that does not exist names that directory.\n\n```diff\n  $ cat card.html | takumi image - -o card.png --log info\n- [     0.0ms] input: read file:///home/me/site/, 198 bytes\n+ [     0.0ms] input: read standard input, 198 bytes\n\n  $ takumi image card.html -o card.png --font nope.ttf\n- error: nope.ttf: No such file or directory (os error 2)\n+ error: `--font nope.ttf`: No such file or directory (os error 2)\n\n  $ takumi image card.html -o out/card.png\n- error: out/card.png: No such file or directory (os error 2)\n+ error: out/card.png: the directory out does not exist. Create it before writing there.\n```\n\n`takumi image --help` and `takumi pdf --help` also name the tab-separated columns `--list-resources` prints.\n"
-    filename: cli-diagnostics-stdin-font.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: patch\n---\n\n# `cargo binstall takumi-cli` installs a prebuilt binary\n\nEach takumi-cli release on GitHub now carries a binary for macOS, Windows, and Linux, each on x64 and arm64, so `cargo binstall` installs takumi in seconds instead of building it. The Linux binary is statically linked and runs on both glibc and musl.\n\n```sh\ncargo binstall takumi-cli\n```\n"
-    filename: cli-binstall.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: minor\n---\n\n# `takumi paint` marks a box the canvas cuts off\n\nA node that crosses an edge of the canvas now ends with `cut off at the <side> edge`, or names each edge it crosses. Before, only a node wholly past an edge was marked, as `offscreen`.\n\n```diff\n- box div#cta 1100,600 200x60 background #4338ca\n+ box div#cta 1100,600 200x60 background #4338ca cut off at the right and bottom edges\n```\n"
-    filename: paint-cut-off.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-cli:\n    type: patch\n---\n\n# `takumi image --help` describes `--selector` and `--color-scheme` as they behave\n\n`--selector` now says it takes a lone class such as `.card`. `--color-scheme` now says `light-dark()` always takes its first color, whatever the scheme.\n"
-    filename: cli-help-selector-light-dark.md
+  - content: "---\npackages:\n  takumi-cli:\n    type: minor\n---\n\n# `takumi pdf --page` takes every ISO A and B size\n\nCSS names only A3 to A5, B4, and B5, so `--page A1` failed and a poster needed its size in millimetres. `--page` now also takes A0 to A10 and B0 to B10, with `landscape` or `portrait`.\n\n```diff\n- takumi pdf poster.html -o poster.pdf --page \"594mm 841mm\"\n+ takumi pdf poster.html -o poster.pdf --page A1\n```\n"
+    filename: cli-iso-page-sizes.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:takumi-pdf
-    updated: true
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-paint
     updated: true
   - id: npm:@takumi-rs/core
     updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/bindings-js
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:takumi-pdf
+    updated: true
+  - id: npm:@takumi-rs/image-response
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:takumi-paint
+  - id: npm:@takumi-rs/bindings-js
     updated: true
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
     updated: false
   - id: npm:pdf-bench
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - changelogIds:
-      - cli-npm.md
-    id: npm:@takumi-rs/cli
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:@takumi-rs/cli
+    updated: true
+  - id: npm:@takumi-rs/cli-darwin-x64
+    updated: true
+  - id: npm:@takumi-rs/cli-linux-x64
     updated: true
   - id: npm:@takumi-rs/cli-darwin-arm64
     updated: true
   - id: npm:@takumi-rs/cli-linux-arm64
     updated: true
-  - id: npm:@takumi-rs/cli-win32-arm64
-    updated: true
-  - id: npm:@takumi-rs/cli-darwin-x64
-    updated: true
   - id: npm:@takumi-rs/cli-win32-x64
     updated: true
-  - id: npm:@takumi-rs/cli-linux-x64
+  - id: npm:@takumi-rs/cli-win32-arm64
     updated: true
   - changelogIds:
-      - button-default-style.md
-      - page-size-warning.md
-      - color-scheme.md
-      - form-control-font.md
-      - html-dir-isolate.md
-      - warn-missing-font-family.md
+      - grid-named-lines.md
+      - grid-subgrid.md
     id: cargo:takumi-core
     updated: true
-  - changelogIds:
-      - color-scheme.md
-    id: cargo:takumi
-    updated: true
-  - changelogIds:
-      - cli-selector.md
-    id: cargo:takumi-raster
+  - id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-svg
     updated: true
+  - id: cargo:takumi
+    updated: true
   - changelogIds:
-      - cli-error-messages.md
-      - paint-text-line-breaks.md
-      - cli-diagnostics-stdin-font.md
-      - color-scheme.md
-      - form-control-font.md
-      - cli-binstall.md
-      - paint-cut-off.md
-      - cli-help-selector-light-dark.md
-      - cli-selector.md
+      - cli-iso-page-sizes.md
     id: cargo:takumi-cli
     updated: true
   - id: cargo:takumi-pdf
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
-  - id: npm:docs
-  - id: npm:@takumi-rs/bindings-js
-  - id: npm:takumi-js
   - id: npm:takumi-paint
-  - id: npm:example-twitter-images
-  - id: npm:example-nextjs
-  - id: npm:svelte
-  - id: npm:waku-ssr
-  - id: npm:example-css-library-integration
-  - id: npm:example-tanstack-start
-  - id: npm:example-satori-html
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
+  - id: npm:docs
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/bindings-js
   - id: npm:ffplay
-  - id: npm:example-liquid-glass
-  - id: npm:example-e-invoice
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
   - id: npm:pdf-bench
   - id: npm:example-cloudflare-workers
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:example-satori-html
   - id: npm:example-generate-invoice
+  - id: npm:example-e-invoice
+  - id: npm:example-twitter-images
+  - id: npm:example-tanstack-start
+  - id: npm:example-css-library-integration
+  - id: npm:waku-ssr
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:@takumi-rs/cli
+  - id: npm:@takumi-rs/cli-darwin-x64
+  - id: npm:@takumi-rs/cli-linux-x64
   - id: npm:@takumi-rs/cli-darwin-arm64
   - id: npm:@takumi-rs/cli-linux-arm64
-  - id: npm:@takumi-rs/cli-win32-arm64
-  - id: npm:@takumi-rs/cli-darwin-x64
   - id: npm:@takumi-rs/cli-win32-x64
-  - id: npm:@takumi-rs/cli-linux-x64
+  - id: npm:@takumi-rs/cli-win32-arm64

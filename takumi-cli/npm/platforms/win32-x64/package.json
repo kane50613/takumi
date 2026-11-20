@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/cli-win32-x64",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The takumi command-line binary for Windows on x64.",
   "homepage": "https://takumi.kane.tw/docs/cli",
   "bugs": {

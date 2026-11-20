@@ -1,3 +1,36 @@
+## takumi-core@0.39.0
+
+### `grid-row` and `grid-column` resolve named lines
+
+A grid item placed by a line name, such as `grid-column: content-start / content-end` or `span gutter`, now lands on the named line. `span name` used to count as `span 1`, and `span 0` and negative spans are rejected, as in Chromium.
+
+```css
+.page {
+  display: grid;
+  grid-template-columns: [full-start] 1fr [content-start] 60ch [content-end] 1fr [full-end];
+}
+
+.wide {
+  grid-column: full;
+}
+```
+
+### Grids lay their items out in subgrids
+
+`grid-template-columns: subgrid` and `grid-template-rows: subgrid` used to lay out as `none`, so a nested grid sized its own tracks. A subgrid now takes the tracks it spans from its parent, its items size those tracks alongside the parent's, and its line names, areas, and `<line-name-list>` resolve against them. A subgrid's own `gap` replaces the parent's in its span.
+
+```css
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+.card {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+}
+```
+
 ## takumi-core@0.38.0
 
 ### `<button>` draws as a button
