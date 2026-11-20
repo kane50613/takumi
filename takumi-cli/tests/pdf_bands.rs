@@ -3,6 +3,7 @@
 //! band the CLI draws in which margin.
 
 use std::{
+  fs,
   path::{Path, PathBuf},
   process::Command,
 };
@@ -37,6 +38,39 @@ fn render(golden: &str, bands: &[(&str, &str)]) {
     "{}",
     String::from_utf8_lossy(&result.stderr)
   );
+
+  let mut pdf = fs::read(&output).expect("reads the PDF");
+
+  zero_producer_version(&mut pdf);
+  fs::write(&output, pdf).expect("writes the PDF");
+}
+
+/// Writes each digit of the `takumi-pdf` version in the producer as `0`, so a release does not
+/// change the goldens. The length stays, and with it every byte offset the PDF records.
+fn zero_producer_version(pdf: &mut [u8]) {
+  const PRODUCER: &[u8] = b"takumi-pdf ";
+
+  let mut start = 0;
+
+  while let Some(found) = pdf[start..]
+    .windows(PRODUCER.len())
+    .position(|window| window == PRODUCER)
+  {
+    let mut index = start + found + PRODUCER.len();
+
+    while let Some(byte) = pdf
+      .get_mut(index)
+      .filter(|byte| byte.is_ascii_digit() || **byte == b'.')
+    {
+      if byte.is_ascii_digit() {
+        *byte = b'0';
+      }
+
+      index += 1;
+    }
+
+    start = index;
+  }
 }
 
 #[test]
