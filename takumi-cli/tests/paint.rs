@@ -39,6 +39,31 @@ fn paint_html(name: &str, html: &str, arguments: &[&str]) -> String {
 }
 
 #[test]
+fn a_box_across_an_edge_is_cut_off() {
+  let outline = paint_html(
+    "cut-off",
+    r#"<style>body { margin: 0 } div { position: absolute; width: 50px; height: 40px; background: red }</style><div id="bottom" style="left: 10px; top: 80px"></div><div id="corner" style="left: 280px; top: 80px"></div><div id="inside" style="left: 10px; top: 10px"></div>"#,
+    &[],
+  );
+  let line = |needle: &str| {
+    outline
+      .lines()
+      .find(|line| line.contains(needle))
+      .unwrap_or_else(|| panic!("nothing holds {needle:?} in:\n{outline}"))
+  };
+
+  assert!(
+    line("div#bottom").ends_with("cut off at the bottom edge"),
+    "{outline}"
+  );
+  assert!(
+    line("div#corner").ends_with("cut off at the right and bottom edges"),
+    "{outline}"
+  );
+  assert!(!line("div#inside").contains("cut off"), "{outline}");
+}
+
+#[test]
 fn a_wrapped_text_marks_each_line_break() {
   let outline = paint_html(
     "wrapped",

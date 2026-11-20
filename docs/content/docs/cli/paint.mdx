@@ -61,11 +61,12 @@ A line holds the kind of node, a selector for its element, and its rectangle on 
 - an image's `src` and natural size
 - `clips-overflow`, `opacity`, `filters`, and `transform` when they apply
 
-Three markers point at a node that cannot show:
+Four markers point at a node that cannot show in full:
 
 | Marker                           | Meaning                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------- |
 | `offscreen past the <side> edge` | Its rectangle lies outside the canvas, past that edge.                    |
+| `cut off at the <side> edge`     | Its rectangle crosses that edge, so the canvas shows only part of it.     |
 | `empty`                          | It has no width or no height.                                             |
 | `draws nothing`                  | Text or an image that paints no pixel, as `visibility: hidden` leaves it. |
 
