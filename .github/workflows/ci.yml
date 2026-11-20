@@ -399,7 +399,6 @@ jobs:
         run: pip install cargo-zigbuild==0.24.1 ziglang==0.17.1
 
       - name: Build
-        shell: bash
         env:
           RUSTFLAGS: ${{ env.RUSTFLAGS }}${{ contains(matrix.settings.target, 'windows') && ' -C target-feature=+crt-static' || '' }}
         run: cargo ${{ contains(matrix.settings.target, 'musl') && 'zigbuild' || 'build' }} --locked --release -p takumi-cli --target ${{ matrix.settings.target }}
