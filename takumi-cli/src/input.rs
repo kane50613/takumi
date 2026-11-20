@@ -127,6 +127,18 @@ pub(crate) fn read_html_file(path: &Path) -> Result<(String, Url), Box<dyn Error
 /// Approximate: a browser decodes HTML in the encoding a `<meta charset>` declares, where this
 /// takes UTF-8 alone.
 fn utf8_html(bytes: Vec<u8>, name: &str) -> Result<String, Box<dyn Error>> {
+  if bytes.starts_with(&[0xFF, 0xFE, 0, 0]) || bytes.starts_with(&[0, 0, 0xFE, 0xFF]) {
+    return Err(format!("{name} is UTF-32, and takumi reads HTML in UTF-8 only. Convert it first, for example with `iconv -f utf-32 -t utf-8`.").into());
+  }
+
+  if bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
+    return Err(format!("{name} is UTF-16, and takumi reads HTML in UTF-8 only. Convert it first, for example with `iconv -f utf-16 -t utf-8`.").into());
+  }
+
+  if bytes.contains(&0) {
+    return Err(format!("{name} holds binary data, not HTML text.").into());
+  }
+
   String::from_utf8(bytes).map_err(|_| {
     format!("{name} is not UTF-8, the only encoding takumi reads HTML in. Convert it first, for example with `iconv -f windows-1252 -t utf-8`.").into()
   })

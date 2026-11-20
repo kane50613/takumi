@@ -7,7 +7,7 @@ use std::fmt::{self, Display, Formatter};
 
 use cssparser::{Parser, Token};
 use takumi::prelude::Bitmap;
-use takumi_core::paint_tree::{ElementInfo, PaintDocument};
+use takumi_core::paint_tree::{ElementInfo, NodeKind, PaintDocument};
 
 /// A compound selector, such as `div.card` or `#hero`, matched against the first element in
 /// document order.
@@ -75,6 +75,17 @@ impl ElementSelector {
       })
   }
 
+  /// Whether a text run in `document` comes from a matching inline element.
+  fn matches_inline_text(&self, document: &PaintDocument) -> bool {
+    document.nodes.iter().any(|node| match &node.kind {
+      NodeKind::Text { runs, .. } => runs
+        .iter()
+        .filter_map(|run| run.element.as_ref())
+        .any(|element| self.matches(element)),
+      _ => false,
+    })
+  }
+
   /// The part of `bitmap` the first matching element in `document` covers, or why there is none.
   pub(crate) fn crop(&self, document: &PaintDocument, bitmap: &Bitmap) -> Result<Bitmap, String> {
     let Some(path) = document
@@ -85,9 +96,13 @@ impl ElementSelector {
       .map(|element| &element.path)
       .min()
     else {
-      return Err(format!(
-        "no element matches `--selector {self}`. An inline element with no background or border draws no box of its own, so give it `display: inline-block`."
-      ));
+      return Err(if self.matches_inline_text(document) {
+        format!(
+          "`--selector {self}` matches only an inline element with no background or border, which draws no box of its own. Give it `display: inline-block`."
+        )
+      } else {
+        format!("no element matches `--selector {self}`.")
+      });
     };
     let (left, top, right, bottom) = document
       .nodes

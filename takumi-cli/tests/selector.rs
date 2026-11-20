@@ -78,7 +78,7 @@ fn no_match_fails_and_names_the_selector() {
   assert!(!dir.join("out.png").exists());
   assert_eq!(
     String::from_utf8(output.stderr).unwrap(),
-    "error: no element matches `--selector .missing`. An inline element with no background or border draws no box of its own, so give it `display: inline-block`.\n"
+    "error: no element matches `--selector .missing`.\n"
   );
 }
 
@@ -109,4 +109,31 @@ fn the_first_match_in_document_order_wins_over_paint_order() {
     String::from_utf8_lossy(&output.stderr)
   );
   assert_eq!(png_size(&fs::read(dir.join("out.png")).unwrap()), (100, 50));
+}
+
+#[test]
+fn an_undecorated_inline_match_is_named() {
+  let dir = TempDir::new("selector-inline");
+
+  fs::write(
+    dir.join("page.html"),
+    r#"<p>Hi <span id="name">Ada</span></p>"#,
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .args(["--selector", "#name"])
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(
+    message.contains("matches only an inline element"),
+    "{message}"
+  );
 }
