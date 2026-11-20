@@ -58,8 +58,8 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 | `--format <format>`       | From the output's extension      | `png`, `jpeg` (or `jpg`), `webp`, or `svg`. <sup>2</sup>      |
 | `--quality <0-100>`       | `75` for JPEG, lossless for WebP | The encoding quality. <sup>3</sup>                            |
 
-<sup>1</sup> The image is `width × dpr` by `height × dpr` pixels, and may hold at most 64
-megapixels.
+<sup>1</sup> The image is `width × dpr` by `height × dpr` pixels. A PNG, JPEG, or WebP image may
+hold at most 64 megapixels.
 
 <sup>2</sup> `--format` is required with `-o -`, since standard output has no extension.
 
@@ -112,14 +112,17 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 
 ## Exit codes
 
-| Code | Meaning                                                                                                 |
-| ---- | ------------------------------------------------------------------------------------------------------- |
-| `0`  | The output was written, or the listing printed.                                                         |
-| `1`  | A file could not be read or written, the render failed, or it raised a warning under `--deny-warnings`. |
-| `2`  | The command line is wrong. <sup>1</sup>                                                                 |
-| `3`  | The document tried to read a file outside the granted directories.                                      |
+| Code | Meaning                                                                                                                                                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | The output was written, or the listing printed.                                                                                                                      |
+| `1`  | A file named on the command line could not be read, the output could not be written, the render failed, or it raised a warning under `--deny-warnings`. <sup>1</sup> |
+| `2`  | The command line is wrong. <sup>2</sup>                                                                                                                              |
+| `3`  | The document tried to read a file outside the granted directories.                                                                                                   |
 
-<sup>1</sup> For example, an unknown flag or command, a value CSS does not accept, or an output
+<sup>1</sup> A file the document references that fails to load is skipped with a warning, so the
+command exits `0` unless `--deny-warnings` is set.
+
+<sup>2</sup> For example, an unknown flag or command, a value CSS does not accept, or an output
 format takumi does not write.
 
 ## Limits

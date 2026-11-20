@@ -11,7 +11,7 @@ takumi image card.html -o card.png --width 1200 --height 630
 
 ## Set the size
 
-`--width` and `--height` set the viewport in CSS pixels, the size the page lays out in. The width defaults to 1200. Without `--height`, the image is as tall as the content, which suits a page whose length you do not know ahead of time. An image holds at most 64 megapixels, so at 1200px wide a page taller than 55,924px needs `--height`.
+`--width` and `--height` set the viewport in CSS pixels, the size the page lays out in. The width defaults to 1200. Without `--height`, the image is as tall as the content, which suits a page whose length you do not know ahead of time. A PNG, JPEG, or WebP image holds at most 64 megapixels, counted in device pixels. At the default 1200px width and `--dpr 1`, a page taller than 55,924px needs `--height`, and `--dpr 2` quarters that budget. SVG output has no such limit.
 
 `--dpr` sets the device pixel ratio. `--dpr 2` lays the page out at the same CSS size and writes twice as many pixels in each direction, for high-density screens:
 
