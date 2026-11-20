@@ -1317,10 +1317,6 @@ jobs:
           filters: |
             docs:
               - "docs/**"
-              - "bun.lock"
-              - ".github/scripts/deploy-docs.sh"
-              - ".github/scripts/preview-alias.sh"
-              - ".github/scripts/preview-comment.cjs"
 
   deploy-docs:
     name: Deploy docs
