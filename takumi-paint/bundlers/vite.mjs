@@ -6,7 +6,10 @@ import * as wasm from "../dist/export.mjs";
 async function resolveWasm() {
   if (typeof process !== "undefined" && process.versions?.node != null) {
     // Nitro 2 traces this file but its output loads node.mjs at runtime, so name it for the tracer.
-    import.meta.resolve("./node.mjs");
+    // Vite's module runner throws on import.meta.resolve, and the hint is only for the tracer.
+    try {
+      import.meta.resolve("./node.mjs");
+    } catch {}
 
     const { readFile } = process.getBuiltinModule("node:fs/promises");
     const path = decodeURIComponent(url.replace(/[?#].*$/, ""));
