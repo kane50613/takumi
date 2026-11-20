@@ -1,9 +1,7 @@
 name: Remove Preview Alias
 
-# pull_request_target also runs for a pull request with a merge conflict, and checks out the base
-# branch, so the head branch's code never runs with the token.
 on:
-  pull_request_target:
+  pull_request:
     types: [closed]
 
 permissions:
