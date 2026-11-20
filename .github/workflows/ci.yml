@@ -1291,7 +1291,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="takumi-cli@$(sed -n 's/^version = "\(.*\)"$/\1/p' takumi-cli/Cargo.toml | head -n 1)"
-          if [ "$(git rev-parse -q --verify "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ] && gh release view "$tag" > /dev/null 2>&1; then
+          if [ "$(git rev-parse -q --verify "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ]; then
             gh release upload "$tag" "$RUNNER_TEMP"/cli/takumi-* --clobber
           fi
 
