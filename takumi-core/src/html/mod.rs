@@ -136,6 +136,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "h6",
     "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
+  ("bdi", "unicode-bidi:isolate"),
+  ("bdo", "unicode-bidi:isolate-override"),
   ("u", "text-decoration:underline"),
   ("ins", "text-decoration:underline"),
   ("strong", "font-weight:bolder"),
