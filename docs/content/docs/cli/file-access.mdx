@@ -18,6 +18,8 @@ Two flags change it:
 takumi image site/pages/card.html -o card.png --root site
 ```
 
+Every file the document reaches counts, including a stylesheet another one `@import`s and the fonts and images it references. When those sit in sibling directories, point `--root` at the directory that holds them all.
+
 `--root` and `--allow-read` only change what the document may read. Relative URLs still resolve against the file that writes them.
 
 A document read from standard input gets no directory by default, since it has no file to sit beside. Grant one with `--root` if it references files.

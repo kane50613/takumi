@@ -46,8 +46,8 @@ pub(crate) struct ImageArgs {
   #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
   quality: Option<u8>,
 
-  /// Keeps only the first element this selector matches, at its own size. Takes a type, `#id`,
-  /// and `.class` together, such as `div.card`.
+  /// Keeps only the first element this selector matches, at its own size. Takes a type, an
+  /// `#id`, and classes, alone or together, such as `.card` or `div.card`.
   #[arg(long, value_name = "SELECTOR", value_parser = ElementSelector::parse)]
   selector: Option<ElementSelector>,
 }
@@ -68,8 +68,8 @@ pub(crate) struct ViewportArgs {
   #[arg(long, default_value_t = 1.0, value_parser = parse_device_pixel_ratio)]
   dpr: f32,
 
-  /// The color scheme `@media (prefers-color-scheme)` matches. `light-dark()` takes its light
-  /// color in either.
+  /// The color scheme `@media (prefers-color-scheme)` matches. `light-dark()` always takes its
+  /// first color, whatever the scheme.
   #[arg(long, value_enum, default_value_t = ColorSchemeArg::Light)]
   color_scheme: ColorSchemeArg,
 }
