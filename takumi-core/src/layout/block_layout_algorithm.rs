@@ -51,6 +51,7 @@ use crate::{
     logical_rect::{AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalSize},
     margin_strut::MarginStrut,
     min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
+    node::Node,
     relative_utils::compute_relative_offset,
     text_control::{TextControl, TextControlBox, baseline_for_empty_line},
     tree::{LayoutTree, RenderNode},
@@ -1069,13 +1070,19 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
     offset
   }
 
-  /// Blink's `AlignContentBlockCenter`, which `html.css` sets on a text field as
+  /// Blink's `AlignContentBlockCenter`, which `html.css` sets on a text field and a `<button>` as
   /// `-internal-align-content-block: center`: its content centers without regard to overflow.
   fn aligns_content_block_center(&self) -> bool {
+    let render_node = self.tree.render_node(self.node);
+
     matches!(
-      self.tree.render_node(self.node).text_control,
+      render_node.text_control,
       Some(TextControlBox::Host(TextControl::SingleLine { .. }))
-    )
+    ) || render_node
+      .node
+      .as_ref()
+      .and_then(Node::tag_name)
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("button"))
   }
 
   /// Blink's `ClampIntrinsicBlockSize` for a text control, whose content block size its attributes
