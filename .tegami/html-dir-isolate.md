@@ -5,7 +5,7 @@ packages:
 
 # `dir`, `<bdi>`, and `<bdo>` isolate their text as in a browser
 
-An element with a `dir` attribute and a `<bdi>` now isolate their text from the text around them, and a `<bdo>` overrides the order of its text. `dir="auto"` and `<bdi>` also take their direction from their content. This follows the HTML default styles, so a date wrapped in one of them keeps its order next to Arabic text.
+An element with a `dir` attribute and a `<bdi>` now isolate their text from the text around them, and a `<bdo>` overrides the order of its text. `dir="auto"` and `<bdi>` also take their direction from their content. This follows the HTML default styles, so a date in a `<bdi>` or in an element with `dir="ltr"` keeps its order next to Arabic text.
 
 ```html
 <p dir="rtl">التاريخ: <bdi>2026-11-19</bdi></p>
