@@ -27,6 +27,12 @@ To keep it in a project, add it as a dev dependency. The project's scripts can t
 npm i -D @takumi-rs/cli
 ```
 
+To call `takumi` from any directory, install it globally instead:
+
+```npm
+npm i -g @takumi-rs/cli
+```
+
 The package ships a binary for each of these platforms:
 
 - macOS on x64 and arm64
@@ -101,7 +107,7 @@ cargo install --locked --path takumi-cli
 
 Upgrade takumi the way you installed it:
 
-- From npm, install the newest release with your package manager, such as `npm i -D @takumi-rs/cli@latest`. `npm update` stays within the version range in `package.json`, which does not cross a minor release before 1.0.
+- From npm, install the newest release again: `npm i -D @takumi-rs/cli@latest` in a project, or `npm i -g @takumi-rs/cli@latest` for a global install. `npm update` stays within the version range in `package.json`, which does not cross a minor release before 1.0.
 - With `cargo binstall`, run `cargo binstall takumi-cli` again to download the newest release.
 - With `cargo install`, run `takumi upgrade`.
 
