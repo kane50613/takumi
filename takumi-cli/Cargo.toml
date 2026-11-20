@@ -8,6 +8,7 @@ repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 keywords = ["html", "css", "pdf", "image", "cli"]
 categories = ["command-line-utilities", "multimedia::images"]
+exclude = ["npm/"]
 
 [[bin]]
 name = "takumi"
