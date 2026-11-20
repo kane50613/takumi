@@ -48,6 +48,16 @@ Without `--format`, an output with any other extension stops before rendering, w
 takumi image photo.html -o photo.webp --quality 80
 ```
 
+## Render one element
+
+`--selector` keeps only the first element it matches that draws a box, at its own size, and drops the rest of the page:
+
+```sh
+takumi image page.html -o pricing.png --selector .pricing-card
+```
+
+The page still lays out at `--width`, so the element keeps the size it has there. `--selector` takes a type, `#id`, and `.class` written together, such as `section.pricing-card` or `#hero`. It reads no combinators or pseudo-classes, so give the element a class or an id to pick it. An inline element with no background or border draws no box of its own, so `--selector` skips it and can pick a later match. Give it `display: inline-block` to pick it. It writes PNG, JPEG, or WebP, not SVG.
+
 ## Keep a transparent background
 
 A page that paints no background renders transparent, so leave `html` and `body` without one for a badge or a sticker:

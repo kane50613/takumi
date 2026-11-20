@@ -12,10 +12,13 @@ use takumi::{
   render, render_svg, uncovered_characters, write_image,
 };
 
+use takumi_core::paint_tree::{PaintTreeOptions, paint_tree};
+
 use crate::{
   document::Document,
   input::{InputArgs, OutputArgs, UsageError},
   product::{Images, Product},
+  selector::ElementSelector,
 };
 
 /// Renders an HTML file to a PNG, JPEG, WebP, or SVG image.
@@ -23,6 +26,7 @@ use crate::{
 #[command(after_help = "Examples:
   takumi image card.html -o card.png --width 1200 --height 630
   takumi image card.html -o card@2x.webp --dpr 2
+  takumi image page.html -o pricing.png --selector .pricing-card
   cat card.html | takumi image - -o - --format png > card.png")]
 pub(crate) struct ImageArgs {
   #[command(flatten)]
@@ -41,6 +45,11 @@ pub(crate) struct ImageArgs {
   /// The encoding quality from 0 to 100. JPEG defaults to 75, and WebP is lossless without it.
   #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
   quality: Option<u8>,
+
+  /// Keeps only the first element this selector matches, at its own size. Takes a type, `#id`,
+  /// and `.class` together, such as `div.card`.
+  #[arg(long, value_name = "SELECTOR", value_parser = ElementSelector::parse)]
+  selector: Option<ElementSelector>,
 }
 
 /// The viewport a product lays the document out in.
@@ -121,6 +130,7 @@ pub(crate) struct Image {
   format: ImageFormat,
   quality: Option<Quality>,
   viewport: Viewport,
+  selector: Option<ElementSelector>,
 }
 
 impl ImageArgs {
@@ -154,10 +164,17 @@ impl ImageArgs {
       ));
     }
 
+    if matches!(format, ImageFormat::Svg) && self.selector.is_some() {
+      return Err(usage(
+        "`--selector` crops pixels, which an SVG has none of. Write png, jpg, or webp.".into(),
+      ));
+    }
+
     Ok(Image {
       format,
       quality: self.quality.map(Quality::new),
       viewport: self.viewport.device_viewport(),
+      selector: self.selector.clone(),
     })
   }
 }
@@ -237,6 +254,23 @@ impl Product for Image {
       (ImageFormat::Webp, Some(quality)) => OutputFormat::WebP { quality },
       (ImageFormat::Webp, None) => OutputFormat::WebPLossless,
     };
+    let region = self
+      .selector
+      .as_ref()
+      .map(|selector| -> Result<_, Box<dyn Error>> {
+        let tree = paint_tree(
+          PaintTreeOptions::builder()
+            .viewport(self.viewport)
+            .node(document.node.clone())
+            .fonts(fonts)
+            .images(images.clone())
+            .stylesheet(Arc::clone(&document.stylesheet))
+            .build(),
+        )?;
+
+        Ok((selector, tree.document))
+      })
+      .transpose()?;
     let bitmap = render(self.options(&document, fonts, images)).map_err(|error| -> Box<dyn Error> {
       match error {
         RenderError::InvalidViewport if self.viewport.size.height.is_none() => {
@@ -245,6 +279,10 @@ impl Product for Image {
         error => error.into(),
       }
     })?;
+    let bitmap = match region {
+      Some((selector, tree)) => selector.crop(&tree, &bitmap)?,
+      None => bitmap,
+    };
     let mut bytes = Vec::new();
 
     write_image(&bitmap, &mut bytes, format)?;

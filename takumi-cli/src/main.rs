@@ -10,6 +10,7 @@ mod paint;
 mod pdf;
 mod product;
 mod sandbox;
+mod selector;
 mod stylesheet;
 mod upgrade;
 
