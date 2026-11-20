@@ -138,13 +138,33 @@ impl FontFallbackList {
     list
   }
 
-  /// Logs the families `key` names that no loaded face has, with the family text falls back to,
-  /// as a warning when the first family, the one the style asks for, is among them.
+  /// Logs the families `key` names that no loaded face has: the first, the one the style asks
+  /// for, as a warning, and the rest at debug level with the family text falls back to.
   fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&SimpleFontData>) {
     let missing: Vec<&str> = fonts.missing_families(key).collect();
-    let Some(first) = missing.first() else {
-      return;
+    // Blink reads `-apple-system` and `BlinkMacSystemFont` as `system-ui`, a generic family.
+    let asks_for_first = matches!(
+      key.family.tokens().first(),
+      Some(FontFamilyToken::Owned(name))
+        if missing.first() == Some(&name.as_str())
+          && !matches!(name.as_str(), "-apple-system" | "BlinkMacSystemFont")
+    );
+    let later = if asks_for_first {
+      log::warn!(
+        target: "takumi::font",
+        "no face is loaded for font-family {:?}, so text falls back to the next family that has one. Load the font, or check the name in font-family.",
+        missing[0]
+      );
+
+      &missing[1..]
+    } else {
+      &missing[..]
     };
+
+    if later.is_empty() || !log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+      return;
+    }
+
     let used = primary
       .and_then(|font_data| {
         let typeface = &font_data.face.typeface;
@@ -152,28 +172,13 @@ impl FontFallbackList {
         fonts.face_family(typeface.id, typeface.index)
       })
       .unwrap_or("no font");
+    let later: Vec<String> = later.iter().map(|name| format!("{name:?}")).collect();
 
-    // Blink reads `-apple-system` and `BlinkMacSystemFont` as `system-ui`, a generic family.
-    let asks_for_first = matches!(
-      key.family.tokens().first(),
-      Some(FontFamilyToken::Owned(name))
-        if name == first && !matches!(name.as_str(), "-apple-system" | "BlinkMacSystemFont")
+    log::debug!(
+      target: "takumi::font",
+      "no face is loaded for font-family {}, so text uses {used}",
+      later.join(", ")
     );
-
-    if asks_for_first {
-      log::warn!(
-        target: "takumi::font",
-        "no face is loaded for font-family {first:?}, so text uses {used}. Load the font, or check the name in font-family."
-      );
-    } else if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
-      let missing: Vec<String> = missing.iter().map(|name| format!("{name:?}")).collect();
-
-      log::debug!(
-        target: "takumi::font",
-        "no face is loaded for font-family {}, so text uses {used}",
-        missing.join(", ")
-      );
-    }
   }
 
   /// Whether the registry the list resolved from holds a pending face.

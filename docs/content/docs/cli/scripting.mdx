@@ -96,7 +96,7 @@ takumi image card.html -o card.png --log info
 
 <sup>1</sup> A line number counts from the start of its `<style>` element or file. An unsupported property is a warning instead, unless it could not change a render, such as `cursor` or `transition`, which is listed here. A vendor-prefixed property such as `-webkit-font-smoothing` is not listed at all.
 
-A missing font family is not a warning, since text falls back to the next family as CSS says. The `debug` line is where it shows. Each `debug` line prints once, however many boxes reach it. The word before the colon is the stage, so `grep '] font:'` keeps one stage.
+A missing font family warns only when it comes first in a `font-family`, since that is the font the style asks for. A generic family, `-apple-system`, and `BlinkMacSystemFont` never warn. A later missing family only falls back to the next one, as CSS says, so it shows only as a `debug` line. Each `debug` line prints once, however many boxes reach it. The word before the colon is the stage, so `grep '] font:'` keeps one stage.
 
 ### Exit codes
 

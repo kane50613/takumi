@@ -199,3 +199,33 @@ fn an_output_under_a_file_names_the_file() {
   assert!(!output.status.success());
   assert!(message.contains("taken is not a directory."), "{message}");
 }
+
+#[test]
+fn debug_names_the_later_font_families_the_render_found_missing() {
+  let dir = TempDir::new("log-later-families");
+
+  fs::write(
+    dir.join("page.html"),
+    r#"<p style="font-family: Geist, MissingA, MissingB, sans-serif">One</p>"#,
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .args(["--log", "debug"])
+    .output()
+    .expect("runs takumi");
+  let steps = String::from_utf8(output.stderr).unwrap();
+
+  assert!(output.status.success(), "{steps}");
+  assert!(!steps.contains("warning:"), "{steps}");
+  assert!(
+    steps.contains(
+      "font: no face is loaded for font-family \"MissingA\", \"MissingB\", so text uses Geist"
+    ),
+    "{steps}"
+  );
+}
