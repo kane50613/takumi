@@ -237,7 +237,7 @@ impl Bitmap {
   }
 
   /// The `width` by `height` region whose top-left pixel is `(x, y)`.
-  pub(crate) fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
+  pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
     let row_bytes = width as usize * 4;
     let data = (y..y + height)
       .flat_map(|row| {
