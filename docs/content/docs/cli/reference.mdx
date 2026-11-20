@@ -119,8 +119,9 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 | `2`  | The command line is wrong. <sup>2</sup>                                                                                                                              |
 | `3`  | The document tried to read a file outside the granted directories.                                                                                                   |
 
-<sup>1</sup> A file the document references that fails to load is skipped with a warning, so the
-command exits `0` unless `--deny-warnings` is set.
+<sup>1</sup> A file the document references that is missing or cannot be decoded is skipped with a
+warning, so the command exits `0` unless `--deny-warnings` is set. A file past the [size
+limits](#limits) stops the render.
 
 <sup>2</sup> For example, an unknown flag or command, a value CSS does not accept, or an output
 format takumi does not write.
