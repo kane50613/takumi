@@ -64,12 +64,16 @@ pub(crate) fn run(
 ) -> Result<(), Box<dyn Error>> {
   let loaded = input.read()?;
 
-  log::info!(
-    target: "takumi::input",
-    "read {}, {} bytes",
-    loaded.location,
-    loaded.html.len()
-  );
+  if input.is_stdin() {
+    log::info!(target: "takumi::input", "read standard input, {} bytes", loaded.html.len());
+  } else {
+    log::info!(
+      target: "takumi::input",
+      "read {}, {} bytes",
+      loaded.location,
+      loaded.html.len()
+    );
+  }
 
   let sandbox = &loaded.sandbox;
   let listing = output.list_resources;

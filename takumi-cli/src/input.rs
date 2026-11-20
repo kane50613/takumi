@@ -48,9 +48,14 @@ pub(crate) struct Input {
 }
 
 impl InputArgs {
+  /// Whether the input is `-`, standard input.
+  pub(crate) fn is_stdin(&self) -> bool {
+    self.input == Path::new("-")
+  }
+
   /// Reads the input and sets up the sandbox its document reads through.
   pub(crate) fn read(&self) -> Result<Input, Box<dyn Error>> {
-    let (html, location, default_root) = if self.input == Path::new("-") {
+    let (html, location, default_root) = if self.is_stdin() {
       let mut stdin = io::stdin();
 
       if stdin.is_terminal() {
@@ -92,11 +97,12 @@ impl InputArgs {
     fonts.register(FontResource::new(DEFAULT_FONT))?;
 
     for path in &self.fonts {
-      let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+      let bytes =
+        fs::read(path).map_err(|error| format!("`--font {}`: {error}", path.display()))?;
 
       fonts
         .register(FontResource::new(bytes))
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+        .map_err(|error| format!("`--font {}`: {error}", path.display()))?;
     }
 
     Ok(fonts)
@@ -133,7 +139,8 @@ pub(crate) struct OutputArgs {
   #[arg(short, long, required_unless_present = "list_resources")]
   output: Option<PathBuf>,
 
-  /// Lists the files the document would load and whether it may, without rendering.
+  /// Lists the files the document would load and whether it may, without rendering: one line
+  /// per file, its kind, status, and URL, then why when it may not, separated by tabs.
   #[arg(long)]
   pub(crate) list_resources: bool,
 }
