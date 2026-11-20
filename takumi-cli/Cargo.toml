@@ -13,6 +13,20 @@ categories = ["command-line-utilities", "multimedia::images"]
 name = "takumi"
 path = "src/main.rs"
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/takumi-cli@{ version }/takumi-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/takumi-cli@{ version }/takumi-{ target }.zip"
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/takumi-cli@{ version }/takumi-{ target }.zip"
+pkg-fmt = "zip"
+
 [dependencies]
 cap-std = "3"
 encoding_rs = "0.8"

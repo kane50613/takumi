@@ -3,8 +3,8 @@
 `takumi` renders an HTML file to an image or a PDF.
 
 ```sh
-cargo install --locked takumi-cli
-takumi upgrade   # later, to install the newest release
+cargo binstall takumi-cli   # a prebuilt binary. Run it again to upgrade
+cargo install --locked takumi-cli   # or build it, then `takumi upgrade` later for the newest release
 takumi completions zsh > ~/.zfunc/_takumi   # zsh Tab completion. See the install guide for bash, fish, and PowerShell
 
 takumi image card.html -o card.png --width 1200 --height 630

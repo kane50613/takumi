@@ -1,21 +1,37 @@
 ---
 title: Install and upgrade
-description: Install the takumi CLI from crates.io with Cargo, keep it up to date with takumi upgrade, and remove it.
+description: Install the takumi CLI as a prebuilt binary with cargo binstall or build it with cargo install, keep it up to date with takumi upgrade, and remove it.
 ---
 
-Cargo downloads the CLI from crates.io and builds it on your machine. You need Rust 1.91 or later.
+Cargo installs the CLI in one of two ways. `cargo binstall` downloads a prebuilt binary in seconds, while `cargo install` builds takumi on your machine, which takes a few minutes and needs Rust 1.91 or later.
 
 ## Install Rust
 
-Skip this step if `cargo --version` prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
+Both ways run through Cargo. Skip this step if `cargo --version` prints a version, and for `cargo install`, if it prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-Run `rustup update` if you already have an older Rust.
+On Windows, download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs) instead. Run `rustup update` if you already have an older Rust.
 
-## Install takumi
+## Install a prebuilt binary
+
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the binary for your platform from the takumi release on GitHub and puts it in `~/.cargo/bin`:
+
+```sh
+cargo binstall takumi-cli
+```
+
+If Cargo says `no such command: binstall`, install cargo-binstall by following [its instructions](https://github.com/cargo-bins/cargo-binstall#installation) first.
+
+Releases carry binaries for macOS, Windows, and Linux, each on x64 and arm64. The Linux binary is statically linked, so it runs on both glibc and musl systems such as Alpine. When a release has no binary for your platform, `cargo binstall` builds takumi from source the way `cargo install` does, which needs Rust 1.91 or later. Check that it runs:
+
+```sh
+takumi --version
+```
+
+## Build from source
 
 ```sh
 cargo install --locked takumi-cli
@@ -52,6 +68,8 @@ takumi upgrade
 ```
 
 `takumi upgrade` reinstalls takumi from the source Cargo recorded when you installed it, into the same directory. An install from crates.io moves to the newest release, and an install that followed a branch moves to that branch's latest commit. It never checks for updates on its own.
+
+`takumi upgrade` does not upgrade an install from `cargo binstall`. Run `cargo binstall takumi-cli` again instead, which downloads the newest release.
 
 To see the `cargo install` command it would run without running it, add `--dry-run`:
 
