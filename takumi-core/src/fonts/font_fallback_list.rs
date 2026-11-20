@@ -131,36 +131,49 @@ impl FontFallbackList {
       has_pending_faces: fonts.has_pending_faces(),
     };
 
-    if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+    if log::log_enabled!(target: "takumi::font", log::Level::Warn) {
       Self::log_missing_families(fonts, key, list.primary_simple_font_data().as_deref());
     }
 
     list
   }
 
-  /// Logs the families `key` names that no loaded face has, with the family text falls back to.
+  /// Logs the families `key` names that no loaded face has, with the family text falls back to,
+  /// as a warning when the first family, the one the style asks for, is among them.
   fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&SimpleFontData>) {
-    let missing: Vec<String> = fonts
-      .missing_families(key)
-      .map(|name| format!("{name:?}"))
-      .collect();
-
-    if missing.is_empty() {
+    let missing: Vec<&str> = fonts.missing_families(key).collect();
+    let Some(first) = missing.first() else {
       return;
-    }
+    };
+    let used = primary
+      .and_then(|font_data| {
+        let typeface = &font_data.face.typeface;
 
-    let used = primary.and_then(|font_data| {
-      let typeface = &font_data.face.typeface;
+        fonts.face_family(typeface.id, typeface.index)
+      })
+      .unwrap_or("no font");
 
-      fonts.face_family(typeface.id, typeface.index)
-    });
-
-    log::debug!(
-      target: "takumi::font",
-      "no face is loaded for font-family {}, so text uses {}",
-      missing.join(", "),
-      used.unwrap_or("no font")
+    // Blink reads `-apple-system` and `BlinkMacSystemFont` as `system-ui`, a generic family.
+    let asks_for_first = matches!(
+      key.family.tokens().first(),
+      Some(FontFamilyToken::Owned(name))
+        if name == first && !matches!(name.as_str(), "-apple-system" | "BlinkMacSystemFont")
     );
+
+    if asks_for_first {
+      log::warn!(
+        target: "takumi::font",
+        "no face is loaded for font-family {first:?}, so text uses {used}. Load the font, or check the name in font-family."
+      );
+    } else if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+      let missing: Vec<String> = missing.iter().map(|name| format!("{name:?}")).collect();
+
+      log::debug!(
+        target: "takumi::font",
+        "no face is loaded for font-family {}, so text uses {used}",
+        missing.join(", ")
+      );
+    }
   }
 
   /// Whether the registry the list resolved from holds a pending face.

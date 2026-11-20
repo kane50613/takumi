@@ -55,16 +55,9 @@ fn info_prints_a_line_per_stage() {
 }
 
 #[test]
-fn debug_names_the_font_family_and_image_the_render_found_missing() {
+fn debug_names_the_image_the_render_found_missing() {
   let steps = steps("debug", &["image", "--log", "debug"]);
 
-  assert_eq!(
-    steps
-      .matches("font: no face is loaded for font-family \"Nowhere\", so text uses Geist")
-      .count(),
-    1,
-    "{steps}"
-  );
   assert!(
     steps.lines().any(
       |line| line.contains("image: no image is loaded for \"file://")
