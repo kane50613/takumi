@@ -29,11 +29,11 @@ vercel pull --yes --environment=preview
 vercel build
 rm -rf .vercel/output/functions
 
-# Preview aliases sit on a custom domain, which Vercel does not mark noindex itself.
+# Preview aliases sit on a custom domain, which Vercel does not mark noindex itself. robots.txt
+# stays as it is, since a crawler it turns away never reads the header.
 jq '.routes = [{"src": "/(.*)", "headers": {"X-Robots-Tag": "noindex"}, "continue": true}] + (.routes // [])' \
   .vercel/output/config.json > .vercel/output/config.json.tmp
 mv .vercel/output/config.json.tmp .vercel/output/config.json
-printf 'User-agent: *\nDisallow: /\n' > .vercel/output/static/robots.txt
 
 url=$(vercel deploy --archive=tgz --prebuilt)
 vercel alias set "$url" "$alias"
