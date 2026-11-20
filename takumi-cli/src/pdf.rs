@@ -40,11 +40,11 @@ pub(crate) struct PdfArgs {
   #[command(flatten)]
   pub(crate) output: OutputArgs,
 
-  /// The CSS `size` of each page, such as `A4` or `letter landscape`. Defaults to A4.
+  /// The CSS `size` of each page, such as `A4`, `A1`, or `letter landscape`. Defaults to A4.
   #[arg(
     long,
     value_name = "SIZE",
-    long_help = "The page size as the CSS `size` property takes it, such as `A4`, `letter landscape`, or `210mm 297mm`. Defaults to A4. The document's `@page` rule wins."
+    long_help = "The page size as the CSS `size` property takes it, such as `A4`, `letter landscape`, or `210mm 297mm`, or an ISO size CSS does not name, A0 to A10 and B0 to B10, such as `A1` or `A0 landscape`. Defaults to A4. The document's `@page` rule wins."
   )]
   page: Option<String>,
 
@@ -118,9 +118,11 @@ impl PdfArgs {
     let declarations: Vec<String> = [("size", &self.page), ("margin", &self.margin)]
       .into_iter()
       .filter_map(|(property, value)| {
-        value
-          .as_ref()
-          .map(|value| check_page_declaration(property, value))
+        value.as_ref().map(|value| {
+          let iso = (property == "size").then(|| iso_page_size(value)).flatten();
+
+          check_page_declaration(property, iso.as_deref().unwrap_or(value))
+        })
       })
       .collect::<Result<_, _>>()
       .map_err(UsageError)?;
@@ -142,6 +144,75 @@ impl PdfArgs {
       outline: self.outline,
     })
   }
+}
+
+/// The width and height in millimetres of `value`, an ISO 216 A or B size CSS does not name, such
+/// as `A1` or `B2 landscape`. CSS names only A3 to A5, B4, and B5.
+fn iso_page_size(value: &str) -> Option<String> {
+  const A: [(u32, u32); 11] = [
+    (841, 1189),
+    (594, 841),
+    (420, 594),
+    (297, 420),
+    (210, 297),
+    (148, 210),
+    (105, 148),
+    (74, 105),
+    (52, 74),
+    (37, 52),
+    (26, 37),
+  ];
+  const B: [(u32, u32); 11] = [
+    (1000, 1414),
+    (707, 1000),
+    (500, 707),
+    (353, 500),
+    (250, 353),
+    (176, 250),
+    (125, 176),
+    (88, 125),
+    (62, 88),
+    (44, 62),
+    (31, 44),
+  ];
+
+  let mut name = None;
+  let mut orientation = None;
+
+  for word in value.split_ascii_whitespace() {
+    let is_orientation =
+      word.eq_ignore_ascii_case("landscape") || word.eq_ignore_ascii_case("portrait");
+
+    if is_orientation {
+      if orientation.replace(word).is_some() {
+        return None;
+      }
+    } else if name.replace(word).is_some() {
+      return None;
+    }
+  }
+
+  let landscape = orientation.is_some_and(|word| word.eq_ignore_ascii_case("landscape"));
+  let name = name?;
+  let (series, number) = name.split_at_checked(1)?;
+  let sizes = match series {
+    "A" | "a" => &A,
+    "B" | "b" => &B,
+    _ => return None,
+  };
+  let number: usize = number.parse().ok()?;
+  let named_by_css = match sizes == &A {
+    true => (3..=5).contains(&number),
+    false => (4..=5).contains(&number),
+  };
+  let &(width, height) = sizes.get(number).filter(|_| !named_by_css)?;
+  let (width, height) = if landscape {
+    (height, width)
+  } else {
+    (width, height)
+  };
+
+  Some(format!("{width}mm {height}mm"))
 }
 
 /// `property: value` for an `@page` rule, refusing a value takumi does not read or that could escape it.
@@ -360,6 +431,17 @@ mod tests {
     assert!(check_page_declaration("margin", "1in 0.5in").is_ok());
     assert!(check_page_declaration("margin", "0 1cm").is_ok());
     assert!(check_page_declaration("size", "bogus").is_err());
+    assert_eq!(iso_page_size("A1").as_deref(), Some("594mm 841mm"));
+    assert_eq!(
+      iso_page_size("a0 landscape").as_deref(),
+      Some("1189mm 841mm")
+    );
+    assert_eq!(iso_page_size("portrait B2").as_deref(), Some("500mm 707mm"));
+    assert_eq!(iso_page_size("A4"), None);
+    assert_eq!(iso_page_size("A11"), None);
+    assert_eq!(iso_page_size("A1 A2"), None);
+    assert_eq!(iso_page_size("A1 landscape portrait"), None);
+    assert_eq!(iso_page_size("landscape A1 landscape"), None);
     assert_eq!(
       check_page_declaration("margin", "5").unwrap_err(),
       "`5` in `--margin` needs a unit, such as `5mm` or `5px`."

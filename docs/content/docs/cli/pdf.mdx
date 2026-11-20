@@ -19,6 +19,8 @@ Content that does not fit on one page flows onto the next. [Pagination](/docs/pd
 takumi pdf report.html -o report.pdf --page "letter landscape" --margin "0.5in 0.75in"
 ```
 
+`--page` also takes the ISO sizes CSS does not name, A0 to A10 and B0 to B10, such as `A1` or `A0 landscape`.
+
 Pages default to A4 with a 1 cm margin, which grows to fit a header or footer. Both flags are defaults, so a `@page` rule in the document wins over them, as it does over Chrome's print dialog. A value CSS does not accept stops before rendering, with exit code `2`.
 
 ## Keep some pages
@@ -78,6 +80,29 @@ takumi pdf report.html -o report.pdf --title "Quarterly report" --author "Financ
 ```
 
 `--outline` adds a bookmark for each `h1` to `h6` heading, so a PDF viewer shows the document's sections in its sidebar.
+
+## Make a poster
+
+Give the poster one page with no margin, and size its root box with `100vh`, which is the page's height in a PDF:
+
+```html title="poster.html"
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+  }
+</style>
+```
+
+```sh
+takumi pdf poster.html -o poster.pdf --page A1 --margin 0
+```
+
+A height in pixels that rounds past the page adds a blank page. To find content that runs past the page, give `takumi paint` the page size in CSS pixels, `--width 2245 --height 3179` for A1, and look for the boxes it marks past the bottom edge:
+
+```sh
+takumi paint poster.html -o - --width 2245 --height 3179
+```
 
 ## Put one slide on each page
 
