@@ -202,6 +202,10 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "button",
     "margin:0;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.333333px;font-family:system-ui;color:#000;letter-spacing:0;word-spacing:0;line-height:normal;text-transform:none;text-indent:0;text-shadow:none;display:inline-block;text-align:center;box-sizing:border-box;padding:1px 6px;border:2px outset #767676;background-color:#efefef",
   ),
+  (
+    "button:disabled",
+    "color:rgba(16,16,16,0.3);background-color:rgba(239,239,239,0.3);border-color:rgba(118,118,118,0.3)",
+  ),
   ("input[type=tel]", "direction:ltr"),
   (
     "input:disabled",
@@ -782,11 +786,13 @@ impl NodeBuilder<'_> {
     Ok(children)
   }
 
-  /// The presets of an `<input>` or `<textarea>`, which `html.css` picks by its `type` and
-  /// whether it is disabled: those of a text field, a hidden input, or a textarea. Other input
-  /// types take none yet.
+  /// The presets of an `<input>`, `<textarea>`, or `<button>`, which `html.css` picks by its `type`
+  /// and whether it is disabled: those of a text field, a hidden input, a textarea, or a button.
+  /// Other input types take none yet.
   fn form_control_preset(&self, handle: NodeRef<'_>, tag: &str) -> Option<Arc<Style>> {
-    let (keys, disabled_key): (&[&str], _) = if tag == "textarea" {
+    let (keys, disabled_key): (&[&str], _) = if tag == "button" {
+      (&["button"], Some("button:disabled"))
+    } else if tag == "textarea" {
       let wraps = !handle
         .attribute("wrap")
         .is_some_and(|wrap| wrap.eq_ignore_ascii_case("off"));
@@ -833,7 +839,7 @@ impl NodeBuilder<'_> {
   fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(self.names.get(tag));
 
-    let preset = if matches!(tag, "input" | "textarea") {
+    let preset = if matches!(tag, "input" | "textarea" | "button") {
       self.form_control_preset(handle, tag)
     } else {
       self.presets.get(tag).cloned()
