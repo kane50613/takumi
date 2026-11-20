@@ -1318,6 +1318,7 @@ jobs:
             docs:
               - "docs/**"
               - "bun.lock"
+              - "scripts/preview-alias.sh"
 
   deploy-docs:
     name: Deploy docs
