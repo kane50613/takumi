@@ -26,7 +26,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
-          alias=$(scripts/preview-alias.sh "$GITHUB_HEAD_REF")
+          alias=$(.github/scripts/preview-alias.sh "$GITHUB_HEAD_REF")
           if ! output=$(bunx vercel alias rm "$alias" --yes --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" 2>&1); then
             echo "$output"
             echo "$output" | grep -q "Alias not found"

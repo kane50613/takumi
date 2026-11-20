@@ -1318,9 +1318,9 @@ jobs:
             docs:
               - "docs/**"
               - "bun.lock"
-              - "scripts/deploy-docs.sh"
-              - "scripts/preview-alias.sh"
-              - "scripts/preview-comment.cjs"
+              - ".github/scripts/deploy-docs.sh"
+              - ".github/scripts/preview-alias.sh"
+              - ".github/scripts/preview-comment.cjs"
 
   deploy-docs:
     name: Deploy docs
@@ -1395,7 +1395,7 @@ jobs:
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: scripts/deploy-docs.sh
+        run: .github/scripts/deploy-docs.sh
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -1403,4 +1403,4 @@ jobs:
         env:
           PREVIEW_URL: https://${{ steps.deploy.outputs.alias }}
         with:
-          script: await require("./scripts/preview-comment.cjs")({ github, context })
+          script: await require("./.github/scripts/preview-comment.cjs")({ github, context })

@@ -6,7 +6,7 @@
 set -eu
 
 if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-  alias=$(scripts/preview-alias.sh "$GITHUB_HEAD_REF")
+  alias=$(.github/scripts/preview-alias.sh "$GITHUB_HEAD_REF")
 elif find .tegami -maxdepth 1 -name '*.md' | grep -q .; then
   alias=preview.takumi.kane.tw
 else
