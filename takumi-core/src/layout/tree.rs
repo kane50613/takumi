@@ -59,7 +59,7 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Direction, Display, Float, FontUnits, KeyframesRule, LineHeight, MatchedStyleKey, Position,
     PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, WhiteSpaceCollapse, animated_custom_properties,
+    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, animated_custom_properties,
     apply_stylesheet_animations, page_rule::PageContext,
   },
   viewport::Viewport,
@@ -3195,6 +3195,12 @@ impl RenderContext {
     matched_declarations: &MatchedDeclarationsView<'_>,
   ) -> (NodeStyle, ElementImportant) {
     let mut style = NodeStyle::default();
+
+    // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
+    // <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
+    if node_layers.dir.is_some() {
+      style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
+    }
 
     if let Some(preset) = node_layers.preset {
       style.append_block(Arc::unwrap_or_clone(preset).declarations);

@@ -6,8 +6,8 @@ use clap::ValueEnum;
 use takumi::{
   needs,
   prelude::{
-    Error as RenderError, Fonts, OutputFormat, Quality, RenderNeeds, RenderOptions, SvgOptions,
-    Viewport,
+    ColorScheme, Error as RenderError, Fonts, OutputFormat, Quality, RenderNeeds, RenderOptions,
+    SvgOptions, Viewport,
   },
   render, render_svg, uncovered_characters, write_image,
 };
@@ -58,6 +58,27 @@ pub(crate) struct ViewportArgs {
   /// two image pixels across, for high-density screens.
   #[arg(long, default_value_t = 1.0, value_parser = parse_device_pixel_ratio)]
   dpr: f32,
+
+  /// The color scheme `@media (prefers-color-scheme)` matches. `light-dark()` takes its light
+  /// color in either.
+  #[arg(long, value_enum, default_value_t = ColorSchemeArg::Light)]
+  color_scheme: ColorSchemeArg,
+}
+
+/// `--color-scheme`.
+#[derive(Clone, Copy, ValueEnum)]
+enum ColorSchemeArg {
+  Light,
+  Dark,
+}
+
+impl From<ColorSchemeArg> for ColorScheme {
+  fn from(scheme: ColorSchemeArg) -> Self {
+    match scheme {
+      ColorSchemeArg::Light => Self::Light,
+      ColorSchemeArg::Dark => Self::Dark,
+    }
+  }
 }
 
 impl ViewportArgs {
@@ -71,6 +92,7 @@ impl ViewportArgs {
 
     Viewport::new((device_pixels(self.width), self.height.map(device_pixels)))
       .with_device_pixel_ratio(self.dpr)
+      .with_color_scheme(self.color_scheme.into())
   }
 }
 
@@ -245,6 +267,7 @@ mod tests {
       width: 1200,
       height: Some(630),
       dpr: 1.5,
+      color_scheme: ColorSchemeArg::Light,
     }
     .device_viewport();
 

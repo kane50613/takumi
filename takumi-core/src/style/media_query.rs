@@ -6,7 +6,7 @@ use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
   style::{FromCss, Length, SizingContext},
-  viewport::{MediaTarget, Viewport},
+  viewport::{ColorScheme, MediaTarget, Viewport},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +51,8 @@ enum MediaFeature {
   Resolution(MediaFeatureComparison, f32),
   AspectRatio(MediaFeatureComparison, MediaRatio),
   Orientation(MediaOrientation),
+  /// The scheme to match, or none for the boolean context, which every scheme matches.
+  PrefersColorScheme(Option<ColorScheme>),
 }
 
 /// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
@@ -210,6 +212,7 @@ impl MediaFeature {
 
     match_ignore_ascii_case! { name,
       "resolution" => Some(Self::Resolution(comparison, 0.0)),
+      "prefers-color-scheme" => Some(Self::PrefersColorScheme(None)),
       "aspect-ratio" => Some(Self::AspectRatio(
         comparison,
         MediaRatio {
@@ -268,6 +271,17 @@ impl MediaFeature {
     if input.try_parse(Parser::expect_colon).is_err() {
       return MediaFeature::boolean(&feature_name)
         .ok_or_else(|| CssParseError::custom(StyleSheetParseErrorKind::UnsupportedMediaFeature));
+    }
+
+    if feature_name.eq_ignore_ascii_case("prefers-color-scheme") {
+      let scheme = input.expect_ident_cloned()?;
+      return match_ignore_ascii_case! { scheme.as_ref(),
+        "light" => Ok(Self::PrefersColorScheme(Some(ColorScheme::Light))),
+        "dark" => Ok(Self::PrefersColorScheme(Some(ColorScheme::Dark))),
+        _ => Err(
+          CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken),
+        ),
+      };
     }
 
     if feature_name.eq_ignore_ascii_case("orientation") {
@@ -373,6 +387,9 @@ impl MediaFeature {
             MediaOrientation::Portrait => height >= width,
             MediaOrientation::Landscape => width > height,
           })
+      }
+      Self::PrefersColorScheme(scheme) => {
+        scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
       }
     }
   }

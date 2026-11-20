@@ -64,6 +64,26 @@ fn a_box_across_an_edge_is_cut_off() {
 }
 
 #[test]
+fn the_color_scheme_picks_the_prefers_color_scheme_rules() {
+  let html = r#"<style>
+  body { background: #ffffff }
+  @media (prefers-color-scheme: dark) { body { background: #111111 } }
+</style><p>One</p>"#;
+  let body = |arguments: &[&str]| {
+    let outline = paint_html("color-scheme", html, arguments);
+
+    outline
+      .lines()
+      .find(|line| line.contains("box body"))
+      .unwrap_or_default()
+      .to_owned()
+  };
+
+  assert!(body(&[]).ends_with("background #ffffff"));
+  assert!(body(&["--color-scheme", "dark"]).ends_with("background #111111"));
+}
+
+#[test]
 fn a_wrapped_text_marks_each_line_break() {
   let outline = paint_html(
     "wrapped",
