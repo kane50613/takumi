@@ -16,8 +16,10 @@ Install takumi in one of three ways:
 `@takumi-rs/cli` runs takumi without Rust. Run it once with `npx`:
 
 ```npm
-npx @takumi-rs/cli image card.html -o card.png --width 1200 --height 630
+npx @takumi-rs/cli@latest image card.html -o card.png --width 1200 --height 630
 ```
+
+`@latest` makes `npx` check for a new release. Without it, `npx` runs whatever version the project or a global install already has.
 
 [Render from the command line](/docs/cli) explains `image` and its flags.
 
