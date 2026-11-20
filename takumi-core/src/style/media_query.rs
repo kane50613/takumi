@@ -51,7 +51,8 @@ enum MediaFeature {
   Resolution(MediaFeatureComparison, f32),
   AspectRatio(MediaFeatureComparison, MediaRatio),
   Orientation(MediaOrientation),
-  PrefersColorScheme(ColorScheme),
+  /// The scheme to match, or none for the boolean context, which every scheme matches.
+  PrefersColorScheme(Option<ColorScheme>),
 }
 
 /// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
@@ -211,6 +212,7 @@ impl MediaFeature {
 
     match_ignore_ascii_case! { name,
       "resolution" => Some(Self::Resolution(comparison, 0.0)),
+      "prefers-color-scheme" => Some(Self::PrefersColorScheme(None)),
       "aspect-ratio" => Some(Self::AspectRatio(
         comparison,
         MediaRatio {
@@ -274,8 +276,8 @@ impl MediaFeature {
     if feature_name.eq_ignore_ascii_case("prefers-color-scheme") {
       let scheme = input.expect_ident_cloned()?;
       return match_ignore_ascii_case! { scheme.as_ref(),
-        "light" => Ok(Self::PrefersColorScheme(ColorScheme::Light)),
-        "dark" => Ok(Self::PrefersColorScheme(ColorScheme::Dark)),
+        "light" => Ok(Self::PrefersColorScheme(Some(ColorScheme::Light))),
+        "dark" => Ok(Self::PrefersColorScheme(Some(ColorScheme::Dark))),
         _ => Err(
           CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken),
         ),
@@ -386,7 +388,9 @@ impl MediaFeature {
             MediaOrientation::Landscape => width > height,
           })
       }
-      Self::PrefersColorScheme(scheme) => viewport.color_scheme == *scheme,
+      Self::PrefersColorScheme(scheme) => {
+        scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
+      }
     }
   }
 }

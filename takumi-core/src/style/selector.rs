@@ -2234,6 +2234,7 @@ mod tests {
       r#"
         @media (prefers-color-scheme: dark) { .card { width: 100px; } }
         @media (prefers-color-scheme: light) { .card { width: 200px; } }
+        @media (prefers-color-scheme) { .card { width: 300px; } }
       "#,
     );
     let dark = Viewport::new((800, 600)).with_color_scheme(ColorScheme::Dark);
@@ -2245,9 +2246,10 @@ mod tests {
         .is_some_and(|media| media.matches(viewport))
     };
 
-    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(sheet.rules.len(), 3);
     assert!(matches(0, dark) && !matches(0, light));
     assert!(matches(1, light) && !matches(1, dark));
+    assert!(matches(2, light) && matches(2, dark));
   }
 
   #[test]
