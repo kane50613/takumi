@@ -51,6 +51,11 @@ use self::dom::{Namespace, NodeData, NodeRef};
 /// Tags whose subtree never reaches the tree, unlike the `display: none` presets.
 const UNRENDERED_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
 
+/// `dir=auto`, which a `bdi` without a valid `dir` also has. Approximate: `plaintext` takes each
+/// paragraph's direction from its first strong character, where `dir=auto` takes one direction for
+/// the element and also sets its `direction` and `:dir()`, which here keep the parent's.
+const AUTO_DIRECTION: &str = "unicode-bidi:plaintext";
+
 const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("html", "display:block"),
   ("head", "display:none"),
@@ -136,6 +141,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "h6",
     "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
+  ("bdi", "unicode-bidi:isolate"),
+  ("bdo", "unicode-bidi:isolate-override"),
   ("u", "text-decoration:underline"),
   ("ins", "text-decoration:underline"),
   ("strong", "font-weight:bolder"),
@@ -836,6 +843,8 @@ impl NodeBuilder<'_> {
     };
 
     let mut attributes = BTreeMap::new();
+    let mut auto_direction = tag == "bdi";
+
     for attr in attrs {
       let name = &*attr.local;
       let value = &*attr.value;
@@ -856,9 +865,11 @@ impl NodeBuilder<'_> {
             node = node.with_lang(lang);
           }
         }
+        "dir" if value.eq_ignore_ascii_case("auto") => auto_direction = true,
         "dir" => {
           if let Ok(dir) = Direction::from_css_str(value) {
             node = node.with_dir(dir);
+            auto_direction = false;
           }
         }
         "style" => node = node.with_style(self.style(value)),
@@ -871,6 +882,12 @@ impl NodeBuilder<'_> {
           attributes.insert(self.names.get(name), value.into());
         }
       }
+    }
+
+    if auto_direction {
+      node = node.with_presentation(Style::from(StyleDeclarationBlock::parse_loosy(
+        AUTO_DIRECTION,
+      )));
     }
 
     if !attributes.is_empty() {
