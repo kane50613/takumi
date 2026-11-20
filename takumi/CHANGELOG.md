@@ -1,3 +1,167 @@
+## takumi@2.21.0
+
+### See what a renderer's cache holds
+
+`Renderer`, `PdfRenderer`, and `Painter` have `cacheStats()`, which reports the bytes the pool holds and how lookups of each kind went.
+
+```ts
+const { memory, images } = renderer.cacheStats();
+console.log(memory.current, memory.high);
+console.log(images.hits, images.misses, images.evictions);
+```
+
+`takumi-js` exports `cacheStats` for the renderer that `render` and the other functions share. It returns `undefined` until the first render creates that renderer. In Rust, `Cache::stats` does the same for a `Cache`.
+
+### The paint tree lists the CSS a render dropped
+
+A declaration or at-rule that takumi drops no longer vanishes without a trace. The paint tree lists each one once, with its property and value as written, why takumi dropped it, and where it was written. The image stays the same.
+
+```ts
+const tree = await paint(html, { width: 600, height: 200 });
+
+console.log(tree.ignoredDeclarations);
+// [{ property: "writing-mode", value: "vertical-rl", reason: "unknown-property", origin: "style-attribute" }]
+```
+
+- `reason` is `unknown-property`, `invalid-value`, or `unknown-at-rule`.
+- `origin` is `style-attribute`, `style-sheet`, or `style-object`.
+- `takumi paint` prints the list under `ignored`, and its JSON output holds it as `ignoredDeclarations`.
+- `needs()` in `@takumi-rs/core`, `@takumi-rs/wasm`, and `takumi-pdf` returns the same list as `ignoredDeclarations`.
+- In Rust, `RenderNeeds::ignored_declarations` and `PaintDocument::ignored_declarations` hold the same list, and `StyleSheet::ignored_declarations` holds what one style sheet dropped.
+
+### One `Cache` holds what renders reuse, in one pool of bytes
+
+`Cache` replaces `ResourceCache` in the Rust crates. Everything it keeps shares `max_bytes`, 128 MiB by default. Setting `images` or `glyphs` to `ImageCacheMode::None` keeps none of that kind.
+
+```rust
+let cache = CacheOptions::builder()
+  .max_bytes(256 << 20)
+  .images(ImageCacheMode::None)
+  .build();
+
+let options = RenderOptions::builder()
+  .viewport(viewport)
+  .node(node)
+  .cache(cache.clone())
+  .build();
+```
+
+`RenderOptions`, `SvgOptions`, `PdfOptions`, `MeasureOptions`, and `PaintTreeOptions` take it as `cache`. A render without one shares `Cache::shared()`. PDF renders now reuse decoded images, and SVG and paint renders cache `data:` images.
+
+### Migration
+
+`ResourceCache` and the `resource_cache` setter of `RenderOptions` and of the `takumi-pdf` options are removed. Pass the cache as `cache`.
+
+```diff
+- let cache = ResourceCache::new(256 << 20);
+- let image = cache.get_or_decode(&bytes, ImageCacheMode::Auto)?;
+- let sheet = cache.get_or_parse_stylesheet(sources);
++ let cache = CacheOptions::builder().max_bytes(256 << 20).build();
++ let image = cache.decode_image(&bytes, ImageCacheMode::Auto)?;
++ let sheet = cache.parse_stylesheet(sources);
+```
+
+### Renders warn about what they could not draw, and load fonts for missing characters
+
+A render now warns when it goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false`. Each warning prints through `console.warn` as `takumi: <message>`, the same form as the warnings for unsupported CSS, every time a render raises it. To collect the warnings somewhere else, wrap `console.warn`.
+
+```txt
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
+```
+
+- `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again.
+- A `render()` without `prepare()` checks glyphs and families only when it passes `loadFallbackFonts`.
+- `loadFallbackFonts(characters)` runs once when characters have no font, and the fonts it returns load with the render.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+
+### `takumi image` warns of the characters no font draws
+
+`takumi image` used to draw an empty box for a character no loaded font draws, without a word. It now prints a warning that names each one.
+
+```sh
+$ takumi image hello.html -o hello.png
+warning: no font draws 你 (U+4F60), 好 (U+597D), so each shows as an empty box. Pass a font that does with `--font`, or check the `font-family` of that text.
+```
+
+The rest of the command line says more when something is off:
+
+- `--list-resources` lists a file that is not there as `missing`, where it said `blocked`. Scripts that read the status column see the new value.
+- `--margin` and `--page` refuse a number without a unit, such as `--margin 5`.
+- An error that `--font`, `--root`, or `takumi pdf` fixes now names that flag or command, such as "`takumi image` writes images, but the output ends in `.pdf`. Use `takumi pdf`."
+
+```diff
+  $ takumi image page.html --list-resources
+- image	blocked	file:///site/gone.png	…
++ image	missing	file:///site/gone.png	…
+```
+
+In the `takumi` crate, `uncovered_characters` returns the characters no registered font draws for a render, each once.
+
+```rust
+let missing: Vec<char> = takumi::uncovered_characters(options)?;
+
+if !missing.is_empty() {
+  eprintln!("no font draws {missing:?}");
+}
+```
+
+### `takumi pdf` takes a whole HTML file as a header or footer
+
+A `--header` or `--footer` file that opens with a doctype or `<html>` now fills the band with its body's content, as Chromium does with a header template. Before, the file brought its body's margin into the band.
+
+- A page and its header that both write `<img src="logo.png">` for different files now each draw their own image.
+- `takumi pdf --pages 1,-` is refused with "`-` names no page. Write a page on at least one side of `-`."
+- An empty `url()` in a style sheet loads nothing.
+- `takumi image --dpr` with an `.svg` output is an error, since an SVG has no pixels to scale.
+
+In Rust, `FromHtmlOptions::fragment` parses a source as a fragment even when it opens with a doctype or `<html>`, dropping its `html`, `head`, and `body` tags.
+
+```rust
+let options = FromHtmlOptions::builder().fragment(true).build();
+// The node is the <p> alone
+let node = parse_html("<!doctype html><html><body><p>hi</p></body></html>", options)?.node;
+```
+
+### `takumi` loads the `@import` rules of a `<style media>` element
+
+The `takumi` command used to drop the `@import` rules of a `<style>` element with a `media` attribute. It now loads them and applies them under that media, as Chrome does.
+
+```html
+<style media="print">
+  @import "print.css";
+</style>
+```
+
+- `ParsedHtml::styles` lists each non-empty CSS `<style>` element in the HTML namespace that applies, so not one inside an inline `<svg>`, with its `text` and `media` apart. That is every untitled one, plus the titled ones in the preferred style sheet set.
+- `StyleElement::css` returns the text inside the `@media` rule that `ParsedHtml::css` holds.
+
+### `parse_html` reports the style sheets a document links
+
+A host can now fetch the CSS a document links and resolve it as a browser does.
+
+```rust
+let parsed = parse_html(html, FromHtmlOptions::default())?;
+// `fetch_css` is your own loader, which returns `Option<String>`
+let css = parsed.css_with_links(|link| fetch_css(&link.href));
+```
+
+- `ParsedHtml::links` lists each `<link rel="stylesheet">` that would load, with its `href` and `media`. It leaves out a `disabled` link and one whose `type` is not CSS.
+- `ParsedHtml::base_href` holds the `href` of the first `<base>` that has one.
+- `ParsedHtml::css_with_links` returns, in document order, the CSS of each non-empty CSS `<style>` element and each fetched link, and wraps a link's `media` in an `@media` rule.
+- Titled and alternate style sheets follow the preferred style sheet set, as in Chrome. Untitled sheets that are not alternate always apply. Of the titled ones, only the preferred set applies. The set is named by whichever comes first in the document, a `<meta http-equiv="default-style">` with a non-empty `content` or a titled sheet that is not alternate.
+
+### Evict fonts one file at a time from the renderer's cache
+
+Font files that renders load now share the renderer's `maxBytes` pool and leave it one file at a time, least recently used first. A family that keeps gaining files, such as one Google Fonts `text=` subset per title, now stays within `maxBytes`. A render keeps the fonts it uses until it finishes, and fonts from `registerFont` still stay. With `cache.fonts` set to `"none"`, each file goes as soon as the last render using it finishes.
+
+```ts
+const renderer = new Renderer({ cache: { fonts: "none" } });
+```
+
+`fontCacheMaxBytes` no longer bounds the fonts apart. A value of `0` still keeps none, as `"none"` does.
+
+Among equally matching faces of one family, the one listed last now wins every time.
+
 ## takumi@2.20.0
 
 ### Load fonts from `@font-face` rules

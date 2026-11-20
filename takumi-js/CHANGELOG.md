@@ -1,3 +1,156 @@
+## takumi-js@2.21.0
+
+### Reuse downloaded bytes across renders, and load Google Fonts for known text
+
+Renderers now keep the images, `@font-face` files, and font URLs they download in a 32 MiB store keyed by URL, so a later render skips the download. A render that passes its own `fetch` skips the store, since that `fetch` may send credentials.
+
+```ts
+import { googleFonts } from "takumi-js/helpers";
+
+const fonts = googleFonts({ families: ["Noto Sans JP"], text: "東京の夜景" });
+```
+
+- `googleFonts` takes `text` to load one file holding just those characters.
+- A font in a render's `fonts` list takes `cache: "none"`, which drops the font once the render settles. `googleFonts` sets it on every subset through `cacheMode: "none"`.
+- Under the default `"auto"`, a `googleFonts` subset loaded for `text` drops once its render settles too, since another render rarely asks for the same characters. Range subsets and other fonts stay as before.
+- `CacheMode` names the `"auto" | "none"` policy that images and fonts share. `ImageCacheMode` stays as a deprecated alias.
+
+### Migration
+
+`images.fetchCache` is deprecated, since renders keep their downloads without it.
+
+```diff
+- await renderer.render(node, { images: { fetchCache } });
++ await renderer.render(node);
+```
+
+### See what a renderer's cache holds
+
+`Renderer`, `PdfRenderer`, and `Painter` have `cacheStats()`, which reports the bytes the pool holds and how lookups of each kind went.
+
+```ts
+const { memory, images } = renderer.cacheStats();
+console.log(memory.current, memory.high);
+console.log(images.hits, images.misses, images.evictions);
+```
+
+`takumi-js` exports `cacheStats` for the renderer that `render` and the other functions share. It returns `undefined` until the first render creates that renderer. In Rust, `Cache::stats` does the same for a `Cache`.
+
+### `require("takumi-js/wasm")` keeps the exports it re-exports
+
+A CommonJS `require("takumi-js/wasm")` returned only the backend's default `init`, so the names `takumi-js/wasm` re-exports from `@takumi-rs/wasm`, such as `Renderer`, were missing. It now returns them beside `default`, as the ES module and the type declarations already did.
+
+### Download fonts listed as URLs with the render's fetch options
+
+A URL string in a render's `fonts` list now downloads with the `fetch`, `allowUrl`, `timeout`, `maxBytes`, and `signal` the render's images use, so `allowUrl` refuses it too.
+
+```tsx
+await render(<div>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: ["https://fonts.example.com/Brand.woff2"],
+  images: { allowUrl: (url) => url.startsWith("https://cdn.example.com/") },
+});
+// Before: downloads the font
+// After: rejects with "URL blocked by allowUrl policy: https://fonts.example.com/Brand.woff2"
+```
+
+### Every renderer takes its cache size in one `cache` option
+
+`Renderer`, `PdfRenderer`, and `Painter` take a `cache` option. Its `maxBytes`, 128 MiB by default, is one pool for everything a renderer reuses. Setting `images`, `glyphs`, or `fonts` to `"none"` keeps none of that kind. The options apply when the renderer is created.
+
+```ts
+const renderer = new Renderer({
+  cache: {
+    maxBytes: 256 * 1024 * 1024,
+    glyphs: "none",
+  },
+});
+```
+
+### Migration
+
+`cacheMaxBytes`, `fontCacheMaxBytes`, and `FontCacheOptions` are deprecated. In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes` is deprecated, and only `0` still changes anything.
+
+```diff
+- setGlyphCacheMaxBytes(0);
+- const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
++ const renderer = new Renderer({ cache: { maxBytes: 64 * 1024 * 1024, glyphs: "none" } });
+
+  // types
+- let options: FontCacheOptions;
++ let options: RendererOptions;
+```
+
+### Renders warn about what they could not draw, and load fonts for missing characters
+
+A render now warns when it goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false`. Each warning prints through `console.warn` as `takumi: <message>`, the same form as the warnings for unsupported CSS, every time a render raises it. To collect the warnings somewhere else, wrap `console.warn`.
+
+```txt
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
+```
+
+- `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again.
+- A `render()` without `prepare()` checks glyphs and families only when it passes `loadFallbackFonts`.
+- `loadFallbackFonts(characters)` runs once when characters have no font, and the fonts it returns load with the render.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+
+### A font one render lists no longer changes another render
+
+Each render now draws with the fonts its own `fonts` list names and the fonts `registerFont` registered. Before, a renderer kept using the fonts earlier renders had listed, so the same request could come out differently.
+
+```ts
+await renderer.render(html, { fonts: [brandRegular] });
+await renderer.render(html, { fonts: [brandBold] });
+await renderer.render(html, { fonts: [brandRegular] });
+// Before: the third render draws Brand with the bold face the second one listed
+// After: the third render matches the first
+```
+
+A family that only another render listed now falls back to the next family. List the font in this render, or register it with `registerFont`.
+
+The options types of `@takumi-rs/core` and `@takumi-rs/wasm` no longer list `failedFontFiles`, a field only the renderer itself sets.
+
+### Render without a font that fails to load when the font is optional
+
+A font in a render's `fonts` list takes `optional: true`. When an optional font fails to download, `allowUrl` refuses it, or its bytes do not decode, the render goes on without it instead of rejecting.
+
+```tsx
+await render(<div style={{ fontFamily: "Brand, Inter" }}>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: [
+    fontFromUrl("https://example.com/Inter.woff2"),
+    fontFromUrl("https://cdn.example.com/Brand.woff2", { optional: true }),
+  ],
+});
+```
+
+### `require` loads the WebAssembly backend again
+
+A CommonJS build that renders on the WebAssembly backend, such as one in a WebContainer, works again. It used to fail with `TypeError: (0 , _takumi_rs_wasm.default) is not a function`.
+
+```js
+const { init } = require("takumi-js/wasm");
+// Before: init is the module object, not a function
+// After: init loads the WebAssembly binary
+```
+
+`require("takumi-js/wasm/no-init")` returns the same `init`, and `@takumi-rs/wasm` now exports `init` by name as well as by default.
+
+### Overlapping first renders load the WebAssembly binary once
+
+On the WebAssembly backend, `render` and `ImageResponse` calls that overlap before the WebAssembly binary has loaded now share one load. Before, each call loaded the binary, and the later load broke the renderers made on the earlier one. If the load fails, the next call tries again.
+
+```ts
+await Promise.all([
+  render(<A />, { width: 1200, height: 630 }),
+  render(<B />, { width: 1200, height: 630 }),
+]);
+// Before: each call loads the binary, and the first one's renderer can break
+// After: both calls share one load
+```
+
 ## takumi-js@2.19.0
 
 ### Render on the native backend under Nitro's `!unwasm` opt-in
