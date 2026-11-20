@@ -177,16 +177,22 @@ fn iso_page_size(value: &str) -> Option<String> {
   ];
 
   let mut name = None;
-  let mut landscape = false;
+  let mut orientation = None;
 
   for word in value.split_ascii_whitespace() {
-    if word.eq_ignore_ascii_case("landscape") {
-      landscape = true;
-    } else if !word.eq_ignore_ascii_case("portrait") && name.replace(word).is_some() {
+    let is_orientation =
+      word.eq_ignore_ascii_case("landscape") || word.eq_ignore_ascii_case("portrait");
+
+    if is_orientation {
+      if orientation.replace(word).is_some() {
+        return None;
+      }
+    } else if name.replace(word).is_some() {
       return None;
     }
   }
 
+  let landscape = orientation.is_some_and(|word| word.eq_ignore_ascii_case("landscape"));
   let name = name?;
   let (series, number) = name.split_at_checked(1)?;
   let sizes = match series {
@@ -434,6 +440,8 @@ mod tests {
     assert_eq!(iso_page_size("A4"), None);
     assert_eq!(iso_page_size("A11"), None);
     assert_eq!(iso_page_size("A1 A2"), None);
+    assert_eq!(iso_page_size("A1 landscape portrait"), None);
+    assert_eq!(iso_page_size("landscape A1 landscape"), None);
     assert_eq!(
       check_page_declaration("margin", "5").unwrap_err(),
       "`5` in `--margin` needs a unit, such as `5mm` or `5px`."
