@@ -1,6 +1,6 @@
 [package]
 name = "takumi-pdf"
-version = "0.21.0"
+version = "0.21.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts."
@@ -53,7 +53,7 @@ optional = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.37.0"
+version = "0.38.0"
 default-features = false
 features = ["woff2", "png", "fragmentation"]
 
