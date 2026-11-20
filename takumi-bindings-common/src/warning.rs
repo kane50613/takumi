@@ -3,6 +3,7 @@
 use std::sync::Once;
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use takumi_core::resources::font::MISSING_FAMILY_LOG_TARGET;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
@@ -43,7 +44,10 @@ impl WarningLog {
 
 impl Log for WarningLog {
   fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-    metadata.level() <= Level::Warn && metadata.target().starts_with(TARGET_PREFIX)
+    // A binding warns of unresolved families itself, from `RenderNeeds`.
+    metadata.level() <= Level::Warn
+      && metadata.target().starts_with(TARGET_PREFIX)
+      && metadata.target() != MISSING_FAMILY_LOG_TARGET
   }
 
   fn log(&self, record: &Record<'_>) {

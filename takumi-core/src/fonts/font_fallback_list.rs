@@ -13,7 +13,7 @@ use super::{
   simple_font_data::SimpleFontData,
 };
 use crate::{
-  resources::font::{Fonts, MatchedFace},
+  resources::font::{Fonts, MISSING_FAMILY_LOG_TARGET, MatchedFace},
   style::{FontFamilyToken, GenericFamilyType},
 };
 
@@ -153,7 +153,7 @@ impl FontFallbackList {
     );
     let later = if asks_for_first {
       log::warn!(
-        target: "takumi::font",
+        target: MISSING_FAMILY_LOG_TARGET,
         "no face is loaded for font-family {:?}, so text falls back to the next family that has one. Load the font, or check the name in font-family.",
         missing[0]
       );
