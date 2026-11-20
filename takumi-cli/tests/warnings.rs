@@ -140,3 +140,27 @@ fn deny_warnings_writes_no_resource_listing() {
   assert_eq!(output.status.code(), Some(1));
   assert!(output.stdout.is_empty(), "{:?}", output.stdout);
 }
+
+#[test]
+fn a_page_size_raises_no_warning() {
+  let dir = TempDir::new("warnings-page-size");
+
+  fs::write(
+    dir.join("page.html"),
+    "<style>@page { size: letter; margin: 2cm }</style><p>One</p>",
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("pdf")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.pdf"))
+    .args(["--page", "A4", "--deny-warnings"])
+    .output()
+    .expect("runs takumi");
+  let messages = String::from_utf8(output.stderr).unwrap();
+
+  assert!(output.status.success(), "{messages}");
+  assert_eq!(messages, "");
+}
