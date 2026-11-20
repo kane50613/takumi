@@ -1,6 +1,6 @@
 ---
 title: Cloudflare Workers
-description: Render images in a Cloudflare Worker with Takumi, which picks its WebAssembly backend on workerd without extra configuration.
+description: Render images or PDFs in a Cloudflare Worker with Takumi, which picks its WebAssembly backend on workerd without extra configuration.
 ---
 
 Takumi renders in a Worker on its WebAssembly backend. Wrangler resolves the `workerd` export condition, so `takumi-js` loads the WebAssembly binary with no configuration and no `module` option.
@@ -57,6 +57,29 @@ Takumi renders in a Worker on its WebAssembly backend. Wrangler resolves the `wo
 
   </Step>
 </Steps>
+
+## Render a PDF
+
+[`takumi-pdf`](/docs/pdf) also resolves the `workerd` condition, so a Worker returns a PDF with no extra configuration either.
+
+```npm
+npm i takumi-pdf
+```
+
+```ts title="src/worker.ts"
+import { render } from "takumi-pdf";
+
+export default {
+  async fetch(): Promise<Response> {
+    const pdf = await render(
+      `<style>h1 { font-family: Geist }</style><h1>Invoice 1042</h1><p>Total: $1,290</p>`,
+      { size: "a4", fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"] },
+    );
+
+    return new Response(pdf, { headers: { "content-type": "application/pdf" } });
+  },
+};
+```
 
 ## Size and limits
 

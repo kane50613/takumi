@@ -1,6 +1,6 @@
 ---
 title: TanStack Start
-description: Generate Open Graph images from React components in TanStack Start server file routes.
+description: Generate Open Graph images or PDFs from React components in TanStack Start server file routes.
 ---
 
 Add a server file route that returns an `ImageResponse`. The example reads the title and description from the query string.
@@ -66,6 +66,39 @@ Add a server file route that returns an `ImageResponse`. The example reads the t
 
   </Step>
 </Steps>
+
+## Render a PDF
+
+[`takumi-pdf`](/docs/pdf) renders a React component to a PDF from a server file route. The `[.]` in the file name escapes the dot, so the route answers at `/invoice.pdf`.
+
+```npm
+npm i takumi-pdf
+```
+
+```tsx title="src/routes/invoice[.]pdf.tsx"
+import { createFileRoute } from "@tanstack/react-router";
+import { render } from "takumi-pdf";
+import Invoice from "../components/Invoice";
+
+export const Route = createFileRoute("/invoice.pdf")({
+  server: {
+    handlers: {
+      async GET() {
+        const pdf = await render(<Invoice id={1042} />, {
+          size: "a4",
+          fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
+        });
+
+        return new Response(pdf, {
+          headers: { "content-type": "application/pdf" },
+        });
+      },
+    },
+  },
+});
+```
+
+The route also runs on Cloudflare Workers through `@cloudflare/vite-plugin`. See [Pagination](/docs/pdf/pagination) to control page breaks.
 
 ## Next steps
 
