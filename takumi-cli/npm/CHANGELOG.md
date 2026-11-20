@@ -1,9 +1,6 @@
----
-packages:
-  "@takumi-rs/cli": minor
----
+## @takumi-rs/cli@0.2.0
 
-# `npx @takumi-rs/cli` runs takumi without Rust
+### `npx @takumi-rs/cli` runs takumi without Rust
 
 The `takumi` command is on npm as `@takumi-rs/cli`, with a prebuilt binary for macOS, Windows, and Linux on x64 and arm64.
 

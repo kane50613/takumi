@@ -1,3 +1,127 @@
+## takumi-cli@0.2.0
+
+### `takumi` errors say how to fix more mistakes
+
+- An image too tall for the canvas names the most height the width and `--dpr` allow.
+- An HTML file that holds binary data says it is not HTML, where it suggested converting its encoding. A UTF-16 file is named as UTF-16, with an `iconv` command that converts it.
+- `--page` and `--margin` values takumi does not read come with examples of the values it does.
+- `--selector` names an inline element without a background or border only when one matches, and otherwise says no element matches.
+
+```diff
+  $ takumi image tall.html -o tall.png
+- error: the image would be 0px tall or over 64 megapixels at the content's height. Pass `--height`.
++ error: the image would be 0px tall or over 64 megapixels at the content's height, which at 1200px wide and `--dpr 1` allows at most 55924px. Pass `--height`.
+```
+
+### `takumi paint` keeps the break between wrapped lines
+
+A text that wrapped onto several lines used to print with its lines run together, so `Takumi CLI, tested by an agent` wrapped after `tested` printed as `"Takumi CLI, testedby an agent"`. Each line break now prints as `\n`.
+
+```diff
+- text p 8,8 284x82 "Takumi CLI, testedby an agent" Geist 32px #000000
++ text p 8,8 284x82 "Takumi CLI, tested\nby an agent" Geist 32px #000000
+```
+
+### `takumi` names standard input, `--font`, and a missing directory in what it prints
+
+`--log info` names standard input for `-`, where it printed the URL of the working directory. A `--font` file that is missing or not a font fails with an error that starts with the flag. An output in a directory that does not exist names that directory.
+
+```diff
+  $ cat card.html | takumi image - -o card.png --log info
+- [     0.0ms] input: read file:///home/me/site/, 198 bytes
++ [     0.0ms] input: read standard input, 198 bytes
+
+  $ takumi image card.html -o card.png --font nope.ttf
+- error: nope.ttf: No such file or directory (os error 2)
++ error: `--font nope.ttf`: No such file or directory (os error 2)
+
+  $ takumi image card.html -o out/card.png
+- error: out/card.png: No such file or directory (os error 2)
++ error: out/card.png: the directory out does not exist. Create it before writing there.
+```
+
+`takumi image --help` and `takumi pdf --help` also name the tab-separated columns `--list-resources` prints.
+
+### `@media (prefers-color-scheme)` matches, and `takumi --color-scheme dark` renders the dark variant
+
+`prefers-color-scheme` used to match nothing. It now matches `light` by default, and `dark` when the viewport asks for it, so a page that keeps its dark colors in a `prefers-color-scheme: dark` rule renders them.
+
+```sh
+takumi image email.html -o email-dark.png --width 600 --color-scheme dark
+```
+
+```rust
+let viewport = Viewport::new((600, 400)).with_color_scheme(ColorScheme::Dark);
+```
+
+- `takumi image` and `takumi paint` take `--color-scheme light` or `dark`.
+- In Rust, `Viewport::with_color_scheme` sets it, and `ColorScheme` is in the prelude. `Viewport` gains the `color_scheme` field, so a `Viewport { .. }` literal needs it. `Viewport::new` and its `with_*` methods need no change.
+- A rule under `prefers-color-scheme: light` now applies by default, as in a browser.
+- `light-dark()` still takes its first color.
+
+### Migration
+
+A `Viewport` struct literal names the new field, unless it copies the rest with `..`:
+
+```diff
+  let viewport = Viewport {
+    size: (1200, 630).into(),
+    font_size: 16.0,
+    device_pixel_ratio: 1.0,
+    media_target: MediaTarget::Screen,
+    unit_reference: None,
++   color_scheme: ColorScheme::Light,
+  };
+```
+
+### Text fields and `--list-resources` no longer warn of a missing font
+
+A page with a text `<input>` warned that no face is loaded for `Arial`, since the default style of a text field named it, so `--deny-warnings` failed on any page with one. The default style now names `system-ui`, which draws in the same font when no Arial is loaded. `takumi --list-resources` no longer warns that an `@font-face` family is missing either.
+
+```diff
+  $ takumi image signup.html -o signup.png --deny-warnings
+- warning: no face is loaded for font-family "Arial", so text falls back to the next family that has one. Load the font, or check the name in font-family.
+```
+
+### `cargo binstall takumi-cli` installs a prebuilt binary
+
+Each takumi-cli release on GitHub now carries a binary for macOS, Windows, and Linux, each on x64 and arm64, so `cargo binstall` installs takumi in seconds instead of building it. The Linux binary is statically linked and runs on both glibc and musl.
+
+```sh
+cargo binstall takumi-cli
+```
+
+### `takumi paint` marks a box the canvas cuts off
+
+A node that crosses an edge of the canvas now ends with `cut off at the <side> edge`, or names each edge it crosses. Before, only a node wholly past an edge was marked, as `offscreen`.
+
+```diff
+- box div#cta 1100,600 200x60 background #4338ca
++ box div#cta 1100,600 200x60 background #4338ca cut off at the right and bottom edges
+```
+
+### `takumi image --help` describes `--selector` and `--color-scheme` as they behave
+
+`--selector` now says it takes a lone class such as `.card`. `--color-scheme` now says `light-dark()` always takes its first color, whatever the scheme.
+
+### `takumi image --selector` renders one element at its own size
+
+`--selector` keeps only the first element it matches and crops the image to that element's box, so a card or a slide renders without the page around it.
+
+```sh
+takumi image page.html -o pricing.png --selector .pricing-card
+```
+
+- It takes a type, `#id`, and `.class` written together, such as `section.pricing-card`.
+- It writes PNG, JPEG, or WebP. An SVG output with `--selector` exits with code `2`.
+- No match fails with `no element matches`.
+- In Rust, `Bitmap::crop` is now public, and returns `None` for an empty region or one that does not fit the bitmap.
+
+```rust
+let bitmap = Bitmap::from_raw(320, 256, vec![0; 320 * 256 * 4]).ok_or("invalid bitmap data")?;
+let card = bitmap.crop(40, 120, 280, 136).ok_or("the card lies outside the image")?;
+```
+
 ## takumi-cli@0.1.0
 
 ### The paint tree lists the CSS a render dropped

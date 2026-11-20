@@ -1,3 +1,90 @@
+## takumi-core@0.38.0
+
+### `<button>` draws as a button
+
+A `<button>` had no default style, so it laid out as inline text: `width` did nothing, a background drew only behind its text, and its label sat at the start. It now takes Chromium's default button style, an inline block with a centered label, `padding: 1px 6px`, a 2px outset border, and a light gray background, which an author's styles override. A disabled button fades as in Chromium.
+
+```html
+<button style="width: 200px; background: #4338ca; color: #fff">Sign up</button>
+```
+
+```diff
+- A 79px box behind the label "Sign up", with the label at the start
++ A 200px button with "Sign up" centered in it
+```
+
+### An `@page` rule's `size` no longer warns as an unsupported property
+
+`size` in an `@page` rule, including the one `takumi pdf --page` writes, set the page size and also raised a warning, so `--deny-warnings` failed on a valid document. It now sets the page size without a warning.
+
+```diff
+  $ takumi pdf report.html -o report.pdf --page A4 --deny-warnings
+- warning: ignored the property `size` at line 1, column 6 of its style sheet or `style` attribute, since takumi does not support it. Check its spelling.
+- error: `--deny-warnings` is set and the command raised 1 warning, so it wrote nothing.
+```
+
+### `@media (prefers-color-scheme)` matches, and `takumi --color-scheme dark` renders the dark variant
+
+`prefers-color-scheme` used to match nothing. It now matches `light` by default, and `dark` when the viewport asks for it, so a page that keeps its dark colors in a `prefers-color-scheme: dark` rule renders them.
+
+```sh
+takumi image email.html -o email-dark.png --width 600 --color-scheme dark
+```
+
+```rust
+let viewport = Viewport::new((600, 400)).with_color_scheme(ColorScheme::Dark);
+```
+
+- `takumi image` and `takumi paint` take `--color-scheme light` or `dark`.
+- In Rust, `Viewport::with_color_scheme` sets it, and `ColorScheme` is in the prelude. `Viewport` gains the `color_scheme` field, so a `Viewport { .. }` literal needs it. `Viewport::new` and its `with_*` methods need no change.
+- A rule under `prefers-color-scheme: light` now applies by default, as in a browser.
+- `light-dark()` still takes its first color.
+
+### Migration
+
+A `Viewport` struct literal names the new field, unless it copies the rest with `..`:
+
+```diff
+  let viewport = Viewport {
+    size: (1200, 630).into(),
+    font_size: 16.0,
+    device_pixel_ratio: 1.0,
+    media_target: MediaTarget::Screen,
+    unit_reference: None,
++   color_scheme: ColorScheme::Light,
+  };
+```
+
+### Text fields and `--list-resources` no longer warn of a missing font
+
+A page with a text `<input>` warned that no face is loaded for `Arial`, since the default style of a text field named it, so `--deny-warnings` failed on any page with one. The default style now names `system-ui`, which draws in the same font when no Arial is loaded. `takumi --list-resources` no longer warns that an `@font-face` family is missing either.
+
+```diff
+  $ takumi image signup.html -o signup.png --deny-warnings
+- warning: no face is loaded for font-family "Arial", so text falls back to the next family that has one. Load the font, or check the name in font-family.
+```
+
+### `dir`, `<bdi>`, and `<bdo>` isolate their text as in a browser
+
+An element with a `dir` attribute and a `<bdi>` now isolate their text from the text around them, and a `<bdo>` overrides the order of its text. `dir="auto"` and `<bdi>` also take their direction from their content. This follows the HTML default styles, so a date in a `<bdi>` or in an element with `dir="ltr"` keeps its order next to Arabic text.
+
+```html
+<p dir="rtl">التاريخ: <bdi>2026-11-19</bdi></p>
+```
+
+- Before, the date drew as `19-11-2026`, since the `<bdi>` did not isolate it from the Arabic before it.
+- Now it draws as `2026-11-19`, as in a browser.
+- A date with no isolating element still reorders after Arabic text, as it does in a browser.
+
+### A `font-family` whose first family never loads now warns
+
+When no loaded face provides the first family a `font-family` names, takumi logs a warning that names it. The `takumi` CLI prints it and fails on it under `--deny-warnings`. The JS and WASM bindings keep their own warning for a family no font provides. Generic families, `-apple-system`, and `BlinkMacSystemFont` never warn, and missing later families stay at debug level.
+
+```sh
+$ takumi image card.html -o card.png
+warning: no face is loaded for font-family "Playfair Display", so text falls back to the next family that has one. Load the font, or check the name in font-family.
+```
+
 ## takumi-core@0.37.0
 
 ### Content after a box that overflows a page starts below the overflow
