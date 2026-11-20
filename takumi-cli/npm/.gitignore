@@ -1,3 +1,4 @@
 artifacts/
 platforms/*/takumi
 platforms/*/takumi.exe
+*.tgz
