@@ -273,7 +273,28 @@ fn a_page_too_tall_names_the_most_height_the_width_allows() {
 
   assert_eq!(output.status.code(), Some(1));
   assert!(
-    message.contains("which at 1200px wide allows at most 55924px. Pass `--height`."),
+    message.contains("which at 1200px wide and `--dpr 1` allows at most 55924px. Pass `--height`."),
     "{message}"
   );
+}
+
+#[test]
+fn utf16_input_is_named_with_how_to_convert_it() {
+  let dir = TempDir::new("log-utf16-input");
+  let mut bytes = vec![0xFF, 0xFE];
+
+  bytes.extend("<p>Hi</p>".encode_utf16().flat_map(u16::to_le_bytes));
+  fs::write(dir.join("page.html"), bytes).unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(message.contains("is UTF-16"), "{message}");
 }
