@@ -483,9 +483,15 @@ export class PdfRenderer extends WasmRenderer<RegisteredFamily, PdfRendererInter
   }
 
   /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
-  render(document: PreparedSource, options?: PreparedRenderOptions): Promise<Uint8Array>;
-  render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
-  async render(node: PreparedSource | NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
+  render(
+    document: PreparedSource,
+    options?: PreparedRenderOptions,
+  ): Promise<Uint8Array<ArrayBuffer>>;
+  render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>>;
+  async render(
+    node: PreparedSource | NodeInput,
+    options: RenderOptions = {},
+  ): Promise<Uint8Array<ArrayBuffer>> {
     return renderPrepared(
       this.fonts,
       node instanceof Prepared ? node : await this.read(node, options),
@@ -560,12 +566,12 @@ export function prepare(node: NodeInput, options?: PrepareOptions): Promise<Prep
 export function render(
   document: PreparedSource,
   options?: PreparedRenderOptions,
-): Promise<Uint8Array>;
-export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array>;
+): Promise<Uint8Array<ArrayBuffer>>;
+export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array<ArrayBuffer>>;
 export function render(
   node: PreparedSource | NodeInput,
   options?: RenderOptions,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   return node instanceof Prepared ? shared().render(node, options) : shared().render(node, options);
 }
 
