@@ -6,7 +6,7 @@ use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
   style::{FromCss, Length, SizingContext},
-  viewport::{MediaTarget, Viewport},
+  viewport::{ColorScheme, MediaTarget, Viewport},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +51,7 @@ enum MediaFeature {
   Resolution(MediaFeatureComparison, f32),
   AspectRatio(MediaFeatureComparison, MediaRatio),
   Orientation(MediaOrientation),
+  PrefersColorScheme(ColorScheme),
 }
 
 /// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
@@ -270,6 +271,17 @@ impl MediaFeature {
         .ok_or_else(|| CssParseError::custom(StyleSheetParseErrorKind::UnsupportedMediaFeature));
     }
 
+    if feature_name.eq_ignore_ascii_case("prefers-color-scheme") {
+      let scheme = input.expect_ident_cloned()?;
+      return match_ignore_ascii_case! { scheme.as_ref(),
+        "light" => Ok(Self::PrefersColorScheme(ColorScheme::Light)),
+        "dark" => Ok(Self::PrefersColorScheme(ColorScheme::Dark)),
+        _ => Err(
+          CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken),
+        ),
+      };
+    }
+
     if feature_name.eq_ignore_ascii_case("orientation") {
       let orientation = input.expect_ident_cloned()?;
       return match_ignore_ascii_case! { orientation.as_ref(),
@@ -374,6 +386,7 @@ impl MediaFeature {
             MediaOrientation::Landscape => width > height,
           })
       }
+      Self::PrefersColorScheme(scheme) => viewport.color_scheme == *scheme,
     }
   }
 }

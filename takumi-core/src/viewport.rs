@@ -16,6 +16,16 @@ pub enum MediaTarget {
   Print,
 }
 
+/// The color scheme `prefers-color-scheme` matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColorScheme {
+  /// A light background with dark text.
+  #[default]
+  Light,
+  /// A dark background with light text.
+  Dark,
+}
+
 /// The viewport for the image renderer.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Viewport {
@@ -30,6 +40,8 @@ pub struct Viewport {
   pub media_target: MediaTarget,
   /// What viewport units resolve against when not `size`, such as the page area in paged output.
   pub unit_reference: Option<Size<f32>>,
+  /// The color scheme `prefers-color-scheme` matches.
+  pub color_scheme: ColorScheme,
 }
 
 impl From<Viewport> for Size<AvailableSpace> {
@@ -60,6 +72,7 @@ impl Viewport {
       device_pixel_ratio: DEFAULT_DEVICE_PIXEL_RATIO,
       media_target: MediaTarget::Screen,
       unit_reference: None,
+      color_scheme: ColorScheme::Light,
     }
   }
 
@@ -85,6 +98,12 @@ impl Viewport {
   /// Sets the media type `@media` queries resolve against.
   pub const fn with_media_target(mut self, media_target: MediaTarget) -> Self {
     self.media_target = media_target;
+    self
+  }
+
+  /// Sets the color scheme `prefers-color-scheme` matches.
+  pub const fn with_color_scheme(mut self, color_scheme: ColorScheme) -> Self {
+    self.color_scheme = color_scheme;
     self
   }
 

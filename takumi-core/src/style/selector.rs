@@ -1899,7 +1899,7 @@ mod tests {
   use super::*;
   use crate::{
     style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration},
-    viewport::{MediaTarget, Viewport},
+    viewport::{ColorScheme, MediaTarget, Viewport},
   };
 
   fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
@@ -2226,6 +2226,28 @@ mod tests {
     assert_eq!(sheet.keyframes.len(), 1);
     assert_eq!(sheet.keyframes[0].keyframes.len(), 1);
     assert_eq!(sheet.keyframes[0].keyframes[0].declarations.len(), 1);
+  }
+
+  #[test]
+  fn prefers_color_scheme_matches_the_viewport_scheme() {
+    let sheet = parse_stylesheet(
+      r#"
+        @media (prefers-color-scheme: dark) { .card { width: 100px; } }
+        @media (prefers-color-scheme: light) { .card { width: 200px; } }
+      "#,
+    );
+    let dark = Viewport::new((800, 600)).with_color_scheme(ColorScheme::Dark);
+    let light = Viewport::new((800, 600));
+    let matches = |index: usize, viewport: Viewport| {
+      sheet.rules[index]
+        .media_queries
+        .first()
+        .is_some_and(|media| media.matches(viewport))
+    };
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert!(matches(0, dark) && !matches(0, light));
+    assert!(matches(1, light) && !matches(1, dark));
   }
 
   #[test]
