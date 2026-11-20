@@ -616,6 +616,11 @@ impl PageDeclarations {
   }
 
   fn push(&mut self, declaration: &RawDeclaration<'_>) {
+    // `size` is a page descriptor that `PageDescriptors` reads, not a property of the page box.
+    if declaration.name.eq_ignore_ascii_case("size") {
+      return;
+    }
+
     let block = if declaration.important {
       &mut self.important
     } else {
