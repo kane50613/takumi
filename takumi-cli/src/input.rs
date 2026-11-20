@@ -139,8 +139,9 @@ pub(crate) struct OutputArgs {
   #[arg(short, long, required_unless_present = "list_resources")]
   output: Option<PathBuf>,
 
-  /// Lists the files the document would load and whether it may, without rendering: one line
-  /// per file, its kind, status, and URL, then why when it may not, separated by tabs.
+  /// Lists the files the document would load and whether it may, without rendering. Each line
+  /// holds its kind, status, and URL, then why when it may not load, separated by tabs. An
+  /// `invalid` line holds the reference as written in place of a URL, and no reason.
   #[arg(long)]
   pub(crate) list_resources: bool,
 }
