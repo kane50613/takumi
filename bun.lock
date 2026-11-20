@@ -278,7 +278,6 @@
     },
     "takumi-bindings-js": {
       "name": "@takumi-rs/bindings-js",
-      "version": "0.0.2",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
