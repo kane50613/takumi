@@ -5,10 +5,13 @@
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
+use std::mem::swap;
+
 use bitflags::bitflags;
 
 use crate::{
   layout::{
+    grid::grid_data::GridTrackBaselines,
     grid::grid_style::{
       GridStyle, GridTrackList, GridTrackSize, GridTrackSizingDirection, RepeatType, TrackBreadth,
     },
@@ -805,11 +808,9 @@ impl GridTrackCollection {
     }) - self.gutter_size
   }
 
-  /// Blink's `CreateSubgridBaselines`: the major baselines of the sets of ranges
-  /// `begin_range_index..=end_range_index` as the subgrid in them sees them, from its border box start.
-  ///
-  /// Approximate: takumi keeps no minor baselines, which a subgrid running the opposite direction
-  /// to its root grid takes for its major ones, so such a subgrid inherits none.
+  /// Blink's `CreateSubgridBaselines`: the baselines of the sets of ranges
+  /// `begin_range_index..=end_range_index` as the subgrid in them sees them, from its border box
+  /// start, a subgrid running opposite to its root grid taking the minor ones for its major ones.
   #[expect(clippy::too_many_arguments)]
   pub(crate) fn create_subgrid_baselines(
     &self,
@@ -820,42 +821,65 @@ impl GridTrackCollection {
     subgrid_border_padding: LogicalBoxStrut,
     subgrid_direction: GridTrackSizingDirection,
     is_opposite_direction_in_root_grid: bool,
-    parent_baselines: &[Option<LayoutUnit>],
-  ) -> Vec<Option<LayoutUnit>> {
+    parent_baselines: &GridTrackBaselines,
+  ) -> GridTrackBaselines {
     let begin_set_index = self.ranges[begin_range_index].begin_set_index;
     let end_set_index =
       self.ranges[end_range_index].begin_set_index + self.ranges[end_range_index].set_count;
     let set_span_size = end_set_index - begin_set_index;
-
-    if is_opposite_direction_in_root_grid {
-      return vec![None; set_span_size];
-    }
-
     let subgrid_gutter_size_delta = subgrid_gutter_size - self.gutter_size;
-    let margin_border_padding_start = match subgrid_direction {
-      GridTrackSizingDirection::ForColumns => {
-        subgrid_margin.inline_start + subgrid_border_padding.inline_start
-      }
-      GridTrackSizingDirection::ForRows => {
-        subgrid_margin.block_start + subgrid_border_padding.block_start
-      }
+    let (margin_border_padding_start, margin_border_padding_end) = match subgrid_direction {
+      GridTrackSizingDirection::ForColumns => (
+        subgrid_margin.inline_start + subgrid_border_padding.inline_start,
+        subgrid_margin.inline_end + subgrid_border_padding.inline_end,
+      ),
+      GridTrackSizingDirection::ForRows => (
+        subgrid_margin.block_start + subgrid_border_padding.block_start,
+        subgrid_margin.block_end + subgrid_border_padding.block_end,
+      ),
     };
+    let adjust = |baselines: &[Option<LayoutUnit>], index: usize, adjust: LayoutUnit| {
+      baselines
+        .get(index)
+        .copied()
+        .flatten()
+        .map(|baseline| baseline - adjust)
+    };
+    let mut subgrid_baselines = GridTrackBaselines::default();
 
-    (0..set_span_size)
-      .map(|index| {
-        let major_adjust = if index == 0 {
-          margin_border_padding_start
-        } else {
-          subgrid_gutter_size_delta / 2
-        };
+    for index in 0..set_span_size {
+      let mut major_adjust = if index == 0 {
+        margin_border_padding_start
+      } else {
+        subgrid_gutter_size_delta / 2
+      };
+      let mut minor_adjust = if index == set_span_size - 1 {
+        margin_border_padding_end
+      } else {
+        subgrid_gutter_size_delta / 2
+      };
 
-        parent_baselines
-          .get(begin_set_index + index)
-          .copied()
-          .flatten()
-          .map(|baseline| baseline - major_adjust)
-      })
-      .collect()
+      if is_opposite_direction_in_root_grid {
+        swap(&mut major_adjust, &mut minor_adjust);
+      }
+
+      let current_index = if is_opposite_direction_in_root_grid {
+        end_set_index - index - 1
+      } else {
+        begin_set_index + index
+      };
+
+      subgrid_baselines
+        .major
+        .push(adjust(&parent_baselines.major, current_index, major_adjust));
+      subgrid_baselines
+        .minor
+        .push(adjust(&parent_baselines.minor, current_index, minor_adjust));
+    }
+    if is_opposite_direction_in_root_grid {
+      swap(&mut subgrid_baselines.major, &mut subgrid_baselines.minor);
+    }
+    subgrid_baselines
   }
 
   /// Blink's `CacheDefiniteSetsGeometry`: the offsets of the sets whose sizes are definite before

@@ -4,11 +4,6 @@
 //! [`grid_subtree.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_subtree.h)
 //! describes. A subtree is its root's index.
 //!
-//! Approximate: Blink keeps a grid's placement and a subgrid's
-//! [`SubgridMinMaxSizesCache`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/subgrid_min_max_sizes_cache.h)
-//! on its `LayoutGrid`, which takumi lacks, so a node keeps them for as long as its tree lives,
-//! and the layout tree hands a subgrid its placement along with its tracks.
-//!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
 use std::rc::Rc;
@@ -17,15 +12,10 @@ use rustc_hash::FxHashMap;
 
 use crate::{
   geometry::NodeId,
-  layout::{
-    grid::{
-      grid_data::GridLayoutData,
-      grid_item::{GridItemData, GridItems},
-      grid_placement::GridPlacementData,
-      grid_style::GridTrackSizingDirection,
-      grid_track_collection::GridTrackCollection,
-    },
-    min_max_sizes::MinMaxSizes,
+  layout::grid::{
+    grid_data::GridLayoutData,
+    grid_item::{GridItemData, GridItems},
+    grid_style::GridTrackSizingDirection,
   },
 };
 
@@ -52,33 +42,6 @@ impl SubgriddedItemData {
   }
 }
 
-/// Blink's `SubgridMinMaxSizesCache`: a subgrid's intrinsic sizes in its standalone axis, valid
-/// while the tracks it takes from its parent in the other axis stay the same.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct SubgridMinMaxSizesCache {
-  opposite_axis_subgridded_tracks: GridTrackCollection,
-  cached_min_max_sizes: MinMaxSizes,
-}
-
-impl SubgridMinMaxSizesCache {
-  pub(crate) fn new(min_max_sizes: MinMaxSizes, layout_data: &GridLayoutData) -> Self {
-    Self {
-      opposite_axis_subgridded_tracks: layout_data.only_subgridded_collection().clone(),
-      cached_min_max_sizes: min_max_sizes,
-    }
-  }
-
-  /// Blink's `IsValidFor`.
-  pub(crate) fn is_valid_for(&self, layout_data: &GridLayoutData) -> bool {
-    *layout_data.only_subgridded_collection() == self.opposite_axis_subgridded_tracks
-  }
-
-  /// Blink's `CachedMinMaxSizes`.
-  pub(crate) fn cached_min_max_sizes(&self) -> MinMaxSizes {
-    self.cached_min_max_sizes
-  }
-}
-
 /// Blink's `GridSizingTree::GridTreeNode`.
 #[derive(Debug, Clone)]
 pub(crate) struct GridTreeNode {
@@ -86,9 +49,6 @@ pub(crate) struct GridTreeNode {
   pub(crate) grid_items: GridItems,
   pub(crate) layout_data: GridLayoutData,
   pub(crate) subtree_size: usize,
-  /// Blink's `CachedPlacementData`, its line resolver Blink's `CachedLineResolver`.
-  pub(crate) placement_data: GridPlacementData,
-  pub(crate) subgrid_min_max_sizes_cache: Option<SubgridMinMaxSizesCache>,
 }
 
 /// Blink's `GridSizingTree`.
@@ -100,15 +60,12 @@ pub(crate) struct GridSizingTree {
   tree_has_baselines: bool,
   has_subgrid_with_indefinite_standalone_axis: bool,
   has_block_size_dependent_grid_item: bool,
+  has_deferred_subgrid_baseline: bool,
 }
 
 impl GridSizingTree {
-  /// Blink's `AddToPreorderTraversal`: the index of `node`, placed as `placement_data` says.
-  pub(crate) fn add_to_preorder_traversal(
-    &mut self,
-    node: NodeId,
-    placement_data: GridPlacementData,
-  ) -> usize {
+  /// Blink's `AddToPreorderTraversal`: the index of `node`.
+  pub(crate) fn add_to_preorder_traversal(&mut self, node: NodeId) -> usize {
     let index = self.tree_data.len();
 
     self.subgrid_index_lookup_map.insert(node, index);
@@ -117,8 +74,6 @@ impl GridSizingTree {
       grid_items: GridItems::default(),
       layout_data: GridLayoutData::default(),
       subtree_size: 1,
-      placement_data,
-      subgrid_min_max_sizes_cache: None,
     });
     index
   }
@@ -225,6 +180,16 @@ impl GridSizingTree {
     self.has_block_size_dependent_grid_item = true;
   }
 
+  /// Blink's `HasDeferredSubgridBaseline`: whether track sizing left a nested subgrid's baseline
+  /// for the standalone-axes pass, its geometry unresolved.
+  pub(crate) fn has_deferred_subgrid_baseline(&self) -> bool {
+    self.has_deferred_subgrid_baseline
+  }
+
+  pub(crate) fn set_has_deferred_subgrid_baseline(&mut self) {
+    self.has_deferred_subgrid_baseline = true;
+  }
+
   /// Blink's `FinalizeTree`.
   pub(crate) fn finalize_tree(&self) -> Rc<GridLayoutTree> {
     Rc::new(self.finalize_subtree_at(0))
@@ -241,7 +206,6 @@ impl GridSizingTree {
         has_unresolved_geometry: node.layout_data.has_indefinite_set(),
         layout_data: node.layout_data.clone(),
         subtree_size: node.subtree_size,
-        placement_data: node.placement_data.clone(),
       })
       .collect();
 
@@ -269,7 +233,6 @@ pub(crate) struct GridLayoutTreeNode {
   pub(crate) has_unresolved_geometry: bool,
   pub(crate) layout_data: GridLayoutData,
   pub(crate) subtree_size: usize,
-  pub(crate) placement_data: GridPlacementData,
 }
 
 /// Blink's `GridLayoutTree`: the finalized tracks of a grid and its subgrids, which a subgrid lays
@@ -297,9 +260,14 @@ impl PartialEq for GridLayoutSubtree {
 
 impl GridLayoutSubtree {
   pub(crate) fn new(layout_tree: Rc<GridLayoutTree>) -> Self {
+    Self::at(layout_tree, 0)
+  }
+
+  /// The subtree of `layout_tree` rooted at `subtree_root`.
+  pub(crate) fn at(layout_tree: Rc<GridLayoutTree>, subtree_root: usize) -> Self {
     Self {
       layout_tree,
-      subtree_root: 0,
+      subtree_root,
     }
   }
 
@@ -330,13 +298,13 @@ impl GridLayoutSubtree {
     children
   }
 
+  /// Blink's `HasUnresolvedGeometry`.
+  pub(crate) fn has_unresolved_geometry(&self) -> bool {
+    self.root().has_unresolved_geometry
+  }
+
   /// Blink's `LayoutData`.
   pub(crate) fn layout_data(&self) -> &GridLayoutData {
     &self.root().layout_data
-  }
-
-  /// The placement the root grid's items took while the tree was sized.
-  pub(crate) fn placement_data(&self) -> &GridPlacementData {
-    &self.root().placement_data
   }
 }

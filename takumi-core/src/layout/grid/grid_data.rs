@@ -1,6 +1,5 @@
 //! Blink's [`GridLayoutData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_data.h):
-//! a grid's track collections and the baselines its tracks share. Every item's baseline group is
-//! the major one, so a track keeps no minor baseline.
+//! a grid's track collections and the baselines its tracks share.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -16,9 +15,8 @@ use crate::{
 pub(crate) struct GridLayoutData {
   pub(crate) columns: GridTrackCollection,
   pub(crate) rows: GridTrackCollection,
-  /// Blink's `GridTrackBaselines::major` by set, none for a set no item aligns a baseline in.
-  column_baselines: Option<Vec<Option<LayoutUnit>>>,
-  row_baselines: Option<Vec<Option<LayoutUnit>>>,
+  column_baselines: Option<GridTrackBaselines>,
+  row_baselines: Option<GridTrackBaselines>,
 }
 
 impl Default for GridLayoutData {
@@ -92,17 +90,21 @@ impl GridLayoutData {
     }
   }
 
-  fn baselines(&self, direction: GridTrackSizingDirection) -> &Option<Vec<Option<LayoutUnit>>> {
+  /// Blink's `GetBaselines`.
+  pub(crate) fn baselines(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> Option<&GridTrackBaselines> {
     match direction {
-      GridTrackSizingDirection::ForColumns => &self.column_baselines,
-      GridTrackSizingDirection::ForRows => &self.row_baselines,
+      GridTrackSizingDirection::ForColumns => self.column_baselines.as_ref(),
+      GridTrackSizingDirection::ForRows => self.row_baselines.as_ref(),
     }
   }
 
   fn baselines_mut(
     &mut self,
     direction: GridTrackSizingDirection,
-  ) -> &mut Option<Vec<Option<LayoutUnit>>> {
+  ) -> &mut Option<GridTrackBaselines> {
     match direction {
       GridTrackSizingDirection::ForColumns => &mut self.column_baselines,
       GridTrackSizingDirection::ForRows => &mut self.row_baselines,
@@ -113,6 +115,7 @@ impl GridLayoutData {
     self.baselines(direction).is_some()
   }
 
+  /// Blink's `MajorBaseline`, none where Blink's is `LayoutUnit::Min()`.
   pub(crate) fn major_baseline(
     &self,
     direction: GridTrackSizingDirection,
@@ -120,49 +123,84 @@ impl GridLayoutData {
   ) -> Option<LayoutUnit> {
     self
       .baselines(direction)
-      .as_ref()
-      .and_then(|baselines| baselines.get(set_index).copied().flatten())
+      .and_then(|baselines| baselines.major.get(set_index).copied().flatten())
   }
 
-  /// Blink's `GetBaselines`, the major ones.
-  pub(crate) fn major_baselines(
+  /// Blink's `MinorBaseline`.
+  pub(crate) fn minor_baseline(
     &self,
     direction: GridTrackSizingDirection,
-  ) -> Option<&[Option<LayoutUnit>]> {
-    self.baselines(direction).as_deref()
+    set_index: usize,
+  ) -> Option<LayoutUnit> {
+    self
+      .baselines(direction)
+      .and_then(|baselines| baselines.minor.get(set_index).copied().flatten())
   }
 
   /// Blink's `SetBaselines`.
-  pub(crate) fn set_major_baselines(
+  pub(crate) fn set_baselines(
     &mut self,
     direction: GridTrackSizingDirection,
-    baselines: Vec<Option<LayoutUnit>>,
+    baselines: GridTrackBaselines,
   ) {
     *self.baselines_mut(direction) = Some(baselines);
   }
 
   pub(crate) fn create_baselines(&mut self, direction: GridTrackSizingDirection) {
-    *self.baselines_mut(direction) = Some(Vec::new());
+    *self.baselines_mut(direction) = Some(GridTrackBaselines::default());
   }
 
   pub(crate) fn reset_baselines(&mut self, direction: GridTrackSizingDirection, set_count: usize) {
-    *self.baselines_mut(direction) = Some(vec![None; set_count]);
+    *self.baselines_mut(direction) = Some(GridTrackBaselines::new(set_count));
   }
 
-  /// Blink's `SetMajorBaseline`: the set's baseline grows to `candidate_baseline`.
+  /// Blink's `SetMajorBaseline`: the set's major baseline grows to `candidate_baseline`.
   pub(crate) fn set_major_baseline(
     &mut self,
     direction: GridTrackSizingDirection,
     set_index: usize,
     candidate_baseline: LayoutUnit,
   ) {
-    if let Some(baseline) = self
-      .baselines_mut(direction)
-      .as_mut()
-      .and_then(|baselines| baselines.get_mut(set_index))
-      && baseline.is_none_or(|baseline| candidate_baseline > baseline)
-    {
-      *baseline = Some(candidate_baseline);
+    if let Some(baselines) = self.baselines_mut(direction) {
+      grow_baseline(&mut baselines.major, set_index, candidate_baseline);
+    }
+  }
+
+  /// Blink's `SetMinorBaseline`: the set's minor baseline grows to `candidate_baseline`.
+  pub(crate) fn set_minor_baseline(
+    &mut self,
+    direction: GridTrackSizingDirection,
+    set_index: usize,
+    candidate_baseline: LayoutUnit,
+  ) {
+    if let Some(baselines) = self.baselines_mut(direction) {
+      grow_baseline(&mut baselines.minor, set_index, candidate_baseline);
+    }
+  }
+}
+
+fn grow_baseline(baselines: &mut [Option<LayoutUnit>], set_index: usize, candidate: LayoutUnit) {
+  if let Some(baseline) = baselines.get_mut(set_index)
+    && baseline.is_none_or(|baseline| candidate > baseline)
+  {
+    *baseline = Some(candidate);
+  }
+}
+
+/// Blink's `GridTrackBaselines`: each set's baseline of its major and minor baseline-sharing
+/// groups, none where no item aligns one. <https://www.w3.org/TR/css-align-3/#baseline-sharing-group>
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct GridTrackBaselines {
+  pub(crate) major: Vec<Option<LayoutUnit>>,
+  pub(crate) minor: Vec<Option<LayoutUnit>>,
+}
+
+impl GridTrackBaselines {
+  /// Blink's `Reset`.
+  pub(crate) fn new(set_count: usize) -> Self {
+    Self {
+      major: vec![None; set_count],
+      minor: vec![None; set_count],
     }
   }
 }

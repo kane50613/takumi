@@ -1,7 +1,7 @@
 //! Blink's [`GridItemData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_item.cc):
 //! a grid item's area, alignment, and the tracks it spans, and the items a grid sizes. In a
-//! horizontal writing mode, without `grid-lanes` or `last baseline`, so every item's baseline
-//! group is the major one and every subgrid is parallel to its root grid.
+//! horizontal writing mode, without `grid-lanes` or `last baseline`, so every subgrid is parallel
+//! to its root grid.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -23,7 +23,7 @@ use crate::{
     layout_style::LayoutStyle,
   },
   layout_unit::LayoutUnit,
-  style::AlignItems,
+  style::{AlignItems, Direction},
 };
 
 /// Blink's `AxisEdge`.
@@ -33,6 +33,75 @@ pub(crate) enum AxisEdge {
   Center,
   End,
   FirstBaseline,
+}
+
+/// Blink's `BaselineGroup`: the baseline-sharing group an item aligns in, at its track's start or
+/// end. <https://www.w3.org/TR/css-align-3/#baseline-sharing-group>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BaselineGroup {
+  Major,
+  Minor,
+}
+
+/// The writing modes Blink's `DetermineBaselineWritingMode` reads a horizontal item's baselines in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaselineWritingMode {
+  HorizontalTb,
+  VerticalLr,
+  VerticalRl,
+}
+
+/// Blink's `DetermineBaselineWritingMode` for a horizontal item of a horizontal grid laid out in
+/// `container_direction`.
+fn determine_baseline_writing_mode(
+  container_direction: Direction,
+  is_parallel_context: bool,
+) -> BaselineWritingMode {
+  if is_parallel_context {
+    return BaselineWritingMode::HorizontalTb;
+  }
+
+  match container_direction {
+    Direction::Ltr => BaselineWritingMode::VerticalLr,
+    Direction::Rtl => BaselineWritingMode::VerticalRl,
+  }
+}
+
+/// Blink's `DetermineBaselineGroup` for a first baseline in a horizontal grid laid out in
+/// `container_direction`.
+fn determine_baseline_group(
+  container_direction: Direction,
+  baseline_writing_mode: BaselineWritingMode,
+  is_parallel_context: bool,
+) -> BaselineGroup {
+  let (start_group, end_group) = (BaselineGroup::Major, BaselineGroup::Minor);
+
+  if is_parallel_context {
+    return if baseline_writing_mode == BaselineWritingMode::HorizontalTb {
+      start_group
+    } else {
+      end_group
+    };
+  }
+
+  let is_ltr = container_direction == Direction::Ltr;
+
+  match baseline_writing_mode {
+    BaselineWritingMode::HorizontalTb | BaselineWritingMode::VerticalLr => {
+      if is_ltr {
+        start_group
+      } else {
+        end_group
+      }
+    }
+    BaselineWritingMode::VerticalRl => {
+      if is_ltr {
+        end_group
+      } else {
+        start_group
+      }
+    }
+  }
 }
 
 /// Blink's `GridItemIndices`.
@@ -194,6 +263,8 @@ pub(crate) struct GridItemData {
   pub(crate) is_subgridded_to_parent_grid: bool,
   pub(crate) must_consider_grid_items_for_column_sizing: bool,
   pub(crate) must_consider_grid_items_for_row_sizing: bool,
+  pub(crate) column_baseline_group: BaselineGroup,
+  pub(crate) row_baseline_group: BaselineGroup,
 }
 
 impl GridItemData {
@@ -269,7 +340,18 @@ impl GridItemData {
         (false, false)
       };
 
+    let root_direction = root_grid_style.direction;
+    let baseline_group = |is_parallel_context| {
+      determine_baseline_group(
+        root_direction,
+        determine_baseline_writing_mode(root_direction, is_parallel_context),
+        is_parallel_context,
+      )
+    };
+
     Self {
+      column_baseline_group: baseline_group(false),
+      row_baseline_group: baseline_group(true),
       has_subgridded_columns,
       has_subgridded_rows,
       is_considered_for_column_sizing,
@@ -486,8 +568,16 @@ impl GridItemData {
       .contains(TrackSpanProperties::HAS_AUTO_MINIMUM_TRACK)
   }
 
+  /// Blink's `BaselineGroup`.
+  pub(crate) fn baseline_group(&self, direction: GridTrackSizingDirection) -> BaselineGroup {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.column_baseline_group,
+      GridTrackSizingDirection::ForRows => self.row_baseline_group,
+    }
+  }
+
   /// Blink's `SetAlignmentFallback`: a baseline-aligned item that cannot take part in baseline
-  /// alignment aligns to the start.
+  /// alignment aligns to the edge of its baseline-sharing group.
   pub(crate) fn set_alignment_fallback(
     &mut self,
     direction: GridTrackSizingDirection,
@@ -516,7 +606,10 @@ impl GridItemData {
           }
         }
       };
-    let fallback = (!can_participate).then_some(AxisEdge::Start);
+    let fallback = (!can_participate).then_some(match self.baseline_group(direction) {
+      BaselineGroup::Major => AxisEdge::Start,
+      BaselineGroup::Minor => AxisEdge::End,
+    });
 
     match direction {
       GridTrackSizingDirection::ForColumns => self.column_fallback_alignment = fallback,
