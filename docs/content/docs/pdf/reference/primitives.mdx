@@ -1,0 +1,26 @@
+---
+title: Page counters
+description: Show the current page, the page count, and the page a link points to with the takumi-pdf/primitives components.
+---
+
+`takumi-pdf/primitives` exports three JSX components. Each draws a number the renderer fills in once pages are known.
+
+```tsx twoslash title="Page 3 of 12"
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const footer = (
+  <div>
+    Page <PageNumber /> of <TotalPages />
+  </div>
+);
+```
+
+| Component              | Shows                                                                 |
+| ---------------------- | --------------------------------------------------------------------- |
+| `<PageNumber />`       | The number of the page it lands on                                    |
+| `<TotalPages />`       | The document's page count                                             |
+| `<TargetPageNumber />` | The page an `<a href="#id">` target lands on, for a table of contents |
+
+`<PageNumber />` and `<TotalPages />` renumber on every page inside a header, a footer, or a `position: fixed` box. `<TargetPageNumber />` reads the nearest enclosing link, or renders its own link when you pass `href`.
+
+Each takes `format`, a `@counter-style` name such as `"lower-roman"` or `"cjk-decimal"`, and `className`, `style`, and `tw` like any element. In HTML, use a `<span>` with the class `pageNumber`, `totalPages`, or `targetPageNumber` instead. See [Page counters](/docs/pdf/headers#page-counters) for every format.

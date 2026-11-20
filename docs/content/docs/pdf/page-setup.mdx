@@ -1,0 +1,118 @@
+---
+title: Page setup
+description: Set the page size, orientation, and margins with options or CSS @page rules, and give some content its own named pages.
+---
+
+Pass `size`, `landscape`, and `margin` to `render()`, or write a `@page` rule in your CSS, which wins over the options.
+
+```tsx twoslash title="Set page geometry"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(report, {
+  // [!code highlight:3]
+  size: "letter", // a page keyword, or { width, height } in CSS px at 96 dpi
+  landscape: true,
+  margin: { top: 48, right: 32, bottom: 48, left: 32 },
+});
+```
+
+| Option            | Type                                                      | Default  | Description                                                            |
+| ----------------- | --------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `size`            | a page keyword or `{ width, height }`                     | `"a4"`   | Page size in CSS px at 96 dpi. <sup>1</sup>                            |
+| `landscape`       | `boolean`                                                 | `false`  | Swaps page width and height, including explicit sizes.                 |
+| `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | Margin in CSS px. <sup>2</sup>                                         |
+| `backgroundColor` | CSS color                                                 | unset    | Fills the whole page, margins included, under everything. <sup>3</sup> |
+
+<sup>1</sup> Size keywords ignore case.
+
+<sup>2</sup> A side left out of the object is `"auto"`.
+
+<sup>3</sup> Without `backgroundColor`, viewers show the page as white.
+
+Each keyword is a portrait paper size:
+
+| Keyword | Size         | Keyword    | Size         |
+| ------- | ------------ | ---------- | ------------ |
+| `"a3"`  | 297 × 420 mm | `"jis-b4"` | 257 × 364 mm |
+| `"a4"`  | 210 × 297 mm | `"jis-b5"` | 182 × 257 mm |
+| `"a5"`  | 148 × 210 mm | `"ledger"` | 11 × 17 in   |
+| `"b4"`  | 250 × 353 mm | `"legal"`  | 8.5 × 14 in  |
+| `"b5"`  | 176 × 250 mm | `"letter"` | 8.5 × 11 in  |
+
+## Automatic margins
+
+| Side        | `"auto"` resolves to                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| Top, bottom | The header or footer height plus a 20px inset, and at least 37.8px (1cm) |
+| Left, right | 37.8px                                                                   |
+
+On a page one inch or smaller along an axis, automatic margins on that axis are 0. To set a numeric margin that fits a band, see [Sizing the margin](/docs/pdf/headers#sizing-the-margin).
+
+## `@page` rules
+
+A `@page` rule in `css` or a `<style>` element sets the page size and margins. It wins over `size`, `landscape`, and `margin`, as CSS does in Chromium with `preferCSSPageSize`. `:first` styles the first page, and `:left` and `:right` style pages by the side they fall on. The first page is a right page, or a left page when the root element has `direction: rtl`.
+
+```css title="A cover page, then mirrored margins"
+@page {
+  size: A5;
+  margin: 10mm;
+}
+@page :first {
+  margin-top: 30mm;
+}
+@page :left {
+  margin-left: 25mm;
+}
+@page :right {
+  margin-right: 25mm;
+}
+```
+
+- `size` takes `auto`, one or two lengths, a keyword from the table above, `portrait`, or `landscape`.
+- A margin percentage is a share of the page height for the top and bottom margins, and of the page width for the left and right.
+- `margin: auto` is 0 on a page that fills its sheet, as in Chromium. To leave room for a band, leave that side out of the rule so the `"auto"` option applies.
+- A rule whose margins leave no page area is ignored. A header or footer that leaves no page area fails the render, as it does with the `margin` option.
+- `em`, `rem`, and `var()` read the root element's font size and custom properties. `vw` and `vh` read the page the options give, before `size` changes it.
+
+The rule also styles the page itself, as it does in Chromium:
+
+- `background` covers the whole page, margins included.
+- `border` and `padding` lie inside the margins, around the area the content flows in.
+- `width` and `height` size the page's box. With `auto` margins a smaller box is centered on the page. With fixed margins the page takes the size the box and its margins add up to.
+- `box-sizing` is `border-box` here, as it is for every takumi element, so `width` and `height` include the border and padding. Chromium measures the area inside them unless the rule sets `box-sizing: border-box`. Set `box-sizing: content-box` to size the area as Chromium does.
+- The properties that inherit, such as `font` and `color`, pass to the page-margin boxes.
+
+```css title="A framed page with a narrower column"
+@page {
+  size: A4;
+  margin: 15mm auto;
+  width: 150mm;
+  box-sizing: content-box;
+  padding: 5mm;
+  border: 0.5pt solid #94a3b8;
+  background: #f8fafc;
+}
+```
+
+A background on `<html>` or `<body>` covers that element's box, not the page as it does in a browser. Set the page's color with `@page { background }` or the `background` option.
+
+Rules nested in `@page`, such as `@top-center`, draw [page-margin boxes](/docs/pdf/headers#page-margin-boxes-in-css). Other descriptors, such as `marks` and `bleed`, are not read.
+
+## Named pages
+
+The `page` property puts an element on a named page, which `@page` rules with that name style. An element on a different named page than the content before it starts a new page, and its children stay on that page type unless they name their own. Content without a `page` goes back to the unnamed pages.
+
+```css title="A landscape page for a wide table"
+@page wide {
+  size: A4 landscape;
+  margin: 10mm;
+}
+.wide-table {
+  page: wide;
+}
+```
+
+`@page wide:first` styles the first page of the document when it is a `wide` page, as `:first` does for unnamed pages. A name without a rule of its own takes the unnamed pages' rules.

@@ -1,0 +1,56 @@
+---
+title: PdfRenderer
+description: Keep fonts across renders with PdfRenderer, fetch a document's assets ahead with prepare(), and measure a band with measure().
+---
+
+The `render()`, `prepare()`, and `measure()` functions use one renderer shared by every call. Create a `PdfRenderer` to keep a font registry of your own, such as one per tenant.
+
+```ts twoslash title="Reuse a font registry"
+import { PdfRenderer } from "takumi-pdf";
+
+const renderer = new PdfRenderer();
+await renderer.registerFont("https://takumi.kane.tw/fonts/Geist.woff2");
+
+const pdf = await renderer.render("<h1>Invoice 1042</h1>");
+```
+
+A font loads once, however many renders list it.
+
+| Method                     | Effect                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `render(input, options?)`  | Renders to PDF bytes. Takes the [`render()` options](/docs/pdf/reference/render) |
+| `prepare(input, options?)` | Loads a document's fonts and images, and returns a prepared document             |
+| `measure(input, options?)` | Returns the laid-out `{ width, height }` in CSS px                               |
+| `registerFont(font)`       | Registers a font that stays until you remove it                                  |
+| `unregisterFont(family)`   | Removes every face of a family                                                   |
+| `clearFonts()`             | Removes every registered font except the bundled fallback                        |
+| `free()`                   | Releases the renderer's WebAssembly memory                                       |
+
+`new PdfRenderer({ cache })` sets the memory the renderer keeps between renders. See [Caching](/docs/caching).
+
+## prepare()
+
+`prepare()` lays nothing out. It downloads every image and `@font-face` file the document draws, so the render that follows makes no request. Its options are the layout options of `render()`, and `images` also takes fetch settings.
+
+```ts twoslash title="Fetch assets, then render"
+import { prepare, render } from "takumi-pdf";
+
+declare const html: string;
+// ---cut---
+const document = await prepare(html, { size: "a4", images: { timeout: 5000 } });
+const pdf = await render(document, { outline: true });
+```
+
+A prepared document keeps its page setup. `render()` then takes only the options that change how its pages are written: `metadata`, `outline`, `backgroundColor`, `uncoveredText`, `pdfa`, `tagged`, `attachments`, and `signal`.
+
+## measure()
+
+`measure()` lays a document out without rendering it and resolves to its size in CSS px. With page options it lays out against the full page width with unbounded height, as a header or footer band does, so the height is the margin the band needs.
+
+```ts twoslash title="Size a footer's margin"
+import { measure } from "takumi-pdf";
+
+const { height } = await measure("<footer>Page 1 of 12</footer>", { size: "a4" });
+```
+
+The size is the document's own, not the space it laid out in. A box with `width: 100px` measures 100 wide on any page. See [Sizing the margin](/docs/pdf/headers#sizing-the-margin).

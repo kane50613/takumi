@@ -1,0 +1,50 @@
+---
+title: Runtimes & frameworks
+description: Import takumi-pdf on Node.js, Bun, Cloudflare Workers, Next.js, or in the browser, and return a PDF from your framework's server route.
+---
+
+Use the default import on Node.js, Bun, and Cloudflare Workers. It loads the WebAssembly binary itself. For manual initialization, import `takumi-pdf/no-init`.
+
+A server route returns the bytes with the `application/pdf` content type:
+
+```ts title="Return a PDF"
+import { render } from "takumi-pdf";
+
+export async function GET() {
+  const pdf = await render("<h1>Invoice 1042</h1>");
+
+  return new Response(pdf, { headers: { "content-type": "application/pdf" } });
+}
+```
+
+Each framework guide shows its own route: [Next.js](/docs/frameworks/nextjs#render-a-pdf), [SvelteKit](/docs/frameworks/sveltekit#render-a-pdf), [TanStack Start](/docs/frameworks/tanstack-start#render-a-pdf), and [Cloudflare Workers](/docs/frameworks/cloudflare-workers#render-a-pdf).
+
+Use the default import on Node.js, Bun, and Cloudflare Workers. For manual initialization, import `takumi-pdf/no-init`.
+
+## Next.js
+
+Import `takumi-pdf/next` in a Next.js route handler. It works on the Node and Edge runtimes without a `serverExternalPackages` entry.
+
+```ts title="app/api/pdf/route.ts"
+import { render } from "takumi-pdf/next";
+```
+
+## In the browser
+
+In a browser bundle, initialize the renderer with `takumi-pdf/no-init` and `takumi-pdf/wasm-url`:
+
+```ts title="Initialize in the browser"
+import init, { render } from "takumi-pdf/no-init";
+import wasmUrl from "takumi-pdf/wasm-url";
+
+await init({ module_or_path: wasmUrl });
+```
+
+`takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`, and Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.
+
+<Callout type="warn">
+  Keep the default entry in server code. A Vite SSR build leaves the URL pointing at the server
+  chunk, where the asset is not emitted.
+</Callout>
+
+On Turbopack, remove any `turbopack.rules` entry that maps `*.wasm` to `type: "wasm"`. That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the package does not ship.
