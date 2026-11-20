@@ -360,6 +360,79 @@ jobs:
     name: Build @takumi-rs/core for ${{ matrix.settings.target }}
     runs-on: ${{ matrix.settings.host }}
     steps: *napi-steps
+
+  # The archives `cargo binstall` downloads, attached to the takumi-cli release. Like the N-API
+  # platforms, only master builds them, right before it publishes.
+  build-cli:
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-15
+            target: aarch64-apple-darwin
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
+          - host: windows-2025
+            target: x86_64-pc-windows-msvc
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          # A static musl binary also runs on glibc, and `cargo binstall` falls back to it there.
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - host: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+
+    name: Build takumi-cli for ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.settings.target }}
+          stage: cli
+
+      - name: Install cargo-zigbuild
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        run: pip install cargo-zigbuild==0.24.1 ziglang==0.17.1
+
+      - name: Build
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ env.RUSTFLAGS }}${{ contains(matrix.settings.target, 'windows') && ' -C target-feature=+crt-static' || '' }}
+        run: cargo ${{ contains(matrix.settings.target, 'musl') && 'zigbuild' || 'build' }} --locked --release -p takumi-cli --target ${{ matrix.settings.target }}
+
+      - name: Package
+        if: runner.os != 'Windows'
+        run: |
+          mkdir dist
+          cp target/${{ matrix.settings.target }}/release/takumi dist/
+          tar -czf dist/takumi-${{ matrix.settings.target }}.tar.gz -C dist takumi -C .. LICENSE-MIT LICENSE-APACHE
+
+      - name: Package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item target/${{ matrix.settings.target }}/release/takumi.exe dist/
+          Compress-Archive -Path dist/takumi.exe, LICENSE-MIT, LICENSE-APACHE -DestinationPath dist/takumi-${{ matrix.settings.target }}.zip
+
+      - name: Render with the packaged binary
+        shell: bash
+        run: |
+          echo '<p>takumi</p>' > smoke.html
+          dist/takumi image smoke.html -o smoke.png --width 200 --height 100
+          test -s smoke.png
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-${{ matrix.settings.target }}
+          path: dist/takumi-${{ matrix.settings.target }}.*
+          if-no-files-found: error
+
   build-js:
     name: Build takumi-js
     runs-on: ubuntu-slim
@@ -1191,6 +1264,36 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
           NPM_TOKEN: "" # https://github.com/changesets/changesets/issues/1152#issuecomment-3190884868
           NPM_CONFIG_PROVENANCE: true
+
+  # Apart from Publish, so a failed CLI build holds back only the takumi-cli binaries.
+  attach-cli:
+    name: Attach takumi-cli archives
+    runs-on: ubuntu-slim
+    needs: [publish, build-cli]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+
+      - name: Download takumi-cli archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cli-*
+          path: ${{ runner.temp }}/cli
+          merge-multiple: true
+
+      # Only to the release tagged at this commit, so a later commit never replaces a released binary.
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="takumi-cli@$(sed -n 's/^version = "\(.*\)"$/\1/p' takumi-cli/Cargo.toml | head -n 1)"
+          if [ "$(git rev-parse -q --verify "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ] && gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "$RUNNER_TEMP"/cli/takumi-* --clobber
+          fi
 
   docs-changed:
     name: Docs changed
