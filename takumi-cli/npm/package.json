@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Renders HTML and CSS to images, SVG, and PDF from the command line.",
   "keywords": [
     "cli",
