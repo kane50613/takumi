@@ -1427,7 +1427,7 @@ jobs:
         id: assign_alias
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          PREVIEW_ALIAS=$(scripts/preview-alias.sh name "$GITHUB_HEAD_REF")
+          PREVIEW_ALIAS=$(scripts/preview-alias.sh "$GITHUB_HEAD_REF")
           bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} "${PREVIEW_ALIAS}" --token=${{ secrets.VERCEL_TOKEN }}
           echo "alias=${PREVIEW_ALIAS}" >> $GITHUB_OUTPUT
 
