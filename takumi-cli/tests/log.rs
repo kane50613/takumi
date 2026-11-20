@@ -186,3 +186,23 @@ fn a_missing_output_directory_is_named() {
     "{message}"
   );
 }
+
+#[test]
+fn an_output_under_a_file_names_the_file() {
+  let dir = TempDir::new("log-output-under-file");
+
+  fs::write(dir.join("page.html"), "<p>One</p>").unwrap();
+  fs::write(dir.join("taken"), "").unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("taken/out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert!(!output.status.success());
+  assert!(message.contains("taken is not a directory."), "{message}");
+}
