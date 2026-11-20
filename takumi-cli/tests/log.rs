@@ -298,3 +298,24 @@ fn utf16_input_is_named_with_how_to_convert_it() {
   assert_eq!(output.status.code(), Some(1));
   assert!(message.contains("is UTF-16"), "{message}");
 }
+
+#[test]
+fn utf32_input_is_not_named_utf16() {
+  let dir = TempDir::new("log-utf32-input");
+  let mut bytes = vec![0xFF, 0xFE, 0, 0];
+
+  bytes.extend("<p>Hi</p>".chars().flat_map(|c| u32::from(c).to_le_bytes()));
+  fs::write(dir.join("page.html"), bytes).unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(message.contains("is UTF-32"), "{message}");
+}
