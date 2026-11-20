@@ -3,7 +3,7 @@ title: From Puppeteer
 description: Move a Puppeteer PDF script to takumi-pdf by mapping each page.pdf() option, fetching images yourself, and checking for browser-only features.
 ---
 
-Start with the HTML you pass to `page.setContent()`. Pass the same string to `prepare()`, which fetches its images, then render the result. Translate the `page.pdf()` options with the [option map](#option-map). A `footerTemplate` or `headerTemplate` passes as it is, since the `pageNumber` and `totalPages` class hooks are the same.
+Start with the HTML you pass to `page.setContent()`. Pass the same string to `prepare()`, which fetches its images, then render the result. Translate the `page.pdf()` options with the [option map](#option-map). A `footerTemplate` or `headerTemplate` that uses only the `pageNumber` and `totalPages` classes passes as it is. Write the values of `date`, `title`, and `url` into the template yourself.
 
 <Callout type="warn">
   Takumi does not load a page or run its scripts. Generate dynamic content and fetch document images
@@ -54,25 +54,25 @@ const pdf = await render(document);
 
 ## Option map
 
-| `page.pdf()`                             | `takumi-pdf`                               |
-| ---------------------------------------- | ------------------------------------------ |
-| `format: "A4"`                           | `size: "a4"`                               |
-| `width`, `height`                        | `size: { width, height }`                  |
-| `landscape`                              | `landscape`                                |
-| `margin`                                 | `margin`, in CSS px                        |
-| `displayHeaderFooter` + `headerTemplate` | `header`                                   |
-| `footerTemplate`                         | `footer`                                   |
-| `pageNumber`, `totalPages` classes       | the same classes                           |
-| `date`, `title`, `url` classes           | interpolate the value yourself             |
-| `tagged` (default on)                    | `tagged` (default on)                      |
-| `outline`                                | `outline`                                  |
-| `printBackground`                        | always on                                  |
-| `path`                                   | write the returned `Uint8Array`            |
-| `timeout`, `waitForFonts`                | not needed, since there is no page to load |
-| `scale`                                  | not supported, so scale the CSS instead    |
-| `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`      |
-| `preferCSSPageSize`, `@page`             | `@page` wins for the descriptors it sets   |
-| `omitBackground`                         | not supported                              |
+| `page.pdf()`                             | `takumi-pdf`                                                 |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| `format: "A4"`                           | `size: "a4"`                                                 |
+| `width`, `height`                        | `size: { width, height }`                                    |
+| `landscape`                              | `landscape`                                                  |
+| `margin`                                 | `margin`, in CSS px. A side you leave out is `"auto"`, not 0 |
+| `displayHeaderFooter` + `headerTemplate` | `header`                                                     |
+| `footerTemplate`                         | `footer`                                                     |
+| `pageNumber`, `totalPages` classes       | the same classes                                             |
+| `date`, `title`, `url` classes           | interpolate the value yourself                               |
+| `tagged` (default on)                    | `tagged` (default on)                                        |
+| `outline`                                | `outline`                                                    |
+| `printBackground`                        | always on                                                    |
+| `path`                                   | write the returned `Uint8Array`                              |
+| `timeout`, `waitForFonts`                | not needed, since there is no page to load                   |
+| `scale`                                  | not supported, so scale the CSS instead                      |
+| `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`                        |
+| `preferCSSPageSize`, `@page`             | `@page` wins for the descriptors it sets                     |
+| `omitBackground`                         | not supported                                                |
 
 Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pass `48`.
 

@@ -38,18 +38,25 @@ import wasmUrl from "takumi-pdf/wasm-url";
 await init({ module_or_path: wasmUrl });
 ```
 
-Call `init()` once per page load and await it before the first render. `takumi-pdf/no-init` exports the same API as the default entry. To save the bytes as a file, wrap them in a `Blob`:
+Call `init()` once per page load and await it before the first render. `takumi-pdf/no-init` exports the same API as the default entry, JSX included. To save the bytes as a file, wrap them in a `Blob`:
 
 ```ts title="Download the PDF"
-import { render } from "takumi-pdf/no-init";
+import init, { render } from "takumi-pdf/no-init";
+import wasmUrl from "takumi-pdf/wasm-url";
 
-const pdf = await render("<h1>Invoice 1042</h1>");
-const link = document.createElement("a");
+const ready = init({ module_or_path: wasmUrl });
 
-link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
-link.download = "invoice.pdf";
-link.click();
-URL.revokeObjectURL(link.href);
+export async function downloadInvoice() {
+  await ready;
+
+  const pdf = await render("<h1>Invoice 1042</h1>");
+  const link = document.createElement("a");
+
+  link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+  link.download = "invoice.pdf";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href));
+}
 ```
 
 `takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`, and Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.
