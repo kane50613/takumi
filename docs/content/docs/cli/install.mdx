@@ -7,7 +7,7 @@ Cargo installs the CLI in one of two ways. `cargo binstall` downloads a prebuilt
 
 ## Install Rust
 
-Skip this step if `cargo --version` prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
+Both ways run through Cargo. Skip this step if `cargo --version` prints a version, and for `cargo install`, if it prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -25,7 +25,7 @@ cargo binstall takumi-cli
 
 If Cargo says `no such command: binstall`, install cargo-binstall by following [its instructions](https://github.com/cargo-bins/cargo-binstall#installation) first.
 
-Releases carry binaries for macOS, Windows, and Linux, each on x64 and arm64. The Linux binary is statically linked, so it runs on both glibc and musl systems such as Alpine. When a release has no binary for your platform, `cargo binstall` builds takumi from source the way `cargo install` does. Check that it runs:
+Releases carry binaries for macOS, Windows, and Linux, each on x64 and arm64. The Linux binary is statically linked, so it runs on both glibc and musl systems such as Alpine. When a release has no binary for your platform, `cargo binstall` builds takumi from source the way `cargo install` does, which needs Rust 1.91 or later. Check that it runs:
 
 ```sh
 takumi --version
