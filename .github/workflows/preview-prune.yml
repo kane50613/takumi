@@ -1,0 +1,33 @@
+name: Remove Preview Alias
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  remove-alias:
+    name: Remove preview alias
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      # A pull request that never changed the docs has no alias to remove.
+      - name: Remove the alias the pull request deployed to
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          alias=$(.github/scripts/preview-alias.sh "$GITHUB_HEAD_REF")
+          if ! output=$(bunx vercel alias rm "$alias" --yes --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" 2>&1); then
+            echo "$output"
+            echo "$output" | grep -q "Alias not found"
+          fi
