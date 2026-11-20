@@ -48,9 +48,14 @@ pub(crate) struct Input {
 }
 
 impl InputArgs {
+  /// Whether the input is `-`, standard input.
+  pub(crate) fn is_stdin(&self) -> bool {
+    self.input == Path::new("-")
+  }
+
   /// Reads the input and sets up the sandbox its document reads through.
   pub(crate) fn read(&self) -> Result<Input, Box<dyn Error>> {
-    let (html, location, default_root) = if self.input == Path::new("-") {
+    let (html, location, default_root) = if self.is_stdin() {
       let mut stdin = io::stdin();
 
       if stdin.is_terminal() {
@@ -92,11 +97,12 @@ impl InputArgs {
     fonts.register(FontResource::new(DEFAULT_FONT))?;
 
     for path in &self.fonts {
-      let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+      let bytes =
+        fs::read(path).map_err(|error| format!("`--font {}`: {error}", path.display()))?;
 
       fonts
         .register(FontResource::new(bytes))
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+        .map_err(|error| format!("`--font {}`: {error}", path.display()))?;
     }
 
     Ok(fonts)
@@ -133,7 +139,9 @@ pub(crate) struct OutputArgs {
   #[arg(short, long, required_unless_present = "list_resources")]
   output: Option<PathBuf>,
 
-  /// Lists the files the document would load and whether it may, without rendering.
+  /// Lists the files the document would load and whether it may, without rendering. Each line
+  /// holds its kind, status, and URL, then why when it may not load, separated by tabs. An
+  /// `invalid` line holds the reference as written in place of a URL, and no reason.
   #[arg(long)]
   pub(crate) list_resources: bool,
 }
@@ -178,8 +186,27 @@ impl OutputArgs {
     log::info!(target: "takumi::output", "writing {}", output.display());
 
     if !self.is_stdout() {
-      return fs::write(output, bytes)
-        .map_err(|error| format!("{}: {error}", output.display()).into());
+      return fs::write(output, bytes).map_err(|error| {
+        match output
+          .parent()
+          .filter(|parent| !parent.as_os_str().is_empty() && !parent.is_dir())
+        {
+          Some(parent) if parent.exists() => {
+            format!(
+              "{}: {} is not a directory.",
+              output.display(),
+              parent.display()
+            )
+          }
+          Some(parent) => format!(
+            "{}: the directory {} does not exist. Create it before writing there.",
+            output.display(),
+            parent.display()
+          ),
+          None => format!("{}: {error}", output.display()),
+        }
+        .into()
+      });
     }
 
     let mut stdout = io::stdout().lock();

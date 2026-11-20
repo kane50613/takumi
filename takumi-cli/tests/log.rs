@@ -1,6 +1,10 @@
 //! Runs `takumi` with `--log` and reads the steps it prints to standard error.
 
-use std::{env, fs, process::Command};
+use std::{
+  env, fs,
+  io::Write,
+  process::{Command, Stdio},
+};
 
 mod common;
 
@@ -109,4 +113,96 @@ fn nothing_is_timed_without_the_flag() {
 
   assert!(stages(&steps).is_empty(), "{steps}");
   assert!(steps.contains("warning: "), "{steps}");
+}
+
+#[test]
+fn info_names_standard_input_as_the_input() {
+  let dir = TempDir::new("log-stdin");
+  let mut child = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .args(["image", "-", "-o"])
+    .arg(dir.join("out.png"))
+    .args(["--log", "info"])
+    .stdin(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .expect("runs takumi");
+
+  child
+    .stdin
+    .take()
+    .unwrap()
+    .write_all(b"<p>One</p>")
+    .unwrap();
+
+  let output = child.wait_with_output().unwrap();
+  let steps = String::from_utf8(output.stderr).unwrap();
+
+  assert!(output.status.success(), "{steps}");
+  assert!(
+    steps.contains("input: read standard input, 10 bytes"),
+    "{steps}"
+  );
+}
+
+#[test]
+fn a_missing_font_names_its_flag() {
+  let dir = TempDir::new("log-missing-font");
+
+  fs::write(dir.join("page.html"), "<p>One</p>").unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .arg("--font")
+    .arg(dir.join("nope.ttf"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert!(!output.status.success());
+  assert!(message.starts_with("error: `--font "), "{message}");
+}
+
+#[test]
+fn a_missing_output_directory_is_named() {
+  let dir = TempDir::new("log-missing-directory");
+
+  fs::write(dir.join("page.html"), "<p>One</p>").unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("nowhere/out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert!(!output.status.success());
+  assert!(
+    message.contains("nowhere does not exist. Create it before writing there."),
+    "{message}"
+  );
+}
+
+#[test]
+fn an_output_under_a_file_names_the_file() {
+  let dir = TempDir::new("log-output-under-file");
+
+  fs::write(dir.join("page.html"), "<p>One</p>").unwrap();
+  fs::write(dir.join("taken"), "").unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("taken/out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert!(!output.status.success());
+  assert!(message.contains("taken is not a directory."), "{message}");
 }
