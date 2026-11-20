@@ -48,6 +48,52 @@ Without `--format`, an output with any other extension stops before rendering, w
 takumi image photo.html -o photo.webp --quality 80
 ```
 
+## Keep a transparent background
+
+A page that paints no background renders transparent, so leave `html` and `body` without one for a badge or a sticker:
+
+```html title="badge.html"
+<style>
+  body {
+    margin: 0;
+  }
+
+  .pill {
+    width: 200px;
+    height: 60px;
+    border-radius: 30px;
+    background: #16a34a;
+  }
+</style>
+<div class="pill"></div>
+```
+
+```sh
+takumi image badge.html -o badge.png --width 200 --height 60
+```
+
+PNG and WebP keep the transparency. JPEG has none, so give the page a background before you write a JPEG.
+
+## Render a dark variant
+
+takumi renders the light color scheme:
+
+- `@media (prefers-color-scheme: dark)` matches nothing, and neither does `prefers-color-scheme: light`.
+- `light-dark()` takes its first color.
+
+To render a dark variant, write the dark colors under a class instead of a media query. Then render a copy of the file whose `<html>` carries that class:
+
+```css
+.dark body {
+  background: #111;
+  color: #eee;
+}
+```
+
+## Draw SVG
+
+An inline `<svg>` element draws as part of the page. An `<img>` whose `src` is an `.svg` file loads like any other image, within the directories the page may read.
+
 ## Fonts and images in the page
 
 The page loads the fonts and images it references, within the directories you allow. [Use your fonts](/docs/cli/fonts) covers fonts, and [Control file access](/docs/cli/file-access) covers which files a page can read.

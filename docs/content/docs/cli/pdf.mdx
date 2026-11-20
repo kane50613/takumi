@@ -59,6 +59,46 @@ takumi pdf report.html -o report.pdf --title "Quarterly report" --author "Financ
 
 `--outline` adds a bookmark for each `h1` to `h6` heading, so a PDF viewer shows the document's sections in its sidebar.
 
+## Put one slide on each page
+
+Give the pages the slide's size, and break a page after each slide:
+
+```html title="deck.html"
+<style>
+  @page {
+    size: 1920px 1080px;
+    margin: 0;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  section {
+    height: 1080px;
+    break-after: page;
+  }
+</style>
+<section>First slide</section>
+<section>Second slide</section>
+```
+
+```sh
+takumi pdf deck.html -o deck.pdf
+```
+
+Each `<section>` fills one 16:9 page of 1920×1080 CSS pixels. The break after the last slide adds no blank page.
+
+## Render Markdown
+
+`takumi` reads HTML only. Convert Markdown with any converter, such as `pandoc`, and pipe its HTML into `takumi pdf -`:
+
+```sh
+pandoc notes.md | takumi pdf - -o notes.pdf --root . --outline
+```
+
+Standard input grants no directory, so `--root .` lets relative images in the Markdown load. `--outline` turns its headings into bookmarks.
+
 ## Set a page background
 
 `--background` takes a CSS color and fills every page with it, margins included:

@@ -38,6 +38,42 @@ takumi image card.html -o card.png --font ~/fonts/Inter.woff2 --font ~/fonts/Not
 
 A font named on the command line is trusted, so it can live anywhere, even outside the directories the document may read. Repeat `--font` for more fonts.
 
+## Use a Google Font
+
+`takumi` never reaches the network, so a `<link>` to `fonts.googleapis.com` loads nothing, and the text falls back to Geist. Download the font and load it as a file instead:
+
+1. Download the family from [Google Fonts](https://fonts.google.com). From the download, copy the file for the weight your text uses, such as `PlayfairDisplay-Bold.ttf`, into a `fonts` directory next to your HTML file.
+2. Load it with an `@font-face` rule that names the family, and use that family where you want it:
+
+   ```css
+   @font-face {
+     font-family: "Playfair Display";
+     src: url(fonts/PlayfairDisplay-Bold.ttf);
+     font-weight: 700;
+   }
+
+   h1 {
+     font-family: "Playfair Display", sans-serif;
+     font-weight: 700;
+   }
+   ```
+
+3. Check that the file loads with `--list-resources`, as the next section shows.
+
+When a family still falls back to Geist, `--log debug` names it.
+
+## Draw color emoji
+
+Geist has no emoji, so an emoji draws as an empty box until you load a color emoji font with `--font`. On macOS, pass Apple Color Emoji:
+
+```sh
+takumi image card.html -o card.png --font "/System/Library/Fonts/Apple Color Emoji.ttc"
+```
+
+The CSS needs no change. A font from `--font` joins the fallback, so takumi draws each emoji from it when the text's own fonts have none.
+
+On other systems, pass a color emoji font file you have, such as Noto Color Emoji or Twemoji COLR. takumi draws both COLR and bitmap color fonts.
+
 ## Check what loads
 
 `--list-resources` lists each font file the document would load, its fallback sources included, and whether the document may read it:
