@@ -9,8 +9,8 @@ box html 0,0 300x100
       box div.ghost 900,0 20x20 background #ff0000 offscreen past the right edge
         - fill background rect 0,0 20x20 #ff0000
       box p 0,83.88 300x0 empty
-      box (anonymous) 0,83.88 300x21
-        text (anonymous) 0,83.88 300x21 "shown" Geist 16px #ffffff
+      box (anonymous) 0,83.88 300x21 cut off at the bottom edge
+        text (anonymous) 0,83.88 300x21 "shown" Geist 16px #ffffff cut off at the bottom edge
           - glyphs text #ffffff "shown" at 0,16 line 0 Geist 16px
         box p.unseen 0,0 53.41x21
           text p.unseen 0,0 53.41x21 "unseen" Geist 16px draws nothing

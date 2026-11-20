@@ -18,6 +18,9 @@ use crate::{
   product::{Images, Product},
 };
 
+/// How far a box may cross a canvas edge before it counts as cut off, absorbing float error.
+const EDGE_TOLERANCE: f32 = 0.01;
+
 /// Describes what painting an HTML file draws: each box, text, and image, where it lands, and
 /// what it is filled with.
 #[derive(clap::Args)]
@@ -29,8 +32,8 @@ use crate::{
 Each line of the text format is one node, indented under its parent:
   box div#card.panel 0,0 1200x630 background #0f172a
     text h1 64,80 820x72 \"Quarterly report\" Geist 64px #ffffff
-`offscreen` marks a node outside the canvas, with the edge it is past, `empty` one without an
-area, and `draws nothing` text or an image that paints no pixel, as `visibility: hidden` leaves
+`offscreen` marks a node outside the canvas, with the edge it is past, `cut off` one that crosses
+an edge, `empty` one without an area, and `draws nothing` text or an image that paints no pixel, as `visibility: hidden` leaves
 it. An element `opacity: 0` hides has no node, and is listed under `not painted`. An element
 with `display: none` makes no box and is not listed, unless it is the root element, which is
 listed under `not painted`. Each declaration or at-rule the style parser dropped is listed under
@@ -475,8 +478,40 @@ impl Outline<'_> {
       self.text.push_str(" empty");
     } else if let Some(side) = side {
       let _ = write!(self.text, " offscreen past the {side} edge");
-    } else if node.drawables.is_empty() && !matches!(node.kind, NodeKind::Box { .. }) {
-      self.text.push_str(" draws nothing");
+    } else {
+      let cut: Vec<&str> = [
+        ("top", bounds.y < -EDGE_TOLERANCE),
+        (
+          "right",
+          bounds.x + bounds.width > self.document.width + EDGE_TOLERANCE,
+        ),
+        (
+          "bottom",
+          bounds.y + bounds.height > self.document.height + EDGE_TOLERANCE,
+        ),
+        ("left", bounds.x < -EDGE_TOLERANCE),
+      ]
+      .into_iter()
+      .filter_map(|(side, crosses)| crosses.then_some(side))
+      .collect();
+
+      match cut.as_slice() {
+        [] => {}
+        [side] => {
+          let _ = write!(self.text, " cut off at the {side} edge");
+        }
+        [rest @ .., last] => {
+          let _ = write!(
+            self.text,
+            " cut off at the {} and {last} edges",
+            rest.join(", ")
+          );
+        }
+      }
+
+      if node.drawables.is_empty() && !matches!(node.kind, NodeKind::Box { .. }) {
+        self.text.push_str(" draws nothing");
+      }
     }
   }
 
