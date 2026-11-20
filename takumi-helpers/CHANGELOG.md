@@ -1,3 +1,152 @@
+## @takumi-rs/helpers@2.21.0
+
+### JSX renders React class components
+
+A component written as a class that extends `Component` or `PureComponent` threw `Class constructor cannot be invoked without 'new'` when rendered. It now renders as React mounts it: `defaultProps` fill missing props, `getDerivedStateFromProps` sets the first state, and `render` draws the element. This covers a class wrapped in `memo` and a class inside an inline `<svg>`.
+
+### A missing emoji image no longer fails the render
+
+When the CDN cannot serve an emoji's image, such as an emoji Twemoji does not draw, the render leaves that emoji out instead of rejecting. This covers every image from an emoji CDN, so a `takumi-js` render and a renderer's own `prepare` behave the same. `images.throwOnError` still rejects when any other image fails.
+
+### A JSX `<svg>` or `<img>` sized with `"100%"` or `"24px"` draws at that size
+
+A JSX `<svg>` or `<img>` whose `width` or `height` was a string with a unit, such as `"100%"`, `"2em"`, or `"24px"`, drew nothing. It now draws at that size, as the same markup passed as HTML does.
+
+```tsx
+<div style={{ display: "flex", width: 200, height: 100 }}>
+  <svg width="100%" height="50%" viewBox="0 0 2 1">
+    …
+  </svg>
+</div>
+// Before: the svg draws nothing
+// After: the svg's box is 200 × 50, since a percentage resolves against the containing block
+```
+
+- An `<svg>` reads `width` and `height` as CSS lengths, such as `2em`, and ignores a negative one.
+- An `<img>` reads them as HTML does, as pixels or a percentage, so `width="2em"` is 2 pixels.
+
+### `preserveAspectRatio`, `clipPathUnits`, and `dominantBaseline` take effect on a JSX `<svg>`
+
+`fromJsx` now writes each attribute of an inline `<svg>` the way React DOM writes it. Before, SVG ignored the attributes below, so `preserveAspectRatio="none"` had no effect.
+
+```tsx
+<svg viewBox="0 0 10 10" preserveAspectRatio="none">
+  …
+</svg>
+// Before: written as preserve-aspect-ratio="none", which SVG ignores
+// After: written as preserveAspectRatio="none"
+```
+
+- `preserveAspectRatio` and `clipPathUnits` stay in camelCase, as SVG spells them.
+- `dominantBaseline`, `renderingIntent`, `strikethroughPosition`, `strikethroughThickness`, and `xHeight` become `dominant-baseline`, `rendering-intent`, `strikethrough-position`, `strikethrough-thickness`, and `x-height`.
+
+### Evict fonts one file at a time from the renderer's cache
+
+Font files that renders load now share the renderer's `maxBytes` pool and leave it one file at a time, least recently used first. A family that keeps gaining files, such as one Google Fonts `text=` subset per title, now stays within `maxBytes`. A render keeps the fonts it uses until it finishes, and fonts from `registerFont` still stay. With `cache.fonts` set to `"none"`, each file goes as soon as the last render using it finishes.
+
+```ts
+const renderer = new Renderer({ cache: { fonts: "none" } });
+```
+
+`fontCacheMaxBytes` no longer bounds the fonts apart. A value of `0` still keeps none, as `"none"` does.
+
+Among equally matching faces of one family, the one listed last now wins every time.
+
+### `fromJsx` renders what `StrictMode`, `Suspense`, and `Profiler` wrap
+
+A tree wrapped in `<StrictMode>`, `<Suspense>`, or `<Profiler>` rendered nothing through `fromJsx`. So did a tree built by a JSX runtime whose fragment is not React's `Fragment`. These elements now render their children, as `<>` already did.
+
+### Renders warn about what they could not draw, and load fonts for missing characters
+
+A render now warns when it goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false`. Each warning prints through `console.warn` as `takumi: <message>`, the same form as the warnings for unsupported CSS, every time a render raises it. To collect the warnings somewhere else, wrap `console.warn`.
+
+```txt
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
+```
+
+- `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again.
+- A `render()` without `prepare()` checks glyphs and families only when it passes `loadFallbackFonts`.
+- `loadFallbackFonts(characters)` runs once when characters have no font, and the fonts it returns load with the render.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+
+### Render without a font that fails to load when the font is optional
+
+A font in a render's `fonts` list takes `optional: true`. When an optional font fails to download, `allowUrl` refuses it, or its bytes do not decode, the render goes on without it instead of rejecting.
+
+```tsx
+await render(<div style={{ fontFamily: "Brand, Inter" }}>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: [
+    fontFromUrl("https://example.com/Inter.woff2"),
+    fontFromUrl("https://cdn.example.com/Brand.woff2", { optional: true }),
+  ],
+});
+```
+
+### Reuse downloaded bytes across renders, and load Google Fonts for known text
+
+Renderers now keep the images, `@font-face` files, and font URLs they download in a 32 MiB store keyed by URL, so a later render skips the download. A render that passes its own `fetch` skips the store, since that `fetch` may send credentials.
+
+```ts
+import { googleFonts } from "takumi-js/helpers";
+
+const fonts = googleFonts({ families: ["Noto Sans JP"], text: "東京の夜景" });
+```
+
+- `googleFonts` takes `text` to load one file holding just those characters.
+- A font in a render's `fonts` list takes `cache: "none"`, which drops the font once the render settles. `googleFonts` sets it on every subset through `cacheMode: "none"`.
+- Under the default `"auto"`, a `googleFonts` subset loaded for `text` drops once its render settles too, since another render rarely asks for the same characters. Range subsets and other fonts stay as before.
+- `CacheMode` names the `"auto" | "none"` policy that images and fonts share. `ImageCacheMode` stays as a deprecated alias.
+
+### Migration
+
+`images.fetchCache` is deprecated, since renders keep their downloads without it.
+
+```diff
+- await renderer.render(node, { images: { fetchCache } });
++ await renderer.render(node);
+```
+
+### Every renderer takes its cache size in one `cache` option
+
+`Renderer`, `PdfRenderer`, and `Painter` take a `cache` option. Its `maxBytes`, 128 MiB by default, is one pool for everything a renderer reuses. Setting `images`, `glyphs`, or `fonts` to `"none"` keeps none of that kind. The options apply when the renderer is created.
+
+```ts
+const renderer = new Renderer({
+  cache: {
+    maxBytes: 256 * 1024 * 1024,
+    glyphs: "none",
+  },
+});
+```
+
+### Migration
+
+`cacheMaxBytes`, `fontCacheMaxBytes`, and `FontCacheOptions` are deprecated. In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes` is deprecated, and only `0` still changes anything.
+
+```diff
+- setGlyphCacheMaxBytes(0);
+- const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
++ const renderer = new Renderer({ cache: { maxBytes: 64 * 1024 * 1024, glyphs: "none" } });
+
+  // types
+- let options: FontCacheOptions;
++ let options: RendererOptions;
+```
+
+### See what a renderer's cache holds
+
+`Renderer`, `PdfRenderer`, and `Painter` have `cacheStats()`, which reports the bytes the pool holds and how lookups of each kind went.
+
+```ts
+const { memory, images } = renderer.cacheStats();
+console.log(memory.current, memory.high);
+console.log(images.hits, images.misses, images.evictions);
+```
+
+`takumi-js` exports `cacheStats` for the renderer that `render` and the other functions share. It returns `undefined` until the first render creates that renderer. In Rust, `Cache::stats` does the same for a `Cache`.
+
 ## @takumi-rs/helpers@2.20.0
 
 ### `registerFont` registers one buffer again under another name, weight, style or `unicodeRange`

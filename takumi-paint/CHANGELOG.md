@@ -1,3 +1,177 @@
+## takumi-paint@0.7.0
+
+### A font one render lists no longer changes another render
+
+Each render now draws with the fonts its own `fonts` list names and the fonts `registerFont` registered. Before, a renderer kept using the fonts earlier renders had listed, so the same request could come out differently.
+
+```ts
+await renderer.render(html, { fonts: [brandRegular] });
+await renderer.render(html, { fonts: [brandBold] });
+await renderer.render(html, { fonts: [brandRegular] });
+// Before: the third render draws Brand with the bold face the second one listed
+// After: the third render matches the first
+```
+
+A family that only another render listed now falls back to the next family. List the font in this render, or register it with `registerFont`.
+
+The options types of `@takumi-rs/core` and `@takumi-rs/wasm` no longer list `failedFontFiles`, a field only the renderer itself sets.
+
+### Download fonts listed as URLs with the render's fetch options
+
+A URL string in a render's `fonts` list now downloads with the `fetch`, `allowUrl`, `timeout`, `maxBytes`, and `signal` the render's images use, so `allowUrl` refuses it too.
+
+```tsx
+await render(<div>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: ["https://fonts.example.com/Brand.woff2"],
+  images: { allowUrl: (url) => url.startsWith("https://cdn.example.com/") },
+});
+// Before: downloads the font
+// After: rejects with "URL blocked by allowUrl policy: https://fonts.example.com/Brand.woff2"
+```
+
+### `unregisterFont` leaves the built-in Geist in place
+
+`unregisterFont` now removes only the fonts you registered. Before, unregistering `Geist` also removed the built-in Geist, so text that no registered font covered drew nothing.
+
+```ts
+// @takumi-rs/core and @takumi-rs/wasm. Use `new Painter()` in takumi-paint and `new PdfRenderer()` in takumi-pdf.
+const renderer = new Renderer();
+
+// Before: true, and the built-in Geist is gone
+// After: false, since no registered font is named Geist
+renderer.unregisterFont({ name: "Geist" });
+```
+
+### Evict fonts one file at a time from the renderer's cache
+
+Font files that renders load now share the renderer's `maxBytes` pool and leave it one file at a time, least recently used first. A family that keeps gaining files, such as one Google Fonts `text=` subset per title, now stays within `maxBytes`. A render keeps the fonts it uses until it finishes, and fonts from `registerFont` still stay. With `cache.fonts` set to `"none"`, each file goes as soon as the last render using it finishes.
+
+```ts
+const renderer = new Renderer({ cache: { fonts: "none" } });
+```
+
+`fontCacheMaxBytes` no longer bounds the fonts apart. A value of `0` still keeps none, as `"none"` does.
+
+Among equally matching faces of one family, the one listed last now wins every time.
+
+### Renders warn about what they could not draw, and load fonts for missing characters
+
+A render now warns when it goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false`. Each warning prints through `console.warn` as `takumi: <message>`, the same form as the warnings for unsupported CSS, every time a render raises it. To collect the warnings somewhere else, wrap `console.warn`.
+
+```txt
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
+```
+
+- `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again.
+- A `render()` without `prepare()` checks glyphs and families only when it passes `loadFallbackFonts`.
+- `loadFallbackFonts(characters)` runs once when characters have no font, and the fonts it returns load with the render.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+
+### A style value Takumi cannot read is ignored instead of failing the render
+
+A node's `style` object now drops a declaration whose value is invalid, such as a negative `height`, and renders the rest, as a browser does with a `style` attribute. Where a render used to reject, `console.warn` now prints the same message after `takumi: ignoring`, and in Rust the message is a `log` warning under the `takumi::style` target.
+
+### Render without a font that fails to load when the font is optional
+
+A font in a render's `fonts` list takes `optional: true`. When an optional font fails to download, `allowUrl` refuses it, or its bytes do not decode, the render goes on without it instead of rejecting.
+
+```tsx
+await render(<div style={{ fontFamily: "Brand, Inter" }}>Hello</div>, {
+  width: 1200,
+  height: 630,
+  fonts: [
+    fontFromUrl("https://example.com/Inter.woff2"),
+    fontFromUrl("https://cdn.example.com/Brand.woff2", { optional: true }),
+  ],
+});
+```
+
+### The paint tree lists the CSS a render dropped
+
+A declaration or at-rule that takumi drops no longer vanishes without a trace. The paint tree lists each one once, with its property and value as written, why takumi dropped it, and where it was written. The image stays the same.
+
+```ts
+const tree = await paint(html, { width: 600, height: 200 });
+
+console.log(tree.ignoredDeclarations);
+// [{ property: "writing-mode", value: "vertical-rl", reason: "unknown-property", origin: "style-attribute" }]
+```
+
+- `reason` is `unknown-property`, `invalid-value`, or `unknown-at-rule`.
+- `origin` is `style-attribute`, `style-sheet`, or `style-object`.
+- `takumi paint` prints the list under `ignored`, and its JSON output holds it as `ignoredDeclarations`.
+- `needs()` in `@takumi-rs/core`, `@takumi-rs/wasm`, and `takumi-pdf` returns the same list as `ignoredDeclarations`.
+- In Rust, `RenderNeeds::ignored_declarations` and `PaintDocument::ignored_declarations` hold the same list, and `StyleSheet::ignored_declarations` holds what one style sheet dropped.
+
+### Reuse downloaded bytes across renders, and load Google Fonts for known text
+
+Renderers now keep the images, `@font-face` files, and font URLs they download in a 32 MiB store keyed by URL, so a later render skips the download. A render that passes its own `fetch` skips the store, since that `fetch` may send credentials.
+
+```ts
+import { googleFonts } from "takumi-js/helpers";
+
+const fonts = googleFonts({ families: ["Noto Sans JP"], text: "東京の夜景" });
+```
+
+- `googleFonts` takes `text` to load one file holding just those characters.
+- A font in a render's `fonts` list takes `cache: "none"`, which drops the font once the render settles. `googleFonts` sets it on every subset through `cacheMode: "none"`.
+- Under the default `"auto"`, a `googleFonts` subset loaded for `text` drops once its render settles too, since another render rarely asks for the same characters. Range subsets and other fonts stay as before.
+- `CacheMode` names the `"auto" | "none"` policy that images and fonts share. `ImageCacheMode` stays as a deprecated alias.
+
+### Migration
+
+`images.fetchCache` is deprecated, since renders keep their downloads without it.
+
+```diff
+- await renderer.render(node, { images: { fetchCache } });
++ await renderer.render(node);
+```
+
+### Every renderer takes its cache size in one `cache` option
+
+`Renderer`, `PdfRenderer`, and `Painter` take a `cache` option. Its `maxBytes`, 128 MiB by default, is one pool for everything a renderer reuses. Setting `images`, `glyphs`, or `fonts` to `"none"` keeps none of that kind. The options apply when the renderer is created.
+
+```ts
+const renderer = new Renderer({
+  cache: {
+    maxBytes: 256 * 1024 * 1024,
+    glyphs: "none",
+  },
+});
+```
+
+### Migration
+
+`cacheMaxBytes`, `fontCacheMaxBytes`, and `FontCacheOptions` are deprecated. In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes` is deprecated, and only `0` still changes anything.
+
+```diff
+- setGlyphCacheMaxBytes(0);
+- const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
++ const renderer = new Renderer({ cache: { maxBytes: 64 * 1024 * 1024, glyphs: "none" } });
+
+  // types
+- let options: FontCacheOptions;
++ let options: RendererOptions;
+```
+
+### See what a renderer's cache holds
+
+`Renderer`, `PdfRenderer`, and `Painter` have `cacheStats()`, which reports the bytes the pool holds and how lookups of each kind went.
+
+```ts
+const { memory, images } = renderer.cacheStats();
+console.log(memory.current, memory.high);
+console.log(images.hits, images.misses, images.evictions);
+```
+
+`takumi-js` exports `cacheStats` for the renderer that `render` and the other functions share. It returns `undefined` until the first render creates that renderer. In Rust, `Cache::stats` does the same for a `Cache`.
+
+### takumi-pdf and takumi-paint read their WebAssembly in Vite dev SSR from a package inside the root
+
+With `ssr.noExternal`, the Vite dev server serves the WebAssembly binary from the package's own `pkg/` folder, and the first server render failed with `Unable to locate Takumi WASM asset for SSR`. The loaders now look there too, as `@takumi-rs/wasm` already does.
+
 ## takumi-paint@0.6.0
 
 ### `PaintTree.free()` releases a tree's font files and glyph outlines
