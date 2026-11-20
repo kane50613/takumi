@@ -45,32 +45,47 @@ fn render(golden: &str, bands: &[(&str, &str)]) {
   fs::write(&output, pdf).expect("writes the PDF");
 }
 
-/// Writes each digit of the `takumi-pdf` version in the producer as `0`, so a release does not
-/// change the goldens. The length stays, and with it every byte offset the PDF records.
+/// Writes each digit of the `takumi-pdf` version in the producer, and every character of the
+/// document ID hashed from it, as `0`, so a release does not change the goldens. The length
+/// stays, and with it every byte offset the PDF records.
 fn zero_producer_version(pdf: &mut [u8]) {
   const PRODUCER: &[u8] = b"takumi-pdf ";
+  const DOCUMENT_ID: &[u8] = b"/ID[(";
 
-  let mut start = 0;
-
-  while let Some(found) = pdf[start..]
-    .windows(PRODUCER.len())
-    .position(|window| window == PRODUCER)
-  {
-    let mut index = start + found + PRODUCER.len();
-
-    while let Some(byte) = pdf
-      .get_mut(index)
-      .filter(|byte| byte.is_ascii_digit() || **byte == b'.')
+  for index in occurrences(pdf, PRODUCER) {
+    for byte in pdf[index + PRODUCER.len()..]
+      .iter_mut()
+      .take_while(|byte| byte.is_ascii_digit() || **byte == b'.')
     {
       if byte.is_ascii_digit() {
         *byte = b'0';
       }
-
-      index += 1;
     }
-
-    start = index;
   }
+
+  let Some(id_start) = occurrences(pdf, DOCUMENT_ID)
+    .first()
+    .map(|index| index + DOCUMENT_ID.len())
+  else {
+    return;
+  };
+  let id_length = pdf[id_start..]
+    .iter()
+    .position(|byte| *byte == b')')
+    .expect("closes the document ID");
+  let id = pdf[id_start..id_start + id_length].to_vec();
+
+  for index in occurrences(pdf, &id) {
+    pdf[index..index + id.len()].fill(b'0');
+  }
+}
+
+fn occurrences(haystack: &[u8], needle: &[u8]) -> Vec<usize> {
+  haystack
+    .windows(needle.len())
+    .enumerate()
+    .filter_map(|(index, window)| (window == needle).then_some(index))
+    .collect()
 }
 
 #[test]
