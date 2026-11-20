@@ -1407,6 +1407,14 @@ jobs:
         if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
         run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
 
+      # Preview aliases sit on a custom domain, which Vercel does not mark noindex itself.
+      - name: Keep the preview out of search engines
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
+        run: |
+          jq '.routes = [{"src": "/(.*)", "headers": {"X-Robots-Tag": "noindex"}, "continue": true}] + (.routes // [])' \
+            .vercel/output/config.json > config.json && mv config.json .vercel/output/config.json
+          printf 'User-agent: *\nDisallow: /\n' > .vercel/output/static/robots.txt
+
       - name: Deploy to Vercel (preview)
         id: deploy_preview
         if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || steps.target.outputs.environment == 'preview'
@@ -1418,16 +1426,7 @@ jobs:
         id: assign_alias
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          SAFE_REF=$(echo "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9-]+#-#g; s/^-+//; s/-+$//; s/-{2,}/-/g')
-          # Keep the full alias under the 64-char TLS common-name limit (".preview.takumi.kane.tw" is 23 chars).
-          SAFE_REF=${SAFE_REF:0:40}
-          SAFE_REF=$(echo "${SAFE_REF}" | sed -E 's/-+$//')
-          if [ -z "${SAFE_REF}" ]; then
-            SAFE_REF="preview"
-          fi
-
-          PREVIEW_ALIAS="${SAFE_REF}.preview.takumi.kane.tw"
+          PREVIEW_ALIAS=$(scripts/preview-alias.sh name "$GITHUB_HEAD_REF")
           bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} "${PREVIEW_ALIAS}" --token=${{ secrets.VERCEL_TOKEN }}
           echo "alias=${PREVIEW_ALIAS}" >> $GITHUB_OUTPUT
 
