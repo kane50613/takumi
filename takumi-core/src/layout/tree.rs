@@ -31,7 +31,7 @@ use crate::{
     constraint_space::CacheSlot,
     counters::{CountersAttachmentContext, ListItemCounter},
     floats_utils::Float as LayoutFloat,
-    grid::grid_layout_algorithm::GridGeometry,
+    grid::{grid_layout_algorithm::GridGeometry, layout_grid::LayoutGrid},
     inline::{
       ContentBox, FragmentItems, InlineContent, InlineContentKind, InlineOutOfFlow,
       inline_node::{InlineNode, ItemShapes},
@@ -413,6 +413,8 @@ pub(crate) struct LayoutNodeState {
   pub(crate) hoisted_children: Vec<NodeId>,
   /// The grid this node last laid out, which places its out-of-flow children in their areas.
   pub(crate) grid_geometry: Option<Rc<GridGeometry>>,
+  /// What a grid keeps across its layouts, Blink's `LayoutGrid`.
+  pub(crate) layout_grid: LayoutGrid,
   /// The out-of-flow boxes this node is the containing block for.
   pub(crate) claims: ContainingBlockClaims,
   /// The pages laid out when its last fragment was placed, none while it has fragments to come
@@ -672,6 +674,7 @@ impl LayoutNodeState {
       box_children: Box::new([]),
       hoisted_children: Vec::new(),
       grid_geometry: None,
+      layout_grid: LayoutGrid::default(),
       claims,
       #[cfg(feature = "fragmentation")]
       ended_by: None,

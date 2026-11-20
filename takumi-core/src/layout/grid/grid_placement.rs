@@ -1,6 +1,7 @@
 //! Blink's [`GridPlacement`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_placement.cc):
-//! the grid areas of a grid's items, auto-placed where their style leaves them open. Without
-//! subgrid. The placed items' ordered list is a vector of their indices.
+//! the grid areas of a grid's items, auto-placed where their style leaves them open, a subgrid's
+//! clamped to its span in the parent grid. The placed items' ordered list is a vector of their
+//! indices.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -20,15 +21,15 @@ use crate::layout::{
 use crate::sort_key::sort_by_key;
 
 /// Blink's `GridPlacementData`: each item's grid area, and how far placement moved the lines.
-#[derive(Debug, Clone)]
-pub(crate) struct GridPlacementData<'a> {
-  pub(crate) line_resolver: GridLineResolver<'a>,
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct GridPlacementData {
+  pub(crate) line_resolver: GridLineResolver,
   pub(crate) grid_item_positions: Vec<GridArea>,
   pub(crate) column_start_offset: usize,
   pub(crate) row_start_offset: usize,
 }
 
-impl<'a> GridPlacementData<'a> {
+impl GridPlacementData {
   pub(crate) fn start_offset(&self, direction: GridTrackSizingDirection) -> usize {
     match direction {
       GridTrackSizingDirection::ForColumns => self.column_start_offset,
@@ -38,6 +39,16 @@ impl<'a> GridPlacementData<'a> {
 
   pub(crate) fn explicit_grid_track_count(&self, direction: GridTrackSizingDirection) -> usize {
     self.line_resolver.explicit_grid_track_count(direction)
+  }
+
+  /// Blink's `HasStandaloneAxis`.
+  pub(crate) fn has_standalone_axis(&self, direction: GridTrackSizingDirection) -> bool {
+    self.line_resolver.has_standalone_axis(direction)
+  }
+
+  /// Blink's `SubgridSpanSize`.
+  pub(crate) fn subgrid_span_size(&self, direction: GridTrackSizingDirection) -> Option<usize> {
+    self.line_resolver.subgrid_span_size(direction)
   }
 }
 
@@ -287,16 +298,16 @@ impl AutoPlacementCursor {
 }
 
 /// Blink's `GridPlacement`.
-pub(crate) struct GridPlacement<'a> {
-  placement_data: GridPlacementData<'a>,
+pub(crate) struct GridPlacement {
+  placement_data: GridPlacementData,
   is_sparse: bool,
   major_direction: GridTrackSizingDirection,
   minor_direction: GridTrackSizingDirection,
   minor_max_end_line: usize,
 }
 
-impl<'a> GridPlacement<'a> {
-  pub(crate) fn new(style: &'a GridStyle, line_resolver: GridLineResolver<'a>) -> Self {
+impl GridPlacement {
+  pub(crate) fn new(style: &GridStyle, line_resolver: GridLineResolver) -> Self {
     let major_direction = if style.is_column_auto_flow {
       GridTrackSizingDirection::ForColumns
     } else {
@@ -338,13 +349,13 @@ impl<'a> GridPlacement<'a> {
   pub(crate) fn run_auto_placement_algorithm(
     mut self,
     item_styles: &[&LayoutStyle],
-  ) -> GridPlacementData<'a> {
+  ) -> GridPlacementData {
     let mut placed_items = PlacedGridItemsList::default();
     let (locked_to_major_axis, not_locked_to_major_axis) =
       self.place_non_auto_grid_items(item_styles, &mut placed_items);
 
     if locked_to_major_axis.is_empty() && not_locked_to_major_axis.is_empty() {
-      return self.placement_data;
+      return self.finalize_resolved_positions();
     }
 
     // Blink's `AppendCurrentItemsToOrderedList`.
@@ -358,6 +369,9 @@ impl<'a> GridPlacement<'a> {
     placed_items.ordered = ordered;
 
     self.place_grid_items_locked_to_major_axis(&locked_to_major_axis, &mut placed_items);
+    // Auto-placement places the remaining items against the clamped positions.
+    self.clamp_grid_items_to_fit_subgrid_area(GridTrackSizingDirection::ForColumns);
+    self.clamp_grid_items_to_fit_subgrid_area(GridTrackSizingDirection::ForRows);
 
     let mut cursor = AutoPlacementCursor::new();
 
@@ -377,7 +391,55 @@ impl<'a> GridPlacement<'a> {
       }
     }
 
+    self.finalize_resolved_positions()
+  }
+
+  /// Blink's `FinalizeResolvedPositions`.
+  fn finalize_resolved_positions(mut self) -> GridPlacementData {
+    self.clamp_grid_items_to_fit_subgrid_area(GridTrackSizingDirection::ForColumns);
+    self.clamp_grid_items_to_fit_subgrid_area(GridTrackSizingDirection::ForRows);
     self.placement_data
+  }
+
+  /// Blink's `ClampGridItemsToFitSubgridArea`: in a subgridded axis, the definite positions within
+  /// the subgrid's explicit grid, which starts at line zero.
+  fn clamp_grid_items_to_fit_subgrid_area(&mut self, direction: GridTrackSizingDirection) {
+    let Some(subgrid_span_size) = self.placement_data.subgrid_span_size(direction) else {
+      return;
+    };
+    let start_offset = self.placement_data.start_offset(direction) as i32;
+    let subgrid_span_size = subgrid_span_size as i32;
+
+    for area in &mut self.placement_data.grid_item_positions {
+      let span = area.span(direction);
+
+      if !span.is_translated_definite() {
+        continue;
+      }
+
+      let start_line = span.start_line() as i32 - start_offset;
+      let end_line = span.end_line() as i32 - start_offset;
+
+      area.set_span(
+        GridSpan::translated_definite(
+          start_line.clamp(0, subgrid_span_size - 1) as usize,
+          end_line.clamp(1, subgrid_span_size) as usize,
+        ),
+        direction,
+      );
+    }
+
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.placement_data.column_start_offset = 0,
+      GridTrackSizingDirection::ForRows => self.placement_data.row_start_offset = 0,
+    }
+  }
+
+  /// Blink's `ClampMinorMaxToSubgridArea`: intrinsic tracks don't overflow a subgrid.
+  fn clamp_minor_max_to_subgrid_area(&mut self) {
+    self.minor_max_end_line = self
+      .minor_max_end_line
+      .min(self.intrinsic_end_line(self.minor_direction));
   }
 
   /// Blink's `PlaceNonAutoGridItems`: the items locked to the major axis, and the ones not.
@@ -386,9 +448,8 @@ impl<'a> GridPlacement<'a> {
     item_styles: &[&LayoutStyle],
     placed_items: &mut PlacedGridItemsList,
   ) -> (Vec<usize>, Vec<usize>) {
-    let resolver = self.placement_data.line_resolver;
-
     for style in item_styles {
+      let resolver = &self.placement_data.line_resolver;
       let area = GridArea {
         columns: resolver
           .resolve_grid_positions_from_style(style, GridTrackSizingDirection::ForColumns),
@@ -412,6 +473,9 @@ impl<'a> GridPlacement<'a> {
 
     self.minor_max_end_line = self.intrinsic_end_line(self.minor_direction);
 
+    let subgrid_in_minor_axis = !self
+      .placement_data
+      .has_standalone_axis(self.minor_direction);
     let mut locked_to_major_axis = Vec::new();
     let mut not_locked_to_major_axis = Vec::new();
     let (major, minor) = (self.major_direction, self.minor_direction);
@@ -454,6 +518,9 @@ impl<'a> GridPlacement<'a> {
         locked_to_major_axis.push(index);
       }
     }
+    if subgrid_in_minor_axis {
+      self.clamp_minor_max_to_subgrid_area();
+    }
 
     (locked_to_major_axis, not_locked_to_major_axis)
   }
@@ -466,6 +533,7 @@ impl<'a> GridPlacement<'a> {
   ) {
     let mut minor_cursors: FxHashMap<usize, usize> = FxHashMap::default();
     let (major, minor) = (self.major_direction, self.minor_direction);
+    let subgrid_in_minor_axis = !self.placement_data.has_standalone_axis(minor);
 
     for &index in positions {
       let area = self.placement_data.grid_item_positions[index];
@@ -496,6 +564,9 @@ impl<'a> GridPlacement<'a> {
         minor_cursors.insert(major_start_line, minor_end_line);
       }
       self.minor_max_end_line = self.minor_max_end_line.max(minor_end_line);
+      if subgrid_in_minor_axis {
+        self.clamp_minor_max_to_subgrid_area();
+      }
       self.placement_data.grid_item_positions[index].set_span(
         GridSpan::translated_definite(cursor.current_position.minor_line, minor_end_line),
         minor,
@@ -598,7 +669,7 @@ impl<'a> GridPlacement<'a> {
   /// edges at within the implicit grid, none for an `auto` edge.
   pub(crate) fn resolve_out_of_flow_item_grid_lines(
     track_collection: &GridTrackCollection,
-    line_resolver: &GridLineResolver<'_>,
+    line_resolver: &GridLineResolver,
     item_style: &LayoutStyle,
     start_offset: usize,
   ) -> (Option<usize>, Option<usize>) {

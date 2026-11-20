@@ -1,18 +1,22 @@
 //! Blink's [`GridTrackCollection`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_track_collection.cc):
 //! a grid's tracks in ranges of the same definition, each split into sets of tracks sized as one.
-//! Blink's `GridLayoutTrackCollection` and `GridSizingTrackCollection` as one type, without
-//! subgrid or `grid-lanes`.
+//! Blink's `GridLayoutTrackCollection` and `GridSizingTrackCollection` as one type, a subgrid's
+//! collection in a subgridded axis being a layout one with no sets to size. Without `grid-lanes`.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
+
+use std::mem::swap;
 
 use bitflags::bitflags;
 
 use crate::{
   layout::{
+    grid::grid_data::GridTrackBaselines,
     grid::grid_style::{
       GridStyle, GridTrackList, GridTrackSize, GridTrackSizingDirection, RepeatType, TrackBreadth,
     },
     layout_style::LayoutLength,
+    logical_rect::LogicalBoxStrut,
   },
   layout_unit::LayoutUnit,
   sort_key::sort_by_key,
@@ -106,7 +110,7 @@ impl<'a> GridRangeBuilder<'a> {
     };
     let mut current_repeater_start_line = start_offset;
 
-    for index in 0..explicit_tracks.repeater_count() {
+    for index in 0..builder.explicit_repeater_count() {
       let repeater_track_count =
         explicit_tracks.repeat_count(index, auto_repetitions) * explicit_tracks.repeat_size(index);
 
@@ -153,6 +157,16 @@ impl<'a> GridRangeBuilder<'a> {
     builder
   }
 
+  /// The explicit repeaters, none for a subgridded axis that has no parent grid, whose used value
+  /// is `none`. <https://drafts.csswg.org/css-grid-2/#subgrid-listing>
+  fn explicit_repeater_count(&self) -> usize {
+    if self.explicit_tracks.is_subgridded_axis() {
+      0
+    } else {
+      self.explicit_tracks.repeater_count()
+    }
+  }
+
   /// Blink's `EnsureTrackCoverage` for the item `item`, whose range indices come back from
   /// [`Self::finalize_ranges`].
   pub(crate) fn ensure_track_coverage(
@@ -179,7 +193,7 @@ impl<'a> GridRangeBuilder<'a> {
       sort_by_key(&mut self.end_lines, |line| line.grid_line);
     }
 
-    let explicit_repeater_count = self.explicit_tracks.repeater_count();
+    let explicit_repeater_count = self.explicit_repeater_count();
     let grid_line_count = self.start_lines.len();
     let mut item_ranges = vec![(0, 0); item_count];
     let mut ranges: Vec<GridRange> = Vec::new();
@@ -249,7 +263,9 @@ impl<'a> GridRangeBuilder<'a> {
       };
       let mut current_repeater_size = 1;
 
-      if let Some(repeater_index) = current_explicit_repeater_index {
+      if self.explicit_tracks.is_subgridded_axis() {
+        // A subgridded axis with no parent grid sizes its tracks as `auto`.
+      } else if let Some(repeater_index) = current_explicit_repeater_index {
         current_repeater_size = self.explicit_tracks.repeat_size(repeater_index);
         range.repeater_index = Some(repeater_index);
         range.repeater_offset =
@@ -423,7 +439,8 @@ pub(crate) struct SetGeometry {
   pub(crate) track_count: usize,
 }
 
-/// Blink's `GridSizingTrackCollection`.
+/// Blink's `GridSizingTrackCollection`, or a subgrid's `GridLayoutTrackCollection` when not
+/// [`Self::is_for_sizing`].
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GridTrackCollection {
   pub(crate) direction: GridTrackSizingDirection,
@@ -435,6 +452,13 @@ pub(crate) struct GridTrackCollection {
   last_indefinite_index: Vec<Option<usize>>,
   non_collapsed_track_count: usize,
   pub(crate) sets: Vec<GridSet>,
+  /// Blink's `IsForSizing`: the grid sizes these tracks itself.
+  is_for_sizing: bool,
+  /// The margin, border, and padding of the subgrids these tracks lie in, on each edge, and the
+  /// gutter they add, which their items' contributions add.
+  accumulated_gutter_size_delta: LayoutUnit,
+  accumulated_start_extra_margin: LayoutUnit,
+  accumulated_end_extra_margin: LayoutUnit,
 }
 
 impl GridTrackCollection {
@@ -446,15 +470,211 @@ impl GridTrackCollection {
       .sum();
 
     Self {
+      non_collapsed_track_count,
+      ranges,
+      is_for_sizing: true,
+      ..Self::empty(direction)
+    }
+  }
+
+  /// The collection of a subgridded axis before its parent grid's tracks give it one.
+  pub(crate) fn empty(direction: GridTrackSizingDirection) -> Self {
+    Self {
       direction,
       gutter_size: LayoutUnit::ZERO,
-      ranges,
+      ranges: Vec::new(),
       properties: TrackSpanProperties::empty(),
       sets_geometry: Vec::new(),
       last_indefinite_index: Vec::new(),
-      non_collapsed_track_count,
+      non_collapsed_track_count: 0,
       sets: Vec::new(),
+      is_for_sizing: false,
+      accumulated_gutter_size_delta: LayoutUnit::ZERO,
+      accumulated_start_extra_margin: LayoutUnit::ZERO,
+      accumulated_end_extra_margin: LayoutUnit::ZERO,
     }
+  }
+
+  /// Blink's `IsForSizing`.
+  pub(crate) fn is_for_sizing(&self) -> bool {
+    self.is_for_sizing
+  }
+
+  /// Blink's `HasIndefiniteSet`.
+  pub(crate) fn has_indefinite_set(&self) -> bool {
+    self
+      .last_indefinite_index
+      .last()
+      .is_some_and(Option::is_some)
+  }
+
+  /// Blink's `StartExtraMargin`: what the subgrids these tracks lie in add before set
+  /// `set_index`.
+  pub(crate) fn start_extra_margin(&self, set_index: usize) -> LayoutUnit {
+    if set_index == 0 {
+      self.accumulated_start_extra_margin
+    } else {
+      self.accumulated_gutter_size_delta / 2
+    }
+  }
+
+  /// Blink's `EndExtraMargin`: what the subgrids these tracks lie in add before boundary
+  /// `set_index`.
+  pub(crate) fn end_extra_margin(&self, set_index: usize) -> LayoutUnit {
+    if set_index < self.sets_geometry.len().saturating_sub(1) {
+      self.accumulated_gutter_size_delta / 2
+    } else {
+      self.accumulated_end_extra_margin
+    }
+  }
+
+  /// Blink's `CreateSubgridTrackCollection`: the tracks of ranges `begin_range_index..=end_range_index`
+  /// as the subgrid in them, `subgrid_direction` its axis, sees them, offsets from its border box
+  /// start, with its gutter and its margin, border, and padding on its edges.
+  #[expect(clippy::too_many_arguments)]
+  pub(crate) fn create_subgrid_track_collection(
+    &self,
+    begin_range_index: usize,
+    end_range_index: usize,
+    subgrid_gutter_size: LayoutUnit,
+    subgrid_margin: LogicalBoxStrut,
+    subgrid_border_padding: LogicalBoxStrut,
+    subgrid_direction: GridTrackSizingDirection,
+    is_opposite_direction_in_root_grid: bool,
+  ) -> Self {
+    let mut subgrid_collection = Self::empty(subgrid_direction);
+    let begin_set_index = self.ranges[begin_range_index].begin_set_index;
+    let end_set_index =
+      self.ranges[end_range_index].begin_set_index + self.ranges[end_range_index].set_count;
+    let range_count = end_range_index - begin_range_index;
+    let mut current_begin_set_index = 0;
+    let mut current_start_line = 0;
+
+    for index in 0..=range_count {
+      let current_index = if is_opposite_direction_in_root_grid {
+        end_range_index - index
+      } else {
+        begin_range_index + index
+      };
+      let mut range = self.ranges[current_index];
+
+      range.begin_set_index = current_begin_set_index;
+      current_begin_set_index += range.set_count;
+      range.start_line = current_start_line;
+      current_start_line += range.track_count;
+      subgrid_collection.properties |= range.properties;
+      if !range.is_collapsed() {
+        subgrid_collection.non_collapsed_track_count += range.track_count;
+      }
+      subgrid_collection.ranges.push(range);
+    }
+
+    let set_span_size = end_set_index - begin_set_index;
+    let subgrid_gutter_size_delta = subgrid_gutter_size - self.gutter_size;
+    let is_for_columns = subgrid_direction == GridTrackSizingDirection::ForColumns;
+    let (margin_start, margin_end, border_padding_start, border_padding_end) = if is_for_columns {
+      (
+        subgrid_margin.inline_start,
+        subgrid_margin.inline_end,
+        subgrid_border_padding.inline_start,
+        subgrid_border_padding.inline_end,
+      )
+    } else {
+      (
+        subgrid_margin.block_start,
+        subgrid_margin.block_end,
+        subgrid_border_padding.block_start,
+        subgrid_border_padding.block_end,
+      )
+    };
+    let margin_border_padding_start = margin_start + border_padding_start;
+    let margin_border_padding_end = margin_end + border_padding_end;
+    let parent_start_extra_margin = self.start_extra_margin(begin_set_index);
+    let parent_end_extra_margin = self.end_extra_margin(end_set_index);
+
+    subgrid_collection.accumulated_gutter_size_delta =
+      subgrid_gutter_size_delta + self.accumulated_gutter_size_delta;
+    (
+      subgrid_collection.accumulated_start_extra_margin,
+      subgrid_collection.accumulated_end_extra_margin,
+    ) = if is_opposite_direction_in_root_grid {
+      (
+        margin_border_padding_start + parent_end_extra_margin,
+        margin_border_padding_end + parent_start_extra_margin,
+      )
+    } else {
+      (
+        margin_border_padding_start + parent_start_extra_margin,
+        margin_border_padding_end + parent_end_extra_margin,
+      )
+    };
+
+    let first_set_offset = if is_opposite_direction_in_root_grid {
+      self.sets_geometry[end_set_index].offset - margin_start
+    } else {
+      self.sets_geometry[begin_set_index].offset + margin_start
+    };
+    let geometry_at = |index: usize| {
+      let mut geometry = self.sets_geometry[index];
+
+      if is_opposite_direction_in_root_grid {
+        // An opposite subgrid takes a boundary's offset, and the track count of the set after it.
+        geometry.offset = first_set_offset - geometry.offset;
+        geometry.track_count = self.sets_geometry[index + 1].track_count;
+      } else {
+        geometry.offset -= first_set_offset;
+      }
+      geometry
+    };
+
+    subgrid_collection.sets_geometry.push(SetGeometry {
+      offset: border_padding_start,
+      track_count: 0,
+    });
+    for index in 1..set_span_size {
+      let mut geometry = geometry_at(if is_opposite_direction_in_root_grid {
+        end_set_index - index
+      } else {
+        begin_set_index + index
+      });
+
+      geometry.offset += subgrid_gutter_size_delta / 2;
+      subgrid_collection.sets_geometry.push(geometry);
+    }
+
+    let mut last_geometry = geometry_at(if is_opposite_direction_in_root_grid {
+      begin_set_index
+    } else {
+      end_set_index
+    });
+
+    last_geometry.offset += subgrid_gutter_size_delta - margin_border_padding_end;
+    subgrid_collection.sets_geometry.push(last_geometry);
+
+    if !self.last_indefinite_index.is_empty() {
+      let mut last_indefinite_index = None;
+
+      subgrid_collection.last_indefinite_index.push(None);
+      for index in 0..set_span_size {
+        let current_index = if is_opposite_direction_in_root_grid {
+          end_set_index - index - 1
+        } else {
+          begin_set_index + index
+        };
+
+        if self.last_indefinite_index[current_index + 1]
+          != self.last_indefinite_index[current_index]
+        {
+          last_indefinite_index = Some(index);
+        }
+        subgrid_collection
+          .last_indefinite_index
+          .push(last_indefinite_index);
+      }
+    }
+
+    subgrid_collection.gutter_size = subgrid_gutter_size;
+    subgrid_collection
   }
 
   pub(crate) fn range_count(&self) -> usize {
@@ -586,6 +806,110 @@ impl GridTrackCollection {
     self.sets.iter().fold(LayoutUnit::ZERO, |total, set| {
       total + set.base_size + self.gutter_size * set.track_count as i32
     }) - self.gutter_size
+  }
+
+  /// Blink's `CreateSubgridBaselines`: the baselines of the sets of ranges
+  /// `begin_range_index..=end_range_index` as the subgrid in them sees them, from its border box
+  /// start, a subgrid running opposite to its root grid taking the minor ones for its major ones.
+  #[expect(clippy::too_many_arguments)]
+  pub(crate) fn create_subgrid_baselines(
+    &self,
+    begin_range_index: usize,
+    end_range_index: usize,
+    subgrid_gutter_size: LayoutUnit,
+    subgrid_margin: LogicalBoxStrut,
+    subgrid_border_padding: LogicalBoxStrut,
+    subgrid_direction: GridTrackSizingDirection,
+    is_opposite_direction_in_root_grid: bool,
+    parent_baselines: &GridTrackBaselines,
+  ) -> GridTrackBaselines {
+    let begin_set_index = self.ranges[begin_range_index].begin_set_index;
+    let end_set_index =
+      self.ranges[end_range_index].begin_set_index + self.ranges[end_range_index].set_count;
+    let set_span_size = end_set_index - begin_set_index;
+    let subgrid_gutter_size_delta = subgrid_gutter_size - self.gutter_size;
+    let (margin_border_padding_start, margin_border_padding_end) = match subgrid_direction {
+      GridTrackSizingDirection::ForColumns => (
+        subgrid_margin.inline_start + subgrid_border_padding.inline_start,
+        subgrid_margin.inline_end + subgrid_border_padding.inline_end,
+      ),
+      GridTrackSizingDirection::ForRows => (
+        subgrid_margin.block_start + subgrid_border_padding.block_start,
+        subgrid_margin.block_end + subgrid_border_padding.block_end,
+      ),
+    };
+    let adjust = |baselines: &[Option<LayoutUnit>], index: usize, adjust: LayoutUnit| {
+      baselines
+        .get(index)
+        .copied()
+        .flatten()
+        .map(|baseline| baseline - adjust)
+    };
+    let mut subgrid_baselines = GridTrackBaselines::default();
+
+    for index in 0..set_span_size {
+      let mut major_adjust = if index == 0 {
+        margin_border_padding_start
+      } else {
+        subgrid_gutter_size_delta / 2
+      };
+      let mut minor_adjust = if index == set_span_size - 1 {
+        margin_border_padding_end
+      } else {
+        subgrid_gutter_size_delta / 2
+      };
+
+      if is_opposite_direction_in_root_grid {
+        swap(&mut major_adjust, &mut minor_adjust);
+      }
+
+      let current_index = if is_opposite_direction_in_root_grid {
+        end_set_index - index - 1
+      } else {
+        begin_set_index + index
+      };
+
+      subgrid_baselines
+        .major
+        .push(adjust(&parent_baselines.major, current_index, major_adjust));
+      subgrid_baselines
+        .minor
+        .push(adjust(&parent_baselines.minor, current_index, minor_adjust));
+    }
+    if is_opposite_direction_in_root_grid {
+      swap(&mut subgrid_baselines.major, &mut subgrid_baselines.minor);
+    }
+    subgrid_baselines
+  }
+
+  /// Blink's `CacheDefiniteSetsGeometry`: the offsets of the sets whose sizes are definite before
+  /// sizing, for the subgrids in them to read.
+  pub(crate) fn cache_definite_sets_geometry(&mut self) {
+    let mut first_set_offset = LayoutUnit::ZERO;
+
+    self.last_indefinite_index = vec![None];
+    self.sets_geometry = vec![SetGeometry {
+      offset: first_set_offset,
+      track_count: 0,
+    }];
+
+    for set in &self.sets {
+      if set.track_size.is_definite() {
+        first_set_offset += set.base_size + self.gutter_size * set.track_count as i32;
+
+        let last = *self.last_indefinite_index.last().unwrap_or(&None);
+
+        self.last_indefinite_index.push(last);
+      } else {
+        self
+          .last_indefinite_index
+          .push(Some(self.last_indefinite_index.len() - 1));
+      }
+      self.sets_geometry.push(SetGeometry {
+        offset: first_set_offset,
+        track_count: set.track_count,
+      });
+    }
   }
 
   /// Blink's `CacheInitializedSetsGeometry`.

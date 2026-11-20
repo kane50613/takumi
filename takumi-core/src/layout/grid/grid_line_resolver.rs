@@ -1,20 +1,24 @@
 //! Blink's [`GridLineResolver`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_line_resolver.cc)
 //! and [`GridNamedLineCollection`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_named_line_collection.cc):
-//! an item's `grid-row` and `grid-column` resolved to grid lines. Without subgrid.
+//! an item's `grid-row` and `grid-column` resolved to grid lines, a subgrid's merged with the
+//! line names and areas of its parent grids.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::mem::swap;
+use std::{mem::swap, rc::Rc};
 
-use crate::layout::{
-  grid::{
-    grid_area::GridSpan,
-    grid_style::{
-      ComputedGridTrackList, GRID_MAX_TRACKS, GridPosition, GridStyle, GridTrackSizingDirection,
-      NamedGridLinesMap,
+use crate::{
+  layout::{
+    grid::{
+      grid_area::{GridArea, GridSpan},
+      grid_style::{
+        ComputedGridTrackList, GRID_MAX_TRACKS, GridPosition, GridStyle, GridTemplateAreas,
+        GridTrackSizingDirection, NamedGridAreaMap, NamedGridLinesMap,
+      },
     },
+    layout_style::LayoutStyle,
   },
-  layout_style::LayoutStyle,
+  style::Direction,
 };
 
 /// Blink's `GridPositionSide`.
@@ -49,21 +53,33 @@ struct GridNamedLineCollection<'a> {
   last_line: usize,
   auto_repeat_total_tracks: usize,
   auto_repeat_track_list_length: usize,
+  is_standalone_grid: bool,
 }
 
 impl<'a> GridNamedLineCollection<'a> {
   fn new(
     named_line: &str,
     implicit_grid_line_names: Option<&'a NamedGridLinesMap>,
+    explicit_grid_line_names: &'a NamedGridLinesMap,
     computed_grid_track_list: &'a ComputedGridTrackList,
     last_line: usize,
     auto_repeat_tracks_count: usize,
+    is_subgridded_to_parent: bool,
   ) -> Self {
-    let find = |map: &'a NamedGridLinesMap| map.get(named_line).map(Vec::as_slice);
-
-    Self {
-      named_lines_indexes: find(&computed_grid_track_list.named_grid_lines),
-      auto_repeat_named_lines_indexes: find(&computed_grid_track_list.auto_repeat_named_grid_lines),
+    let find = |map: &'a NamedGridLinesMap| {
+      map
+        .get(named_line)
+        .map(Vec::as_slice)
+        .filter(|indexes| !indexes.is_empty())
+    };
+    let is_standalone_grid = !computed_grid_track_list.is_subgridded_axis();
+    // A subgridded axis has its line names only when a parent grid subgrids it.
+    // <https://www.w3.org/TR/css-grid-2/#subgrid-listing>
+    let are_named_lines_valid = is_subgridded_to_parent || is_standalone_grid;
+    let mut collection = Self {
+      named_lines_indexes: find(explicit_grid_line_names).filter(|_| are_named_lines_valid),
+      auto_repeat_named_lines_indexes: find(&computed_grid_track_list.auto_repeat_named_grid_lines)
+        .filter(|_| are_named_lines_valid),
       implicit_named_lines_indexes: implicit_grid_line_names.and_then(find),
       insertion_point: computed_grid_track_list.auto_repeat_insertion_point,
       last_line,
@@ -71,20 +87,41 @@ impl<'a> GridNamedLineCollection<'a> {
       auto_repeat_track_list_length: computed_grid_track_list
         .track_list
         .auto_repeat_track_count(),
+      is_standalone_grid,
+    };
+
+    // A subgrid's auto repeater may repeat no times, and `contains` counts the line after it one
+    // higher, so the last line moves with it.
+    if collection.has_collapsed_auto_repeat() {
+      collection.last_line += 1;
     }
+    collection
   }
 
   fn has_explicit_named_lines(&self) -> bool {
     self.named_lines_indexes.is_some() || self.auto_repeat_named_lines_indexes.is_some()
   }
 
+  /// Blink's `HasCollapsedAutoRepeat`: a subgrid's auto repeater that repeats no times.
+  fn has_collapsed_auto_repeat(&self) -> bool {
+    !self.is_standalone_grid
+      && self.auto_repeat_track_list_length != 0
+      && self.auto_repeat_total_tracks == 0
+  }
+
   fn has_named_lines(&self) -> bool {
     self.has_explicit_named_lines() || self.implicit_named_lines_indexes.is_some()
   }
 
-  fn contains(&self, line: usize) -> bool {
+  fn contains(&self, mut line: usize) -> bool {
     if line > self.last_line {
       return false;
+    }
+
+    let has_collapsed_auto_repeat = self.has_collapsed_auto_repeat();
+
+    if has_collapsed_auto_repeat && line >= self.insertion_point {
+      line += 1;
     }
 
     let find = |indexes: Option<&[usize]>, line: usize| {
@@ -94,7 +131,10 @@ impl<'a> GridNamedLineCollection<'a> {
     if find(self.implicit_named_lines_indexes, line) {
       return true;
     }
-    if self.auto_repeat_track_list_length == 0 || line < self.insertion_point {
+    if self.auto_repeat_track_list_length == 0
+      || has_collapsed_auto_repeat
+      || line < self.insertion_point
+    {
       return find(self.named_lines_indexes, line);
     }
     if line > self.insertion_point + self.auto_repeat_total_tracks {
@@ -138,7 +178,8 @@ impl<'a> GridNamedLineCollection<'a> {
 
   fn first_explicit_position(&self) -> usize {
     if let Some(indexes) = self.named_lines_indexes
-      && (self.auto_repeat_track_list_length == 0 || indexes[0] <= self.insertion_point)
+      && ((self.is_standalone_grid && self.auto_repeat_track_list_length == 0)
+        || indexes[0] <= self.insertion_point)
     {
       return indexes[0];
     }
@@ -164,28 +205,353 @@ impl<'a> GridNamedLineCollection<'a> {
   }
 }
 
-/// Blink's `GridLineResolver`: a grid's lines as its auto repeaters repeat.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct GridLineResolver<'a> {
-  style: &'a GridStyle,
-  column_auto_repetitions: usize,
-  row_auto_repetitions: usize,
+/// Blink's `MergeNamedGridLinesWithParent`: `parent_map`'s lines in `subgrid_span` merged into
+/// `subgrid_map`, numbered from the subgrid's first line.
+fn merge_named_grid_lines_with_parent(
+  subgrid_map: &mut NamedGridLinesMap,
+  parent_map: &NamedGridLinesMap,
+  subgrid_span: GridSpan,
+  is_opposite_direction_to_parent: bool,
+) {
+  for (name, positions) in parent_map {
+    let mut merged_list: Vec<usize> = positions
+      .iter()
+      .filter(|&&position| subgrid_span.contains(position))
+      .map(|&position| {
+        if is_opposite_direction_to_parent {
+          subgrid_span.end_line() - position
+        } else {
+          position - subgrid_span.start_line()
+        }
+      })
+      .collect();
+
+    if let Some(existing) = subgrid_map.get(name) {
+      merged_list.extend_from_slice(existing);
+      merged_list.sort_unstable();
+      merged_list.dedup();
+    }
+    if !merged_list.is_empty() {
+      subgrid_map.insert(name.clone(), merged_list);
+    }
+  }
 }
 
-impl<'a> GridLineResolver<'a> {
+/// Blink's `ExpandAutoRepeatTracksFromParent`: the parent's auto repeater's line names in
+/// `subgrid_span` merged into `subgrid_map`, after the subgrid's lines past the repeater move by its
+/// tracks.
+fn expand_auto_repeat_tracks_from_parent(
+  subgrid_map: &mut NamedGridLinesMap,
+  parent_auto_repeat_map: &NamedGridLinesMap,
+  track_list: &ComputedGridTrackList,
+  subgrid_span: GridSpan,
+  auto_repetitions: usize,
+  is_opposite_direction_to_parent: bool,
+  is_nested_subgrid: bool,
+) {
+  let auto_repeat_track_count = track_list.track_list.auto_repeat_track_count();
+  let auto_repeat_total_tracks = auto_repeat_track_count * auto_repetitions;
+
+  if auto_repeat_total_tracks == 0 {
+    return;
+  }
+
+  let insertion_point = track_list.auto_repeat_insertion_point;
+
+  // A nested subgrid's lines past the insertion point stay, as Blink leaves them: moving them here
+  // too would move them twice.
+  if !is_nested_subgrid {
+    for positions in subgrid_map.values_mut() {
+      *positions = positions
+        .iter()
+        .filter_map(|&position| {
+          if position < insertion_point {
+            return Some(position);
+          }
+
+          let expanded_position = position + auto_repeat_total_tracks;
+
+          subgrid_span
+            .contains(expanded_position)
+            .then_some(expanded_position)
+        })
+        .collect();
+    }
+  }
+
+  for (name, positions) in parent_auto_repeat_map {
+    let mut merged_list = Vec::new();
+
+    for &position in positions {
+      for repetition in 0..auto_repetitions {
+        for track in 0..auto_repeat_track_count {
+          // Blink adds the repetition and the track, not the repetition's first track.
+          let expanded_position = insertion_point + position + repetition + track;
+
+          if subgrid_span.contains(expanded_position) {
+            merged_list.push(if is_opposite_direction_to_parent {
+              subgrid_span.end_line() - expanded_position
+            } else {
+              expanded_position - subgrid_span.start_line()
+            });
+          }
+        }
+      }
+    }
+    if let Some(existing) = subgrid_map.get(name) {
+      merged_list.extend_from_slice(existing);
+      merged_list.sort_unstable();
+    }
+    if !merged_list.is_empty() {
+      subgrid_map.insert(name.clone(), merged_list);
+    }
+  }
+}
+
+/// Blink's `ClampSubgridAreas`: `style_map`'s areas clamped to the subgrid's span.
+fn clamp_subgrid_areas(
+  subgrid_map: &mut NamedGridAreaMap,
+  style_map: &NamedGridAreaMap,
+  subgrid_span: &GridArea,
+) {
+  for (name, area) in style_map {
+    let mut clamped_area = *area;
+
+    if subgrid_span.columns.is_translated_definite() {
+      clamped_area
+        .columns
+        .intersect(0, subgrid_span.columns.integer_span() as i32);
+    }
+    if subgrid_span.rows.is_translated_definite() {
+      clamped_area
+        .rows
+        .intersect(0, subgrid_span.rows.integer_span() as i32);
+    }
+    subgrid_map.insert(name.clone(), clamped_area);
+  }
+}
+
+/// Blink's `MergeAndClampGridAreasWithParent`: the parent's areas that overlap the subgrid,
+/// clamped to it and numbered from its first lines, merged into `subgrid_map`.
+/// <https://www.w3.org/TR/css-grid-2/#subgrid-area-inheritance>
+fn merge_and_clamp_grid_areas_with_parent(
+  subgrid_map: &mut NamedGridAreaMap,
+  parent_map: &NamedGridAreaMap,
+  subgrid_span: &GridArea,
+) {
+  let has_subgridded_columns = subgrid_span.columns.is_translated_definite();
+  let has_subgridded_rows = subgrid_span.rows.is_translated_definite();
+
+  for (name, area) in parent_map {
+    let mut position = *area;
+    let rows_intersect = has_subgridded_rows && subgrid_span.rows.intersects(position.rows);
+    let columns_intersect =
+      has_subgridded_columns && subgrid_span.columns.intersects(position.columns);
+
+    if !rows_intersect && !columns_intersect {
+      continue;
+    }
+
+    for (has_subgridded_axis, direction) in [
+      (has_subgridded_rows, GridTrackSizingDirection::ForRows),
+      (has_subgridded_columns, GridTrackSizingDirection::ForColumns),
+    ] {
+      if !has_subgridded_axis {
+        continue;
+      }
+
+      let span = subgrid_span.span(direction);
+      let position_span = position.span_mut(direction);
+
+      position_span.intersect(span.start_line() as i32, span.end_line() as i32);
+      position_span.translate_by(-(span.start_line() as i32));
+
+      if let Some(existing) = subgrid_map.get(name) {
+        let existing_span = existing.span(direction);
+
+        position_span.set_start(
+          position_span
+            .untranslated_start_line()
+            .min(existing_span.untranslated_start_line()),
+        );
+        position_span.set_end(
+          position_span
+            .untranslated_end_line()
+            .min(existing_span.untranslated_end_line()),
+        );
+      }
+    }
+    subgrid_map.insert(name.clone(), position);
+  }
+}
+
+/// Blink's `GridLineResolver`: a grid's lines as its auto repeaters repeat, a subgrid's merged
+/// with the line names and areas of its parent grid.
+#[derive(Debug, Clone)]
+pub(crate) struct GridLineResolver {
+  style: Rc<GridStyle>,
+  direction: Direction,
+  column_auto_repetitions: usize,
+  row_auto_repetitions: usize,
+  subgridded_columns_span_size: Option<usize>,
+  subgridded_rows_span_size: Option<usize>,
+  subgridded_columns_merged_explicit_grid_line_names: Option<NamedGridLinesMap>,
+  subgridded_rows_merged_explicit_grid_line_names: Option<NamedGridLinesMap>,
+  subgridded_columns_merged_implicit_grid_line_names: Option<NamedGridLinesMap>,
+  subgridded_rows_merged_implicit_grid_line_names: Option<NamedGridLinesMap>,
+  subgrid_merged_named_areas: Option<NamedGridAreaMap>,
+}
+
+impl PartialEq for GridLineResolver {
+  /// Blink's `operator==`, which compares the inputs placement reads alone.
+  fn eq(&self, other: &Self) -> bool {
+    self.column_auto_repetitions == other.column_auto_repetitions
+      && self.row_auto_repetitions == other.row_auto_repetitions
+      && self.subgridded_columns_span_size == other.subgridded_columns_span_size
+      && self.subgridded_rows_span_size == other.subgridded_rows_span_size
+  }
+}
+
+impl GridLineResolver {
+  /// A grid's line resolver, the grid laid out in `direction`.
   pub(crate) fn new(
-    style: &'a GridStyle,
+    style: Rc<GridStyle>,
+    direction: Direction,
     column_auto_repetitions: usize,
     row_auto_repetitions: usize,
   ) -> Self {
     Self {
       style,
+      direction,
       column_auto_repetitions,
       row_auto_repetitions,
+      subgridded_columns_span_size: None,
+      subgridded_rows_span_size: None,
+      subgridded_columns_merged_explicit_grid_line_names: None,
+      subgridded_rows_merged_explicit_grid_line_names: None,
+      subgridded_columns_merged_implicit_grid_line_names: None,
+      subgridded_rows_merged_implicit_grid_line_names: None,
+      subgrid_merged_named_areas: None,
     }
   }
 
+  /// Blink's subgrid constructor: the resolver of a subgrid in `subgrid_area` of the grid
+  /// `parent_line_resolver` resolves, its subgridded axes' definite in the area.
+  ///
+  /// Approximate: takumi lays out horizontally alone, so a subgrid is always parallel to its parent.
+  pub(crate) fn for_subgrid(
+    style: Rc<GridStyle>,
+    direction: Direction,
+    parent_line_resolver: &GridLineResolver,
+    subgrid_area: GridArea,
+    column_auto_repetitions: usize,
+    row_auto_repetitions: usize,
+  ) -> Self {
+    let has_subgridded_columns = subgrid_area.columns.is_translated_definite();
+    let has_subgridded_rows = subgrid_area.rows.is_translated_definite();
+    let is_opposite_direction_to_parent = direction != parent_line_resolver.direction;
+    let mut resolver = Self {
+      subgridded_columns_span_size: has_subgridded_columns
+        .then(|| subgrid_area.span_size(GridTrackSizingDirection::ForColumns)),
+      subgridded_rows_span_size: has_subgridded_rows
+        .then(|| subgrid_area.span_size(GridTrackSizingDirection::ForRows)),
+      subgridded_columns_merged_explicit_grid_line_names: Some(
+        style.template_columns.named_grid_lines.clone(),
+      ),
+      subgridded_rows_merged_explicit_grid_line_names: Some(
+        style.template_rows.named_grid_lines.clone(),
+      ),
+      ..Self::new(
+        Rc::clone(&style),
+        direction,
+        column_auto_repetitions,
+        row_auto_repetitions,
+      )
+    };
+
+    for (is_subgridded, direction, subgrid_span) in [
+      (
+        has_subgridded_columns,
+        GridTrackSizingDirection::ForColumns,
+        subgrid_area.columns,
+      ),
+      (
+        has_subgridded_rows,
+        GridTrackSizingDirection::ForRows,
+        subgrid_area.rows,
+      ),
+    ] {
+      if !is_subgridded {
+        continue;
+      }
+
+      let merged = match direction {
+        GridTrackSizingDirection::ForColumns => {
+          &mut resolver.subgridded_columns_merged_explicit_grid_line_names
+        }
+        GridTrackSizingDirection::ForRows => {
+          &mut resolver.subgridded_rows_merged_explicit_grid_line_names
+        }
+      };
+      let merged = merged.get_or_insert_default();
+
+      merge_named_grid_lines_with_parent(
+        merged,
+        parent_line_resolver.explicit_named_lines_map(direction),
+        subgrid_span,
+        is_opposite_direction_to_parent,
+      );
+      expand_auto_repeat_tracks_from_parent(
+        merged,
+        parent_line_resolver.auto_repeat_line_names_map(direction),
+        parent_line_resolver.computed_grid_track_list(direction),
+        subgrid_span,
+        parent_line_resolver.auto_repetitions(direction),
+        is_opposite_direction_to_parent,
+        parent_line_resolver.is_subgridded(direction),
+      );
+    }
+
+    if let Some(areas) = &style.template_areas {
+      clamp_subgrid_areas(
+        resolver.subgrid_merged_named_areas.get_or_insert_default(),
+        &areas.named_areas,
+        &subgrid_area,
+      );
+    }
+    if let Some(parent_areas) = parent_line_resolver.named_areas_map() {
+      merge_and_clamp_grid_areas_with_parent(
+        resolver.subgrid_merged_named_areas.get_or_insert_default(),
+        parent_areas,
+        &subgrid_area,
+      );
+    }
+    if let Some(areas) = &resolver.subgrid_merged_named_areas {
+      if has_subgridded_columns {
+        resolver.subgridded_columns_merged_implicit_grid_line_names = Some(
+          GridTemplateAreas::create_implicit_named_grid_lines_from_grid_area(
+            areas,
+            GridTrackSizingDirection::ForColumns,
+          ),
+        );
+      }
+      if has_subgridded_rows {
+        resolver.subgridded_rows_merged_implicit_grid_line_names = Some(
+          GridTemplateAreas::create_implicit_named_grid_lines_from_grid_area(
+            areas,
+            GridTrackSizingDirection::ForRows,
+          ),
+        );
+      }
+    }
+    resolver
+  }
+
   pub(crate) fn explicit_grid_track_count(&self, direction: GridTrackSizingDirection) -> usize {
+    if let Some(span_size) = self.subgrid_span_size(direction) {
+      return span_size;
+    }
+
     let mut count = self
       .style
       .template_tracks(direction)
@@ -213,35 +579,111 @@ impl<'a> GridLineResolver<'a> {
   pub(crate) fn auto_repeat_track_count(&self, direction: GridTrackSizingDirection) -> usize {
     self.auto_repetitions(direction)
       * self
-        .style
-        .template_tracks(direction)
+        .computed_grid_track_list(direction)
         .track_list
         .auto_repeat_track_count()
   }
 
+  /// Blink's `SubgridSpanSize`, none for a standalone axis.
+  pub(crate) fn subgrid_span_size(&self, direction: GridTrackSizingDirection) -> Option<usize> {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.subgridded_columns_span_size,
+      GridTrackSizingDirection::ForRows => self.subgridded_rows_span_size,
+    }
+  }
+
+  /// Blink's `HasStandaloneAxis`.
+  pub(crate) fn has_standalone_axis(&self, direction: GridTrackSizingDirection) -> bool {
+    self.subgrid_span_size(direction).is_none()
+  }
+
+  /// Blink's `IsSubgridded`: whether the merged explicit line names exist, as they do for a
+  /// subgrid in both axes.
+  fn is_subgridded(&self, direction: GridTrackSizingDirection) -> bool {
+    match direction {
+      GridTrackSizingDirection::ForColumns => {
+        &self.subgridded_columns_merged_explicit_grid_line_names
+      }
+      GridTrackSizingDirection::ForRows => &self.subgridded_rows_merged_explicit_grid_line_names,
+    }
+    .is_some()
+  }
+
+  /// Blink's `ImplicitNamedLinesMap`.
   fn implicit_named_lines_map(
     &self,
     direction: GridTrackSizingDirection,
-  ) -> Option<&'a NamedGridLinesMap> {
-    self
-      .style
-      .template_areas
-      .as_ref()
-      .map(|areas| match direction {
-        GridTrackSizingDirection::ForColumns => &areas.implicit_named_grid_column_lines,
-        GridTrackSizingDirection::ForRows => &areas.implicit_named_grid_row_lines,
-      })
+  ) -> Option<&NamedGridLinesMap> {
+    let merged = match direction {
+      GridTrackSizingDirection::ForColumns => {
+        &self.subgridded_columns_merged_implicit_grid_line_names
+      }
+      GridTrackSizingDirection::ForRows => &self.subgridded_rows_merged_implicit_grid_line_names,
+    };
+
+    merged.as_ref().or_else(|| {
+      self
+        .style
+        .template_areas
+        .as_ref()
+        .map(|areas| match direction {
+          GridTrackSizingDirection::ForColumns => &areas.implicit_named_grid_column_lines,
+          GridTrackSizingDirection::ForRows => &areas.implicit_named_grid_row_lines,
+        })
+    })
   }
 
-  fn lines_collection(&self, name: &str, side: GridPositionSide) -> GridNamedLineCollection<'a> {
+  /// Blink's `ExplicitNamedLinesMap`.
+  fn explicit_named_lines_map(&self, direction: GridTrackSizingDirection) -> &NamedGridLinesMap {
+    let merged = match direction {
+      GridTrackSizingDirection::ForColumns => {
+        &self.subgridded_columns_merged_explicit_grid_line_names
+      }
+      GridTrackSizingDirection::ForRows => &self.subgridded_rows_merged_explicit_grid_line_names,
+    };
+
+    merged
+      .as_ref()
+      .unwrap_or(&self.computed_grid_track_list(direction).named_grid_lines)
+  }
+
+  /// Blink's `NamedAreasMap`.
+  fn named_areas_map(&self) -> Option<&NamedGridAreaMap> {
+    self.subgrid_merged_named_areas.as_ref().or_else(|| {
+      self
+        .style
+        .template_areas
+        .as_ref()
+        .map(|areas| &areas.named_areas)
+    })
+  }
+
+  /// Blink's `AutoRepeatLineNamesMap`.
+  fn auto_repeat_line_names_map(&self, direction: GridTrackSizingDirection) -> &NamedGridLinesMap {
+    &self
+      .computed_grid_track_list(direction)
+      .auto_repeat_named_grid_lines
+  }
+
+  /// Blink's `ComputedGridTrackList`.
+  fn computed_grid_track_list(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> &ComputedGridTrackList {
+    self.style.template_tracks(direction)
+  }
+
+  fn lines_collection(&self, name: &str, side: GridPositionSide) -> GridNamedLineCollection<'_> {
     let direction = side.direction();
 
     GridNamedLineCollection::new(
       name,
       self.implicit_named_lines_map(direction),
-      self.style.template_tracks(direction),
+      self.explicit_named_lines_map(direction),
+      self.computed_grid_track_list(direction),
       self.explicit_grid_track_count(direction),
       self.auto_repeat_track_count(direction),
+      self.is_subgridded(direction),
     )
   }
 
@@ -521,6 +963,7 @@ mod tests {
       last_line: 4,
       auto_repeat_total_tracks: 0,
       auto_repeat_track_list_length: 1,
+      is_standalone_grid: true,
     };
 
     assert!(collection.contains(2));

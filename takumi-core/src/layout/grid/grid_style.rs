@@ -3,7 +3,7 @@
 //! [`GridTrackSize`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/style/grid_track_size.h),
 //! and [`GridPosition`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/style/grid_position.h)
 //! hold them, built from takumi's computed style the way Blink's `StyleBuilderConverter` builds
-//! them. Without subgrid or `grid-lanes`.
+//! them. Without `grid-lanes`.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
@@ -15,7 +15,7 @@ use crate::{
     layout_style::LayoutLength,
   },
   style::{
-    ComputedStyle, GridDirection, GridLength, GridPlacement, GridPlacementSpan,
+    ComputedStyle, Gap, GridDirection, GridLength, GridPlacement, GridPlacementSpan,
     GridRepetitionCount, GridRepetitionKeyword, GridTemplateComponent,
     GridTrackSize as StyleTrackSize, SizingContext,
   },
@@ -280,6 +280,11 @@ pub(crate) struct GridTrackList {
   auto_repeater_index: Option<usize>,
   track_count_without_auto_repeat: usize,
   has_intrinsic_sized_repeater: bool,
+  /// Blink's `GridAxisType::kSubgriddedAxis`: a `subgrid` list, whose repeaters hold line names
+  /// and no track sizes.
+  is_subgridded_axis: bool,
+  /// Blink's `NonAutoRepeatLineCount`.
+  non_auto_repeat_line_count: usize,
 }
 
 impl GridTrackList {
@@ -329,26 +334,56 @@ impl GridTrackList {
     self.auto_repeater_index.is_some()
   }
 
-  /// Blink's `AddRepeater`: false when the repeater would hold no tracks or too many.
+  /// Blink's `IsSubgriddedAxis`.
+  pub(crate) fn is_subgridded_axis(&self) -> bool {
+    self.is_subgridded_axis
+  }
+
+  /// Blink's `NonAutoRepeatLineCount`.
+  pub(crate) fn non_auto_repeat_line_count(&self) -> usize {
+    self.non_auto_repeat_line_count
+  }
+
+  /// Blink's `AddRepeater` for a track list's track sizes: false when the repeater would hold no
+  /// tracks or too many.
   pub(crate) fn add_repeater(
     &mut self,
     track_sizes: &[GridTrackSize],
     repeat_type: RepeatType,
     repeat_count: usize,
   ) -> bool {
-    if repeat_count == 0 || track_sizes.is_empty() {
+    self.add_repeater_of_lines(track_sizes, repeat_type, repeat_count, 1)
+  }
+
+  /// Blink's `AddRepeater`, which in a subgridded axis repeats `repeat_number_of_lines` line names
+  /// and no track sizes.
+  fn add_repeater_of_lines(
+    &mut self,
+    track_sizes: &[GridTrackSize],
+    repeat_type: RepeatType,
+    repeat_count: usize,
+    repeat_number_of_lines: usize,
+  ) -> bool {
+    if !self.is_subgridded_axis && (repeat_count == 0 || track_sizes.is_empty()) {
       return false;
     }
 
-    let repeat_size = track_sizes.len();
+    let repeat_size = if self.is_subgridded_axis {
+      repeat_number_of_lines
+    } else {
+      track_sizes.len()
+    };
     let available_track_count = GRID_MAX_TRACKS - self.track_count_without_auto_repeat;
 
     match repeat_type {
       RepeatType::NoRepeat | RepeatType::Integer => {
-        if repeat_size > available_track_count / repeat_count {
+        if repeat_count == 0 || repeat_size > available_track_count / repeat_count {
           return false;
         }
-        self.track_count_without_auto_repeat += repeat_size * repeat_count;
+        // A subgrid's explicit grid is its span in the parent grid, which placement reads instead.
+        if !self.is_subgridded_axis {
+          self.track_count_without_auto_repeat += repeat_size * repeat_count;
+        }
       }
       RepeatType::AutoFill | RepeatType::AutoFit => {
         self.has_intrinsic_sized_repeater = track_sizes
@@ -388,6 +423,11 @@ pub(crate) struct ComputedGridTrackList {
 }
 
 impl ComputedGridTrackList {
+  /// Blink's `IsSubgriddedAxis`.
+  pub(crate) fn is_subgridded_axis(&self) -> bool {
+    self.track_list.is_subgridded_axis()
+  }
+
   /// Blink's `StyleBuilderConverter::ConvertGridTrackList`.
   fn of(components: Option<&[GridTemplateComponent]>, sizing: &SizingContext) -> Self {
     let mut list = Self::default();
@@ -403,8 +443,43 @@ impl ComputedGridTrackList {
 
     for component in components {
       match component {
+        GridTemplateComponent::Subgrid => list.track_list.is_subgridded_axis = true,
         GridTemplateComponent::LineNames(names) => {
           add_names(&mut list.named_grid_lines, names, current_named_grid_line);
+          if list.is_subgridded_axis() {
+            current_named_grid_line += 1;
+            list.track_list.non_auto_repeat_line_count += 1;
+            list
+              .track_list
+              .add_repeater_of_lines(&[], RepeatType::NoRepeat, 1, 1);
+          }
+        }
+        GridTemplateComponent::NameRepeat(GridRepetitionCount::Keyword(_), line_names) => {
+          for (index, names) in line_names.iter().enumerate() {
+            add_names(&mut list.auto_repeat_named_grid_lines, names, index);
+          }
+          list
+            .track_list
+            .add_repeater_of_lines(&[], RepeatType::AutoFill, 1, line_names.len());
+          list.auto_repeat_insertion_point = current_named_grid_line;
+          current_named_grid_line += 1;
+        }
+        GridTemplateComponent::NameRepeat(GridRepetitionCount::Count(repetitions), line_names) => {
+          let repetitions = usize::from(*repetitions);
+
+          for _ in 0..repetitions {
+            for names in line_names {
+              add_names(&mut list.named_grid_lines, names, current_named_grid_line);
+              current_named_grid_line += 1;
+              list.track_list.non_auto_repeat_line_count += 1;
+            }
+          }
+          list.track_list.add_repeater_of_lines(
+            &[],
+            RepeatType::Integer,
+            repetitions,
+            line_names.len(),
+          );
         }
         GridTemplateComponent::Single(size) => {
           current_named_grid_line += 1;
@@ -475,10 +550,13 @@ impl ComputedGridTrackList {
   }
 }
 
+/// Blink's `NamedGridAreaMap`.
+pub(crate) type NamedGridAreaMap = FxHashMap<String, GridArea>;
+
 /// Blink's `ComputedGridTemplateAreas`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct GridTemplateAreas {
-  pub(crate) named_areas: FxHashMap<String, GridArea>,
+  pub(crate) named_areas: NamedGridAreaMap,
   pub(crate) row_count: usize,
   pub(crate) column_count: usize,
   pub(crate) implicit_named_grid_column_lines: NamedGridLinesMap,
@@ -516,30 +594,6 @@ impl GridTemplateAreas {
     }
 
     for (name, (row_start, row_end, column_start, column_end)) in bounds {
-      let add = |map: &mut NamedGridLinesMap, suffix: &str, line: usize| {
-        map.entry(format!("{name}{suffix}")).or_default().push(line);
-      };
-
-      add(
-        &mut areas.implicit_named_grid_row_lines,
-        "-start",
-        row_start,
-      );
-      add(
-        &mut areas.implicit_named_grid_row_lines,
-        "-end",
-        row_end + 1,
-      );
-      add(
-        &mut areas.implicit_named_grid_column_lines,
-        "-start",
-        column_start,
-      );
-      add(
-        &mut areas.implicit_named_grid_column_lines,
-        "-end",
-        column_end + 1,
-      );
       areas.named_areas.insert(
         name.to_owned(),
         GridArea {
@@ -548,16 +602,41 @@ impl GridTemplateAreas {
         },
       );
     }
-
-    for lines in areas
-      .implicit_named_grid_row_lines
-      .values_mut()
-      .chain(areas.implicit_named_grid_column_lines.values_mut())
-    {
-      lines.sort_unstable();
-    }
+    areas.implicit_named_grid_row_lines = Self::create_implicit_named_grid_lines_from_grid_area(
+      &areas.named_areas,
+      GridTrackSizingDirection::ForRows,
+    );
+    areas.implicit_named_grid_column_lines = Self::create_implicit_named_grid_lines_from_grid_area(
+      &areas.named_areas,
+      GridTrackSizingDirection::ForColumns,
+    );
 
     Some(areas)
+  }
+
+  /// Blink's `CreateImplicitNamedGridLinesFromGridArea`.
+  pub(crate) fn create_implicit_named_grid_lines_from_grid_area(
+    named_areas: &NamedGridAreaMap,
+    direction: GridTrackSizingDirection,
+  ) -> NamedGridLinesMap {
+    let mut named_grid_lines = NamedGridLinesMap::default();
+
+    for (name, area) in named_areas {
+      let span = area.span(direction);
+
+      named_grid_lines
+        .entry(format!("{name}-start"))
+        .or_default()
+        .push(span.start_line());
+      named_grid_lines
+        .entry(format!("{name}-end"))
+        .or_default()
+        .push(span.end_line());
+    }
+    for lines in named_grid_lines.values_mut() {
+      lines.sort_unstable();
+    }
+    named_grid_lines
   }
 }
 
@@ -623,6 +702,10 @@ pub(crate) struct GridStyle {
   /// Whether auto-placement fills columns before rows.
   pub(crate) is_column_auto_flow: bool,
   pub(crate) is_dense_auto_flow: bool,
+  /// Whether `column-gap` and `row-gap` are `normal`, Blink's `ColumnGap` and `RowGap` being
+  /// none, which a subgrid reads as its parent's gap.
+  pub(crate) is_column_gap_normal: bool,
+  pub(crate) is_row_gap_normal: bool,
 }
 
 impl GridStyle {
@@ -653,6 +736,16 @@ impl GridStyle {
         .and_then(|areas| GridTemplateAreas::of(&areas.0)),
       is_column_auto_flow: grid.grid_auto_flow.direction == GridDirection::Column,
       is_dense_auto_flow: grid.grid_auto_flow.dense,
+      is_column_gap_normal: style.misc1_data.column_gap == Gap::Normal,
+      is_row_gap_normal: style.misc3_data.row_gap == Gap::Normal,
+    }
+  }
+
+  /// Whether `direction`'s gap is `normal`.
+  pub(crate) fn is_gap_normal(&self, direction: GridTrackSizingDirection) -> bool {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.is_column_gap_normal,
+      GridTrackSizingDirection::ForRows => self.is_row_gap_normal,
     }
   }
 

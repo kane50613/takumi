@@ -112,6 +112,9 @@ impl TailwindPropertyParser for TwGridTemplate {
     if token.eq_ignore_ascii_case("none") {
       return Some(TwGridTemplate(GridTemplateComponents::default()));
     }
+    if token.eq_ignore_ascii_case("subgrid") {
+      return Some(TwGridTemplate(vec![GridTemplateComponent::Subgrid]));
+    }
 
     let count = token.parse::<u32>().ok()?;
     if count == 0 {

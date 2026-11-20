@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="../shared.css" />
+    <style>
+      .page {
+        display: grid;
+        grid-template-columns: [start] 1fr [middle] 1fr 1fr [end];
+        grid-template-rows: auto auto auto 48px;
+        gap: 8px 16px;
+        align-content: start;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background-color: rgb(248, 250, 252);
+        font-size: 14px;
+      }
+      .card {
+        display: grid;
+        grid-row: span 3;
+        grid-template-rows: subgrid;
+        padding: 10px;
+        border: 2px solid rgb(30, 64, 175);
+        background-color: rgb(219, 234, 254);
+      }
+      .title {
+        background-color: rgb(191, 219, 254);
+        font-weight: 700;
+      }
+      .body {
+        background-color: rgb(255, 255, 255);
+      }
+      .footer {
+        background-color: rgb(30, 64, 175);
+        color: rgb(255, 255, 255);
+      }
+      .strip {
+        display: grid;
+        grid-column: start / end;
+        grid-template-columns: subgrid [first] [second] [third] [last];
+        column-gap: 4px;
+        padding: 0 8px;
+        background-color: rgb(253, 230, 138);
+      }
+      .strip > div {
+        background-color: rgb(180, 83, 9);
+      }
+    </style>
+  </head>
+  <body style="width: 640px; height: 360px">
+    <div class="page">
+      <div class="card">
+        <div class="title">Short</div>
+        <div class="body">One line.</div>
+        <div class="footer">Footer</div>
+      </div>
+      <div class="card">
+        <div class="title">A title long enough to wrap onto a second line</div>
+        <div class="body">Two lines of body text that the other cards line up with.</div>
+        <div class="footer">Footer</div>
+      </div>
+      <div class="card">
+        <div class="title">Medium title</div>
+        <div class="body">Body</div>
+        <div class="footer">A footer that wraps onto two lines</div>
+      </div>
+      <div class="strip">
+        <div style="grid-column: first"></div>
+        <div style="grid-column: second / last"></div>
+      </div>
+    </div>
+  </body>
+</html>

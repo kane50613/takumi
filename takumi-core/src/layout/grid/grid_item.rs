@@ -1,17 +1,21 @@
 //! Blink's [`GridItemData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_item.cc):
-//! a grid item's area, alignment, and the tracks it spans. In a horizontal writing mode, without
-//! subgrid, `grid-lanes`, or `last baseline`, so every item's baseline group is the major one.
+//! a grid item's area, alignment, and the tracks it spans, and the items a grid sizes. In a
+//! horizontal writing mode, without `grid-lanes` or `last baseline`, so every subgrid is parallel
+//! to its root grid.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::rc::Rc;
+use std::{
+  ops::{Deref, DerefMut},
+  rc::Rc,
+};
 
 use crate::{
   geometry::NodeId,
   layout::{
     constraint_space::AutoSizeBehavior,
     grid::{
-      grid_area::GridArea,
+      grid_area::{GridArea, GridSpan},
       grid_placement::{GridPlacement, GridPlacementData},
       grid_style::GridTrackSizingDirection,
       grid_track_collection::{GridTrackCollection, TrackSpanProperties},
@@ -19,7 +23,7 @@ use crate::{
     layout_style::LayoutStyle,
   },
   layout_unit::LayoutUnit,
-  style::AlignItems,
+  style::{AlignItems, Direction},
 };
 
 /// Blink's `AxisEdge`.
@@ -29,6 +33,75 @@ pub(crate) enum AxisEdge {
   Center,
   End,
   FirstBaseline,
+}
+
+/// Blink's `BaselineGroup`: the baseline-sharing group an item aligns in, at its track's start or
+/// end. <https://www.w3.org/TR/css-align-3/#baseline-sharing-group>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BaselineGroup {
+  Major,
+  Minor,
+}
+
+/// The writing modes Blink's `DetermineBaselineWritingMode` reads a horizontal item's baselines in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaselineWritingMode {
+  HorizontalTb,
+  VerticalLr,
+  VerticalRl,
+}
+
+/// Blink's `DetermineBaselineWritingMode` for a horizontal item of a horizontal grid laid out in
+/// `container_direction`.
+fn determine_baseline_writing_mode(
+  container_direction: Direction,
+  is_parallel_context: bool,
+) -> BaselineWritingMode {
+  if is_parallel_context {
+    return BaselineWritingMode::HorizontalTb;
+  }
+
+  match container_direction {
+    Direction::Ltr => BaselineWritingMode::VerticalLr,
+    Direction::Rtl => BaselineWritingMode::VerticalRl,
+  }
+}
+
+/// Blink's `DetermineBaselineGroup` for a first baseline in a horizontal grid laid out in
+/// `container_direction`.
+fn determine_baseline_group(
+  container_direction: Direction,
+  baseline_writing_mode: BaselineWritingMode,
+  is_parallel_context: bool,
+) -> BaselineGroup {
+  let (start_group, end_group) = (BaselineGroup::Major, BaselineGroup::Minor);
+
+  if is_parallel_context {
+    return if baseline_writing_mode == BaselineWritingMode::HorizontalTb {
+      start_group
+    } else {
+      end_group
+    };
+  }
+
+  let is_ltr = container_direction == Direction::Ltr;
+
+  match baseline_writing_mode {
+    BaselineWritingMode::HorizontalTb | BaselineWritingMode::VerticalLr => {
+      if is_ltr {
+        start_group
+      } else {
+        end_group
+      }
+    }
+    BaselineWritingMode::VerticalRl => {
+      if is_ltr {
+        end_group
+      } else {
+        start_group
+      }
+    }
+  }
 }
 
 /// Blink's `GridItemIndices`.
@@ -52,14 +125,23 @@ struct AxisAlignment {
   is_overflow_safe: bool,
 }
 
-/// Blink's `AxisEdgeFromItemPosition`.
+/// Blink's `AxisEdgeFromItemPosition`. A subgridded axis stretches to its area from the start.
 fn axis_edge_from_item_position(
   direction: GridTrackSizingDirection,
+  has_subgridded_axis: bool,
   is_replaced: bool,
   is_out_of_flow: bool,
   item_style: &LayoutStyle,
   grid_style: &LayoutStyle,
 ) -> AxisAlignment {
+  if has_subgridded_axis {
+    return AxisAlignment {
+      edge: AxisEdge::Start,
+      auto_behavior: AutoSizeBehavior::StretchImplicit,
+      is_overflow_safe: true,
+    };
+  }
+
   let is_for_columns = direction == GridTrackSizingDirection::ForColumns;
   let (alignment, normal) = if is_for_columns {
     (item_style.justify_self, grid_style.justify_items)
@@ -173,32 +255,111 @@ pub(crate) struct GridItemData {
   pub(crate) row_range_indices: GridItemIndices,
   pub(crate) column_placement: OutOfFlowItemPlacement,
   pub(crate) row_placement: OutOfFlowItemPlacement,
+  pub(crate) has_subgridded_columns: bool,
+  pub(crate) has_subgridded_rows: bool,
+  pub(crate) is_considered_for_column_sizing: bool,
+  pub(crate) is_considered_for_row_sizing: bool,
+  pub(crate) is_opposite_direction_in_root_grid_columns: bool,
+  pub(crate) is_subgridded_to_parent_grid: bool,
+  pub(crate) must_consider_grid_items_for_column_sizing: bool,
+  pub(crate) must_consider_grid_items_for_row_sizing: bool,
+  pub(crate) column_baseline_group: BaselineGroup,
+  pub(crate) row_baseline_group: BaselineGroup,
 }
 
 impl GridItemData {
+  /// Blink's `GridItemData(node, parent_style)`: an item of the grid styled `grid_style` that no
+  /// track sizing considers, as an out-of-flow box is.
   pub(crate) fn new(
     node: NodeId,
     style: Rc<LayoutStyle>,
     grid_style: &LayoutStyle,
     is_replaced: bool,
   ) -> Self {
+    Self::new_in_grid(
+      node,
+      style,
+      grid_style,
+      grid_style,
+      is_replaced,
+      false,
+      false,
+    )
+  }
+
+  /// Blink's `GridItemData` constructor: an item of the grid styled `parent_grid_style`, whose
+  /// tracks the root grid styled `root_grid_style` sizes in the axes the parent `must_consider`.
+  pub(crate) fn new_in_grid(
+    node: NodeId,
+    style: Rc<LayoutStyle>,
+    parent_grid_style: &LayoutStyle,
+    root_grid_style: &LayoutStyle,
+    is_replaced: bool,
+    parent_must_consider_grid_items_for_column_sizing: bool,
+    parent_must_consider_grid_items_for_row_sizing: bool,
+  ) -> Self {
     let is_out_of_flow = style.is_out_of_flow();
+    // A grid that is forced to establish an independent formatting context is not a subgrid.
+    // <https://drafts.csswg.org/css-grid-2/#subgrid-listing>
+    let subgrid_style = style
+      .grid
+      .as_deref()
+      .filter(|_| style.display.is_grid() && !is_replaced && !style.applies_layout_containment());
+    let has_subgridded_columns =
+      subgrid_style.is_some_and(|grid| grid.template_columns.is_subgridded_axis());
+    let has_subgridded_rows =
+      subgrid_style.is_some_and(|grid| grid.template_rows.is_subgridded_axis());
     let columns = axis_edge_from_item_position(
       GridTrackSizingDirection::ForColumns,
+      has_subgridded_columns,
       is_replaced,
       is_out_of_flow,
       &style,
-      grid_style,
+      parent_grid_style,
     );
     let rows = axis_edge_from_item_position(
       GridTrackSizingDirection::ForRows,
+      has_subgridded_rows,
       is_replaced,
       is_out_of_flow,
       &style,
-      grid_style,
+      parent_grid_style,
     );
+    // A subgrid acts as if it were empty in the axes it subgrids, its items sizing the tracks.
+    // <https://drafts.csswg.org/css-grid-2/#subgrid-size-contribution>
+    let (must_consider_grid_items_for_column_sizing, is_considered_for_column_sizing) =
+      if parent_must_consider_grid_items_for_column_sizing {
+        (has_subgridded_columns, !has_subgridded_columns)
+      } else {
+        (false, false)
+      };
+    let (must_consider_grid_items_for_row_sizing, is_considered_for_row_sizing) =
+      if parent_must_consider_grid_items_for_row_sizing {
+        (has_subgridded_rows, !has_subgridded_rows)
+      } else {
+        (false, false)
+      };
+
+    let root_direction = root_grid_style.direction;
+    let baseline_group = |is_parallel_context| {
+      determine_baseline_group(
+        root_direction,
+        determine_baseline_writing_mode(root_direction, is_parallel_context),
+        is_parallel_context,
+      )
+    };
 
     Self {
+      column_baseline_group: baseline_group(false),
+      row_baseline_group: baseline_group(true),
+      has_subgridded_columns,
+      has_subgridded_rows,
+      is_considered_for_column_sizing,
+      is_considered_for_row_sizing,
+      is_opposite_direction_in_root_grid_columns: style.direction != root_grid_style.direction,
+      is_subgridded_to_parent_grid: false,
+      must_consider_grid_items_for_column_sizing,
+      must_consider_grid_items_for_row_sizing,
       node,
       style,
       resolved_position: GridArea::default(),
@@ -219,6 +380,79 @@ impl GridItemData {
       row_range_indices: GridItemIndices::default(),
       column_placement: OutOfFlowItemPlacement::default(),
       row_placement: OutOfFlowItemPlacement::default(),
+    }
+  }
+
+  /// Blink's `IsSubgrid`.
+  pub(crate) fn is_subgrid(&self) -> bool {
+    self.has_subgridded_columns || self.has_subgridded_rows
+  }
+
+  /// Blink's `IsConsideredForSizing`.
+  pub(crate) fn is_considered_for_sizing(&self, direction: GridTrackSizingDirection) -> bool {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.is_considered_for_column_sizing,
+      GridTrackSizingDirection::ForRows => self.is_considered_for_row_sizing,
+    }
+  }
+
+  /// Blink's `IsOppositeDirectionInRootGrid`.
+  pub(crate) fn is_opposite_direction_in_root_grid(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> bool {
+    direction == GridTrackSizingDirection::ForColumns
+      && self.is_opposite_direction_in_root_grid_columns
+  }
+
+  /// Blink's `MustConsiderGridItemsForSizing`.
+  pub(crate) fn must_consider_grid_items_for_sizing(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> bool {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.must_consider_grid_items_for_column_sizing,
+      GridTrackSizingDirection::ForRows => self.must_consider_grid_items_for_row_sizing,
+    }
+  }
+
+  /// Blink's `MustCachePlacementIndices`.
+  pub(crate) fn must_cache_placement_indices(&self, direction: GridTrackSizingDirection) -> bool {
+    !self.is_subgridded_to_parent_grid
+      || self.is_considered_for_sizing(direction)
+      || self.must_consider_grid_items_for_sizing(direction)
+  }
+
+  /// Blink's `ResetPlacementIndices`.
+  pub(crate) fn reset_placement_indices(&mut self) {
+    self.column_range_indices = GridItemIndices::default();
+    self.row_range_indices = GridItemIndices::default();
+    self.column_set_indices = GridItemIndices::default();
+    self.row_set_indices = GridItemIndices::default();
+  }
+
+  /// Blink's `AdjustSubgriddedItemSpan`: the span of an item of the subgrid `subgrid_item` in its
+  /// parent's lines.
+  pub(crate) fn adjust_subgridded_item_span(&mut self, subgrid_item: &GridItemData) {
+    for direction in [
+      GridTrackSizingDirection::ForColumns,
+      GridTrackSizingDirection::ForRows,
+    ] {
+      if !subgrid_item.must_consider_grid_items_for_sizing(direction) {
+        continue;
+      }
+
+      let span = self.resolved_position.span_mut(direction);
+
+      if subgrid_item.is_opposite_direction_in_root_grid(direction) {
+        let subgrid_span_size = subgrid_item.span_size(direction);
+
+        *span = GridSpan::translated_definite(
+          subgrid_span_size - span.end_line(),
+          subgrid_span_size - span.start_line(),
+        );
+      }
+      span.translate(subgrid_item.start_line(direction));
     }
   }
 
@@ -278,6 +512,13 @@ impl GridItemData {
     (indices.begin.unwrap_or(0), indices.end.unwrap_or(0))
   }
 
+  pub(crate) fn range_indices(&self, direction: GridTrackSizingDirection) -> GridItemIndices {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.column_range_indices,
+      GridTrackSizingDirection::ForRows => self.row_range_indices,
+    }
+  }
+
   pub(crate) fn range_indices_mut(
     &mut self,
     direction: GridTrackSizingDirection,
@@ -327,8 +568,16 @@ impl GridItemData {
       .contains(TrackSpanProperties::HAS_AUTO_MINIMUM_TRACK)
   }
 
+  /// Blink's `BaselineGroup`.
+  pub(crate) fn baseline_group(&self, direction: GridTrackSizingDirection) -> BaselineGroup {
+    match direction {
+      GridTrackSizingDirection::ForColumns => self.column_baseline_group,
+      GridTrackSizingDirection::ForRows => self.row_baseline_group,
+    }
+  }
+
   /// Blink's `SetAlignmentFallback`: a baseline-aligned item that cannot take part in baseline
-  /// alignment aligns to the start.
+  /// alignment aligns to the edge of its baseline-sharing group.
   pub(crate) fn set_alignment_fallback(
     &mut self,
     direction: GridTrackSizingDirection,
@@ -357,7 +606,10 @@ impl GridItemData {
           }
         }
       };
-    let fallback = (!can_participate).then_some(AxisEdge::Start);
+    let fallback = (!can_participate).then_some(match self.baseline_group(direction) {
+      BaselineGroup::Major => AxisEdge::Start,
+      BaselineGroup::Minor => AxisEdge::End,
+    });
 
     match direction {
       GridTrackSizingDirection::ForColumns => self.column_fallback_alignment = fallback,
@@ -398,7 +650,7 @@ impl GridItemData {
   pub(crate) fn compute_out_of_flow_item_placement(
     &mut self,
     track_collection: &GridTrackCollection,
-    placement_data: &GridPlacementData<'_>,
+    placement_data: &GridPlacementData,
   ) {
     let direction = track_collection.direction;
     let (mut start_line, mut end_line) = GridPlacement::resolve_out_of_flow_item_grid_lines(
@@ -459,5 +711,57 @@ impl GridItemData {
       track_collection.calculate_set_span_size(begin, end),
       track_collection.set_offset(begin),
     )
+  }
+}
+
+/// Blink's `GridItems`: a grid's items, then the items of its subgrids it sizes, which only
+/// [`Self::include_subgridded_items`] reaches.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct GridItems {
+  item_data: Vec<GridItemData>,
+  first_subgridded_item_index: usize,
+}
+
+impl GridItems {
+  /// Blink's `Append`, a subgridded item after the grid's own.
+  pub(crate) fn append(&mut self, item: GridItemData) {
+    if !item.is_subgridded_to_parent_grid {
+      self.first_subgridded_item_index += 1;
+    }
+    self.item_data.push(item);
+  }
+
+  /// Blink's `IncludeSubgriddedItems`.
+  pub(crate) fn include_subgridded_items(&self) -> &[GridItemData] {
+    &self.item_data
+  }
+
+  pub(crate) fn include_subgridded_items_mut(&mut self) -> &mut [GridItemData] {
+    &mut self.item_data
+  }
+}
+
+impl FromIterator<GridItemData> for GridItems {
+  fn from_iter<T: IntoIterator<Item = GridItemData>>(iter: T) -> Self {
+    let mut items = Self::default();
+
+    for item in iter {
+      items.append(item);
+    }
+    items
+  }
+}
+
+impl Deref for GridItems {
+  type Target = [GridItemData];
+
+  fn deref(&self) -> &[GridItemData] {
+    &self.item_data[..self.first_subgridded_item_index]
+  }
+}
+
+impl DerefMut for GridItems {
+  fn deref_mut(&mut self) -> &mut [GridItemData] {
+    &mut self.item_data[..self.first_subgridded_item_index]
   }
 }

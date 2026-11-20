@@ -4,8 +4,8 @@ use cssparser::Parser;
 
 use super::write_space_separated;
 use crate::style::{
-  FromCss, GridRepeatTrack, GridRepetitionCount, GridTrackSize, MakeComputed, ParseResult,
-  SizingContext, ToCss,
+  FromCss, GridRepeatTrack, GridRepetitionCount, GridRepetitionKeyword, GridTrackSize,
+  MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
 /// An ordered list of [`GridTemplateComponent`] values.
@@ -33,6 +33,10 @@ pub enum GridTemplateComponent {
   /// Automatically generate grid tracks to fit the available space using the specified definite track lengths
   /// Only valid if every track in template (not just the repetition) has a fixed size.
   Repeat(GridRepetitionCount, Vec<GridRepeatTrack>),
+  /// The `subgrid` keyword, which starts a list that takes its tracks from the parent grid
+  Subgrid,
+  /// A `<name-repeat>` in a `subgrid` list: line names repeated a number of times or to fill the span
+  NameRepeat(GridRepetitionCount, Vec<Vec<String>>),
 }
 
 impl MakeComputed for GridTemplateComponent {
@@ -113,8 +117,72 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
     &["<line-names>", "<repeat()>", "<minmax()>", "<length>"];
 }
 
+/// Blink's `ConsumeGridLineNamesRepeat` body: `[ <integer [1,∞]> | auto-fill ], <line-names>+`.
+fn parse_name_repeat<'i>(input: &mut Parser<'i>) -> ParseResult<'i, GridTemplateComponent> {
+  input.expect_function_matching("repeat")?;
+  input.parse_nested_block(|input| {
+    let repetition = GridRepetitionCount::from_css(input)?;
+
+    if matches!(
+      repetition,
+      GridRepetitionCount::Count(0) | GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit)
+    ) {
+      return Err(input.new_error_for_next_token());
+    }
+    input.expect_comma()?;
+
+    let mut line_names = Vec::new();
+
+    while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
+      line_names.push(parse_line_names(input)?);
+    }
+    if line_names.is_empty() {
+      return Err(input.new_error_for_next_token());
+    }
+    Ok(GridTemplateComponent::NameRepeat(repetition, line_names))
+  })
+}
+
+/// Blink's `ConsumeGridTrackList` for `subgrid <line-name-list>?`, the keyword consumed: at most one
+/// `auto-fill` repeater.
+fn parse_line_name_list<'i>(input: &mut Parser<'i>) -> ParseResult<'i, GridTemplateComponents> {
+  let mut components = vec![GridTemplateComponent::Subgrid];
+  let mut has_auto_fill = false;
+
+  loop {
+    if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
+      components.push(GridTemplateComponent::LineNames(parse_line_names(input)?));
+      continue;
+    }
+
+    let Ok(repeat) = input.try_parse(parse_name_repeat) else {
+      break;
+    };
+
+    if matches!(
+      repeat,
+      GridTemplateComponent::NameRepeat(GridRepetitionCount::Keyword(_), _)
+    ) {
+      if has_auto_fill {
+        return Err(input.new_error_for_next_token());
+      }
+      has_auto_fill = true;
+    }
+    components.push(repeat);
+  }
+
+  Ok(components)
+}
+
 impl<'i> FromCss<'i> for GridTemplateComponents {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("subgrid"))
+      .is_ok()
+    {
+      return parse_line_name_list(input);
+    }
+
     let mut components = Vec::new();
     while let Ok(component) = input.try_parse(GridTemplateComponent::from_css) {
       components.push(component);
@@ -142,6 +210,18 @@ impl ToCss for GridTemplateComponent {
         count.to_css(dest)?;
         dest.write_str(", ")?;
         write_space_separated(dest, tracks)?;
+        dest.write_str(")")
+      }
+      Self::Subgrid => dest.write_str("subgrid"),
+      Self::NameRepeat(count, line_names) => {
+        dest.write_str("repeat(")?;
+        count.to_css(dest)?;
+        dest.write_str(",")?;
+        for names in line_names {
+          dest.write_str(" [")?;
+          write_space_separated(dest, names)?;
+          dest.write_str("]")?;
+        }
         dest.write_str(")")
       }
     }
@@ -198,6 +278,45 @@ mod tests {
           end_names: Some(vec!["a".to_string(), "b".to_string()])
         }]
       ))
+    );
+  }
+
+  #[test]
+  fn subgrid_line_name_list_round_trips() {
+    let components =
+      GridTemplateComponents::from_css_str("subgrid [a] repeat(auto-fill, [b] [c]) [d]").unwrap();
+
+    assert_eq!(
+      components,
+      vec![
+        GridTemplateComponent::Subgrid,
+        GridTemplateComponent::LineNames(vec!["a".to_owned()]),
+        GridTemplateComponent::NameRepeat(
+          GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFill),
+          vec![vec!["b".to_owned()], vec!["c".to_owned()]],
+        ),
+        GridTemplateComponent::LineNames(vec!["d".to_owned()]),
+      ]
+    );
+    assert_eq!(
+      components.to_css_string(),
+      "subgrid [a] repeat(auto-fill, [b] [c]) [d]"
+    );
+  }
+
+  #[test]
+  fn subgrid_takes_one_auto_fill_and_no_tracks() {
+    assert!(
+      GridTemplateComponents::from_css_str("subgrid repeat(auto-fill, [a]) repeat(auto-fill, [b])")
+        .is_err()
+    );
+    assert_eq!(
+      GridTemplateComponents::from_css_str("subgrid repeat(auto-fit, [a])"),
+      Ok(vec![GridTemplateComponent::Subgrid])
+    );
+    assert_eq!(
+      GridTemplateComponents::from_css_str("subgrid 10px"),
+      Ok(vec![GridTemplateComponent::Subgrid])
     );
   }
 
