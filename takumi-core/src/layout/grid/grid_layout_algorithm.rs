@@ -1,15 +1,18 @@
 //! Blink's [`GridLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.cc)
 //! and the [`grid_layout_utils`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/grid/grid_layout_utils.cc)
-//! it runs, in a horizontal writing mode, without subgrid, `grid-lanes`, gap decorations,
-//! `reading-flow`, scrollbars, size containment, or `last baseline`. Every item lies parallel to
-//! its grid.
+//! it runs, in a horizontal writing mode, without `grid-lanes`, gap decorations, `reading-flow`,
+//! scrollbars, size containment, or `last baseline`. Every item lies parallel to its grid, and a
+//! root grid sizes the tracks of the subgrids in it, which lay their items out in them.
 //!
 //! Follows Blink under the notice in LICENSE-CHROMIUM.
 
 #[cfg(feature = "fragmentation")]
 mod fragmentation;
 
-use std::rc::Rc;
+use std::{
+  mem::{swap, take},
+  rc::Rc,
+};
 
 #[cfg(feature = "fragmentation")]
 pub(crate) use fragmentation::GridBreakTokenData;
@@ -30,10 +33,15 @@ use crate::{
     constraint_space::{CacheSlot, ConstraintSpace},
     fragmentation_layout_input::FragmentationLayoutInput,
     grid::{
+      grid_area::{GridArea, GridSpan},
       grid_data::GridLayoutData,
-      grid_item::{AxisEdge, GridItemData, GridItemIndices},
+      grid_item::{AxisEdge, GridItemData, GridItemIndices, GridItems},
       grid_line_resolver::GridLineResolver,
       grid_placement::{GridPlacement, GridPlacementData},
+      grid_sizing_tree::{
+        GridLayoutSubtree, GridSizingTree, GridTreeNode, SubgridMinMaxSizesCache,
+        SubgriddedItemData,
+      },
       grid_style::{GridStyle, GridTrackList, GridTrackSizingDirection, RepeatType},
       grid_track_collection::{GridRangeBuilder, GridTrackCollection},
       grid_track_sizing_algorithm::{
@@ -48,7 +56,7 @@ use crate::{
     logical_rect::{
       AvailableLogicalSize, LogicalBoxStrut, LogicalOffset, LogicalRect, LogicalSize,
     },
-    min_max_sizes::{MinMaxSizes, MinMaxSizesResult},
+    min_max_sizes::{MinMaxSizes, MinMaxSizesResult, SizeType},
     out_of_flow::ContainingBlock,
     relative_utils::compute_relative_offset,
     tree::LayoutTree,
@@ -63,45 +71,97 @@ use GridTrackSizingDirection::{ForColumns, ForRows};
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GridGeometry {
   layout_data: GridLayoutData,
-  column_auto_repetitions: usize,
-  row_auto_repetitions: usize,
-  column_start_offset: usize,
-  row_start_offset: usize,
+  placement_data: GridPlacementData,
   direction: Direction,
   inline_size: LayoutUnit,
 }
 
-/// Blink's `GridSizingTree` for a grid without subgrids: its items and tracks.
+/// What Blink's `ComputeGridGeometry` hands `PlaceGridItems`: the grid's items, its tracks, which
+/// fragmentation moves, and the finalized layout subtree its subgrids lay out in.
 #[derive(Clone, PartialEq)]
-struct GridSizingTree {
-  grid_items: Vec<GridItemData>,
+struct GridLayoutState {
+  grid_items: GridItems,
   layout_data: GridLayoutData,
-  column_auto_repetitions: usize,
-  row_auto_repetitions: usize,
-  column_start_offset: usize,
-  row_start_offset: usize,
+  layout_subtree: GridLayoutSubtree,
+  placement_data: GridPlacementData,
 }
 
-impl GridSizingTree {
-  /// Blink's `HasBlockSizeDependentGridItem`.
-  fn has_block_size_dependent_item(&self) -> bool {
-    self
-      .grid_items
-      .iter()
-      .any(|item| item.is_sizing_dependent_on_block_size)
-  }
-
+impl GridLayoutState {
   fn geometry(&self, direction: Direction, inline_size: LayoutUnit) -> GridGeometry {
     GridGeometry {
       direction,
       inline_size,
       layout_data: self.layout_data.clone(),
-      column_auto_repetitions: self.column_auto_repetitions,
-      row_auto_repetitions: self.row_auto_repetitions,
-      column_start_offset: self.column_start_offset,
-      row_start_offset: self.row_start_offset,
+      placement_data: self.placement_data.clone(),
     }
   }
+
+  /// The layout subtree of each item that is a subgrid, in the items' order.
+  fn item_layout_subtrees(&self) -> Vec<Option<GridLayoutSubtree>> {
+    let mut subgrid_subtrees = self.layout_subtree.children().into_iter();
+
+    self
+      .grid_items
+      .iter()
+      .map(|item| {
+        if item.is_subgrid() {
+          subgrid_subtrees.next()
+        } else {
+          None
+        }
+      })
+      .collect()
+  }
+}
+
+/// Blink's `SubgriddedAreaInParent`: the area of `subgrid` in its parent's lines in the axes it
+/// subgrids, the other axes indefinite.
+fn subgridded_area_in_parent(subgrid: Option<&GridItemData>) -> GridArea {
+  let Some(subgrid) = subgrid.filter(|item| item.is_subgrid()) else {
+    return GridArea::default();
+  };
+  let mut area = subgrid.resolved_position;
+
+  if !subgrid.has_subgridded_columns {
+    area.columns = GridSpan::indefinite(1);
+  }
+  if !subgrid.has_subgridded_rows {
+    area.rows = GridSpan::indefinite(1);
+  }
+  area
+}
+
+/// Blink's `ValidateMinMaxSizesCache`: drops the intrinsic sizes a subgrid in the subtree at `index`
+/// kept when the tracks it takes from its parent changed, whether any did.
+fn validate_min_max_sizes_cache(
+  sizing_tree: &mut GridSizingTree,
+  index: usize,
+  direction: GridTrackSizingDirection,
+) -> bool {
+  let mut should_invalidate_min_max_sizes_cache = false;
+
+  for subtree in sizing_tree.children(index) {
+    should_invalidate_min_max_sizes_cache |=
+      validate_min_max_sizes_cache(sizing_tree, subtree, direction);
+  }
+
+  let tree_node = sizing_tree.node_mut(index);
+
+  if tree_node
+    .layout_data
+    .is_subgrid_with_standalone_axis(direction)
+  {
+    if !should_invalidate_min_max_sizes_cache {
+      should_invalidate_min_max_sizes_cache = tree_node
+        .subgrid_min_max_sizes_cache
+        .as_ref()
+        .is_some_and(|cache| !cache.is_valid_for(&tree_node.layout_data));
+    }
+    if should_invalidate_min_max_sizes_cache {
+      tree_node.subgrid_min_max_sizes_cache = None;
+    }
+  }
+  should_invalidate_min_max_sizes_cache
 }
 
 /// Blink's `BlockSizeDependentGridItem`.
@@ -110,23 +170,35 @@ struct BlockSizeDependentGridItem {
   cached_block_size: Option<LayoutUnit>,
 }
 
-/// What measuring an item's contribution to the tracks of `direction` reads.
-struct ItemMeasure<'a> {
-  layout_data: &'a GridLayoutData,
-  space: &'a ConstraintSpace,
+/// What measuring an item's contribution to the tracks of `direction` reads: its measure space, and
+/// of the subgrid that holds it, where it lies in that subgrid's tracks and what the subgrid adds
+/// around them.
+struct ItemMeasure {
+  space: ConstraintSpace,
   margins: LogicalBoxStrut,
   direction: GridTrackSizingDirection,
+  /// The baseline of the set the item starts in, in the measuring grid.
+  track_baseline: Option<LayoutUnit>,
+  /// Blink's `StartExtraMargin` and `EndExtraMargin` of the sets the item spans.
+  start_extra_margin: LayoutUnit,
+  end_extra_margin: LayoutUnit,
+  spanned_tracks_definite_max_size: Option<LayoutUnit>,
+  /// The item in its own grid, Blink's `SubgriddedItemData`, and its measure grid area there.
+  subgridded_item: GridItemData,
+  containing_grid_area_size: AvailableLogicalSize,
 }
 
-impl ItemMeasure<'_> {
+impl ItemMeasure {
   /// Blink's `CalculateBaselineShim`: the space before an item's `baseline` that lines it up with
-  /// its track's.
-  fn baseline_shim(&self, item: &GridItemData, baseline: LayoutUnit) -> LayoutUnit {
+  /// its track's, less `GetExtraMarginForBaseline`.
+  fn baseline_shim(&self, baseline: LayoutUnit) -> LayoutUnit {
     self
-      .layout_data
-      .major_baseline(self.direction, item.set_indices(self.direction).0)
+      .track_baseline
       .map_or(LayoutUnit::ZERO, |track_baseline| {
-        track_baseline - baseline - baseline_margin(self.margins, self.direction)
+        track_baseline
+          - baseline
+          - self.start_extra_margin
+          - baseline_margin(self.margins, self.direction)
       })
   }
 }
@@ -506,7 +578,7 @@ fn track_end_offset(
 /// Blink's `ComputeOutOfFlowItemContainingRect`: the grid area `item` resolves its insets against,
 /// within `padding_box_rect`.
 fn compute_out_of_flow_item_containing_rect(
-  placement_data: &GridPlacementData<'_>,
+  placement_data: &GridPlacementData,
   layout_data: &GridLayoutData,
   padding_box_rect: LogicalRect,
   item: &mut GridItemData,
@@ -620,20 +692,7 @@ impl<'r> LayoutTree<'r> {
       return containing_block;
     };
     let container_style = self.layout_style(container);
-    let Some(grid_style) = container_style.grid.as_deref() else {
-      return containing_block;
-    };
     let (direction, inline_size) = (geometry.direction, geometry.inline_size);
-    let placement_data = GridPlacementData {
-      line_resolver: GridLineResolver::new(
-        grid_style,
-        geometry.column_auto_repetitions,
-        geometry.row_auto_repetitions,
-      ),
-      grid_item_positions: Vec::new(),
-      column_start_offset: geometry.column_start_offset,
-      row_start_offset: geometry.row_start_offset,
-    };
     let mut item = GridItemData::new(
       node,
       Rc::clone(self.layout_style_rc(node)),
@@ -641,7 +700,7 @@ impl<'r> LayoutTree<'r> {
       self.is_replaced(node),
     );
     let rect = compute_out_of_flow_item_containing_rect(
-      &placement_data,
+      &geometry.placement_data,
       &geometry.layout_data,
       logical_rect(
         containing_block.origin + Point::new(LayoutUnit::ZERO, previously_consumed_block_size),
@@ -685,6 +744,14 @@ pub(crate) struct GridLayoutAlgorithm<'t, 'r> {
   fragmentation: GridFragmentation,
 }
 
+/// The intrinsic sizes a box's inline size reads, by size type.
+type MinMaxSizesFn<'f, 'r> = dyn FnMut(&mut LayoutTree<'r>, SizeType) -> MinMaxSizesResult + 'f;
+
+/// The callback Blink's `ForEachSubgrid` runs with each subgrid's algorithm, the index of its
+/// subtree, and its data in the grid.
+type SubgridCallback<'f, 'r> =
+  dyn FnMut(&mut GridLayoutAlgorithm<'_, 'r>, &mut GridSizingTree, usize, SubgriddedItemData) + 'f;
+
 impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   /// The algorithm for `node` in `space`, resumed as `input` says, with an indefinite inline size
   /// when `is_intrinsic`.
@@ -693,16 +760,35 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     node: NodeId,
     space: &'t ConstraintSpace,
     is_intrinsic: bool,
+    input: &FragmentationLayoutInput,
+  ) -> Self {
+    Self::with_min_max_sizes(
+      tree,
+      node,
+      space,
+      is_intrinsic,
+      input,
+      &mut |tree, size_type| tree.min_max_sizes(node, space, size_type),
+    )
+  }
+
+  /// [`Self::new`] with the intrinsic sizes `min_max_sizes` gives, Blink's `CalculateInitialFragmentGeometry`
+  /// callback.
+  fn with_min_max_sizes(
+    tree: &'t mut LayoutTree<'r>,
+    node: NodeId,
+    space: &'t ConstraintSpace,
+    is_intrinsic: bool,
     #[cfg_attr(not(feature = "fragmentation"), expect(unused_variables))]
     input: &FragmentationLayoutInput,
+    min_max_sizes: &mut MinMaxSizesFn<'_, 'r>,
   ) -> Self {
     let style = Rc::clone(tree.layout_style_rc(node));
     let grid_style = style.grid.clone().unwrap_or_default();
     let resolver = LengthResolver::new(space, &style);
     let border_padding = resolver.border_padding;
-    let inline_size = (!is_intrinsic).then(|| {
-      resolver.inline_size_for_fragment(&mut |size_type| tree.min_max_sizes(node, space, size_type))
-    });
+    let inline_size = (!is_intrinsic)
+      .then(|| resolver.inline_size_for_fragment(&mut |size_type| min_max_sizes(tree, size_type)));
     let grid_available_size = child_available_size(
       AvailableLogicalSize {
         inline_size,
@@ -785,6 +871,102 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     }
   }
 
+  /// Blink's `CalculateInitialFragmentGeometryForSubgrid` and the algorithm for `subgrid` in `space`: its
+  /// intrinsic sizes from `sizing_subtree` when it sizes its columns itself and one is given, else
+  /// an intrinsic inline size when its inline size reads them.
+  fn for_subgrid(
+    tree: &'t mut LayoutTree<'r>,
+    subgrid: &GridItemData,
+    space: &'t ConstraintSpace,
+    sizing_subtree: Option<(&mut GridSizingTree, usize)>,
+  ) -> Self {
+    let node = subgrid.node;
+    let input = FragmentationLayoutInput::default();
+    let mut needs_to_compute_min_max_sizes = false;
+
+    LengthResolver::new(space, &subgrid.style).inline_size_for_fragment(&mut |_| {
+      needs_to_compute_min_max_sizes = true;
+      MinMaxSizesResult::default()
+    });
+
+    if !needs_to_compute_min_max_sizes {
+      return Self::with_min_max_sizes(tree, node, space, false, &input, &mut |_, _| {
+        MinMaxSizesResult::default()
+      });
+    }
+    if !subgrid.has_subgridded_columns
+      && let Some((sizing_tree, index)) = sizing_subtree
+    {
+      let sizes = GridLayoutAlgorithm::subgrid_min_max_sizes(tree, sizing_tree, index, space);
+
+      return Self::with_min_max_sizes(tree, node, space, false, &input, &mut |_, _| {
+        MinMaxSizesResult::new(sizes, false)
+      });
+    }
+
+    Self::new(tree, node, space, true, &input)
+  }
+
+  /// Blink's `GridNode::ComputeSubgridMinMaxSizes`: the intrinsic inline sizes of the subgrid at
+  /// `index` measured in `space`, kept until its subgridded tracks change.
+  fn subgrid_min_max_sizes(
+    tree: &mut LayoutTree<'r>,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    space: &ConstraintSpace,
+  ) -> MinMaxSizes {
+    if let Some(cache) = &sizing_tree.node(index).subgrid_min_max_sizes_cache {
+      return cache.cached_min_max_sizes();
+    }
+
+    let node = sizing_tree.node(index).node;
+    let sizes = GridLayoutAlgorithm::new(
+      tree,
+      node,
+      space,
+      true,
+      &FragmentationLayoutInput::default(),
+    )
+    .compute_subgrid_min_max_sizes(sizing_tree, index);
+    let subgrid_node = sizing_tree.node_mut(index);
+
+    subgrid_node.subgrid_min_max_sizes_cache = Some(SubgridMinMaxSizesCache::new(
+      sizes,
+      &subgrid_node.layout_data,
+    ));
+    sizes
+  }
+
+  /// Blink's `GridNode::ComputeSubgridIntrinsicBlockSize`: the block size of the subgrid at `index`
+  /// measured in `space`, both its intrinsic sizes, kept until its subgridded tracks change.
+  fn subgrid_intrinsic_block_size(
+    tree: &mut LayoutTree<'r>,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    space: &ConstraintSpace,
+  ) -> LayoutUnit {
+    if let Some(cache) = &sizing_tree.node(index).subgrid_min_max_sizes_cache {
+      return cache.cached_min_max_sizes().max_size;
+    }
+
+    let node = sizing_tree.node(index).node;
+    let block_size = GridLayoutAlgorithm::new(
+      tree,
+      node,
+      space,
+      true,
+      &FragmentationLayoutInput::default(),
+    )
+    .compute_subgrid_intrinsic_block_size(sizing_tree, index);
+    let subgrid_node = sizing_tree.node_mut(index);
+
+    subgrid_node.subgrid_min_max_sizes_cache = Some(SubgridMinMaxSizesCache::new(
+      MinMaxSizes::both(block_size),
+      &subgrid_node.layout_data,
+    ));
+    block_size
+  }
+
   fn direction(&self) -> Direction {
     self.style.direction
   }
@@ -803,12 +985,41 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     }
   }
 
-  /// Blink's `ComputeAutomaticRepetitions`.
-  fn compute_automatic_repetitions(&self, direction: GridTrackSizingDirection) -> usize {
+  /// Blink's `CalculateGutterSize` for this grid, a `normal` gap `parent_gutter_size`.
+  fn gutter_size(
+    &self,
+    direction: GridTrackSizingDirection,
+    parent_gutter_size: LayoutUnit,
+  ) -> LayoutUnit {
+    calculate_gutter_size(
+      &self.style,
+      &self.grid_style,
+      self.grid_available_size,
+      direction,
+      parent_gutter_size,
+    )
+  }
+
+  /// Blink's `ComputeAutomaticRepetitions`, a subgridded axis's in `subgrid_span` of its parent.
+  /// <https://drafts.csswg.org/css-grid-2/#auto-repeat>
+  fn compute_automatic_repetitions(
+    &self,
+    subgrid_span: GridSpan,
+    direction: GridTrackSizingDirection,
+  ) -> usize {
     let track_list = &self.grid_style.template_tracks(direction).track_list;
 
     if !track_list.has_auto_repeater() {
       return 0;
+    }
+    if track_list.is_subgridded_axis() {
+      // A subgridded axis with no parent grid has the used value `none`.
+      // <https://drafts.csswg.org/css-grid-2/#subgrid-listing>
+      if subgrid_span.is_indefinite() {
+        return 0;
+      }
+      return self
+        .compute_automatic_repetitions_for_subgrid(subgrid_span.integer_span(), direction);
     }
 
     let (min_available_size, max_available_size) = match direction {
@@ -824,22 +1035,73 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
 
     calculate_automatic_repetitions(
       track_list,
-      calculate_gutter_size(&self.style, self.grid_available_size, direction),
+      self.gutter_size(direction, LayoutUnit::ZERO),
       self.available_size(direction),
       min_available_size,
       max_available_size,
     )
   }
 
-  /// Blink's `BuildGridSizingTree`: the in-flow items placed in the grid, their tracks, and the
-  /// out-of-flow children.
-  fn build_grid_sizing_tree(&mut self) -> (GridSizingTree, Vec<NodeId>) {
-    let column_auto_repetitions = self.compute_automatic_repetitions(ForColumns);
-    let row_auto_repetitions = self.compute_automatic_repetitions(ForRows);
-    let mut grid_items = Vec::new();
-    let mut out_of_flow_children = Vec::new();
+  /// Blink's `ComputeAutomaticRepetitionsForSubgrid`: an `auto-fill` name list repeats enough to fill
+  /// the subgrid's span, none when the other line names already do.
+  fn compute_automatic_repetitions_for_subgrid(
+    &self,
+    subgrid_span_size: usize,
+    direction: GridTrackSizingDirection,
+  ) -> usize {
+    let track_list = &self.grid_style.template_tracks(direction).track_list;
+    let non_auto_repeat_line_count = track_list.non_auto_repeat_line_count();
+    let tracks_per_repeat = track_list.auto_repeat_track_count();
 
-    // Blink's `GridNode::ConstructGridItems`.
+    if non_auto_repeat_line_count > subgrid_span_size || tracks_per_repeat > subgrid_span_size {
+      return 0;
+    }
+
+    (subgrid_span_size - non_auto_repeat_line_count + 1) / tracks_per_repeat
+  }
+
+  /// Blink's `BuildGridLineResolver`: this grid's, a subgrid's in its area of the grid `parent` resolves.
+  fn build_grid_line_resolver(
+    &self,
+    parent: Option<(&GridLineResolver, GridArea)>,
+  ) -> GridLineResolver {
+    let subgrid_area = parent
+      .as_ref()
+      .map_or_else(GridArea::default, |(_, area)| *area);
+    let column_auto_repetitions =
+      self.compute_automatic_repetitions(subgrid_area.columns, ForColumns);
+    let row_auto_repetitions = self.compute_automatic_repetitions(subgrid_area.rows, ForRows);
+
+    match parent {
+      Some((parent_line_resolver, subgrid_area)) => GridLineResolver::for_subgrid(
+        Rc::clone(&self.grid_style),
+        self.direction(),
+        parent_line_resolver,
+        subgrid_area,
+        column_auto_repetitions,
+        row_auto_repetitions,
+      ),
+      None => GridLineResolver::new(
+        Rc::clone(&self.grid_style),
+        self.direction(),
+        column_auto_repetitions,
+        row_auto_repetitions,
+      ),
+    }
+  }
+
+  /// Blink's `GridNode::ConstructGridItems`: the in-flow children as items placed as `line_resolver`
+  /// resolves them, or as `cached_placement_data` placed them, the out-of-flow children, and
+  /// whether an item is a subgrid.
+  fn construct_grid_items(
+    &mut self,
+    line_resolver: &GridLineResolver,
+    cached_placement_data: Option<&GridPlacementData>,
+    mut out_of_flow_children: Option<&mut Vec<NodeId>>,
+  ) -> (GridItems, GridPlacementData, bool) {
+    let mut grid_items = GridItems::default();
+    let mut has_nested_subgrid = false;
+
     for &child in self.tree.child_nodes(self.node).iter() {
       let child_style = Rc::clone(self.tree.layout_style_rc(child));
 
@@ -850,26 +1112,32 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         continue;
       }
       if child_style.is_out_of_flow() {
-        out_of_flow_children.push(child);
+        if let Some(out_of_flow_children) = out_of_flow_children.as_deref_mut() {
+          out_of_flow_children.push(child);
+        }
         continue;
       }
 
-      let is_replaced = self.tree.is_replaced(child);
-
-      grid_items.push(GridItemData::new(
+      let item = GridItemData::new_in_grid(
         child,
         child_style,
         &self.style,
-        is_replaced,
-      ));
+        &self.style,
+        self.tree.is_replaced(child),
+        line_resolver.has_standalone_axis(ForColumns),
+        line_resolver.has_standalone_axis(ForRows),
+      );
+
+      has_nested_subgrid |= item.is_subgrid();
+      grid_items.append(item);
     }
 
-    let grid_style = Rc::clone(&self.grid_style);
-    let line_resolver =
-      GridLineResolver::new(&grid_style, column_auto_repetitions, row_auto_repetitions);
-    let item_styles: Vec<&LayoutStyle> = grid_items.iter().map(|item| &*item.style).collect();
-    let placement_data =
-      GridPlacement::new(&grid_style, line_resolver).run_auto_placement_algorithm(&item_styles);
+    let placement_data = cached_placement_data.cloned().unwrap_or_else(|| {
+      let item_styles: Vec<&LayoutStyle> = grid_items.iter().map(|item| &*item.style).collect();
+
+      GridPlacement::new(&self.grid_style, line_resolver.clone())
+        .run_auto_placement_algorithm(&item_styles)
+    });
 
     for (item, position) in grid_items
       .iter_mut()
@@ -877,75 +1145,343 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     {
       item.resolved_position = *position;
     }
+    (grid_items, placement_data, has_nested_subgrid)
+  }
 
-    let column_start_offset = placement_data.column_start_offset;
-    let row_start_offset = placement_data.row_start_offset;
-    let build_sizing_collection =
-      |direction, auto_repetitions, start_offset, items: &mut [GridItemData]| {
-        // Blink's `BuildSizingCollection`.
-        let mut range_builder =
-          GridRangeBuilder::new(&grid_style, direction, auto_repetitions, start_offset);
-        let mut must_create_baselines = false;
+  /// Blink's `AppendSubgriddedItems`: the items of the subgrids among `grid_items` that this grid sizes,
+  /// in its lines, theirs after them.
+  fn append_subgridded_items(&self, sizing_tree: &GridSizingTree, grid_items: &mut GridItems) {
+    let mut index = 0;
 
-        for (index, item) in items.iter().enumerate() {
-          must_create_baselines |= item.is_baseline_specified(direction);
-          range_builder.ensure_track_coverage(
-            item.start_line(direction),
-            item.span_size(direction),
-            index,
-          );
-        }
+    while index < grid_items.include_subgridded_items().len() {
+      let current_item = grid_items.include_subgridded_items()[index].clone();
 
-        let (ranges, item_ranges) = range_builder.finalize_ranges(items.len());
+      index += 1;
+      if !current_item.must_consider_grid_items_for_column_sizing
+        && !current_item.must_consider_grid_items_for_row_sizing
+      {
+        continue;
+      }
 
-        for (item, (begin, end)) in items.iter_mut().zip(item_ranges) {
-          *item.range_indices_mut(direction) = GridItemIndices {
-            begin: Some(begin),
-            end: Some(end),
-          };
-        }
-        (
-          GridTrackCollection::new(ranges, direction),
-          must_create_baselines,
-        )
+      let subgrid_node = sizing_tree.node(sizing_tree.lookup_subgrid_index(current_item.node));
+
+      for subgrid_item in subgrid_node.grid_items.iter() {
+        let mut subgridded_item = GridItemData::new_in_grid(
+          subgrid_item.node,
+          Rc::clone(&subgrid_item.style),
+          &current_item.style,
+          &self.style,
+          self.tree.is_replaced(subgrid_item.node),
+          current_item.must_consider_grid_items_for_column_sizing,
+          current_item.must_consider_grid_items_for_row_sizing,
+        );
+
+        subgridded_item.resolved_position = subgrid_item.resolved_position;
+        subgridded_item.is_subgridded_to_parent_grid = true;
+        subgridded_item.adjust_subgridded_item_span(&current_item);
+        grid_items.append(subgridded_item);
+      }
+    }
+  }
+
+  /// Blink's `BuildSizingCollection`: the ranges of `direction`'s tracks the items placed as
+  /// `placement_data` cover, and the items' first and last ranges.
+  fn build_sizing_collection(
+    &self,
+    direction: GridTrackSizingDirection,
+    placement_data: &GridPlacementData,
+    grid_items: &mut GridItems,
+    layout_data: &mut GridLayoutData,
+  ) {
+    let mut range_builder = GridRangeBuilder::new(
+      &self.grid_style,
+      direction,
+      placement_data.line_resolver.auto_repetitions(direction),
+      placement_data.start_offset(direction),
+    );
+    let items = grid_items.include_subgridded_items_mut();
+    let mut must_create_baselines = false;
+    let mut covered_items = Vec::new();
+
+    for (index, item) in items.iter().enumerate() {
+      if item.is_considered_for_sizing(direction) {
+        must_create_baselines |= item.is_baseline_specified(direction);
+      }
+      if item.must_cache_placement_indices(direction) {
+        range_builder.ensure_track_coverage(
+          item.start_line(direction),
+          item.span_size(direction),
+          index,
+        );
+        covered_items.push(index);
+      }
+    }
+
+    let (ranges, item_ranges) = range_builder.finalize_ranges(items.len());
+
+    for index in covered_items {
+      let (begin, end) = item_ranges[index];
+
+      *items[index].range_indices_mut(direction) = GridItemIndices {
+        begin: Some(begin),
+        end: Some(end),
       };
-    let (columns, column_baselines) = build_sizing_collection(
-      ForColumns,
-      column_auto_repetitions,
-      column_start_offset,
-      &mut grid_items,
-    );
-    let (rows, row_baselines) = build_sizing_collection(
-      ForRows,
-      row_auto_repetitions,
-      row_start_offset,
-      &mut grid_items,
-    );
-    let mut layout_data = GridLayoutData::new(columns, rows);
-
-    if column_baselines {
-      layout_data.create_baselines(ForColumns);
     }
-    if row_baselines {
-      layout_data.create_baselines(ForRows);
+    layout_data.set_track_collection(GridTrackCollection::new(ranges, direction));
+    if must_create_baselines {
+      layout_data.create_baselines(direction);
     }
+  }
 
-    let sizing_tree = GridSizingTree {
-      grid_items,
-      layout_data,
-      column_auto_repetitions,
-      row_auto_repetitions,
-      column_start_offset,
-      row_start_offset,
-    };
+  /// Blink's `BuildGridSizingTree`: this grid and its nested subgrids, their items placed, and its
+  /// out-of-flow children.
+  fn build_grid_sizing_tree(&mut self) -> (GridSizingTree, Vec<NodeId>) {
+    let line_resolver = self.build_grid_line_resolver(None);
+    let mut sizing_tree = GridSizingTree::default();
+    let mut out_of_flow_children = Vec::new();
 
+    self.build_grid_sizing_subtree(
+      &mut sizing_tree,
+      &line_resolver,
+      Some(&mut out_of_flow_children),
+      None,
+    );
     (sizing_tree, out_of_flow_children)
   }
 
-  /// Blink's `InitializeTrackSizes`, for `direction` or both.
-  fn initialize_track_sizes(
-    &self,
+  /// Blink's `BuildGridSizingSubtree`: this grid's node, the subtrees of its subgrids after it, and the
+  /// items of those subgrids it sizes.
+  fn build_grid_sizing_subtree(
+    &mut self,
     sizing_tree: &mut GridSizingTree,
+    line_resolver: &GridLineResolver,
+    out_of_flow_children: Option<&mut Vec<NodeId>>,
+    subgrid_data: Option<SubgriddedItemData>,
+  ) {
+    let (mut grid_items, placement_data, has_nested_subgrid) =
+      self.construct_grid_items(line_resolver, None, out_of_flow_children);
+    let subgrid_area = subgridded_area_in_parent(subgrid_data.map(|data| data.item(sizing_tree)));
+    let has_standalone_columns = subgrid_area.columns.is_indefinite();
+    let has_standalone_rows = subgrid_area.rows.is_indefinite();
+    let mut layout_data = GridLayoutData::default();
+
+    if has_standalone_columns {
+      self.build_sizing_collection(
+        ForColumns,
+        &placement_data,
+        &mut grid_items,
+        &mut layout_data,
+      );
+    }
+    if has_standalone_rows {
+      self.build_sizing_collection(ForRows, &placement_data, &mut grid_items, &mut layout_data);
+    }
+
+    let index = sizing_tree.add_to_preorder_traversal(self.node, placement_data);
+
+    if !has_nested_subgrid {
+      sizing_tree.set_sizing_node_data(index, grid_items, layout_data);
+      return;
+    }
+
+    for direction in [ForColumns, ForRows] {
+      self.initialize_track_collection(sizing_tree, subgrid_data, direction, &mut layout_data);
+    }
+    if has_standalone_columns {
+      layout_data.columns.cache_definite_sets_geometry();
+    }
+    if has_standalone_rows {
+      layout_data.rows.cache_definite_sets_geometry();
+    }
+
+    // The subgrids read this grid's tracks and their own data in it through the tree.
+    {
+      let tree_node = sizing_tree.node_mut(index);
+
+      tree_node.grid_items = grid_items;
+      tree_node.layout_data = layout_data;
+    }
+
+    let subgrid_item_indices: Vec<usize> = sizing_tree
+      .node(index)
+      .grid_items
+      .iter()
+      .enumerate()
+      .filter(|(_, item)| item.is_subgrid())
+      .map(|(item_index, _)| item_index)
+      .collect();
+
+    for item_index in subgrid_item_indices {
+      let GridTreeNode {
+        grid_items,
+        layout_data,
+        ..
+      } = sizing_tree.node_mut(index);
+
+      // Blink's `ComputeSetIndicesForSubgrid`.
+      grid_items[item_index].compute_set_indices(&layout_data.columns);
+      grid_items[item_index].compute_set_indices(&layout_data.rows);
+
+      let subgrid_data = SubgriddedItemData {
+        item_index_in_parent: item_index,
+        parent_grid_index: index,
+      };
+      let subgrid_item = subgrid_data.item(sizing_tree).clone();
+      let (space, _) = self.create_constraint_space_for_layout(
+        &subgrid_item,
+        subgrid_data.parent_layout_data(sizing_tree),
+        None,
+      );
+      let mut subgrid_algorithm =
+        GridLayoutAlgorithm::for_subgrid(&mut *self.tree, &subgrid_item, &space, None);
+      let subgrid_line_resolver = subgrid_algorithm.build_grid_line_resolver(Some((
+        &sizing_tree.node(index).placement_data.line_resolver,
+        subgridded_area_in_parent(Some(&subgrid_item)),
+      )));
+
+      subgrid_algorithm.build_grid_sizing_subtree(
+        sizing_tree,
+        &subgrid_line_resolver,
+        None,
+        Some(subgrid_data),
+      );
+      // Sizing the subgridded items moves the ranges, so the item finds its own again.
+      sizing_tree.node_mut(index).grid_items[item_index].reset_placement_indices();
+    }
+
+    let mut grid_items = take(&mut sizing_tree.node_mut(index).grid_items);
+    let mut layout_data = take(&mut sizing_tree.node_mut(index).layout_data);
+    let placement_data = sizing_tree.node(index).placement_data.clone();
+
+    self.append_subgridded_items(sizing_tree, &mut grid_items);
+    // The ranges cover the subgridded items now, which a subgrid's automatic repetitions needed
+    // the ranges for.
+    if has_standalone_columns {
+      self.build_sizing_collection(
+        ForColumns,
+        &placement_data,
+        &mut grid_items,
+        &mut layout_data,
+      );
+    }
+    if has_standalone_rows {
+      self.build_sizing_collection(ForRows, &placement_data, &mut grid_items, &mut layout_data);
+    }
+    sizing_tree.set_sizing_node_data(index, grid_items, layout_data);
+  }
+
+  /// Blink's `CreateSubgridTrackCollection`: the tracks of this subgrid's `direction`, its parent's
+  /// tracks it spans.
+  fn create_subgrid_track_collection(
+    &self,
+    sizing_tree: &GridSizingTree,
+    subgrid_data: SubgriddedItemData,
+    direction: GridTrackSizingDirection,
+  ) -> GridTrackCollection {
+    let subgrid_item = subgrid_data.item(sizing_tree);
+    let parent_track_collection = subgrid_data
+      .parent_layout_data(sizing_tree)
+      .collection(direction);
+    let range_indices = subgrid_item.range_indices(direction);
+
+    parent_track_collection.create_subgrid_track_collection(
+      range_indices.begin.unwrap_or(0),
+      range_indices.end.unwrap_or(0),
+      self.gutter_size(direction, parent_track_collection.gutter_size),
+      margins_for(
+        &self.style,
+        self.space.percentage_resolution_inline_size,
+        self.direction(),
+      ),
+      self.border_padding,
+      direction,
+      subgrid_item.is_opposite_direction_in_root_grid(direction),
+    )
+  }
+
+  /// Blink's `InitializeTrackCollection`: a subgridded axis's tracks from the parent, a standalone
+  /// one's sets.
+  fn initialize_track_collection(
+    &self,
+    sizing_tree: &GridSizingTree,
+    subgrid_data: Option<SubgriddedItemData>,
+    direction: GridTrackSizingDirection,
+    layout_data: &mut GridLayoutData,
+  ) {
+    if layout_data.has_subgridded_axis(direction) {
+      if let Some(subgrid_data) = subgrid_data {
+        layout_data.set_track_collection(self.create_subgrid_track_collection(
+          sizing_tree,
+          subgrid_data,
+          direction,
+        ));
+      }
+      return;
+    }
+
+    layout_data.collection_mut(direction).build_sets(
+      &self.grid_style,
+      self.available_size(direction),
+      self.gutter_size(direction, LayoutUnit::ZERO),
+    );
+  }
+
+  /// Blink's `ForEachSubgrid`: `callback` with each subgrid of the grid at `index`, its algorithm's
+  /// intrinsic sizes from its subtree when `should_compute_min_max_sizes`.
+  fn for_each_subgrid(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    should_compute_min_max_sizes: bool,
+    callback: &mut SubgridCallback<'_, 'r>,
+  ) {
+    let subgrid_subtrees = sizing_tree.children(index);
+
+    if subgrid_subtrees.is_empty() {
+      return;
+    }
+
+    let subgrid_item_indices = sizing_tree
+      .node(index)
+      .grid_items
+      .iter()
+      .enumerate()
+      .filter(|(_, item)| item.is_subgrid())
+      .map(|(item_index, _)| item_index);
+
+    for (item_index, subtree) in subgrid_item_indices
+      .collect::<Vec<_>>()
+      .into_iter()
+      .zip(subgrid_subtrees)
+    {
+      let subgrid_data = SubgriddedItemData {
+        item_index_in_parent: item_index,
+        parent_grid_index: index,
+      };
+      let subgrid_item = subgrid_data.item(sizing_tree).clone();
+      let (space, _) = self.create_constraint_space_for_layout(
+        &subgrid_item,
+        subgrid_data.parent_layout_data(sizing_tree),
+        None,
+      );
+      let mut subgrid_algorithm = GridLayoutAlgorithm::for_subgrid(
+        &mut *self.tree,
+        &subgrid_item,
+        &space,
+        should_compute_min_max_sizes.then_some((&mut *sizing_tree, subtree)),
+      );
+
+      callback(&mut subgrid_algorithm, sizing_tree, subtree, subgrid_data);
+    }
+  }
+
+  /// Blink's `InitializeTrackSizes` for the subtree at `index`, the subgrid `subgrid_data` or the root,
+  /// in `direction` or both.
+  fn initialize_track_sizes(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    subgrid_data: Option<SubgriddedItemData>,
     direction: Option<GridTrackSizingDirection>,
   ) {
     let directions = match direction {
@@ -954,30 +1490,58 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     };
 
     for direction in directions {
-      let available_size = self.available_size(direction);
-      let gutter_size = calculate_gutter_size(&self.style, self.grid_available_size, direction);
-      let track_collection = sizing_tree.layout_data.collection_mut(direction);
+      let mut layout_data = take(&mut sizing_tree.node_mut(index).layout_data);
 
-      track_collection.build_sets(&self.grid_style, available_size, gutter_size);
-      GridTrackSizingAlgorithm::cache_grid_items_properties(
-        track_collection,
-        &mut sizing_tree.grid_items,
-      );
+      self.initialize_track_collection(sizing_tree, subgrid_data, direction, &mut layout_data);
 
-      if track_collection.has_non_definite_track() {
-        track_collection.cache_initialized_sets_geometry(self.border_padding_start(direction));
+      let grid_items = &mut sizing_tree.node_mut(index).grid_items;
+      let mut has_indefinite_standalone_axis = false;
+
+      if layout_data.has_subgridded_axis(direction) {
+        for item in grid_items.iter_mut() {
+          item.compute_set_indices(layout_data.collection(direction));
+        }
       } else {
-        self.finalize_sets_geometry(track_collection);
+        let track_collection = layout_data.collection_mut(direction);
+
+        GridTrackSizingAlgorithm::cache_grid_items_properties(
+          track_collection,
+          grid_items.include_subgridded_items_mut(),
+        );
+
+        if track_collection.has_non_definite_track() {
+          has_indefinite_standalone_axis = subgrid_data.is_some();
+          track_collection.cache_initialized_sets_geometry(self.border_padding_start(direction));
+        } else {
+          self.finalize_sets_geometry(track_collection);
+        }
+
+        let set_count = track_collection.set_count();
+
+        if layout_data.has_baselines(direction) {
+          layout_data.reset_baselines(direction, set_count);
+        }
       }
-
-      let set_count = track_collection.set_count();
-
-      if sizing_tree.layout_data.has_baselines(direction) {
-        sizing_tree
-          .layout_data
-          .reset_baselines(direction, set_count);
+      sizing_tree.node_mut(index).layout_data = layout_data;
+      if has_indefinite_standalone_axis {
+        sizing_tree.set_subgrid_has_indefinite_standalone_axis();
       }
     }
+
+    // Blink's `InitializeTrackSizesForEachSubgrid`.
+    self.for_each_subgrid(
+      sizing_tree,
+      index,
+      false,
+      &mut |subgrid_algorithm, sizing_tree, subtree, subgrid_data| {
+        subgrid_algorithm.initialize_track_sizes(
+          sizing_tree,
+          subtree,
+          Some(subgrid_data),
+          direction,
+        );
+      },
+    );
   }
 
   /// Blink's `ComputeFirstSetGeometry` then `FinalizeSetsGeometry`.
@@ -994,13 +1558,15 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `CreateConstraintSpace`: a space in the item's grid area `containing_grid_area_size`,
-  /// its sizes fixed to those of `fixed_available_size` that are definite.
+  /// its sizes fixed to those of `fixed_available_size` that are definite, a subgrid's with the
+  /// tracks it lays out in.
   fn create_constraint_space(
     &self,
     cache_slot: CacheSlot,
     item: &GridItemData,
     containing_grid_area_size: AvailableLogicalSize,
     fixed_available_size: AvailableLogicalSize,
+    layout_subtree: Option<GridLayoutSubtree>,
   ) -> ConstraintSpace {
     let mut space = ConstraintSpace::for_child(
       self.space,
@@ -1023,105 +1589,198 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     space.percentage_resolution_block_size = containing_grid_area_size.block_size;
     space.inline_auto_behavior = item.column_auto_behavior;
     space.block_auto_behavior = item.row_auto_behavior;
+    space.grid_layout_subtree = layout_subtree;
     space
   }
 
-  /// Blink's `CreateConstraintSpaceForLayout`: the space and the item's grid area.
-  fn space_for_layout(
+  /// A subgrid's grid area less its margins, Blink's `ShrinkLogicalSize`, which a subgrid fills.
+  fn subgrid_fixed_available_size(
     &self,
-    item: &GridItemData,
+    subgrid: &GridItemData,
+    containing_grid_area_size: AvailableLogicalSize,
+  ) -> AvailableLogicalSize {
+    let margins = margins_for(
+      &subgrid.style,
+      containing_grid_area_size.inline_size,
+      self.direction(),
+    );
+
+    AvailableLogicalSize {
+      inline_size: containing_grid_area_size
+        .inline_size
+        .map(|size| (size - margins.inline_sum()).clamp_negative_to_zero()),
+      block_size: containing_grid_area_size
+        .block_size
+        .map(|size| (size - margins.block_sum()).clamp_negative_to_zero()),
+    }
+  }
+
+  /// Blink's `CreateConstraintSpaceForLayout`: the space and the grid area of `subgridded_item` in
+  /// its parent's tracks `layout_data`, a subgrid's sized to the area in the axes it subgrids and
+  /// laid out in `layout_subtree`.
+  fn create_constraint_space_for_layout(
+    &self,
+    subgridded_item: &GridItemData,
     layout_data: &GridLayoutData,
+    layout_subtree: Option<GridLayoutSubtree>,
   ) -> (ConstraintSpace, LogicalRect) {
-    let (inline_size, inline_offset) = item.calculate_available_size(&layout_data.columns);
-    let (block_size, block_offset) = item.calculate_available_size(&layout_data.rows);
+    let (inline_size, inline_offset) =
+      subgridded_item.calculate_available_size(&layout_data.columns);
+    let (block_size, block_offset) = subgridded_item.calculate_available_size(&layout_data.rows);
     let containing_grid_area = LogicalRect::new(
       inline_offset,
       block_offset,
       inline_size.unwrap_or_default(),
       block_size.unwrap_or_default(),
     );
+    let containing_grid_area_size = AvailableLogicalSize {
+      inline_size,
+      block_size,
+    };
+    let fixed_available_size = if subgridded_item.is_subgrid() {
+      let fixed = self.subgrid_fixed_available_size(subgridded_item, containing_grid_area_size);
+
+      AvailableLogicalSize {
+        inline_size: fixed
+          .inline_size
+          .filter(|_| subgridded_item.has_subgridded_columns),
+        block_size: fixed
+          .block_size
+          .filter(|_| subgridded_item.has_subgridded_rows),
+      }
+    } else {
+      AvailableLogicalSize::default()
+    };
     let space = self.create_constraint_space(
       self.space.cache_slot,
-      item,
-      AvailableLogicalSize {
-        inline_size,
-        block_size,
-      },
-      AvailableLogicalSize::default(),
+      subgridded_item,
+      containing_grid_area_size,
+      fixed_available_size,
+      layout_subtree,
     );
 
     (space, containing_grid_area)
   }
 
-  /// Blink's `CreateConstraintSpaceForMeasure`: a space with the grid area's size in the axis
-  /// other than `direction`.
-  fn space_for_measure(
-    &self,
-    item: &GridItemData,
+  /// The grid area Blink's `CreateConstraintSpaceForMeasure` measures `subgridded_item` for
+  /// `direction`'s tracks in: the size of the tracks it spans in the other axis.
+  fn measure_grid_area_size(
+    subgridded_item: &GridItemData,
     layout_data: &GridLayoutData,
     direction: GridTrackSizingDirection,
-    fixed_inline_size: Option<LayoutUnit>,
-  ) -> ConstraintSpace {
-    let containing_grid_area_size = match direction {
+  ) -> AvailableLogicalSize {
+    match direction {
       ForColumns => AvailableLogicalSize {
         inline_size: None,
-        block_size: item.calculate_available_size(&layout_data.rows).0,
+        block_size: subgridded_item
+          .calculate_available_size(&layout_data.rows)
+          .0,
       },
       ForRows => AvailableLogicalSize {
-        inline_size: item.calculate_available_size(&layout_data.columns).0,
+        inline_size: subgridded_item
+          .calculate_available_size(&layout_data.columns)
+          .0,
         block_size: None,
       },
+    }
+  }
+
+  /// Blink's `CreateConstraintSpaceForMeasure` in `containing_grid_area_size`, from
+  /// [`Self::measure_grid_area_size`], a subgrid's sized to the area.
+  fn create_constraint_space_for_measure(
+    &self,
+    subgridded_item: &GridItemData,
+    containing_grid_area_size: AvailableLogicalSize,
+    fixed_inline_size: Option<LayoutUnit>,
+  ) -> ConstraintSpace {
+    let mut fixed_available_size = if subgridded_item.is_subgrid() {
+      self.subgrid_fixed_available_size(subgridded_item, containing_grid_area_size)
+    } else {
+      AvailableLogicalSize::default()
     };
 
+    if fixed_inline_size.is_some() {
+      fixed_available_size.inline_size = fixed_inline_size;
+    }
     self.create_constraint_space(
       CacheSlot::Measure,
-      item,
+      subgridded_item,
       containing_grid_area_size,
-      AvailableLogicalSize {
-        inline_size: fixed_inline_size,
-        block_size: None,
-      },
+      fixed_available_size,
+      None,
     )
   }
 
-  /// Blink's `ContributionSizeForGridItem`.
+  /// Blink's `ContributionSizeForGridItem` for an item of the subtree at `index`, a subgridded one
+  /// measured in the tracks of the subgrid that holds it.
   fn contribution_size_for_grid_item(
     &mut self,
-    layout_data: &GridLayoutData,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
     contribution_type: GridItemContributionType,
     direction: GridTrackSizingDirection,
     item: &mut GridItemData,
   ) -> LayoutUnit {
     let item_style = Rc::clone(&item.style);
-    let space = self.space_for_measure(item, layout_data, direction, None);
-    let margins = margins_for(
-      &item_style,
-      space.percentage_resolution_inline_size,
-      self.direction(),
-    );
-    let measure = ItemMeasure {
-      layout_data,
-      space: &space,
-      margins,
-      direction,
+    let measure = {
+      let (subgridded_item, parent_layout_data) = if item.is_subgridded_to_parent_grid {
+        let subgridded_item_data = sizing_tree.lookup_subgridded_item_data(item);
+
+        (
+          subgridded_item_data.item(sizing_tree),
+          subgridded_item_data.parent_layout_data(sizing_tree),
+        )
+      } else {
+        (&*item, &sizing_tree.node(index).layout_data)
+      };
+      let containing_grid_area_size =
+        Self::measure_grid_area_size(subgridded_item, parent_layout_data, direction);
+      let space =
+        self.create_constraint_space_for_measure(subgridded_item, containing_grid_area_size, None);
+      let track_collection = parent_layout_data.collection(direction);
+      let (begin_set_index, end_set_index) = subgridded_item.set_indices(direction);
+      let margins = margins_for(
+        &item_style,
+        space.percentage_resolution_inline_size,
+        self.direction(),
+      );
+
+      ItemMeasure {
+        track_baseline: sizing_tree
+          .node(index)
+          .layout_data
+          .major_baseline(direction, item.set_indices(direction).0),
+        start_extra_margin: track_collection.start_extra_margin(begin_set_index),
+        end_extra_margin: track_collection.end_extra_margin(end_set_index),
+        spanned_tracks_definite_max_size: track_collection
+          .calculate_set_span_size(begin_set_index, end_set_index),
+        subgridded_item: subgridded_item.clone(),
+        containing_grid_area_size,
+        space,
+        margins,
+        direction,
+      }
     };
-    let is_for_columns = direction == ForColumns;
-    let margin_sum = if is_for_columns {
-      margins.inline_sum()
-    } else {
-      margins.block_sum()
-    };
+    let margin_sum = match direction {
+      ForColumns => measure.margins.inline_sum(),
+      ForRows => measure.margins.block_sum(),
+    } + measure.start_extra_margin
+      + measure.end_extra_margin;
     let contribution = match contribution_type {
       GridItemContributionType::ContentBasedMinimums
       | GridItemContributionType::IntrinsicMaximums => {
-        self.content_contribution(&measure, item, true).0
+        self
+          .content_contribution(sizing_tree, &measure, item, true)
+          .0
       }
       GridItemContributionType::MaxContentMinimums
       | GridItemContributionType::MaxContentMaximums => {
-        self.content_contribution(&measure, item, false).0
+        self
+          .content_contribution(sizing_tree, &measure, item, false)
+          .0
       }
       GridItemContributionType::IntrinsicMinimums => {
-        self.intrinsic_minimum_contribution(&measure, item, margin_sum)
+        self.intrinsic_minimum_contribution(sizing_tree, &measure, item, margin_sum)
       }
       GridItemContributionType::FreeSpace => LayoutUnit::ZERO,
     };
@@ -1133,7 +1792,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   /// `ContributionSizeForGridItem` does.
   fn intrinsic_minimum_contribution(
     &mut self,
-    measure: &ItemMeasure<'_>,
+    sizing_tree: &mut GridSizingTree,
+    measure: &ItemMeasure,
     item: &mut GridItemData,
     margin_sum: LayoutUnit,
   ) -> LayoutUnit {
@@ -1157,9 +1817,15 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     };
 
     match main_length {
-      LayoutLength::MaxContent => return self.content_contribution(measure, item, false).0,
+      LayoutLength::MaxContent => {
+        return self
+          .content_contribution(sizing_tree, measure, item, false)
+          .0;
+      }
       LayoutLength::MinContent | LayoutLength::Fixed(_) | LayoutLength::MinIntrinsic => {
-        return self.content_contribution(measure, item, true).0;
+        return self
+          .content_contribution(sizing_tree, measure, item, true)
+          .0;
       }
       LayoutLength::Auto
       | LayoutLength::FitContent
@@ -1169,17 +1835,41 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       | LayoutLength::Math(_) => {}
     }
 
-    let resolver = LengthResolver::new(measure.space, &item_style);
+    let resolver = LengthResolver::new(&measure.space, &item_style);
 
     if !min_length.is_auto() || !overflow.is_clip_or_visible() || special_spanning_criteria {
       if !is_for_columns {
         return resolver.resolve_initial_min_block_length(min_length, None);
       }
 
+      let subgrid_min_max_sizes = if item.is_subgrid() {
+        let subgrid_index = sizing_tree.lookup_subgrid_index(item.node);
+        let sizes = if sizing_tree
+          .node(subgrid_index)
+          .layout_data
+          .is_subgrid_with_standalone_axis(ForColumns)
+        {
+          GridLayoutAlgorithm::subgrid_min_max_sizes(
+            self.tree,
+            sizing_tree,
+            subgrid_index,
+            &measure.space,
+          )
+        } else {
+          MinMaxSizes::default()
+        };
+
+        Some(MinMaxSizesResult::new(sizes, false))
+      } else {
+        None
+      };
       let tree = &mut *self.tree;
 
       return resolver.resolve_min_inline_length(
-        &mut |size_type| tree.min_max_sizes(item.node, measure.space, size_type),
+        &mut |size_type| {
+          subgrid_min_max_sizes
+            .unwrap_or_else(|| tree.min_max_sizes(item.node, &measure.space, size_type))
+        },
         min_length,
         None,
         None,
@@ -1187,13 +1877,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       );
     }
 
-    let (contribution, baseline_shim) = self.content_contribution(measure, item, true);
-    let (begin_set_index, end_set_index) = item.set_indices(direction);
-    let Some(spanned_tracks_definite_max_size) = measure
-      .layout_data
-      .collection(direction)
-      .calculate_set_span_size(begin_set_index, end_set_index)
-    else {
+    let (contribution, baseline_shim) = self.content_contribution(sizing_tree, measure, item, true);
+    let Some(spanned_tracks_definite_max_size) = measure.spanned_tracks_definite_max_size else {
       return contribution;
     };
     let border_padding_sum = if is_for_columns {
@@ -1210,30 +1895,54 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   }
 
   /// Blink's `MinContentSize` or `MaxContentSize` for a column and `BlockContributionSize` for a
-  /// row: the contribution and the baseline shim in it.
+  /// row: the contribution and the baseline shim in it. A subgrid sizes its standalone axis from
+  /// its subtree.
   fn content_contribution(
     &mut self,
-    measure: &ItemMeasure<'_>,
+    sizing_tree: &mut GridSizingTree,
+    measure: &ItemMeasure,
     item: &mut GridItemData,
     is_min_content: bool,
   ) -> (LayoutUnit, LayoutUnit) {
     let direction = measure.direction;
 
     if direction == ForColumns {
-      return self.min_or_max_content_size(measure, item, is_min_content);
+      return self.min_or_max_content_size(sizing_tree, measure, item, is_min_content);
+    }
+    if item.is_subgrid() {
+      // Blink's `ComputeBlockSizeForSubgrid`.
+      let subgrid_index = sizing_tree.lookup_subgrid_index(item.node);
+      let intrinsic_block_size = GridLayoutAlgorithm::subgrid_intrinsic_block_size(
+        self.tree,
+        sizing_tree,
+        subgrid_index,
+        &measure.space,
+      );
+      let block_size = LengthResolver::new(&measure.space, &item.style)
+        .block_size_for_fragment(
+          Some(intrinsic_block_size),
+          measure.space.available_inline_size,
+          None,
+        )
+        .unwrap_or(intrinsic_block_size);
+
+      return (block_size, LayoutUnit::ZERO);
     }
 
     let result = if measure.space.available_inline_size.is_none() {
-      let (max_content_size, _) = self.min_or_max_content_size(measure, item, false);
-      let fallback_space =
-        self.space_for_measure(item, measure.layout_data, direction, Some(max_content_size));
+      let (max_content_size, _) = self.min_or_max_content_size(sizing_tree, measure, item, false);
+      let fallback_space = self.create_constraint_space_for_measure(
+        &measure.subgridded_item,
+        measure.containing_grid_area_size,
+        Some(max_content_size),
+      );
 
       self.tree.layout(item.node, &fallback_space)
     } else {
-      self.tree.layout(item.node, measure.space)
+      self.tree.layout(item.node, &measure.space)
     };
     let baseline_shim = if item.is_baseline_aligned(direction) {
-      measure.baseline_shim(item, first_baseline_or_synthesize(item, &result))
+      measure.baseline_shim(first_baseline_or_synthesize(item, &result))
     } else {
       LayoutUnit::ZERO
     };
@@ -1244,16 +1953,31 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   /// Blink's `MinOrMaxContentSize`.
   fn min_or_max_content_size(
     &mut self,
-    measure: &ItemMeasure<'_>,
+    sizing_tree: &mut GridSizingTree,
+    measure: &ItemMeasure,
     item: &mut GridItemData,
     is_min_content: bool,
   ) -> (LayoutUnit, LayoutUnit) {
-    let result = self
-      .tree
-      .min_and_max_content_contribution(item.node, measure.space);
+    let result = if item.is_subgrid() {
+      let subgrid_index = sizing_tree.lookup_subgrid_index(item.node);
+      let sizes = GridLayoutAlgorithm::subgrid_min_max_sizes(
+        self.tree,
+        sizing_tree,
+        subgrid_index,
+        &measure.space,
+      );
+
+      LengthResolver::new(&measure.space, &item.style)
+        .min_and_max_content_contribution(&mut |_| MinMaxSizesResult::new(sizes, false))
+    } else {
+      self
+        .tree
+        .min_and_max_content_contribution(item.node, &measure.space)
+    };
 
     if result.depends_on_block_constraints {
       item.is_sizing_dependent_on_block_size = true;
+      sizing_tree.set_has_block_size_dependent_grid_item();
     }
 
     let content_size = if is_min_content {
@@ -1262,10 +1986,11 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       result.sizes.max_size
     };
     let baseline_shim = if item.is_baseline_aligned(measure.direction) {
-      measure.baseline_shim(
-        item,
-        synthesized_baseline(measure.direction, self.direction(), content_size),
-      )
+      measure.baseline_shim(synthesized_baseline(
+        measure.direction,
+        self.direction(),
+        content_size,
+      ))
     } else {
       LayoutUnit::ZERO
     };
@@ -1273,100 +1998,345 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     (content_size + baseline_shim, baseline_shim)
   }
 
-  /// Blink's `ComputeUsedTrackSizes`.
+  /// Blink's `AccommodateSubgridExtraMargins`: the edge sets of a subgrid's span in `track_collection`
+  /// grow to its margin, border, and padding, which no item on its edge may carry.
+  fn accommodate_subgrid_extra_margins(
+    sizing_tree: &GridSizingTree,
+    index: usize,
+    track_collection: &mut GridTrackCollection,
+    direction: GridTrackSizingDirection,
+  ) {
+    let mut accommodate_extra_margin = |extra_margin: LayoutUnit, set_index: usize| {
+      let set = &mut track_collection.sets[set_index];
+
+      if set.track_size.has_intrinsic_min_track_breadth() && set.base_size < extra_margin {
+        set.increase_base_size(extra_margin);
+      }
+    };
+
+    for item in sizing_tree
+      .node(index)
+      .grid_items
+      .include_subgridded_items()
+    {
+      if !item.must_consider_grid_items_for_sizing(direction)
+        || !item.is_spanning_intrinsic_track(direction)
+      {
+        continue;
+      }
+
+      let subgrid_track_collection = sizing_tree
+        .node(sizing_tree.lookup_subgrid_index(item.node))
+        .layout_data
+        .collection(direction);
+      let mut start_extra_margin = subgrid_track_collection.start_extra_margin(0);
+      let mut end_extra_margin = subgrid_track_collection.end_extra_margin(usize::MAX);
+
+      if item.is_opposite_direction_in_root_grid(direction) {
+        swap(&mut start_extra_margin, &mut end_extra_margin);
+      }
+
+      let (begin_set_index, end_set_index) = item.set_indices(direction);
+      let end_position = end_set_index - 1;
+
+      if begin_set_index < end_position {
+        accommodate_extra_margin(start_extra_margin, begin_set_index);
+        accommodate_extra_margin(end_extra_margin, end_position);
+      } else {
+        accommodate_extra_margin(start_extra_margin + end_extra_margin, begin_set_index);
+      }
+    }
+  }
+
+  /// Blink's `ComputeUsedTrackSizes` for the subtree at `index`.
   fn compute_used_track_sizes(
     &mut self,
     sizing_tree: &mut GridSizingTree,
+    index: usize,
     direction: GridTrackSizingDirection,
     sizing_constraint: SizingConstraint,
   ) {
     let available_size = self.available_size(direction);
-    let gutter_size = calculate_gutter_size(&self.style, self.grid_available_size, direction);
+    let gutter_size = self.gutter_size(direction, LayoutUnit::ZERO);
 
     sizing_tree
+      .node_mut(index)
       .layout_data
       .collection_mut(direction)
       .build_sets(&self.grid_style, available_size, gutter_size);
 
     // The contributions read the geometry the tracks had before sizing.
-    let mut track_collection = sizing_tree.layout_data.collection(direction).clone();
+    let mut track_collection = sizing_tree
+      .node(index)
+      .layout_data
+      .collection(direction)
+      .clone();
+
+    Self::accommodate_subgrid_extra_margins(sizing_tree, index, &mut track_collection, direction);
+
+    let mut grid_items = take(&mut sizing_tree.node_mut(index).grid_items);
     let algorithm = GridTrackSizingAlgorithm::new(
       &self.style,
       self.grid_available_size,
       self.grid_min_available_size,
       sizing_constraint,
     );
-    let layout_data = &sizing_tree.layout_data;
 
     algorithm.compute_used_track_sizes(
       &mut |contribution_type, item| {
-        self.contribution_size_for_grid_item(layout_data, contribution_type, direction, item)
+        self.contribution_size_for_grid_item(sizing_tree, index, contribution_type, direction, item)
       },
       &mut track_collection,
-      &mut sizing_tree.grid_items,
+      grid_items.include_subgridded_items_mut(),
     );
 
-    *sizing_tree.layout_data.collection_mut(direction) = track_collection;
+    let tree_node = sizing_tree.node_mut(index);
+
+    tree_node.grid_items = grid_items;
+    *tree_node.layout_data.collection_mut(direction) = track_collection;
   }
 
-  /// Blink's `CompleteTrackSizingAlgorithm`.
+  /// Blink's `CompleteTrackSizingAlgorithm` for the subtree at `index`: a subgridded axis's tracks
+  /// from its parent's sized ones, a standalone one's sized.
   fn complete_track_sizing_algorithm(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    subgrid_data: Option<SubgriddedItemData>,
+    direction: GridTrackSizingDirection,
+    sizing_constraint: SizingConstraint,
+    mut needs_additional_pass: Option<&mut bool>,
+  ) {
+    let layout_data = &sizing_tree.node(index).layout_data;
+
+    if layout_data.collection(direction).has_non_definite_track() {
+      if layout_data.has_subgridded_axis(direction) {
+        if let Some(subgrid_data) = subgrid_data {
+          let track_collection =
+            self.create_subgrid_track_collection(sizing_tree, subgrid_data, direction);
+
+          sizing_tree
+            .node_mut(index)
+            .layout_data
+            .set_track_collection(track_collection);
+        }
+      } else {
+        self.compute_used_track_sizes(sizing_tree, index, direction, sizing_constraint);
+
+        let needs_to_check_block_size_dependent_grid_items = direction == ForRows
+          && needs_additional_pass
+            .as_deref()
+            .is_some_and(|needs_additional_pass| !needs_additional_pass);
+        let tree_node = sizing_tree.node_mut(index);
+        let block_size_dependent_items: Vec<BlockSizeDependentGridItem> =
+          if needs_to_check_block_size_dependent_grid_items {
+            tree_node
+              .grid_items
+              .iter()
+              .filter(|item| item.is_sizing_dependent_on_block_size)
+              .map(|item| {
+                let row_set_indices = item.set_indices(ForRows);
+
+                BlockSizeDependentGridItem {
+                  row_set_indices,
+                  cached_block_size: tree_node
+                    .layout_data
+                    .rows
+                    .calculate_set_span_size(row_set_indices.0, row_set_indices.1),
+                }
+              })
+              .collect()
+          } else {
+            Vec::new()
+          };
+
+        self.finalize_sets_geometry(tree_node.layout_data.collection_mut(direction));
+
+        // Blink's `MayChangeBlockSizeDependentGridItemContributions`.
+        if needs_to_check_block_size_dependent_grid_items
+          && let Some(needs_additional_pass) = needs_additional_pass.as_deref_mut()
+        {
+          *needs_additional_pass = block_size_dependent_items.iter().any(|item| {
+            tree_node
+              .layout_data
+              .rows
+              .calculate_set_span_size(item.row_set_indices.0, item.row_set_indices.1)
+              != item.cached_block_size
+          });
+        }
+      }
+    }
+
+    // Blink's `CompleteTrackSizingAlgorithmForEachSubgrid`.
+    self.for_each_subgrid(
+      sizing_tree,
+      index,
+      true,
+      &mut |subgrid_algorithm, sizing_tree, subtree, subgrid_data| {
+        subgrid_algorithm.complete_track_sizing_algorithm(
+          sizing_tree,
+          subtree,
+          Some(subgrid_data),
+          direction,
+          sizing_constraint,
+          needs_additional_pass.as_deref_mut(),
+        );
+      },
+    );
+  }
+
+  /// Blink's `CompleteTrackSizingAlgorithm` for the whole sizing tree.
+  fn complete_track_sizing_algorithm_for_tree(
     &mut self,
     sizing_tree: &mut GridSizingTree,
     direction: GridTrackSizingDirection,
     sizing_constraint: SizingConstraint,
     needs_additional_pass: Option<&mut bool>,
   ) {
-    if sizing_tree.layout_data.has_any_baselines() {
-      self.compute_grid_item_baselines(sizing_tree, direction, true);
+    validate_min_max_sizes_cache(sizing_tree, 0, direction);
+    if sizing_tree.has_baselines() {
+      self.compute_baseline_alignment(sizing_tree, 0, None, Some(direction), true);
     }
-    if !sizing_tree
-      .layout_data
-      .collection(direction)
-      .has_non_definite_track()
-    {
-      return;
+    self.complete_track_sizing_algorithm(
+      sizing_tree,
+      0,
+      None,
+      direction,
+      sizing_constraint,
+      needs_additional_pass,
+    );
+  }
+
+  /// Blink's `ComputeSubgridMinMaxSizes`: the subgrid at `index`'s columns sized at min-content and
+  /// max-content.
+  fn compute_subgrid_min_max_sizes(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+  ) -> MinMaxSizes {
+    MinMaxSizes {
+      min_size: self.compute_subgrid_intrinsic_size(
+        sizing_tree,
+        index,
+        ForColumns,
+        SizingConstraint::MinContent,
+      ),
+      max_size: self.compute_subgrid_intrinsic_size(
+        sizing_tree,
+        index,
+        ForColumns,
+        SizingConstraint::MaxContent,
+      ),
     }
+  }
 
-    self.compute_used_track_sizes(sizing_tree, direction, sizing_constraint);
+  /// Blink's `ComputeSubgridIntrinsicBlockSize`.
+  fn compute_subgrid_intrinsic_block_size(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+  ) -> LayoutUnit {
+    self.compute_subgrid_intrinsic_size(sizing_tree, index, ForRows, SizingConstraint::MaxContent)
+  }
 
-    let needs_additional_pass =
-      needs_additional_pass.filter(|needs| direction == ForRows && !**needs);
-    let block_size_dependent_items: Vec<BlockSizeDependentGridItem> =
-      if needs_additional_pass.is_some() {
-        sizing_tree
-          .grid_items
-          .iter()
-          .filter(|item| item.is_sizing_dependent_on_block_size)
-          .map(|item| {
-            let row_set_indices = item.set_indices(ForRows);
+  /// Blink's `ComputeSubgridIntrinsicSize`: the border box of the subgrid at `index` around its
+  /// `direction` tracks sized for `sizing_constraint`.
+  fn compute_subgrid_intrinsic_size(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    direction: GridTrackSizingDirection,
+    sizing_constraint: SizingConstraint,
+  ) -> LayoutUnit {
+    self.compute_used_track_sizes(sizing_tree, index, direction, sizing_constraint);
 
-            BlockSizeDependentGridItem {
-              row_set_indices,
-              cached_block_size: sizing_tree
-                .layout_data
-                .rows
-                .calculate_set_span_size(row_set_indices.0, row_set_indices.1),
-            }
-          })
-          .collect()
-      } else {
-        Vec::new()
+    let border_padding = match direction {
+      ForColumns => self.border_padding.inline_sum(),
+      ForRows => self.border_padding.block_sum(),
+    };
+
+    border_padding
+      + sizing_tree
+        .node(index)
+        .layout_data
+        .collection(direction)
+        .total_track_size()
+  }
+
+  /// Blink's `ComputeBaselineAlignment` for the subtree at `index`, the subgrid `subgrid_data` or the
+  /// root, in `direction` or both: a subgridded axis's baselines its parent's.
+  ///
+  /// Approximate: a subgrid takes no part in its grid's baselines, which Blink measures from its
+  /// layout subtree.
+  fn compute_baseline_alignment(
+    &mut self,
+    sizing_tree: &mut GridSizingTree,
+    index: usize,
+    subgrid_data: Option<SubgriddedItemData>,
+    direction: Option<GridTrackSizingDirection>,
+    is_for_track_sizing: bool,
+  ) {
+    let directions = match direction {
+      Some(direction) => vec![direction],
+      None => vec![ForColumns, ForRows],
+    };
+
+    for direction in directions {
+      if !sizing_tree
+        .node(index)
+        .layout_data
+        .has_subgridded_axis(direction)
+      {
+        self.compute_grid_item_baselines(sizing_tree, index, direction, is_for_track_sizing);
+        continue;
+      }
+
+      let Some(subgrid_data) = subgrid_data else {
+        continue;
       };
-    let track_collection = sizing_tree.layout_data.collection_mut(direction);
+      let subgrid_item = subgrid_data.item(sizing_tree);
+      let parent_layout_data = subgrid_data.parent_layout_data(sizing_tree);
+      let Some(parent_baselines) = parent_layout_data.major_baselines(direction) else {
+        continue;
+      };
+      let parent_track_collection = parent_layout_data.collection(direction);
+      let range_indices = subgrid_item.range_indices(direction);
+      let baselines = parent_track_collection.create_subgrid_baselines(
+        range_indices.begin.unwrap_or(0),
+        range_indices.end.unwrap_or(0),
+        self.gutter_size(direction, parent_track_collection.gutter_size),
+        margins_for(
+          &self.style,
+          self.space.percentage_resolution_inline_size,
+          self.direction(),
+        ),
+        self.border_padding,
+        direction,
+        subgrid_item.is_opposite_direction_in_root_grid(direction),
+        parent_baselines,
+      );
 
-    self.finalize_sets_geometry(track_collection);
-
-    // Blink's `MayChangeBlockSizeDependentGridItemContributions`.
-    if let Some(needs_additional_pass) = needs_additional_pass {
-      *needs_additional_pass = block_size_dependent_items.iter().any(|item| {
-        sizing_tree
-          .layout_data
-          .rows
-          .calculate_set_span_size(item.row_set_indices.0, item.row_set_indices.1)
-          != item.cached_block_size
-      });
+      sizing_tree
+        .node_mut(index)
+        .layout_data
+        .set_major_baselines(direction, baselines);
     }
+
+    // Blink's `ComputeBaselineAlignmentForEachSubgrid`.
+    self.for_each_subgrid(
+      sizing_tree,
+      index,
+      true,
+      &mut |subgrid_algorithm, sizing_tree, subtree, subgrid_data| {
+        subgrid_algorithm.compute_baseline_alignment(
+          sizing_tree,
+          subtree,
+          Some(subgrid_data),
+          direction,
+          is_for_track_sizing,
+        );
+      },
+    );
   }
 
   /// Blink's `ComputeGridItemBaselines`: each set's baseline in `direction`, measured for track
@@ -1374,34 +2344,66 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   fn compute_grid_item_baselines(
     &mut self,
     sizing_tree: &mut GridSizingTree,
+    index: usize,
     direction: GridTrackSizingDirection,
     is_for_track_sizing: bool,
   ) {
-    if !sizing_tree.layout_data.has_baselines(direction) {
+    if !sizing_tree.node(index).layout_data.has_baselines(direction) {
       return;
     }
 
-    let set_count = sizing_tree.layout_data.collection(direction).set_count();
+    let tree_node = sizing_tree.node_mut(index);
+    let set_count = tree_node.layout_data.collection(direction).set_count();
 
-    sizing_tree
-      .layout_data
-      .reset_baselines(direction, set_count);
+    tree_node.layout_data.reset_baselines(direction, set_count);
 
-    for index in 0..sizing_tree.grid_items.len() {
-      let item = &sizing_tree.grid_items[index];
+    let item_count = tree_node.grid_items.include_subgridded_items().len();
 
-      if !item.is_baseline_specified(direction) {
+    for item_index in 0..item_count {
+      let item = &sizing_tree
+        .node(index)
+        .grid_items
+        .include_subgridded_items()[item_index];
+
+      if !item.is_baseline_specified(direction)
+        || !item.is_considered_for_sizing(direction)
+        || item.is_subgrid()
+      {
         continue;
       }
 
-      let space = if is_for_track_sizing {
-        self.space_for_measure(item, &sizing_tree.layout_data, direction, None)
-      } else {
-        self.space_for_layout(item, &sizing_tree.layout_data).0
-      };
       let node = item.node;
+      let (space, extra_margin) = {
+        let (subgridded_item, parent_layout_data) = if item.is_subgridded_to_parent_grid {
+          let subgridded_item_data = sizing_tree.lookup_subgridded_item_data(item);
+
+          (
+            subgridded_item_data.item(sizing_tree),
+            subgridded_item_data.parent_layout_data(sizing_tree),
+          )
+        } else {
+          (item, &sizing_tree.node(index).layout_data)
+        };
+        let space = if is_for_track_sizing {
+          let containing_grid_area_size =
+            Self::measure_grid_area_size(subgridded_item, parent_layout_data, direction);
+
+          self.create_constraint_space_for_measure(subgridded_item, containing_grid_area_size, None)
+        } else {
+          self
+            .create_constraint_space_for_layout(subgridded_item, parent_layout_data, None)
+            .0
+        };
+        // Blink's `GetExtraMarginForBaseline` before the item's own margin.
+        let extra_margin = parent_layout_data
+          .collection(direction)
+          .start_extra_margin(subgridded_item.set_indices(direction).0);
+
+        (space, extra_margin)
+      };
       let result = self.tree.layout(node, &space);
-      let item = &mut sizing_tree.grid_items[index];
+      let tree_node = sizing_tree.node_mut(index);
+      let item = &mut tree_node.grid_items.include_subgridded_items_mut()[item_index];
       // Blink's `MeasureAndStoreItemBaseline`. A column baseline is always synthesized.
       let has_synthesized_baseline = direction == ForColumns || result.first_baseline.is_none();
 
@@ -1415,11 +2417,12 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         space.percentage_resolution_inline_size,
         self.direction(),
       );
-      let baseline = baseline_margin(margins, direction)
+      let baseline = extra_margin
+        + baseline_margin(margins, direction)
         + item_baseline(item, direction, self.direction(), &result);
       let begin_set_index = item.set_indices(direction).0;
 
-      sizing_tree
+      tree_node
         .layout_data
         .set_major_baseline(direction, begin_set_index, baseline);
     }
@@ -1437,20 +2440,63 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         .is_some()
   }
 
-  /// Blink's `ComputeGridGeometry`: the sized grid, the out-of-flow children, and the intrinsic
-  /// block size.
-  fn compute_grid_geometry(&mut self) -> (GridSizingTree, Vec<NodeId>, LayoutUnit) {
+  /// The early return of Blink's `ComputeGridGeometry` in a subgrid, whose root grid sized its tracks:
+  /// the items in `layout_subtree`, placed as they were while it was sized.
+  fn subgrid_geometry(
+    &mut self,
+    layout_subtree: GridLayoutSubtree,
+  ) -> (GridLayoutState, Vec<NodeId>, LayoutUnit) {
+    let placement_data = layout_subtree.placement_data().clone();
+    let mut out_of_flow_children = Vec::new();
+    let (mut grid_items, _, _) = self.construct_grid_items(
+      &placement_data.line_resolver,
+      Some(&placement_data),
+      Some(&mut out_of_flow_children),
+    );
+    let layout_data = layout_subtree.layout_data().clone();
+
+    GridTrackSizingAlgorithm::cache_grid_items_properties(
+      &layout_data.columns,
+      grid_items.include_subgridded_items_mut(),
+    );
+    GridTrackSizingAlgorithm::cache_grid_items_properties(
+      &layout_data.rows,
+      grid_items.include_subgridded_items_mut(),
+    );
+
+    let intrinsic_block_size =
+      layout_data.rows.total_set_span_size().unwrap_or_default() + self.border_padding.block_sum();
+
+    (
+      GridLayoutState {
+        grid_items,
+        layout_data,
+        layout_subtree,
+        placement_data,
+      },
+      out_of_flow_children,
+      intrinsic_block_size,
+    )
+  }
+
+  /// Blink's `ComputeGridGeometry`: the sized grid, the out-of-flow children, and the intrinsic block
+  /// size.
+  fn compute_grid_geometry(&mut self) -> (GridLayoutState, Vec<NodeId>, LayoutUnit) {
+    if let Some(layout_subtree) = self.space.grid_layout_subtree.clone() {
+      return self.subgrid_geometry(layout_subtree);
+    }
+
     let (mut sizing_tree, out_of_flow_children) = self.build_grid_sizing_tree();
     let mut needs_additional_pass = false;
 
-    self.initialize_track_sizes(&mut sizing_tree, None);
-    self.complete_track_sizing_algorithm(
+    self.initialize_track_sizes(&mut sizing_tree, 0, None, None);
+    self.complete_track_sizing_algorithm_for_tree(
       &mut sizing_tree,
       ForColumns,
       SizingConstraint::Layout,
       Some(&mut needs_additional_pass),
     );
-    self.complete_track_sizing_algorithm(
+    self.complete_track_sizing_algorithm_for_tree(
       &mut sizing_tree,
       ForRows,
       SizingConstraint::Layout,
@@ -1458,6 +2504,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     );
 
     let intrinsic_block_size = sizing_tree
+      .node(0)
       .layout_data
       .rows
       .total_set_span_size()
@@ -1477,53 +2524,79 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       self.grid_available_size.block_size = Some(content_block_size);
       self.grid_min_available_size.block_size = content_block_size;
       self.grid_max_available_size.block_size = content_block_size;
-      needs_additional_pass |= self.needs_additional_layout_pass(&sizing_tree.layout_data.rows);
+      needs_additional_pass |=
+        self.needs_additional_layout_pass(&sizing_tree.node(0).layout_data.rows);
 
       if !needs_additional_pass && self.style.align_content != Default::default() {
-        let rows = &mut sizing_tree.layout_data.rows;
-
-        self.finalize_sets_geometry(rows);
+        self.finalize_sets_geometry(&mut sizing_tree.node_mut(0).layout_data.rows);
       }
     }
 
     if needs_additional_pass {
-      self.initialize_track_sizes(&mut sizing_tree, Some(ForColumns));
-      self.complete_track_sizing_algorithm(
+      self.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForColumns));
+      self.complete_track_sizing_algorithm_for_tree(
         &mut sizing_tree,
         ForColumns,
         SizingConstraint::Layout,
         None,
       );
-      self.initialize_track_sizes(&mut sizing_tree, Some(ForRows));
-      self.complete_track_sizing_algorithm(
+      self.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForRows));
+      self.complete_track_sizing_algorithm_for_tree(
         &mut sizing_tree,
         ForRows,
+        SizingConstraint::Layout,
+        None,
+      );
+    } else if sizing_tree.has_subgrid_with_indefinite_standalone_axis()
+      && sizing_tree.has_block_size_dependent_grid_item()
+    {
+      // A subgrid's indefinite rows the first column pass measured against are sized now.
+      self.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForColumns));
+      self.complete_track_sizing_algorithm_for_tree(
+        &mut sizing_tree,
+        ForColumns,
         SizingConstraint::Layout,
         None,
       );
     }
 
     // Blink's `CompleteFinalBaselineAlignment`.
-    if sizing_tree.layout_data.has_any_baselines() {
-      self.compute_grid_item_baselines(&mut sizing_tree, ForColumns, false);
-      self.compute_grid_item_baselines(&mut sizing_tree, ForRows, false);
+    if sizing_tree.has_baselines() {
+      self.compute_baseline_alignment(&mut sizing_tree, 0, None, None, false);
     }
 
-    (sizing_tree, out_of_flow_children, intrinsic_block_size)
+    let layout_subtree = GridLayoutSubtree::new(sizing_tree.finalize_tree());
+    let root = sizing_tree.node_mut(0);
+
+    (
+      GridLayoutState {
+        grid_items: take(&mut root.grid_items),
+        layout_data: take(&mut root.layout_data),
+        layout_subtree,
+        placement_data: root.placement_data.clone(),
+      },
+      out_of_flow_children,
+      intrinsic_block_size,
+    )
   }
 
   /// Blink's `PlaceGridItems`: the items laid out in their grid areas, and the grid's baselines.
   fn place_grid_items(
     &mut self,
-    sizing_tree: &GridSizingTree,
+    grid_state: &GridLayoutState,
   ) -> (Vec<PlacedChild>, GridBaselineAccumulator) {
-    let layout_data = &sizing_tree.layout_data;
+    let layout_data = &grid_state.layout_data;
     let mut baseline_accumulator = GridBaselineAccumulator::default();
-    let mut children = Vec::with_capacity(sizing_tree.grid_items.len());
+    let mut children = Vec::with_capacity(grid_state.grid_items.len());
 
     self.reset_row_break_between(layout_data.rows.set_count());
-    for item in &sizing_tree.grid_items {
-      let (space, mut containing_grid_area) = self.space_for_layout(item, layout_data);
+    for (item, layout_subtree) in grid_state
+      .grid_items
+      .iter()
+      .zip(grid_state.item_layout_subtrees())
+    {
+      let (space, mut containing_grid_area) =
+        self.create_constraint_space_for_layout(item, layout_data, layout_subtree);
       let margins = margins_for(
         &item.style,
         space.percentage_resolution_inline_size,
@@ -1612,7 +2685,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   /// Blink's `PlaceOutOfFlowItems`.
   fn place_out_of_flow_items(
     &self,
-    sizing_tree: &GridSizingTree,
+    grid_state: &GridLayoutState,
     block_size: LayoutUnit,
     out_of_flow_children: Vec<NodeId>,
   ) -> (Vec<OutOfFlowCandidate>, Vec<NodeId>) {
@@ -1637,18 +2710,6 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       (inline_size - self.border_padding.inline_sum()).clamp_negative_to_zero(),
       (block_size - self.border_padding.block_sum()).clamp_negative_to_zero(),
     );
-    let line_resolver = GridLineResolver::new(
-      &self.grid_style,
-      sizing_tree.column_auto_repetitions,
-      sizing_tree.row_auto_repetitions,
-    );
-    let placement_data = GridPlacementData {
-      line_resolver,
-      grid_item_positions: Vec::new(),
-      column_start_offset: sizing_tree.column_start_offset,
-      row_start_offset: sizing_tree.row_start_offset,
-    };
-
     for child in out_of_flow_children {
       let mut item = GridItemData::new(
         child,
@@ -1661,8 +2722,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         || (claims.fixed && position == Position::Fixed))
         .then(|| {
           compute_out_of_flow_item_containing_rect(
-            &placement_data,
-            &sizing_tree.layout_data,
+            &grid_state.placement_data,
+            &grid_state.layout_data,
             padding_box_rect,
             &mut item,
           )
@@ -1700,18 +2761,18 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
 
   /// Blink's `Layout`.
   pub(crate) fn layout(mut self) -> LayoutResult {
-    let (mut sizing_tree, out_of_flow_children, mut intrinsic_block_size) =
-      match self.resumed_sizing_tree() {
+    let (mut grid_state, out_of_flow_children, mut intrinsic_block_size) =
+      match self.resumed_grid_state() {
         Some(resumed) => resumed,
         None => self.compute_grid_geometry(),
       };
     let (children, baselines) = if self.is_resuming() {
       (Vec::new(), GridBaselineAccumulator::default())
     } else {
-      self.place_grid_items(&sizing_tree)
+      self.place_grid_items(&grid_state)
     };
     let (children, baselines) = self.place_grid_items_for_fragmentation(
-      &mut sizing_tree,
+      &mut grid_state,
       &mut intrinsic_block_size,
       (children, baselines),
     );
@@ -1736,12 +2797,12 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         .flat_map(|child| child.result.out_of_flow_moved_by(child.location)),
     );
     let (candidates, held_out_of_flow) =
-      self.place_out_of_flow_items(&sizing_tree, block_size, out_of_flow_children);
+      self.place_out_of_flow_items(&grid_state, block_size, out_of_flow_children);
 
     out_of_flow.extend(candidates);
     self.tree.node_state_mut(self.node).grid_geometry =
-      Some(Rc::new(sizing_tree.geometry(self.direction(), inline_size)));
-    self.keep_break_token_data(sizing_tree, intrinsic_block_size, held_out_of_flow);
+      Some(Rc::new(grid_state.geometry(self.direction(), inline_size)));
+    self.keep_break_token_data(grid_state, intrinsic_block_size, held_out_of_flow);
 
     let size = LogicalSize::new(inline_size, fragment_block_size);
     let mut result = LayoutResult::of_box(size, &style, self.space);
@@ -1780,33 +2841,50 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     result
   }
 
-  /// Blink's `ComputeMinMaxSizes`.
+  /// Blink's `ComputeMinMaxSizes`, a subgrid's the columns its root grid sized.
   pub(crate) fn compute_min_max_sizes(mut self) -> MinMaxSizesResult {
+    if let Some(layout_subtree) = &self.space.grid_layout_subtree {
+      let size = layout_subtree
+        .layout_data()
+        .columns
+        .total_set_span_size()
+        .unwrap_or_default();
+
+      return MinMaxSizesResult::new(
+        MinMaxSizes::both(size) + self.border_padding.inline_sum(),
+        false,
+      );
+    }
+
     let (mut sizing_tree, _) = self.build_grid_sizing_tree();
     let mut depends_on_block_constraints = false;
     let mut compute_total_column_size = |this: &mut Self, sizing_constraint| {
       let mut needs_additional_pass = false;
 
-      this.initialize_track_sizes(&mut sizing_tree, None);
-      this.complete_track_sizing_algorithm(
+      this.initialize_track_sizes(&mut sizing_tree, 0, None, None);
+      this.complete_track_sizing_algorithm_for_tree(
         &mut sizing_tree,
         ForColumns,
         sizing_constraint,
         Some(&mut needs_additional_pass),
       );
 
-      if needs_additional_pass || sizing_tree.has_block_size_dependent_item() {
+      let needs_additional_pass_for_column_subtree = sizing_tree
+        .has_subgrid_with_indefinite_standalone_axis()
+        && sizing_tree.has_block_size_dependent_grid_item();
+
+      if needs_additional_pass || sizing_tree.has_block_size_dependent_grid_item() {
         depends_on_block_constraints = true;
-        this.complete_track_sizing_algorithm(
+        this.complete_track_sizing_algorithm_for_tree(
           &mut sizing_tree,
           ForRows,
           sizing_constraint,
           Some(&mut needs_additional_pass),
         );
 
-        if needs_additional_pass {
-          this.initialize_track_sizes(&mut sizing_tree, Some(ForColumns));
-          this.complete_track_sizing_algorithm(
+        if needs_additional_pass || needs_additional_pass_for_column_subtree {
+          this.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForColumns));
+          this.complete_track_sizing_algorithm_for_tree(
             &mut sizing_tree,
             ForColumns,
             sizing_constraint,
@@ -1816,6 +2894,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       }
 
       sizing_tree
+        .node(0)
         .layout_data
         .columns
         .total_set_span_size()
@@ -1865,7 +2944,7 @@ impl GridLayoutAlgorithm<'_, '_> {
     true
   }
 
-  fn resumed_sizing_tree(&mut self) -> Option<(GridSizingTree, Vec<NodeId>, LayoutUnit)> {
+  fn resumed_grid_state(&mut self) -> Option<(GridLayoutState, Vec<NodeId>, LayoutUnit)> {
     None
   }
 
@@ -1884,7 +2963,7 @@ impl GridLayoutAlgorithm<'_, '_> {
 
   fn place_grid_items_for_fragmentation(
     &mut self,
-    _sizing_tree: &mut GridSizingTree,
+    _grid_state: &mut GridLayoutState,
     _intrinsic_block_size: &mut LayoutUnit,
     unfragmented: (Vec<PlacedChild>, GridBaselineAccumulator),
   ) -> (Vec<PlacedChild>, GridBaselineAccumulator) {
@@ -1908,7 +2987,7 @@ impl GridLayoutAlgorithm<'_, '_> {
 
   fn keep_break_token_data(
     &mut self,
-    _sizing_tree: GridSizingTree,
+    _grid_state: GridLayoutState,
     _intrinsic_block_size: LayoutUnit,
     _out_of_flow_children: Vec<NodeId>,
   ) {

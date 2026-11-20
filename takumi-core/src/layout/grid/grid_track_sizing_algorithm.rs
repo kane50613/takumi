@@ -10,7 +10,7 @@ use crate::{
     content_alignment::{ContentAlignment, ContentDistribution, ContentPosition},
     grid::{
       grid_item::GridItemData,
-      grid_style::GridTrackSizingDirection,
+      grid_style::{GridStyle, GridTrackSizingDirection},
       grid_track_collection::{GridSet, GridTrackCollection, TrackSpanProperties},
     },
     layout_style::LayoutStyle,
@@ -368,7 +368,8 @@ impl GridTrackSizingAlgorithm {
     }
   }
 
-  /// Blink's `CacheGridItemsProperties`: the sets each item spans, and what they hold.
+  /// Blink's `CacheGridItemsProperties`: the sets each item spans, and what they hold, for the
+  /// items and subgridded items in `grid_items` that keep their placement.
   pub(crate) fn cache_grid_items_properties(
     track_collection: &GridTrackCollection,
     grid_items: &mut [GridItemData],
@@ -377,6 +378,10 @@ impl GridTrackSizingAlgorithm {
     let mut spanning_multiple_ranges = Vec::new();
 
     for (index, item) in grid_items.iter_mut().enumerate() {
+      if !item.must_cache_placement_indices(direction) {
+        continue;
+      }
+
       item.compute_set_indices(track_collection);
 
       let range_indices = *item.range_indices_mut(direction);
@@ -649,7 +654,11 @@ impl GridTrackSizingAlgorithm {
   ) {
     let direction = track_collection.direction;
     let mut reordered: Vec<usize> = (0..grid_items.len())
-      .filter(|&index| grid_items[index].is_spanning_intrinsic_track(direction))
+      .filter(|&index| {
+        let item = &grid_items[index];
+
+        item.is_spanning_intrinsic_track(direction) && item.is_considered_for_sizing(direction)
+      })
       .collect();
 
     // Items spanning no flexible track go first, by span.
@@ -894,7 +903,8 @@ impl GridTrackSizingAlgorithm {
       );
     } else {
       for item in grid_items.iter_mut() {
-        if !item.is_spanning_flexible_track(direction) {
+        if !item.is_spanning_flexible_track(direction) || !item.is_considered_for_sizing(direction)
+        {
           continue;
         }
 
@@ -957,12 +967,19 @@ impl GridTrackSizingAlgorithm {
   }
 }
 
-/// Blink's `CalculateGutterSize`: `column-gap` or `row-gap` against the content box.
+/// Blink's `CalculateGutterSize`: `column-gap` or `row-gap` against the content box, a `normal`
+/// gap the parent grid's `parent_gutter_size`, which a grid with no parent has as zero.
 pub(crate) fn calculate_gutter_size(
   style: &LayoutStyle,
+  grid_style: &GridStyle,
   available_size: AvailableLogicalSize,
   direction: GridTrackSizingDirection,
+  parent_gutter_size: LayoutUnit,
 ) -> LayoutUnit {
+  if grid_style.is_gap_normal(direction) {
+    return parent_gutter_size;
+  }
+
   let (gap, basis) = match direction {
     GridTrackSizingDirection::ForColumns => (style.column_gap, available_size.inline_size),
     GridTrackSizingDirection::ForRows => (style.row_gap, available_size.block_size),

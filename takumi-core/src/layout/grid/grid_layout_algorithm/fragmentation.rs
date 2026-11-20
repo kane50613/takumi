@@ -7,7 +7,7 @@
 
 use std::{mem::take, rc::Rc};
 
-use super::{ForRows, GridBaselineAccumulator, GridLayoutAlgorithm, GridSizingTree, PlacedChild};
+use super::{ForRows, GridBaselineAccumulator, GridLayoutAlgorithm, GridLayoutState, PlacedChild};
 use crate::{
   geometry::{NodeId, Point},
   layout::{
@@ -41,7 +41,7 @@ pub(super) struct GridItemPlacementData {
 /// from.
 #[derive(Clone, PartialEq)]
 pub(crate) struct GridBreakTokenData {
-  sizing_tree: GridSizingTree,
+  grid_state: GridLayoutState,
   out_of_flow_children: Vec<NodeId>,
   intrinsic_block_size: LayoutUnit,
   /// Blink's `offset_in_stitched_container`: where the next page starts in the grid.
@@ -130,11 +130,11 @@ impl GridLayoutAlgorithm<'_, '_> {
     !self.is_involved_in_block_fragmentation() || !self.builder.should_break()
   }
 
-  /// The grid an earlier page laid out, which this one resumes from: its sizing tree, the
+  /// The grid an earlier page laid out, which this one resumes from: its items and tracks, the
   /// out-of-flow children it left, and its intrinsic block size.
-  pub(super) fn resumed_sizing_tree(
+  pub(super) fn resumed_grid_state(
     &mut self,
-  ) -> Option<(GridSizingTree, Vec<NodeId>, LayoutUnit)> {
+  ) -> Option<(GridLayoutState, Vec<NodeId>, LayoutUnit)> {
     if !self.is_resuming() {
       return None;
     }
@@ -156,7 +156,7 @@ impl GridLayoutAlgorithm<'_, '_> {
     self.fragmentation.row_offset_adjustments = data.row_offset_adjustments.clone();
     self.fragmentation.row_break_between = data.row_break_between.clone();
     Some((
-      data.sizing_tree.clone(),
+      data.grid_state.clone(),
       data.out_of_flow_children.clone(),
       intrinsic_block_size,
     ))
@@ -223,7 +223,7 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// them and moved past a break, or the `unfragmented` ones when the grid does not break.
   pub(super) fn place_grid_items_for_fragmentation(
     &mut self,
-    sizing_tree: &mut GridSizingTree,
+    grid_state: &mut GridLayoutState,
     intrinsic_block_size: &mut LayoutUnit,
     unfragmented: (Vec<PlacedChild>, GridBaselineAccumulator),
   ) -> (Vec<PlacedChild>, GridBaselineAccumulator) {
@@ -232,7 +232,7 @@ impl GridLayoutAlgorithm<'_, '_> {
     }
     if !self.is_resuming() {
       self.fragmentation.row_offset_adjustments =
-        vec![LayoutUnit::ZERO; sizing_tree.layout_data.rows.set_count() + 1];
+        vec![LayoutUnit::ZERO; grid_state.layout_data.rows.set_count() + 1];
     }
 
     let mut fragmentainer_space = self
@@ -251,7 +251,7 @@ impl GridLayoutAlgorithm<'_, '_> {
 
     let mut previous_expansion_row_set_index = None;
     let mut page = self.place_items_on_page(
-      sizing_tree,
+      grid_state,
       fragmentainer_space,
       cloned_block_start_decoration,
       previous_expansion_row_set_index,
@@ -264,17 +264,17 @@ impl GridLayoutAlgorithm<'_, '_> {
     {
       *intrinsic_block_size += page.max_row_expansion;
       self.adjust_item_offsets(
-        sizing_tree,
+        grid_state,
         expansion_row_set_index + 1,
         page.max_row_expansion,
       );
-      sizing_tree
+      grid_state
         .layout_data
         .rows
         .adjust_set_offsets(expansion_row_set_index + 1, page.max_row_expansion);
       previous_expansion_row_set_index = Some(expansion_row_set_index);
       page = self.place_items_on_page(
-        sizing_tree,
+        grid_state,
         fragmentainer_space,
         cloned_block_start_decoration,
         previous_expansion_row_set_index,
@@ -282,13 +282,13 @@ impl GridLayoutAlgorithm<'_, '_> {
     }
 
     if self.shift_breakpoint_into_next_fragmentainer(
-      sizing_tree,
+      grid_state,
       &page,
       &mut fragmentainer_space,
       intrinsic_block_size,
     ) {
       page = self.place_items_on_page(
-        sizing_tree,
+        grid_state,
         fragmentainer_space,
         cloned_block_start_decoration,
         previous_expansion_row_set_index,
@@ -325,13 +325,13 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// laid out at its place, the row to break before, and how much a row grows to fit its items.
   fn place_items_on_page(
     &mut self,
-    sizing_tree: &GridSizingTree,
+    grid_state: &GridLayoutState,
     fragmentainer_space: Option<LayoutUnit>,
     cloned_block_start_decoration: LayoutUnit,
     previous_expansion_row_set_index: Option<usize>,
   ) -> GridPage {
     let mut page = GridPage::default();
-    let layout_data = &sizing_tree.layout_data;
+    let layout_data = &grid_state.layout_data;
     let offset_in_stitched_container = self.fragmentation.offset_in_stitched_container;
     let capacity = self.fragmentainer_capacity_for_children();
     let break_token = self.fragmentation.input.break_token.clone();
@@ -342,7 +342,12 @@ impl GridLayoutAlgorithm<'_, '_> {
       .iter()
       .peekable();
 
-    for (index, item) in sizing_tree.grid_items.iter().enumerate() {
+    for (index, (item, layout_subtree)) in grid_state
+      .grid_items
+      .iter()
+      .zip(grid_state.item_layout_subtrees())
+      .enumerate()
+    {
       let placement = self.fragmentation.placement_data[index];
       let token = match child_break_tokens.peek() {
         Some(BreakToken::Block(token)) if token.node == item.node => {
@@ -369,7 +374,8 @@ impl GridLayoutAlgorithm<'_, '_> {
         }
         _ => LayoutUnit::ZERO,
       };
-      let (mut space, mut grid_area) = self.space_for_layout(item, layout_data);
+      let (mut space, mut grid_area) =
+        self.create_constraint_space_for_layout(item, layout_data, layout_subtree);
 
       if unavailable_block_size != LayoutUnit::ZERO {
         let shrink = |size: LayoutUnit| size - unavailable_block_size;
@@ -515,7 +521,7 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// Blink's `AdjustItemOffsets`: the items from row `row_index` on move by `delta`.
   fn adjust_item_offsets(
     &mut self,
-    sizing_tree: &GridSizingTree,
+    grid_state: &GridLayoutState,
     row_index: usize,
     delta: LayoutUnit,
   ) {
@@ -523,7 +529,7 @@ impl GridLayoutAlgorithm<'_, '_> {
       .fragmentation
       .placement_data
       .iter_mut()
-      .zip(&sizing_tree.grid_items)
+      .zip(grid_state.grid_items.iter())
     {
       if item.set_indices(ForRows).0 >= row_index {
         placement.offset.block_offset += delta;
@@ -535,7 +541,7 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// next page's start, whether it moved.
   fn shift_breakpoint_into_next_fragmentainer(
     &mut self,
-    sizing_tree: &GridSizingTree,
+    grid_state: &GridLayoutState,
     page: &GridPage,
     fragmentainer_space: &mut Option<LayoutUnit>,
     intrinsic_block_size: &mut LayoutUnit,
@@ -543,7 +549,7 @@ impl GridLayoutAlgorithm<'_, '_> {
     let Some(breakpoint) = page.breakpoint_row_set_index else {
       return false;
     };
-    let row_offset = sizing_tree.layout_data.rows.set_offset(breakpoint)
+    let row_offset = grid_state.layout_data.rows.set_offset(breakpoint)
       + self.fragmentation.row_offset_adjustments[breakpoint];
     let fragment_relative_row_offset = row_offset - self.fragmentation.offset_in_stitched_container;
     let Some(space) = *fragmentainer_space else {
@@ -557,7 +563,7 @@ impl GridLayoutAlgorithm<'_, '_> {
     }
 
     *intrinsic_block_size += row_offset_delta;
-    self.adjust_item_offsets(sizing_tree, breakpoint, row_offset_delta);
+    self.adjust_item_offsets(grid_state, breakpoint, row_offset_delta);
     for adjustment in &mut self.fragmentation.row_offset_adjustments[breakpoint..] {
       *adjustment += row_offset_delta;
     }
@@ -655,7 +661,7 @@ impl GridLayoutAlgorithm<'_, '_> {
   /// Keeps the grid in the break token for the next page to resume from.
   pub(super) fn keep_break_token_data(
     &mut self,
-    sizing_tree: GridSizingTree,
+    grid_state: GridLayoutState,
     intrinsic_block_size: LayoutUnit,
     out_of_flow_children: Vec<NodeId>,
   ) {
@@ -665,7 +671,7 @@ impl GridLayoutAlgorithm<'_, '_> {
 
     self.builder.break_token_data =
       Some(BreakTokenAlgorithmData::Grid(Rc::new(GridBreakTokenData {
-        sizing_tree,
+        grid_state,
         out_of_flow_children,
         intrinsic_block_size,
         offset_in_stitched_container: self.fragmentation.offset_in_stitched_container,

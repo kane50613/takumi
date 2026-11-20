@@ -21,6 +21,16 @@ pub(crate) struct GridLayoutData {
   row_baselines: Option<Vec<Option<LayoutUnit>>>,
 }
 
+impl Default for GridLayoutData {
+  /// The layout data of a grid whose collections its sizing tree has yet to build.
+  fn default() -> Self {
+    Self::new(
+      GridTrackCollection::empty(GridTrackSizingDirection::ForColumns),
+      GridTrackCollection::empty(GridTrackSizingDirection::ForRows),
+    )
+  }
+}
+
 impl GridLayoutData {
   pub(crate) fn new(columns: GridTrackCollection, rows: GridTrackCollection) -> Self {
     Self {
@@ -29,6 +39,40 @@ impl GridLayoutData {
       column_baselines: None,
       row_baselines: None,
     }
+  }
+
+  /// Blink's `HasSubgriddedAxis`: whether the parent grid's tracks give `direction`'s.
+  pub(crate) fn has_subgridded_axis(&self, direction: GridTrackSizingDirection) -> bool {
+    !self.collection(direction).is_for_sizing()
+  }
+
+  /// Blink's `IsSubgridWithStandaloneAxis`.
+  pub(crate) fn is_subgrid_with_standalone_axis(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> bool {
+    !self.has_subgridded_axis(direction) && self.has_subgridded_axis(direction.opposite())
+  }
+
+  /// Blink's `OnlySubgriddedCollection`.
+  pub(crate) fn only_subgridded_collection(&self) -> &GridTrackCollection {
+    if self.columns.is_for_sizing() {
+      &self.rows
+    } else {
+      &self.columns
+    }
+  }
+
+  /// Blink's `HasIndefiniteSet`.
+  pub(crate) fn has_indefinite_set(&self) -> bool {
+    self.columns.has_indefinite_set() || self.rows.has_indefinite_set()
+  }
+
+  /// Blink's `SetTrackCollection`.
+  pub(crate) fn set_track_collection(&mut self, track_collection: GridTrackCollection) {
+    let direction = track_collection.direction;
+
+    *self.collection_mut(direction) = track_collection;
   }
 
   pub(crate) fn collection(&self, direction: GridTrackSizingDirection) -> &GridTrackCollection {
@@ -69,10 +113,6 @@ impl GridLayoutData {
     self.baselines(direction).is_some()
   }
 
-  pub(crate) fn has_any_baselines(&self) -> bool {
-    self.column_baselines.is_some() || self.row_baselines.is_some()
-  }
-
   pub(crate) fn major_baseline(
     &self,
     direction: GridTrackSizingDirection,
@@ -82,6 +122,23 @@ impl GridLayoutData {
       .baselines(direction)
       .as_ref()
       .and_then(|baselines| baselines.get(set_index).copied().flatten())
+  }
+
+  /// Blink's `GetBaselines`, the major ones.
+  pub(crate) fn major_baselines(
+    &self,
+    direction: GridTrackSizingDirection,
+  ) -> Option<&[Option<LayoutUnit>]> {
+    self.baselines(direction).as_deref()
+  }
+
+  /// Blink's `SetBaselines`.
+  pub(crate) fn set_major_baselines(
+    &mut self,
+    direction: GridTrackSizingDirection,
+    baselines: Vec<Option<LayoutUnit>>,
+  ) {
+    *self.baselines_mut(direction) = Some(baselines);
   }
 
   pub(crate) fn create_baselines(&mut self, direction: GridTrackSizingDirection) {

@@ -6,6 +6,7 @@ pub(crate) mod grid_item;
 pub(crate) mod grid_layout_algorithm;
 pub(crate) mod grid_line_resolver;
 pub(crate) mod grid_placement;
+pub(crate) mod grid_sizing_tree;
 pub(crate) mod grid_style;
 pub(crate) mod grid_track_collection;
 pub(crate) mod grid_track_sizing_algorithm;

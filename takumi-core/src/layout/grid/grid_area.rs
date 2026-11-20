@@ -93,12 +93,51 @@ impl GridSpan {
     self.kind == GridSpanType::Indefinite
   }
 
+  pub(crate) fn is_translated_definite(&self) -> bool {
+    self.kind == GridSpanType::TranslatedDefinite
+  }
+
   pub(crate) fn translate(&mut self, offset: usize) {
+    self.translate_by(offset as i32);
+  }
+
+  /// Blink's `Translate` with a negative `offset`, as a subgrid moves its parent's areas to its own
+  /// first line.
+  pub(crate) fn translate_by(&mut self, offset: i32) {
     *self = Self::new(
-      self.start_line + offset as i32,
-      self.end_line + offset as i32,
+      self.start_line + offset,
+      self.end_line + offset,
       GridSpanType::TranslatedDefinite,
     );
+  }
+
+  /// Blink's `Contains`: whether `line` is one of the span's lines, its end line included.
+  pub(crate) fn contains(&self, line: usize) -> bool {
+    self.start_line() <= line && line <= self.end_line()
+  }
+
+  /// Blink's `Intersects`.
+  pub(crate) fn intersects(&self, span: GridSpan) -> bool {
+    self.start_line < span.end_line && self.end_line >= span.start_line
+  }
+
+  /// Blink's `Intersect`.
+  pub(crate) fn intersect(&mut self, start_line: i32, end_line: i32) {
+    *self = Self::new(
+      self.start_line.max(start_line),
+      self.end_line.min(end_line),
+      GridSpanType::TranslatedDefinite,
+    );
+  }
+
+  /// Blink's `SetStart`.
+  pub(crate) fn set_start(&mut self, start_line: i32) {
+    *self = Self::new(start_line, self.end_line, GridSpanType::TranslatedDefinite);
+  }
+
+  /// Blink's `SetEnd`.
+  pub(crate) fn set_end(&mut self, end_line: i32) {
+    *self = Self::new(self.start_line, end_line, GridSpanType::TranslatedDefinite);
   }
 }
 

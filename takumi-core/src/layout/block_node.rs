@@ -13,7 +13,7 @@ use crate::{
     content_alignment::BlockContentAlignment,
     flex::flex_layout_algorithm::FlexLayoutAlgorithm,
     fragmentation_layout_input::{ChildBreakToken, FragmentationLayoutInput},
-    grid::grid_layout_algorithm::GridLayoutAlgorithm,
+    grid::{grid_layout_algorithm::GridLayoutAlgorithm, grid_sizing_tree::GridLayoutSubtree},
     inline::{
       atomic_inline::BoxAtomicInline, inline_layout_algorithm::LineBoxFragment,
       inline_node::InlineNode, inline_node_data::InlineNodeData,
@@ -69,12 +69,13 @@ struct CacheEntries {
 }
 
 /// What a box's intrinsic inline sizes depend on in the space it is sized in.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct MinMaxKey {
   percentage_resolution_inline_size: Option<LayoutUnit>,
   percentage_resolution_block_size: Option<LayoutUnit>,
   available_block_size: Option<LayoutUnit>,
   is_new_formatting_context: bool,
+  grid_layout_subtree: Option<GridLayoutSubtree>,
 }
 
 impl MinMaxKey {
@@ -84,6 +85,7 @@ impl MinMaxKey {
       percentage_resolution_block_size: space.percentage_resolution_block_size,
       available_block_size: space.available_block_size,
       is_new_formatting_context: space.is_new_formatting_context,
+      grid_layout_subtree: space.grid_layout_subtree.clone(),
     }
   }
 }
@@ -182,7 +184,7 @@ impl LayoutCache {
     );
   }
 
-  fn min_max_sizes(&self, key: (MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
+  fn min_max_sizes(&self, key: &(MinMaxKey, SizeType)) -> Option<MinMaxSizesResult> {
     #[cfg(feature = "fragmentation")]
     debug_assert!(
       self.released != Self::ALL_RELEASED,
@@ -194,7 +196,7 @@ impl LayoutCache {
       .as_deref()?
       .min_max_sizes
       .iter()
-      .find(|(cached, _)| *cached == key)
+      .find(|(cached, _)| cached == key)
       .map(|&(_, sizes)| sizes)
   }
 
@@ -632,7 +634,7 @@ impl<'r> LayoutTree<'r> {
   ) -> MinMaxSizesResult {
     let key = (MinMaxKey::of(space), size_type);
 
-    if let Some(sizes) = self.node_state(node).cache.min_max_sizes(key) {
+    if let Some(sizes) = self.node_state(node).cache.min_max_sizes(&key) {
       return sizes;
     }
 
