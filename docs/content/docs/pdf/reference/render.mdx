@@ -1,0 +1,162 @@
+---
+title: render()
+description: Every option render() takes, grouped by what it sets, and what it returns.
+---
+
+`render()` lays out JSX, an HTML string, or a node tree across pages and resolves to the PDF bytes, a `Uint8Array`.
+
+```ts twoslash title="Render a document"
+import { render } from "takumi-pdf";
+
+const pdf = await render("<h1>Invoice 1042</h1>", { size: "letter", outline: true });
+```
+
+It uses one renderer shared by every call. To keep a font registry of your own, call `render()` on a [`PdfRenderer`](/docs/pdf/reference/renderer), which takes the same options.
+
+## Page
+
+These options lay content out across pages. They can't be combined with `viewport`.
+
+<TypeTable
+  type={{
+    size: {
+      type: '"a3" | "a4" | "a5" | "b4" | "b5" | "jis-b4" | "jis-b5" | "ledger" | "legal" | "letter" | { width, height }',
+      default: '"a4"',
+      description: "Page size. An object is in CSS px at 96 dpi. A `@page` rule wins over it.",
+      typeDescriptionLink: "/docs/pdf/page-setup",
+    },
+    landscape: {
+      type: "boolean",
+      default: "false",
+      description: "Swaps the page width and height, explicit sizes included.",
+    },
+    margin: {
+      type: 'number | "auto" | { top?, right?, bottom?, left? }',
+      default: '"auto"',
+      description: 'Page margin in CSS px. `"auto"` fits the header or footer on that side.',
+      typeDescriptionLink: "/docs/pdf/page-setup#automatic-margins",
+    },
+    header: {
+      type: "JSX | string | Node | false",
+      description: "A band repeated in the top margin of every page.",
+      typeDescriptionLink: "/docs/pdf/headers",
+    },
+    footer: {
+      type: "JSX | string | Node | false",
+      description: "A band repeated in the bottom margin of every page.",
+      typeDescriptionLink: "/docs/pdf/headers",
+    },
+    pages: {
+      type: "{ first?, last?, odd?, even? }",
+      description:
+        "Replaces the header or footer on some pages. Each field takes `{ header?, footer? }`.",
+      typeDescriptionLink: "/docs/pdf/headers#pages-that-differ",
+    },
+    pageRanges: {
+      type: "(number | { from?, to? })[]",
+      description: "The pages the file keeps, counted from 1. Page numbers still count every page.",
+      typeDescriptionLink: "/docs/pdf/pagination#page-ranges",
+    },
+  }}
+/>
+
+## Single page
+
+<TypeTable
+  type={{
+    viewport: {
+      type: "{ width: number; height?: number }",
+      description:
+        "Renders one page of this size in CSS px, like an image. Without `height`, the page is as tall as the content.",
+      typeDescriptionLink: "/docs/pdf/viewport",
+    },
+  }}
+/>
+
+## Content
+
+<TypeTable
+  type={{
+    css: {
+      type: "CssInput | CssInput[]",
+      description:
+        "Stylesheets applied before layout, cascading in order. `@page` rules here set the page.",
+      typeDescriptionLink: "/docs/styles#css",
+    },
+    fonts: {
+      type: "FontLoader[]",
+      description:
+        "Fonts to load: URLs, bytes, descriptors, or `googleFonts()` entries. A loaded font is reused while the renderer's cache keeps it.",
+      typeDescriptionLink: "/docs/pdf/assets#fonts",
+    },
+    fontFamilies: {
+      type: "string[]",
+      description: "The families text falls back through, in order.",
+      typeDescriptionLink: "/docs/fonts",
+    },
+    images: {
+      type: "ImageLoader[] | { sources?, cache? }",
+      description: "Images by `src`, so the render doesn't fetch them.",
+      typeDescriptionLink: "/docs/pdf/assets#images",
+    },
+    lang: {
+      type: "string",
+      description:
+        "The BCP 47 language of the root element. Tagged output and metadata use it too.",
+    },
+    uncoveredText: {
+      type: '"error" | "placeholder" | "blank"',
+      default: '"error"',
+      description:
+        'What a character no font covers becomes. `"error"` fails the render and names the character.',
+      typeDescriptionLink: "/docs/pdf/assets#uncovered-text",
+    },
+    backgroundColor: {
+      type: "string",
+      description: "A CSS color painted under everything on every page, margins included.",
+    },
+  }}
+/>
+
+## Document
+
+<TypeTable
+  type={{
+    metadata: {
+      type: "{ title?, description?, authors?, keywords?, creator?, creationDate?, xmp? }",
+      description:
+        "The document properties a viewer shows. `creationDate` is UTC, and setting it keeps the bytes reproducible.",
+      typeDescriptionLink: "/docs/pdf/links#document-metadata",
+    },
+    outline: {
+      type: "boolean",
+      default: "false",
+      description: "Adds bookmarks for `h1` to `h6` headings.",
+      typeDescriptionLink: "/docs/pdf/links#outline",
+    },
+    attachments: {
+      type: "{ name, data, mimeType?, description?, relationship?, modificationDate? }[]",
+      description: "Files embedded in the PDF, such as invoice XML.",
+      typeDescriptionLink: "/docs/pdf/attachments",
+    },
+    pdfa: {
+      type: '"2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4" | "4f"',
+      description:
+        "A PDF/A level to write and validate. A file that fails validation rejects the render.",
+      typeDescriptionLink: "/docs/pdf/conformance",
+    },
+    tagged: {
+      type: 'boolean | "ua1" | "ua2"',
+      default: "true",
+      description:
+        'Writes the structure tree, and with `"ua1"` or `"ua2"` validates it against PDF/UA.',
+      typeDescriptionLink: "/docs/pdf/conformance#tagged-output",
+    },
+    signal: {
+      type: "AbortSignal",
+      description: "Stops the render before it reads or draws the document.",
+    },
+  }}
+/>
+
+The types reject combinations a standard forbids. For example, `pdfa: "2a"` with `tagged: false`, or `attachments` with a PDF/A-2 level, fail to typecheck. See [Compatible options](/docs/pdf/conformance#compatible-options).
