@@ -157,7 +157,7 @@ Takumi runs the Unicode Bidirectional Algorithm, so Arabic and Hebrew text, mixe
 <p dir="rtl">مرحبا بالعالم, Hello</p>
 ```
 
-An element with a `dir` attribute isolates its text from the text around it, as does `<bdi>`. `<bdo>` also overrides the order of its text. These match the HTML default styles a browser applies.
+An element with a `dir` attribute isolates its text from the text around it, as does `<bdi>`. `dir="auto"` and `<bdi>` take their direction from their content, and `<bdo>` overrides the order of its text. These match the HTML default styles a browser applies.
 
 Digits right after Arabic text count as Arabic numbers, so a date written with hyphens, such as `2026-11-19`, reorders the same way it does in a browser. Wrap it in `<bdi>` to keep it in order:
 

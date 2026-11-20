@@ -513,6 +513,12 @@ impl Node {
     self
   }
 
+  /// Sets the presentation attributes' style and returns the updated node.
+  pub(crate) fn with_presentation(mut self, presentation: Style) -> Self {
+    self.metadata.presentation = Some(Box::new(presentation));
+    self
+  }
+
   /// Sets the inline style and returns the updated node.
   pub fn with_style(mut self, style: Style) -> Self {
     self.metadata.style = Some(Box::new(style));
