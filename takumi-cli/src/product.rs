@@ -128,6 +128,8 @@ pub(crate) fn run(
       None => true,
     });
 
+    Logger::listing();
+
     for each in std::iter::once(&document).chain(&bands) {
       each.list_resources(product, &fonts, sandbox, &mut lines)?;
     }

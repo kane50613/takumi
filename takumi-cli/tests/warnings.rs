@@ -186,3 +186,18 @@ fn a_missing_first_font_family_warns_once() {
     ]
   );
 }
+
+#[test]
+fn a_form_control_raises_no_warning() {
+  let (output, _dir) = render(
+    "form-control",
+    r#"<input value="Ada"><textarea>Notes</textarea><button>Send</button>"#,
+    &["--deny-warnings"],
+  );
+
+  assert!(
+    output.status.success(),
+    "{}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+}

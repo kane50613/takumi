@@ -108,3 +108,24 @@ fn an_svg_refuses_a_device_pixel_ratio() {
   assert_eq!(output.status.code(), Some(2));
   assert!(String::from_utf8_lossy(&output.stderr).contains("Drop `--dpr`"));
 }
+
+#[test]
+fn listing_a_font_face_raises_no_missing_family_warning() {
+  let dir = TempDir::new("listing-font-face");
+
+  fs::write(
+    dir.join("page.html"),
+    r#"<style>@font-face { font-family: Brand; src: url(Brand.woff2) } body { font-family: Brand }</style><p>One</p>"#,
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .args(["image", "--list-resources", "--deny-warnings"])
+    .arg(dir.join("page.html"))
+    .output()
+    .expect("runs takumi");
+  let messages = String::from_utf8_lossy(&output.stderr);
+
+  assert!(output.status.success(), "{messages}");
+  assert!(!messages.contains("no face is loaded"), "{messages}");
+}
