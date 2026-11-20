@@ -1,14 +1,16 @@
 //! `--selector`: the element whose box an image keeps. Approximate: it reads a compound of a type,
-//! `#id`, and `.class` selectors, where a browser's `querySelector` takes any selector.
+//! `#id`, and `.class` selectors, where a browser's `querySelector` takes any selector, and finds
+//! only elements that paint a box, which an inline element without a background or border does not.
 
 use std::fmt::{self, Display, Formatter};
 
+use cssparser::{Parser, Token};
 use takumi::prelude::Bitmap;
 use takumi_core::paint_tree::{ElementInfo, PaintDocument};
 
 /// A compound selector, such as `div.card` or `#hero`, matched against the first element in
 /// document order.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ElementSelector {
   tag_name: Option<String>,
   id: Option<String>,
@@ -18,53 +20,39 @@ pub(crate) struct ElementSelector {
 impl ElementSelector {
   /// `text` as a selector, or why it is not one `--selector` reads.
   pub(crate) fn parse(text: &str) -> Result<Self, String> {
-    let invalid = || {
-      format!(
-        "`{text}` is not a selector `--selector` reads. Use a type, `#id`, and `.class` together, such as `div.card`."
-      )
-    };
-    let is_name = |character: char| character.is_alphanumeric() || matches!(character, '-' | '_');
-    let mut selector = Self {
-      tag_name: None,
-      id: None,
-      class_names: Vec::new(),
-    };
-    let mut rest = text.trim();
-    let name_length = rest
-      .find(|character| !is_name(character))
-      .unwrap_or(rest.len());
+    Self::read(&mut Parser::new(text))
+      .filter(|selector| *selector != Self::default())
+      .ok_or_else(|| {
+        format!("`{text}` is not a selector `--selector` reads. Use a type, `#id`, and `.class` together, such as `div.card`.")
+      })
+  }
 
-    if name_length > 0 {
-      selector.tag_name = Some(rest[..name_length].to_ascii_lowercase());
-      rest = &rest[name_length..];
+  /// The compound `parser` holds, with CSS whitespace around it and nothing else.
+  fn read(parser: &mut Parser<'_>) -> Option<Self> {
+    let mut selector = Self::default();
+
+    parser.skip_whitespace();
+
+    if let Ok(name) = parser.try_parse(Parser::expect_ident_cloned) {
+      selector.tag_name = Some(name.to_ascii_lowercase());
     }
 
-    while let Some(marker) = rest.chars().next() {
-      let tail = &rest[1..];
-      let length = tail
-        .find(|character| !is_name(character))
-        .unwrap_or(tail.len());
+    loop {
+      match parser.next_including_whitespace() {
+        Ok(Token::IDHash(name)) if selector.id.is_none() => selector.id = Some(name.to_string()),
+        Ok(Token::Delim('.')) => match parser.next_including_whitespace() {
+          Ok(Token::Ident(name)) => selector.class_names.push(name.to_string()),
+          _ => return None,
+        },
+        Ok(Token::WhiteSpace(_)) => {
+          parser.skip_whitespace();
 
-      if length == 0 {
-        return Err(invalid());
+          return parser.is_exhausted().then_some(selector);
+        }
+        Err(_) => return Some(selector),
+        Ok(_) => return None,
       }
-
-      let name = tail[..length].to_owned();
-
-      match marker {
-        '#' if selector.id.is_none() => selector.id = Some(name),
-        '.' => selector.class_names.push(name),
-        _ => return Err(invalid()),
-      }
-
-      rest = &tail[length..];
     }
-
-    if selector.tag_name.is_none() && selector.id.is_none() && selector.class_names.is_empty() {
-      return Err(invalid());
-    }
-
-    Ok(selector)
   }
 
   fn matches(&self, element: &ElementInfo) -> bool {
@@ -92,10 +80,13 @@ impl ElementSelector {
       .nodes
       .iter()
       .filter_map(|node| node.element.as_ref())
-      .find(|element| self.matches(element))
+      .filter(|element| self.matches(element))
       .map(|element| &element.path)
+      .min()
     else {
-      return Err(format!("no element matches `--selector {}`.", self));
+      return Err(format!(
+        "no element matches `--selector {self}`. An inline element with no background or border draws no box of its own, so give it `display: inline-block`."
+      ));
     };
     let (left, top, right, bottom) = document
       .nodes
@@ -136,7 +127,9 @@ impl ElementSelector {
       ));
     }
 
-    Ok(bitmap.crop(x as u32, y as u32, (x_end - x) as u32, (y_end - y) as u32))
+    bitmap
+      .crop(x as u32, y as u32, (x_end - x) as u32, (y_end - y) as u32)
+      .ok_or_else(|| format!("`--selector {self}` matches an element outside the canvas."))
   }
 }
 
@@ -169,11 +162,36 @@ mod tests {
       ElementSelector::parse(".card").unwrap().to_string(),
       ".card"
     );
+    assert_eq!(
+      ElementSelector::parse(" .w-1\\/2\t").unwrap().class_names,
+      ["w-1/2"]
+    );
+    assert_eq!(
+      ElementSelector::parse("#cafe\u{301}")
+        .unwrap()
+        .id
+        .as_deref(),
+      Some("cafe\u{301}")
+    );
+    assert_eq!(
+      ElementSelector::parse(".card\u{a0}").unwrap().class_names,
+      ["card\u{a0}"]
+    );
   }
 
   #[test]
   fn refuses_what_it_cannot_match() {
-    for text in ["", "div > p", "a b", "#a#b", ".", "div:hover", "[href]"] {
+    for text in [
+      "",
+      "div > p",
+      "a b",
+      "#a#b",
+      ".",
+      "div:hover",
+      "[href]",
+      ".123",
+      "#123",
+    ] {
       assert!(ElementSelector::parse(text).is_err(), "{text}");
     }
   }

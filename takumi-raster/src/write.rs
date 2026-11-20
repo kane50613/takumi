@@ -236,8 +236,18 @@ impl Bitmap {
     self.data.as_chunks_mut().0[index] = pixel;
   }
 
-  /// The `width` by `height` region whose top-left pixel is `(x, y)`.
-  pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
+  /// The `width` by `height` region whose top-left pixel is `(x, y)`, or none when it does not fit.
+  pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Option<Self> {
+    let fits = |start: u32, length: u32, limit: u32| {
+      start.checked_add(length).is_some_and(|end| end <= limit)
+    };
+
+    (fits(x, width, self.width) && fits(y, height, self.height))
+      .then(|| self.crop_inside(x, y, width, height))
+  }
+
+  /// [`Self::crop`] of a region known to fit.
+  pub(crate) fn crop_inside(&self, x: u32, y: u32, width: u32, height: u32) -> Self {
     let row_bytes = width as usize * 4;
     let data = (y..y + height)
       .flat_map(|row| {
@@ -867,7 +877,7 @@ where
     let pixels = if region == FrameRegion::full(width, height) {
       image
     } else {
-      part = image.crop(region.x, region.y, region.width, region.height);
+      part = image.crop_inside(region.x, region.y, region.width, region.height);
       &part
     };
     let stream = encoding.deflate(
@@ -1580,7 +1590,7 @@ mod tests {
   #[test]
   fn crop_keeps_the_region() {
     let image = Bitmap::from_fn(4, 3, |x, y| [x as u8, y as u8, 0, 255]);
-    let cropped = image.crop(1, 1, 2, 2);
+    let cropped = image.crop(1, 1, 2, 2).unwrap();
 
     assert_eq!(cropped.dimensions(), (2, 2));
     assert_eq!(
@@ -1593,6 +1603,17 @@ mod tests {
       ]
       .concat()
     );
+  }
+
+  /// A region past an edge, or one whose end overflows, is no crop.
+  #[test]
+  fn crop_refuses_a_region_that_does_not_fit() {
+    let image = Bitmap::from_pixel(2, 2, [0, 0, 0, 255]);
+
+    assert!(image.crop(1, 1, 2, 1).is_none());
+    assert!(image.crop(1, 0, 2, 1).is_none());
+    assert!(image.crop(u32::MAX, 0, 2, 1).is_none());
+    assert!(image.crop(0, 0, 2, 2).is_some());
   }
 
   /// One icon directory entry pointing at a PNG of the image right after the header.

@@ -78,6 +78,35 @@ fn no_match_fails_and_names_the_selector() {
   assert!(!dir.join("out.png").exists());
   assert_eq!(
     String::from_utf8(output.stderr).unwrap(),
-    "error: no element matches `--selector .missing`.\n"
+    "error: no element matches `--selector .missing`. An inline element with no background or border draws no box of its own, so give it `display: inline-block`.\n"
   );
+}
+
+#[test]
+fn the_first_match_in_document_order_wins_over_paint_order() {
+  let dir = TempDir::new("selector-order");
+  let html = r#"<style>
+  body { margin: 0 }
+  .card { position: relative; background: #eef2ff }
+</style>
+<div class="card" style="z-index: 1; width: 100px; height: 50px"></div>
+<div class="card" style="z-index: 0; width: 200px; height: 80px"></div>"#;
+
+  fs::write(dir.join("page.html"), html).unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .args(["--selector", ".card"])
+    .output()
+    .expect("runs takumi");
+
+  assert!(
+    output.status.success(),
+    "{}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+  assert_eq!(png_size(&fs::read(dir.join("out.png")).unwrap()), (100, 50));
 }

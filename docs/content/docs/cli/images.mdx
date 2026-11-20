@@ -56,7 +56,7 @@ takumi image photo.html -o photo.webp --quality 80
 takumi image page.html -o pricing.png --selector .pricing-card
 ```
 
-The page still lays out at `--width`, so the element keeps the size it has there. `--selector` takes a type, `#id`, and `.class` written together, such as `section.pricing-card` or `#hero`. It reads no combinators or pseudo-classes, so give the element a class or an id to pick it. It writes PNG, JPEG, or WebP, not SVG.
+The page still lays out at `--width`, so the element keeps the size it has there. `--selector` takes a type, `#id`, and `.class` written together, such as `section.pricing-card` or `#hero`. It reads no combinators or pseudo-classes, so give the element a class or an id to pick it. An inline element with no background or border draws no box of its own, so it needs `display: inline-block` to be found. It writes PNG, JPEG, or WebP, not SVG.
 
 ## Keep a transparent background
 
