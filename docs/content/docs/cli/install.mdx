@@ -1,13 +1,29 @@
 ---
 title: Install and upgrade
-description: Install the takumi CLI as a prebuilt binary with cargo binstall or build it with cargo install, keep it up to date with takumi upgrade, and remove it.
+description: Install the takumi CLI from npm, as a prebuilt binary with cargo binstall, or build it with cargo install, keep it up to date, and remove it.
 ---
 
-Cargo installs the CLI in one of two ways. `cargo binstall` downloads a prebuilt binary in seconds, while `cargo install` builds takumi on your machine, which takes a few minutes and needs Rust 1.91 or later.
+npm and `cargo binstall` both download a prebuilt binary in seconds. `cargo install` builds takumi on your machine instead, which takes a few minutes and needs Rust 1.91 or later.
+
+## Install from npm
+
+`@takumi-rs/cli` runs takumi without Rust. Run it once with `npx`:
+
+```npm
+npx @takumi-rs/cli image card.html -o card.png --width 1200 --height 630
+```
+
+To keep it in a project, add it as a dev dependency. The project's scripts can then call `takumi`:
+
+```npm
+npm i -D @takumi-rs/cli
+```
+
+The package installs the binary for your platform through an optional dependency, for macOS, Windows, and Linux on x64 and arm64. If the package manager skipped optional dependencies, `takumi` exits with an error that names the package it is missing. Upgrade and remove it with your package manager.
 
 ## Install Rust
 
-Both ways run through Cargo. Skip this step if `cargo --version` prints a version, and for `cargo install`, if it prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
+The two ways below run through Cargo. Skip this step if `cargo --version` prints a version, and for `cargo install`, if it prints 1.91 or later. Otherwise install Rust with [rustup](https://rustup.rs), which also puts Cargo on your `PATH`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -69,7 +85,7 @@ takumi upgrade
 
 `takumi upgrade` reinstalls takumi from the source Cargo recorded when you installed it, into the same directory. An install from crates.io moves to the newest release, and an install that followed a branch moves to that branch's latest commit. It never checks for updates on its own.
 
-`takumi upgrade` does not upgrade an install from `cargo binstall`. Run `cargo binstall takumi-cli` again instead, which downloads the newest release.
+`takumi upgrade` does not upgrade an install from `cargo binstall` or npm. Run `cargo binstall takumi-cli` again instead, which downloads the newest release.
 
 To see the `cargo install` command it would run without running it, add `--dry-run`:
 
@@ -118,4 +134,4 @@ Run the command again after `takumi upgrade`, so the script knows the new comman
 cargo uninstall takumi-cli
 ```
 
-This removes the `takumi` binary and Cargo's record of it, whichever source it came from.
+This removes the `takumi` binary and Cargo's record of it, whichever source it came from. An install from npm is removed with your package manager instead.

@@ -3,6 +3,7 @@
 `takumi` renders an HTML file to an image or a PDF.
 
 ```sh
+npx @takumi-rs/cli --help   # from npm, without Rust
 cargo binstall takumi-cli   # a prebuilt binary. Run it again to upgrade
 cargo install --locked takumi-cli   # or build it, then `takumi upgrade` later for the newest release
 takumi completions zsh > ~/.zfunc/_takumi   # zsh Tab completion. See the install guide for bash, fish, and PowerShell

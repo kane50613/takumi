@@ -288,6 +288,48 @@
         "react": "catalog:",
       },
     },
+    "takumi-cli/npm": {
+      "name": "@takumi-rs/cli",
+      "version": "0.1.0",
+      "bin": {
+        "takumi": "bin/takumi.js",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+      },
+      "optionalDependencies": {
+        "@takumi-rs/cli-darwin-arm64": "workspace:*",
+        "@takumi-rs/cli-darwin-x64": "workspace:*",
+        "@takumi-rs/cli-linux-arm64": "workspace:*",
+        "@takumi-rs/cli-linux-x64": "workspace:*",
+        "@takumi-rs/cli-win32-arm64": "workspace:*",
+        "@takumi-rs/cli-win32-x64": "workspace:*",
+      },
+    },
+    "takumi-cli/npm/platforms/darwin-arm64": {
+      "name": "@takumi-rs/cli-darwin-arm64",
+      "version": "0.1.0",
+    },
+    "takumi-cli/npm/platforms/darwin-x64": {
+      "name": "@takumi-rs/cli-darwin-x64",
+      "version": "0.1.0",
+    },
+    "takumi-cli/npm/platforms/linux-arm64": {
+      "name": "@takumi-rs/cli-linux-arm64",
+      "version": "0.1.0",
+    },
+    "takumi-cli/npm/platforms/linux-x64": {
+      "name": "@takumi-rs/cli-linux-x64",
+      "version": "0.1.0",
+    },
+    "takumi-cli/npm/platforms/win32-arm64": {
+      "name": "@takumi-rs/cli-win32-arm64",
+      "version": "0.1.0",
+    },
+    "takumi-cli/npm/platforms/win32-x64": {
+      "name": "@takumi-rs/cli-win32-x64",
+      "version": "0.1.0",
+    },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
       "version": "2.21.0",
@@ -1297,6 +1339,20 @@
     "@tailwindcss/vite": ["@tailwindcss/vite@4.3.5", "", { "dependencies": { "@tailwindcss/node": "4.3.5", "@tailwindcss/oxide": "4.3.5", "tailwindcss": "4.3.5" }, "peerDependencies": { "vite": "^5.2.0 || ^6 || ^7 || ^8" } }, "sha512-BCNiY0a1ZjdOHVqw7kyb7U72BwfMF3dfUuN+tQsLWky/J5JOI/r7abibglXfygrZhVO/3u3V+E25kkKTeMkXaQ=="],
 
     "@takumi-rs/bindings-js": ["@takumi-rs/bindings-js@workspace:takumi-bindings-js"],
+
+    "@takumi-rs/cli": ["@takumi-rs/cli@workspace:takumi-cli/npm"],
+
+    "@takumi-rs/cli-darwin-arm64": ["@takumi-rs/cli-darwin-arm64@workspace:takumi-cli/npm/platforms/darwin-arm64"],
+
+    "@takumi-rs/cli-darwin-x64": ["@takumi-rs/cli-darwin-x64@workspace:takumi-cli/npm/platforms/darwin-x64"],
+
+    "@takumi-rs/cli-linux-arm64": ["@takumi-rs/cli-linux-arm64@workspace:takumi-cli/npm/platforms/linux-arm64"],
+
+    "@takumi-rs/cli-linux-x64": ["@takumi-rs/cli-linux-x64@workspace:takumi-cli/npm/platforms/linux-x64"],
+
+    "@takumi-rs/cli-win32-arm64": ["@takumi-rs/cli-win32-arm64@workspace:takumi-cli/npm/platforms/win32-arm64"],
+
+    "@takumi-rs/cli-win32-x64": ["@takumi-rs/cli-win32-x64@workspace:takumi-cli/npm/platforms/win32-x64"],
 
     "@takumi-rs/core": ["@takumi-rs/core@workspace:takumi-napi"],
 
