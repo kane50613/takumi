@@ -514,6 +514,7 @@ impl Node {
   }
 
   /// Sets the presentation attributes' style and returns the updated node.
+  #[cfg(feature = "html")]
   pub(crate) fn with_presentation(mut self, presentation: Style) -> Self {
     self.metadata.presentation = Some(Box::new(presentation));
     self
