@@ -146,11 +146,19 @@ impl PdfArgs {
 
 /// `property: value` for an `@page` rule, refusing a value takumi does not read or that could escape it.
 fn check_page_declaration(property: &str, value: &str) -> Result<String, String> {
+  let rejected = || {
+    let examples = if property == "size" {
+      "a size such as `A4`, `letter landscape`, or `210mm 297mm`"
+    } else {
+      "one to four lengths such as `1cm` or `1in 0.75in`"
+    };
+
+    format!("`{value}` is not a CSS `{property}` value takumi reads. Use {examples}.")
+  };
+
   // Nothing may end the declaration or rule or make it `!important`, so the document's `@page` rule still overrides it.
   if value.contains(['{', '}', ';', '!', '@', '\\']) || value.contains("/*") {
-    return Err(format!(
-      "`{value}` is not a CSS `{property}` value takumi reads."
-    ));
+    return Err(rejected());
   }
 
   // takumi reads a bare number as px, where CSS takes only `0` without a unit. A function such as
@@ -178,9 +186,7 @@ fn check_page_declaration(property: &str, value: &str) -> Result<String, String>
   if is_read {
     Ok(declaration)
   } else {
-    Err(format!(
-      "`{value}` is not a CSS `{property}` value takumi reads."
-    ))
+    Err(rejected())
   }
 }
 

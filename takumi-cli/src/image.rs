@@ -52,6 +52,9 @@ pub(crate) struct ImageArgs {
   selector: Option<ElementSelector>,
 }
 
+/// The most pixels an image holds, takumi-raster's canvas limit.
+const MAX_IMAGE_PIXELS: u64 = 64 << 20;
+
 /// The viewport a product lays the document out in.
 #[derive(clap::Args)]
 pub(crate) struct ViewportArgs {
@@ -274,7 +277,13 @@ impl Product for Image {
     let bitmap = render(self.options(&document, fonts, images)).map_err(|error| -> Box<dyn Error> {
       match error {
         RenderError::InvalidViewport if self.viewport.size.height.is_none() => {
-          "the image would be 0px tall or over 64 megapixels at the content's height. Pass `--height`.".into()
+          let width = self.viewport.size.width.unwrap_or(1).max(1);
+
+          format!(
+            "the image would be 0px tall or over 64 megapixels at the content's height, which at {width}px wide allows at most {}px. Pass `--height`.",
+            MAX_IMAGE_PIXELS / u64::from(width)
+          )
+          .into()
         }
         error => error.into(),
       }

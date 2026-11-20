@@ -229,3 +229,51 @@ fn debug_names_the_later_font_families_the_render_found_missing() {
     "{steps}"
   );
 }
+
+#[test]
+fn binary_input_is_named_as_not_html() {
+  let dir = TempDir::new("log-binary-input");
+
+  fs::write(dir.join("page.html"), [0x89, b'P', b'N', b'G', 0, 0, 0]).unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(
+    message.contains("holds binary data, not HTML text."),
+    "{message}"
+  );
+}
+
+#[test]
+fn a_page_too_tall_names_the_most_height_the_width_allows() {
+  let dir = TempDir::new("log-too-tall");
+
+  fs::write(
+    dir.join("page.html"),
+    r#"<div style="height: 60000px"></div>"#,
+  )
+  .unwrap();
+
+  let output = Command::new(env!("CARGO_BIN_EXE_takumi"))
+    .arg("image")
+    .arg(dir.join("page.html"))
+    .arg("-o")
+    .arg(dir.join("out.png"))
+    .output()
+    .expect("runs takumi");
+  let message = String::from_utf8(output.stderr).unwrap();
+
+  assert_eq!(output.status.code(), Some(1));
+  assert!(
+    message.contains("which at 1200px wide allows at most 55924px. Pass `--height`."),
+    "{message}"
+  );
+}
