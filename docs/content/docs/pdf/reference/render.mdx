@@ -86,7 +86,7 @@ These options lay content out across pages. They can't be combined with `viewpor
     fonts: {
       type: "FontLoader[]",
       description:
-        "Fonts to load: URLs, bytes, descriptors, or `googleFonts()` entries. Each file loads once per renderer.",
+        "Fonts to load: URLs, bytes, descriptors, or `googleFonts()` entries. A loaded font is reused while the renderer's cache keeps it.",
       typeDescriptionLink: "/docs/pdf/assets#fonts",
     },
     fontFamilies: {
