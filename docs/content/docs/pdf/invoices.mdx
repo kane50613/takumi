@@ -7,15 +7,15 @@ An invoice needs line items that flow across pages, totals that stay in one piec
 
 ## A plain invoice
 
-Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. `measure()` returns the footer's height, so you can reserve enough bottom margin. [Headers & footers](/docs/pdf/headers) covers the footer in full.
+Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. The bottom margin is left out, so it stays `"auto"` and grows to fit the footer. [Headers & footers](/docs/pdf/headers) covers the footer in full.
 
-```tsx twoslash title="Reserve space for an invoice footer"
+```tsx twoslash title="An invoice with a page footer"
 import type { ReactNode } from "react";
 declare const invoice: { number: string };
 declare function InvoiceDocument(props: { data: typeof invoice }): ReactNode;
 // ---cut---
 import { googleFonts } from "@takumi-rs/helpers";
-import { measure, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const footer = (
@@ -27,16 +27,12 @@ const footer = (
   </div>
 );
 
-const fonts = await googleFonts(["Inter"]);
-// [!code highlight]
-const { height } = await measure(footer, { size: "a4", fonts });
-
 const pdf = await render(<InvoiceDocument data={invoice} />, {
   size: "a4",
   // [!code highlight]
-  margin: { top: 48, bottom: height + 32, left: 48, right: 48 },
+  margin: { top: 48, left: 48, right: 48 },
   footer,
-  fonts,
+  fonts: await googleFonts(["Inter"]),
 });
 ```
 
@@ -46,8 +42,8 @@ Use `break-inside: avoid`, or `break-inside-avoid` in Tailwind, to keep a line i
 
 ```tsx twoslash title="Keep a line item together"
 declare const item: { description: string; amount: string };
-// ---cut---
 import "takumi-pdf";
+// ---cut---
 
 // [!code highlight]
 <div tw="flex break-inside-avoid gap-3 pt-3 text-xs">
@@ -70,7 +66,7 @@ Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. The tab
 | A modification date per file | `modificationDate` |
 | Embedded subset fonts        | always on          |
 
-Each attachment's `modificationDate` falls back to `metadata.creationDate`, so one document date covers both. See [Attachments](/docs/pdf/attachments) for every attachment field. This example also validates against PDF/UA-1:
+The example attaches a MINIMUM profile as `factur-x.xml` with the `text/xml` type and the `"data"` relationship. Check your profile's specification for the values it requires. Each attachment's `modificationDate` falls back to `metadata.creationDate`, so one document date covers both. See [Attachments](/docs/pdf/attachments) for every attachment field. This example also validates against PDF/UA-1:
 
 ```tsx twoslash title="Attach invoice XML"
 import type { ReactNode } from "react";

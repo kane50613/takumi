@@ -83,7 +83,7 @@ Render a Svelte component to HTML on the server. Then pass that HTML and its CSS
 
 ## Render a PDF
 
-The same component HTML renders to a PDF with [`takumi-pdf`](/docs/pdf). Install it, then return its bytes from a server route.
+The same component HTML renders to a PDF with [`takumi-pdf`](/docs/pdf). The component needs `css="injected"` here too, or its styles stay out of `head`. Install the package, then return its bytes from a server route.
 
 ```npm
 npm i takumi-pdf

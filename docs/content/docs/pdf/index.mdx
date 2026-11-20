@@ -14,6 +14,8 @@ It shares one layout engine, a port of Chromium's layout, with [image output](/d
 npm i takumi-pdf @takumi-rs/helpers
 ```
 
+JSX input also needs `react`, which supplies the JSX runtime.
+
 ## Render a document
 
 Save this as `invoice.tsx` and run `bun invoice.tsx` to write `invoice.pdf`. On Node.js, compile the JSX first.
@@ -68,13 +70,14 @@ Headers, footers, and `measure()` take the same inputs.
 
 | Task                                           | Guide                                                                                                                                          |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Generate a PDF in the browser                  | [Runtimes & frameworks](/docs/pdf/runtimes#in-the-browser)                                                                                     |
 | Return a PDF from a server route               | [Runtimes & frameworks](/docs/pdf/runtimes)                                                                                                    |
 | Set the page size, orientation, and margins    | [Page setup](/docs/pdf/page-setup)                                                                                                             |
 | Control page breaks and repeated table headers | [Pagination](/docs/pdf/pagination)                                                                                                             |
 | Add page numbers, headers, and footers         | [Headers & footers](/docs/pdf/headers)                                                                                                         |
 | Load fonts, logos, and photos                  | [Fonts & images](/docs/pdf/assets)                                                                                                             |
 | Add links, a table of contents, or bookmarks   | [Links, outline & metadata](/docs/pdf/links)                                                                                                   |
-| Create a receipt, certificate, or label        | [Single-page PDFs](/docs/pdf/viewport)                                                                                                         |
+| Create a receipt, certificate, or label        | [Tickets & receipts](/docs/pdf/tickets), [Single-page PDFs](/docs/pdf/viewport)                                                                |
 | Generate archival or accessible output         | [PDF/A & PDF/UA](/docs/pdf/conformance)                                                                                                        |
 | Embed invoice XML or another file              | [Attachments](/docs/pdf/attachments)                                                                                                           |
 | Build a complete document                      | [Invoices](/docs/pdf/invoices), [Reports & statements](/docs/pdf/reports), [Charts](/docs/pdf/charts), [Tickets & receipts](/docs/pdf/tickets) |

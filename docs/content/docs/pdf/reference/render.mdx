@@ -125,13 +125,14 @@ These options lay content out across pages. They can't be combined with `viewpor
     metadata: {
       type: "{ title?, description?, authors?, keywords?, creator?, creationDate?, xmp? }",
       description:
-        "The document properties a viewer shows. `creationDate` is UTC, and setting it keeps the bytes reproducible.",
+        "The document properties a viewer shows. An HTML `<title>` is not read. `creationDate` is UTC, and setting it keeps the bytes reproducible.",
       typeDescriptionLink: "/docs/pdf/links#document-metadata",
     },
     outline: {
       type: "boolean",
       default: "false",
-      description: "Adds bookmarks for `h1` to `h6` headings.",
+      description:
+        "Adds bookmarks for `h1` to `h6` headings. PDF/UA output adds them whatever this says.",
       typeDescriptionLink: "/docs/pdf/links#outline",
     },
     attachments: {

@@ -22,7 +22,7 @@ A registered font stays until you remove it. A font listed in `fonts` is reused 
 | `prepare(input, options?)` | Loads a document's fonts and images, and returns a prepared document             |
 | `measure(input, options?)` | Returns the laid-out `{ width, height }` in CSS px                               |
 | `registerFont(font)`       | Registers a font that stays until you remove it                                  |
-| `unregisterFont(family)`   | Removes every face of a family                                                   |
+| `unregisterFont({ name })` | Removes every face of a family                                                   |
 | `clearFonts()`             | Removes every registered font except the bundled fallback                        |
 | `free()`                   | Releases the renderer's WebAssembly memory                                       |
 
@@ -30,7 +30,7 @@ A registered font stays until you remove it. A font listed in `fonts` is reused 
 
 ## prepare()
 
-`prepare()` lays nothing out. It downloads every image and `@font-face` file the document draws, and the prepared document keeps the images. A `@font-face` file the cache drops before the render is fetched again. Its options are the layout options of `render()`, and `images` also takes fetch settings.
+`prepare()` lays nothing out. It downloads every image and `@font-face` file the document draws, and the prepared document keeps the images. A `@font-face` file the cache drops before the render is fetched again. Its options are the layout options of `render()`. Its `images` option also takes the fetch settings `timeout`, `maxBytes`, `allowUrl`, and your own `fetch`.
 
 ```ts twoslash title="Fetch assets, then render"
 import { prepare, render } from "takumi-pdf";

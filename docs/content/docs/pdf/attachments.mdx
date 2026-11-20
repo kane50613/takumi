@@ -3,12 +3,12 @@ title: Attachments
 description: Embed files such as invoice XML in a PDF, and set the fields PDF/A-3 requires on each attachment.
 ---
 
-Pass files through `attachments` to embed source data, supporting documents, or invoice XML. Viewers with an attachment panel list them there. This example embeds a Factur-X XML file:
+Pass files through `attachments` to embed source data, supporting documents, or invoice XML. Viewers with an attachment panel list them there. This example embeds the line items as CSV:
 
 ```tsx twoslash title="Attachments"
 import type { ReactNode } from "react";
 declare const invoice: ReactNode;
-declare const xml: string;
+declare const csv: string;
 // ---cut---
 import { render } from "takumi-pdf";
 
@@ -16,11 +16,11 @@ const pdf = await render(invoice, {
   // [!code highlight]
   attachments: [
     {
-      name: "factur-x.xml",
-      data: xml,
-      mimeType: "application/xml",
-      description: "Factur-X invoice data",
-      relationship: "alternative",
+      name: "line-items.csv",
+      data: csv,
+      mimeType: "text/csv",
+      description: "Invoice line items",
+      relationship: "source",
     },
   ],
 });
@@ -43,42 +43,19 @@ const pdf = await render(invoice, {
 
 `relationship` takes one of these values.
 
-| Value           | Meaning                                          |
-| --------------- | ------------------------------------------------ |
-| `"source"`      | The document was created from this file.         |
-| `"alternative"` | An alternative representation of the document.   |
-| `"data"`        | The file backs a visual presentation in the PDF. |
-| `"supplement"`  | Additional resources for the document.           |
-| `"unspecified"` | No clear relationship. <sup>1</sup>              |
+| Value           | Meaning                                                           |
+| --------------- | ----------------------------------------------------------------- |
+| `"source"`      | The document was created from this file.                          |
+| `"alternative"` | An alternative representation of the document.                    |
+| `"data"`        | The PDF presents the file's data, as an invoice presents its XML. |
+| `"supplement"`  | Additional resources for the document.                            |
+| `"unspecified"` | No clear relationship. <sup>1</sup>                               |
 
 <sup>1</sup> `"unspecified"` is the default.
 
 ## Electronic invoices
 
-For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. [Invoices](/docs/pdf/invoices#electronic-invoices) covers the rest of the setup.
-
-```tsx twoslash title="Electronic invoices"
-import type { ReactNode } from "react";
-declare const invoice: ReactNode;
-declare const xml: string;
-// ---cut---
-import { render } from "takumi-pdf";
-
-const pdf = await render(invoice, {
-  // [!code highlight]
-  pdfa: "3b",
-  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
-  attachments: [
-    {
-      name: "factur-x.xml",
-      data: xml,
-      mimeType: "application/xml",
-      description: "Factur-X invoice data",
-      relationship: "alternative",
-    },
-  ],
-});
-```
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. [Invoices](/docs/pdf/invoices#electronic-invoices) shows a complete Factur-X MINIMUM example with its XMP metadata.
 
 The PDF/A-3 levels require three fields on each attachment:
 
