@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cap-std",
  "clap",
@@ -1949,7 +1949,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.21.2"
+version = "0.21.3"
 dependencies = [
  "base64",
  "bumpalo",
