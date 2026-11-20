@@ -258,7 +258,8 @@ fn expand_auto_repeat_tracks_from_parent(
 
   let insertion_point = track_list.auto_repeat_insertion_point;
 
-  // Approximate: Blink skips the move in a nested subgrid, where it would move the lines twice.
+  // A nested subgrid's lines past the insertion point stay, as Blink leaves them: moving them here
+  // too would move them twice.
   if !is_nested_subgrid {
     for positions in subgrid_map.values_mut() {
       *positions = positions
