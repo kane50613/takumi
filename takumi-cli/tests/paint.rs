@@ -39,6 +39,20 @@ fn paint_html(name: &str, html: &str, arguments: &[&str]) -> String {
 }
 
 #[test]
+fn a_wrapped_text_marks_each_line_break() {
+  let outline = paint_html(
+    "wrapped",
+    r#"<p style="margin: 0; font-size: 32px">Takumi CLI, tested by an agent</p>"#,
+    &[],
+  );
+
+  assert!(
+    outline.contains(r#""Takumi CLI, tested\nby an agent""#),
+    "{outline}"
+  );
+}
+
+#[test]
 fn the_outline_names_each_node_where_it_lands_and_what_fills_it() {
   let outline = paint("nodes", &[]);
   let line = |needle: &str| {

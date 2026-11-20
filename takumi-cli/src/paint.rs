@@ -386,12 +386,22 @@ impl Outline<'_> {
       NodeKind::Text { runs, .. } => {
         // A node that draws no run at all still names its text, marked `draws nothing`.
         let draws_any = (0..runs.len()).any(|index| draws_run(&node.drawables, index));
-        let content: String = runs
+        let mut content = String::new();
+        let mut line = None;
+
+        for (_, run) in runs
           .iter()
           .enumerate()
           .filter(|(index, _)| !draws_any || draws_run(&node.drawables, *index))
-          .map(|(_, run)| run.text.as_str())
-          .collect();
+        {
+          if line.is_some_and(|line| line != run.line) && !content.ends_with('\n') {
+            content.push('\n');
+          }
+
+          content.push_str(&run.text);
+          line = Some(run.line);
+        }
+
         let _ = write!(self.text, " {content:?}");
 
         if let Some(run) = runs
