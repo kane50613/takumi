@@ -13,7 +13,7 @@ use super::{
   simple_font_data::SimpleFontData,
 };
 use crate::{
-  resources::font::{Fonts, MatchedFace},
+  resources::font::{Fonts, MISSING_FAMILY_LOG_TARGET, MatchedFace},
   style::{FontFamilyToken, GenericFamilyType},
 };
 
@@ -131,35 +131,55 @@ impl FontFallbackList {
       has_pending_faces: fonts.has_pending_faces(),
     };
 
-    if log::log_enabled!(target: "takumi::font", log::Level::Debug) {
+    if log::log_enabled!(target: "takumi::font", log::Level::Warn) {
       Self::log_missing_families(fonts, key, list.primary_simple_font_data().as_deref());
     }
 
     list
   }
 
-  /// Logs the families `key` names that no loaded face has, with the family text falls back to.
+  /// Logs the families `key` names that no loaded face has: the first, the one the style asks
+  /// for, as a warning, and the rest at debug level with the family text falls back to.
   fn log_missing_families(fonts: &Fonts, key: &FontFallbackKey, primary: Option<&SimpleFontData>) {
-    let missing: Vec<String> = fonts
-      .missing_families(key)
-      .map(|name| format!("{name:?}"))
-      .collect();
+    let missing: Vec<&str> = fonts.missing_families(key).collect();
+    // Blink reads `-apple-system` and `BlinkMacSystemFont` as `system-ui`, a generic family.
+    let asks_for_first = matches!(
+      key.family.tokens().first(),
+      Some(FontFamilyToken::Owned(name))
+        if missing.first() == Some(&name.as_str())
+          && !["-apple-system", "BlinkMacSystemFont"]
+            .iter()
+            .any(|alias| name.eq_ignore_ascii_case(alias))
+    );
+    let later = if asks_for_first {
+      log::warn!(
+        target: MISSING_FAMILY_LOG_TARGET,
+        "no face is loaded for font-family {:?}, so text falls back to the next family that has one. Load the font, or check the name in font-family.",
+        missing[0]
+      );
 
-    if missing.is_empty() {
+      &missing[1..]
+    } else {
+      &missing[..]
+    };
+
+    if later.is_empty() || !log::log_enabled!(target: "takumi::font", log::Level::Debug) {
       return;
     }
 
-    let used = primary.and_then(|font_data| {
-      let typeface = &font_data.face.typeface;
+    let used = primary
+      .and_then(|font_data| {
+        let typeface = &font_data.face.typeface;
 
-      fonts.face_family(typeface.id, typeface.index)
-    });
+        fonts.face_family(typeface.id, typeface.index)
+      })
+      .unwrap_or("no font");
+    let later: Vec<String> = later.iter().map(|name| format!("{name:?}")).collect();
 
     log::debug!(
       target: "takumi::font",
-      "no face is loaded for font-family {}, so text uses {}",
-      missing.join(", "),
-      used.unwrap_or("no font")
+      "no face is loaded for font-family {}, so text uses {used}",
+      later.join(", ")
     );
   }
 

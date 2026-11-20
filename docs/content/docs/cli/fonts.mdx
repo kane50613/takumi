@@ -60,7 +60,7 @@ A font named on the command line is trusted, so it can live anywhere, even outsi
 
 3. Check that the file loads with `--list-resources`, as the next section shows.
 
-When a family still falls back to Geist, `--log debug` names it.
+When the first family a `font-family` names has no loaded face, takumi prints a warning that names it. A generic family such as `sans-serif`, `-apple-system`, and `BlinkMacSystemFont` never warn.
 
 ## Draw color emoji
 

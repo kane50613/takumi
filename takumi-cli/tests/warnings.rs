@@ -164,3 +164,25 @@ fn a_page_size_raises_no_warning() {
   assert!(output.status.success(), "{messages}");
   assert_eq!(messages, "");
 }
+
+#[test]
+fn a_missing_first_font_family_warns_once() {
+  let html = r#"<style>
+  h1 { font-family: "Playfair Display", serif; font-weight: 700 }
+  p { font-family: "Playfair Display", serif }
+  footer { font-family: ui-sans-serif, system-ui, "Apple Color Emoji" }
+  aside { font-family: "Playfair Display", Geist, serif }
+  nav { font-family: -Apple-System, blinkmacsystemfont, sans-serif }
+</style>
+<h1>Title</h1><p>Body</p><footer>Footer</footer><aside>Aside</aside><nav>Nav</nav>"#;
+  let (output, _dir) = render("font-family", html, &[]);
+  let messages = String::from_utf8(output.stderr).unwrap();
+
+  assert!(output.status.success(), "{messages}");
+  assert_eq!(
+    messages.lines().collect::<Vec<_>>(),
+    [
+      "warning: no face is loaded for font-family \"Playfair Display\", so text falls back to the next family that has one. Load the font, or check the name in font-family."
+    ]
+  );
+}

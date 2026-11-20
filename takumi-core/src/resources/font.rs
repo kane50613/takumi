@@ -52,6 +52,9 @@ use crate::{
   style::{FontFamily, FontFamilyToken, FontStyle as CssFontStyle, GenericFamilyType},
 };
 
+/// The log target of the warning that a style's first `font-family` has no loaded face.
+pub const MISSING_FAMILY_LOG_TARGET: &str = "takumi::font::missing";
+
 /// Errors that can occur during font loading and conversion.
 #[derive(Debug, Error)]
 #[non_exhaustive]
