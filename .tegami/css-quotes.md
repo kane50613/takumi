@@ -17,4 +17,4 @@ blockquote::before {
 }
 ```
 
-`auto` takes the English `“` `”` and `‘` `’` in every language, where Chromium takes the marks of the element's language.
+`auto` takes the marks of the element's `lang` from CLDR, as Chromium does: `„` `“` in German and `「` `」` in Japanese, and `“` `”` when the language has none.

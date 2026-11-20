@@ -15,7 +15,7 @@ use crate::{
     node::Node,
   },
   style::{
-    ComputedStyle, Contain, CounterChange, Display, Quote, Quotes,
+    ComputedStyle, Contain, CounterChange, Display, Lang, Quote, Quotes,
     page_rule::{PAGE_COUNTER, PAGES_COUNTER},
   },
 };
@@ -271,12 +271,17 @@ pub(super) struct CountersAttachmentContext {
 impl CountersAttachmentContext {
   /// The mark `quote` writes from `quotes`, after moving the quote depth as it does.
   /// <https://drafts.csswg.org/css-content-3/#quote-values>
-  pub(super) fn quote<'q>(&mut self, quote: Quote, quotes: &'q Quotes) -> &'q str {
+  pub(super) fn quote<'q>(
+    &mut self,
+    quote: Quote,
+    quotes: &'q Quotes,
+    lang: Option<&Lang>,
+  ) -> &'q str {
     match quote {
       Quote::Open => {
         self.quote_depth += 1;
 
-        quotes.mark(self.quote_depth - 1, true)
+        quotes.mark(lang, self.quote_depth - 1, true)
       }
       Quote::NoOpen => {
         self.quote_depth += 1;
@@ -286,7 +291,7 @@ impl CountersAttachmentContext {
       Quote::Close if self.quote_depth > 0 => {
         self.quote_depth -= 1;
 
-        quotes.mark(self.quote_depth, false)
+        quotes.mark(lang, self.quote_depth, false)
       }
       Quote::NoClose => {
         self.quote_depth = self.quote_depth.saturating_sub(1);
