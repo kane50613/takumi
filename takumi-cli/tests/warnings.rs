@@ -172,8 +172,9 @@ fn a_missing_first_font_family_warns_once() {
   p { font-family: "Playfair Display", serif }
   footer { font-family: ui-sans-serif, system-ui, "Apple Color Emoji" }
   aside { font-family: "Playfair Display", Geist, serif }
+  nav { font-family: -Apple-System, blinkmacsystemfont, sans-serif }
 </style>
-<h1>Title</h1><p>Body</p><footer>Footer</footer><aside>Aside</aside>"#;
+<h1>Title</h1><p>Body</p><footer>Footer</footer><aside>Aside</aside><nav>Nav</nav>"#;
   let (output, _dir) = render("font-family", html, &[]);
   let messages = String::from_utf8(output.stderr).unwrap();
 

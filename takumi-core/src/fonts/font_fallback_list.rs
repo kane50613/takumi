@@ -147,7 +147,9 @@ impl FontFallbackList {
       key.family.tokens().first(),
       Some(FontFamilyToken::Owned(name))
         if missing.first() == Some(&name.as_str())
-          && !matches!(name.as_str(), "-apple-system" | "BlinkMacSystemFont")
+          && !["-apple-system", "BlinkMacSystemFont"]
+            .iter()
+            .any(|alias| name.eq_ignore_ascii_case(alias))
     );
     let later = if asks_for_first {
       log::warn!(
