@@ -395,9 +395,7 @@ css/
 !css/CSS2/text/white-space-applies-to-013.xht
 !css/CSS2/text/white-space-applies-to-014.xht
 !css/CSS2/text/white-space-applies-to-015.xht
-!css/CSS2/text/white-space-bidirectionality-001.xht
 !css/CSS2/text/white-space-collapsing-bidi-001.xht
-!css/CSS2/text/white-space-collapsing-bidi-002.xht
 !css/CSS2/text/white-space-generated-content-before-001.xht
 !css/CSS2/text/white-space-mixed-001.xht
 !css/CSS2/text/white-space-mixed-002.xht
@@ -2186,13 +2184,10 @@ css/css-overflow/scroll-markers/targeted-column-scroll-marker-selection-004.html
 !css/css-page/media-queries-001-print.html
 !css/css-page/media-queries-002-print.html
 !css/css-page/media-queries-003-print.html
-!css/css-page/monolithic-overflow-015-print.html
 !css/css-page/monolithic-overflow-016-print.html
 !css/css-page/monolithic-overflow-017-print.html
 !css/css-page/monolithic-overflow-018-print.html
 !css/css-page/monolithic-overflow-023-print.html
-!css/css-page/monolithic-overflow-024-print.html
-!css/css-page/monolithic-overflow-025-print.html
 !css/css-page/monolithic-overflow-031-print.html
 !css/css-page/page-background-001-print.html
 !css/css-page/page-background-002-print.html
@@ -2447,7 +2442,6 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-tables/rules-groups.html
 !css/css-tables/table-cell-child-overflow-measure.html
 !css/css-tables/table-cell-inline-size-box-sizing-quirks.html
-!css/css-tables/tentative/padding-percentage.html
 !css/css-tables/tentative/paint/
 css/css-tables/tentative/paint/collapsed-border-large-cell.html
 !css/css-tables/th-text-align.html
@@ -2661,8 +2655,6 @@ css/css-text/letter-spacing/letter-spacing-trim-start-001.html
 !css/css-text/shaping/shaping-009.html
 !css/css-text/shaping/shaping-010.html
 !css/css-text/shaping/shaping-011.html
-!css/css-text/shaping/shaping-012.html
-!css/css-text/shaping/shaping-013.html
 !css/css-text/shaping/shaping-arabic-diacritics-002.html
 !css/css-text/shaping/shaping_lig-001.html
 !css/css-text/tab-size/tab-size-block-ancestor.html
@@ -2670,11 +2662,6 @@ css/css-text/letter-spacing/letter-spacing-trim-start-001.html
 !css/css-text/tab-size/tab-size-length-001.html
 !css/css-text/tab-size/tab-size-length-002.html
 !css/css-text/tab-size/tab-size-spacing-001.html
-!css/css-text/text-align/text-align-end-009.html
-!css/css-text/text-align/text-align-end-010.html
-!css/css-text/text-align/text-align-end-016.html
-!css/css-text/text-align/text-align-justify-005.html
-!css/css-text/text-align/text-align-justify-006.html
 !css/css-text/text-align/text-align-justify-tabs-001.html
 !css/css-text/text-align/text-align-justify-tabs-002.html
 !css/css-text/text-align/text-align-justify-tabs-003.html
@@ -2688,9 +2675,6 @@ css/css-text/letter-spacing/letter-spacing-trim-start-001.html
 !css/css-text/text-align/text-align-last-015.html
 !css/css-text/text-align/text-align-match-parent-01.html
 !css/css-text/text-align/text-align-match-parent-05.html
-!css/css-text/text-align/text-align-start-009.html
-!css/css-text/text-align/text-align-start-010.html
-!css/css-text/text-align/text-align-start-016.html
 !css/css-text/text-autospace/
 css/css-text/text-autospace/text-autospace-elements-004.html
 css/css-text/text-autospace/text-autospace-elements-005.html
