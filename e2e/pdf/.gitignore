@@ -1,0 +1,7 @@
+node_modules
+bun.lock
+.packs
+.logs
+.output
+.nuxt
+.nitro
