@@ -1,0 +1,17 @@
+{
+  "name": "takumi-pdf-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pack": "bun pack.ts",
+    "test": "bun run.ts"
+  },
+  "dependencies": {
+    "nitro": "3.0.260903-beta",
+    "nuxt": "4.6.4",
+    "takumi-pdf": "file:.packs/takumi-pdf.tgz"
+  },
+  "overrides": {
+    "@takumi-rs/helpers": "file:.packs/helpers.tgz"
+  }
+}

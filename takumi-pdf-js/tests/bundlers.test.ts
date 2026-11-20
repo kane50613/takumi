@@ -18,15 +18,21 @@ test.each(cases)(
     writeFileSync(entry, `import { default as wasm } from "takumi-pdf";\n\nconsole.log(wasm);\n`);
 
     try {
-      const built = Bun.spawnSync([
-        "bun",
-        "build",
-        entry,
-        "--target=node",
-        "--external=*.wasm",
-        "--external=*.wasm?module",
-        ...conditions.map((condition) => `--conditions=${condition}`),
-      ]);
+      const built = Bun.spawnSync(
+        [
+          "bun",
+          "build",
+          entry,
+          "--target=node",
+          "--external=*.wasm",
+          "--external=*.wasm?module",
+          ...conditions.map((condition) => `--conditions=${condition}`),
+        ],
+        {
+          // Nitro builds with `production`. Bun's bundler takes that condition from NODE_ENV, which `bun test` sets to `test`.
+          env: { ...Bun.env, NODE_ENV: "production" },
+        },
+      );
 
       expect(built.exitCode).toBe(0);
       expect(built.stdout.toString()).toContain(loader);

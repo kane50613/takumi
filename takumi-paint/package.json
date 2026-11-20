@@ -42,6 +42,16 @@
   "exports": {
     ".": {
       "unwasm": {
+        "node": {
+          "development": {
+            "types": "./bundlers/node.d.ts",
+            "default": "./bundlers/nitro-dev.mjs"
+          },
+          "default": {
+            "types": "./bundlers/node.d.ts",
+            "default": "./bundlers/next.mjs"
+          }
+        },
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/next.mjs"
       },

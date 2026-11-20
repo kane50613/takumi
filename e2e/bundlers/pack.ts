@@ -1,6 +1,7 @@
 import { Glob } from "bun";
 import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { run } from "../harness";
 
 const root = import.meta.dir;
 const repo = join(root, "..", "..");
@@ -11,14 +12,6 @@ const packages = {
   wasm: "takumi-wasm",
   helpers: "takumi-helpers",
 };
-
-function run(command: string[], cwd: string): void {
-  const { exitCode } = Bun.spawnSync(command, { cwd, stdout: "inherit", stderr: "inherit" });
-
-  if (exitCode !== 0) {
-    throw new Error(`${command.join(" ")} exited with ${exitCode}`);
-  }
-}
 
 // The published core package loads its binary from a per-platform package, so build one from the local `.node`.
 function packPlatformPackage(): string {

@@ -8,14 +8,13 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { freePort, runLogged, serve, tail } from "../harness";
 import { cells, type Cell } from "./matrix";
 
 const PNG_MAGIC = "89504e47";
 const INLINED_WASM_BYTES = 3_000_000;
-const SERVER_TIMEOUT_MS = 60_000;
 const root = import.meta.dir;
 const logs = join(root, ".logs");
 
@@ -76,82 +75,26 @@ function detectBackend(files: OutputFiles): "native" | "wasm" | "none" {
   return files.referencesAddon ? "native" : "none";
 }
 
-async function runLogged(
-  command: string[],
-  options: { cwd: string; env?: Record<string, string>; log: string },
-) {
-  const stream = Bun.file(options.log);
-  const process = Bun.spawn(command, {
-    cwd: options.cwd,
-    env: { ...Bun.env, ...options.env },
-    stdout: stream,
-    stderr: stream,
-  });
-
-  return { exitCode: await process.exited, output: () => readFileSync(options.log, "utf8") };
-}
-
-function tail(text: string): string {
-  const lines = text.trim().split("\n");
-
-  return (lines.find((line) => /\w+Error: /.test(line)) ?? lines.slice(-6).join(" | ")).slice(
-    0,
-    300,
-  );
-}
-
 function magicOf(output: string): string | undefined {
   return output.match(/^magic ([0-9a-f]+)$/m)?.[1];
 }
 
-async function freePort(): Promise<number> {
-  const server = createServer();
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  const address = server.address();
-
-  await new Promise((resolve) => server.close(resolve));
-
-  if (typeof address !== "object" || !address) {
-    throw new Error("could not reserve a port");
-  }
-
-  return address.port;
-}
-
-async function serve(cell: Cell, directory: string, log: string): Promise<string | undefined> {
+async function serveCell(cell: Cell, directory: string, log: string): Promise<string | undefined> {
   const port = await freePort();
-  const stream = Bun.file(log);
-  const server = Bun.spawn([cell.runtime, cell.entry ?? ""], {
+  const response = await serve([cell.runtime, cell.entry ?? ""], {
     cwd: directory,
-    env: { ...Bun.env, PORT: String(port), HOSTNAME: "127.0.0.1" },
-    stdout: stream,
-    stderr: stream,
+    port,
+    path: cell.path ?? "/",
+    log,
   });
-  const deadline = Date.now() + SERVER_TIMEOUT_MS;
 
-  try {
-    while (Date.now() < deadline && server.exitCode === null) {
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}${cell.path ?? "/"}`, {
-          signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
-        });
-        const body = Buffer.from(await response.arrayBuffer());
-
-        return response.status === 200
-          ? `magic ${body.subarray(0, 4).toString("hex")}`
-          : `status ${response.status}: ${tail(readFileSync(log, "utf8"))}`;
-      } catch {
-        await Bun.sleep(500);
-      }
-    }
-
+  if (!response) {
     return undefined;
-  } finally {
-    server.kill();
-    await server.exited;
   }
+
+  return response.status === 200
+    ? `magic ${response.body.subarray(0, 4).toString("hex")}`
+    : `status ${response.status}: ${tail(readFileSync(log, "utf8"))}`;
 }
 
 async function render(cell: Cell, out: string, log: string): Promise<string | undefined> {
@@ -176,7 +119,7 @@ async function render(cell: Cell, out: string, log: string): Promise<string | un
     }
 
     if (cell.mode === "server") {
-      const result = await serve(cell, directory, log);
+      const result = await serveCell(cell, directory, log);
 
       return result?.startsWith("magic")
         ? magicOf(result)
