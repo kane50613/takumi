@@ -1,3 +1,543 @@
+## takumi-core@0.37.0
+
+### Content after a box that overflows a page starts below the overflow
+
+In a paged PDF, a box at the top of a page can reach past the page's end, such as a flex row whose item margin runs past it. The content after that box started at the top of the next page and drew over the overflow. It now starts below the overflow, as in Chromium.
+
+### `@page` rules style the page and draw page-margin boxes, such as `@bottom-center`
+
+A paged PDF now reads more of an `@page` rule than `size` and `margin`. The rule styles the page itself, and a page-margin rule nested in it draws its `content` in that part of the margin.
+
+```css
+@page {
+  margin: 20mm 15mm;
+  border: 0.5pt solid #94a3b8;
+  background: #f8fafc;
+
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+  }
+}
+```
+
+- `background` covers the whole page, margins included.
+- `border` and `padding` lie inside the margins, around the area the content flows in.
+- `width` and `height` size the page's box, and `auto` margins center a smaller box on the page. They include the border and padding. Set `box-sizing: content-box` to measure them as Chromium does.
+- Each of the 16 page-margin rules, such as `@top-left` and `@bottom-right-corner`, takes strings, images, `counter(page)`, and `counter(pages)` in `content`. The boxes inherit `font` and `color` from the `@page` rule and draw in the margin without growing it.
+
+### `Fonts::with_system_fonts` replaces `FontResource::last_resort`
+
+`Fonts::with_system_fonts` creates a `Fonts` with the fonts it is given installed as system fonts, the fonts a renderer starts with.
+
+Lookup and removal by family name treat system fonts differently from registered fonts:
+
+- A family name reaches a system font only when no registered font has that name.
+- `unregister_family` never removes a system font.
+
+Font fallback tries the system fonts last, as it did `last_resort` fonts:
+
+- By default, they come after every registered family.
+- A snapshot from `snapshot_with_fallbacks` tries only the families it lists before the system fonts.
+- A system family that the snapshot lists by name draws at its place in that list.
+- For an emoji, fallback tries every color font before any monochrome one, so a color system font can draw an emoji before a monochrome registered font.
+
+```rust
+let mut fonts = Fonts::with_system_fonts([FontResource::new(geist).override_info(FontOverride {
+  family_name: Some("Geist".into()),
+  ..Default::default()
+})])?;
+
+// A font registered as Geist draws first. The system Geist draws a character it lacks
+// when no other registered font has that character.
+fonts.register(FontResource::new(geist_cyrillic).override_info(FontOverride {
+  family_name: Some("Geist".into()),
+  ..Default::default()
+}))?;
+```
+
+A system font joins no generic family, so `generic_family` on a font passed to `with_system_fonts` does nothing.
+
+### Migration
+
+`FontResource::last_resort` is removed. Pass those fonts to `Fonts::with_system_fonts` when you create the `Fonts`, instead of registering them.
+
+```diff
+- let mut fonts = Fonts::default();
+- fonts.register(FontResource::new(geist).last_resort())?;
++ let mut fonts = Fonts::with_system_fonts([FontResource::new(geist)])?;
+```
+
+### See what a renderer's cache holds
+
+`Renderer`, `PdfRenderer`, and `Painter` have `cacheStats()`, which reports the bytes the pool holds and how lookups of each kind went.
+
+```ts
+const { memory, images } = renderer.cacheStats();
+console.log(memory.current, memory.high);
+console.log(images.hits, images.misses, images.evictions);
+```
+
+`takumi-js` exports `cacheStats` for the renderer that `render` and the other functions share. It returns `undefined` until the first render creates that renderer. In Rust, `Cache::stats` does the same for a `Cache`.
+
+### `FromHtmlOptions` can parse a fragment as a whole document
+
+The `document` option of `FromHtmlOptions` parses the source as a browser opens an HTML file, with `html` and `body` elements, even when it starts with neither a doctype nor `<html>`. Rules such as `body { font-family: … }` then match. Without it, such a source still parses as a fragment.
+
+```rust
+let options = FromHtmlOptions::builder().document(true).build();
+// The tree has `html`, `head`, and `body`, so the `body` rule matches
+let parsed = parse_html("<style>body { margin: 0 }</style><p>Hello</p>", options)?;
+let stylesheet = StyleSheet::parse(&parsed.css.join("\n"))?;
+// Render `parsed.node` with `.stylesheet(stylesheet.into())`
+```
+
+### The paint tree lists the CSS a render dropped
+
+A declaration or at-rule that takumi drops no longer vanishes without a trace. The paint tree lists each one once, with its property and value as written, why takumi dropped it, and where it was written. The image stays the same.
+
+```ts
+const tree = await paint(html, { width: 600, height: 200 });
+
+console.log(tree.ignoredDeclarations);
+// [{ property: "writing-mode", value: "vertical-rl", reason: "unknown-property", origin: "style-attribute" }]
+```
+
+- `reason` is `unknown-property`, `invalid-value`, or `unknown-at-rule`.
+- `origin` is `style-attribute`, `style-sheet`, or `style-object`.
+- `takumi paint` prints the list under `ignored`, and its JSON output holds it as `ignoredDeclarations`.
+- `needs()` in `@takumi-rs/core`, `@takumi-rs/wasm`, and `takumi-pdf` returns the same list as `ignoredDeclarations`.
+- In Rust, `RenderNeeds::ignored_declarations` and `PaintDocument::ignored_declarations` hold the same list, and `StyleSheet::ignored_declarations` holds what one style sheet dropped.
+
+### An image whose header claims too many pixels fails to load instead of aborting a PDF
+
+A PNG or WebP whose header claims an edge longer than 8192 pixels, the limit every decode already enforced, now fails to load like any other undecodable image. A PDF used to embed such a PNG as is and abort the whole process when it sized a buffer from that header.
+
+### `paint-order: stroke` draws `-webkit-text-stroke` under the text
+
+On HTML text, `paint-order: stroke` or `stroke fill` now draws the stroke first and the fill on top, as Chrome does, so a thick outline no longer eats into the letters. Images, SVG output, PDFs, and the paint tree all follow it.
+
+```css
+h1 {
+  -webkit-text-stroke: 8px black;
+  paint-order: stroke;
+}
+```
+
+- The fill and the stroke each paint over a whole run, as in Chrome. With `normal`, a letter's fill no longer covers the previous letter's stroke where they overlap.
+- `PaintOrder::text_phases` returns the order, and `InlineBrush` carries the run's `paint_order`.
+
+### An `offset-path` with huge coordinates renders instead of panicking
+
+A `path()` in `offset-path` whose coordinates run into the quintillions, as generated or user-supplied paths can, panicked while measuring its length. It now measures, and a percentage `offset-distance` lands at that share of the whole path instead of near its start.
+
+### A positioned or stacking inline element paints as a layer of its own
+
+A `display: inline` element now paints as a layer of its own, as Chrome paints it, when any of these hold. At `opacity: 0` it paints nothing at all, whatever else holds.
+
+- `position` is not `static`
+- `opacity` is below 1
+- `filter` or `backdrop-filter` is not `none`
+- `mix-blend-mode` is not `normal`
+- `isolation` is `isolate`
+- `clip-path` or `mask` is not `none`
+
+Its backgrounds, its text, and the boxes inside it, floats and inline-blocks included, composite together after the content around it. Before, `opacity` faded each line and each text run on its own, and the other properties did nothing.
+
+```html
+<!-- Before: each line and each text run fades on its own -->
+<!-- After: the whole element fades as one layer -->
+<span style="opacity: 0.5; background: gold">A span that wraps onto a second line</span>
+```
+
+- The layer's box is the union of the element's line boxes. This approximates Chrome, where each line's box stays apart.
+- A text node with a style of its own now opens an inline box as a span does.
+- In the paint tree, such an element is a box with `effects`, and its line boxes and its own text node are its children.
+- `NodePaint::inline_layer`, `InlineLayer`, and `OwnContent::InlineLayer` are new.
+
+### Migration
+
+`InlineBrush` no longer has an `opacity` field, since an inline element's `opacity` no longer applies per text run. It applies once, to the layer of the `NodePaint` whose `inline_layer` is set. In the paint tree, that element's box holds the value in `effects.opacity`.
+
+```diff
+- let opacity = brush.opacity;
++ let opacity = match &node.kind {
++   NodeKind::Box { effects: Some(effects), .. } => effects.opacity,
++   _ => 1.0,
++ };
+```
+
+Here `node` is the element's `PaintNode` in the paint tree.
+
+### A JSX `<svg>` or `<img>` sized with `"100%"` or `"24px"` draws at that size
+
+A JSX `<svg>` or `<img>` whose `width` or `height` was a string with a unit, such as `"100%"`, `"2em"`, or `"24px"`, drew nothing. It now draws at that size, as the same markup passed as HTML does.
+
+```tsx
+<div style={{ display: "flex", width: 200, height: 100 }}>
+  <svg width="100%" height="50%" viewBox="0 0 2 1">
+    …
+  </svg>
+</div>
+// Before: the svg draws nothing
+// After: the svg's box is 200 × 50, since a percentage resolves against the containing block
+```
+
+- An `<svg>` reads `width` and `height` as CSS lengths, such as `2em`, and ignores a negative one.
+- An `<img>` reads them as HTML does, as pixels or a percentage, so `width="2em"` is 2 pixels.
+
+### A font registered under the built-in Geist's name draws before it
+
+A font registered as `Geist` used to lose to the built-in Geist at weights 300 to 800, so its Cyrillic and Latin Extended characters drew as boxes. A family now reaches its last-resort faces only when no other face has it, and font fallback still reaches them after every registered family.
+
+### A style value Takumi cannot read is ignored instead of failing the render
+
+A node's `style` object now drops a declaration whose value is invalid, such as a negative `height`, and renders the rest, as a browser does with a `style` attribute. Where a render used to reject, `console.warn` now prints the same message after `takumi: ignoring`, and in Rust the message is a `log` warning under the `takumi::style` target.
+
+### One `Cache` holds what renders reuse, in one pool of bytes
+
+`Cache` replaces `ResourceCache` in the Rust crates. Everything it keeps shares `max_bytes`, 128 MiB by default. Setting `images` or `glyphs` to `ImageCacheMode::None` keeps none of that kind.
+
+```rust
+let cache = CacheOptions::builder()
+  .max_bytes(256 << 20)
+  .images(ImageCacheMode::None)
+  .build();
+
+let options = RenderOptions::builder()
+  .viewport(viewport)
+  .node(node)
+  .cache(cache.clone())
+  .build();
+```
+
+`RenderOptions`, `SvgOptions`, `PdfOptions`, `MeasureOptions`, and `PaintTreeOptions` take it as `cache`. A render without one shares `Cache::shared()`. PDF renders now reuse decoded images, and SVG and paint renders cache `data:` images.
+
+### Migration
+
+`ResourceCache` and the `resource_cache` setter of `RenderOptions` and of the `takumi-pdf` options are removed. Pass the cache as `cache`.
+
+```diff
+- let cache = ResourceCache::new(256 << 20);
+- let image = cache.get_or_decode(&bytes, ImageCacheMode::Auto)?;
+- let sheet = cache.get_or_parse_stylesheet(sources);
++ let cache = CacheOptions::builder().max_bytes(256 << 20).build();
++ let image = cache.decode_image(&bytes, ImageCacheMode::Auto)?;
++ let sheet = cache.parse_stylesheet(sources);
+```
+
+### Renders warn about what they could not draw, and load fonts for missing characters
+
+A render now warns when it goes without a character's glyph, a font family, an optional font, or an image under `images.throwOnError: false`. Each warning prints through `console.warn` as `takumi: <message>`, the same form as the warnings for unsupported CSS, every time a render raises it. To collect the warnings somewhere else, wrap `console.warn`.
+
+```txt
+takumi: No font draws "世界". Add a font that covers them to `fonts`, or return one from `loadFallbackFonts`.
+```
+
+- `prepare()` prints the warnings it finds, and a later render of the prepared source warns only about a font that fails when it loads again.
+- A `render()` without `prepare()` checks glyphs and families only when it passes `loadFallbackFonts`.
+- `loadFallbackFonts(characters)` runs once when characters have no font, and the fonts it returns load with the render.
+- In Rust, `RenderNeeds` has `missing_characters` and `unresolved_families`, and is now `#[non_exhaustive]`.
+
+### An `svg` element embedded in SVG output takes the host's color whenever it draws with it
+
+In SVG output, an embedded `svg` element that draws with `currentColor` now carries the host's `color` on its root, so a viewer draws it as takumi does. Before, it got the color only when its markup spelled out `currentColor`.
+
+### Migration
+
+`SvgSource::source_with_current_color` is removed.
+
+```diff
+- let markup = source.source_with_current_color(color);
++ let markup = source.embedded_source(&host, viewport);
+```
+
+### A floated flex or grid item breaks across pages as any other item
+
+`float` does not apply to a flex or grid item, but in a PDF an item with `float: left` or `float: right` was still treated as a float when pages broke. Its `break-after` was dropped, and the container's background could stop short on the next page. Such an item now lays out and breaks as any other item, as in Chromium.
+
+### A box moved to the next page by `break-before: page` keeps its text
+
+A paged PDF, or the pages `takumi-raster`'s `render_pages` streams, could lose the text of a box with `break-before: page` that came right after a flex container spanning several pages. The page that holds the box now matches the same document rendered in one pass.
+
+### `break-after: page` breaks once when an absolute box inside runs onto the next page
+
+In a PDF, when an absolutely positioned box ran past the page from inside a box with `break-after: page`, the break applied again on the next page, so a float after the box landed a page later than in Chromium. The break now applies once, where the box's content ends.
+
+```html
+<!-- The absolute box starts past the bottom of the page -->
+<div style="position: relative; break-after: page">
+  The box
+  <div style="position: absolute; top: 110px">Runs onto the next page</div>
+</div>
+<div style="float: left">Starts the next page</div>
+```
+
+### GIFs, APNGs, and animated WebPs draw at the device pixel ratio, and as backgrounds
+
+With a `devicePixelRatio` above 1, an animated image drew at its CSS size in device pixels. It filled the top-left of its box, and its right column and bottom row streaked across the rest. A single-frame GIF drew the same way. An animated image used as a `background-image` drew nothing at all. Both now draw as a still PNG does.
+
+`ImageSource::dimensions` gives an image's natural size in its own pixels.
+
+### The paint tree lists the elements painting skips
+
+`PaintDocument::unpainted` names each element that painting skips, and why. It lists only the outermost one, since painting skips everything inside it too. These elements have no node, so the list is where you find why one is absent.
+
+```diff
+  {
+    "steps": [ … ],
++   "unpainted": [
++     { "element": { "path": [0, 1], "tagName": "section" }, "reason": "opacity-zero" }
++   ]
+  }
+```
+
+- `opacity-zero` marks an element that `opacity: 0` hides.
+- `display-none` marks the root element when it has `display: none`.
+
+### `takumi image` warns of the characters no font draws
+
+`takumi image` used to draw an empty box for a character no loaded font draws, without a word. It now prints a warning that names each one.
+
+```sh
+$ takumi image hello.html -o hello.png
+warning: no font draws 你 (U+4F60), 好 (U+597D), so each shows as an empty box. Pass a font that does with `--font`, or check the `font-family` of that text.
+```
+
+The rest of the command line says more when something is off:
+
+- `--list-resources` lists a file that is not there as `missing`, where it said `blocked`. Scripts that read the status column see the new value.
+- `--margin` and `--page` refuse a number without a unit, such as `--margin 5`.
+- An error that `--font`, `--root`, or `takumi pdf` fixes now names that flag or command, such as "`takumi image` writes images, but the output ends in `.pdf`. Use `takumi pdf`."
+
+```diff
+  $ takumi image page.html --list-resources
+- image	blocked	file:///site/gone.png	…
++ image	missing	file:///site/gone.png	…
+```
+
+In the `takumi` crate, `uncovered_characters` returns the characters no registered font draws for a render, each once.
+
+```rust
+let missing: Vec<char> = takumi::uncovered_characters(options)?;
+
+if !missing.is_empty() {
+  eprintln!("no font draws {missing:?}");
+}
+```
+
+### `takumi pdf` takes a whole HTML file as a header or footer
+
+A `--header` or `--footer` file that opens with a doctype or `<html>` now fills the band with its body's content, as Chromium does with a header template. Before, the file brought its body's margin into the band.
+
+- A page and its header that both write `<img src="logo.png">` for different files now each draw their own image.
+- `takumi pdf --pages 1,-` is refused with "`-` names no page. Write a page on at least one side of `-`."
+- An empty `url()` in a style sheet loads nothing.
+- `takumi image --dpr` with an `.svg` output is an error, since an SVG has no pixels to scale.
+
+In Rust, `FromHtmlOptions::fragment` parses a source as a fragment even when it opens with a doctype or `<html>`, dropping its `html`, `head`, and `body` tags.
+
+```rust
+let options = FromHtmlOptions::builder().fragment(true).build();
+// The node is the <p> alone
+let node = parse_html("<!doctype html><html><body><p>hi</p></body></html>", options)?.node;
+```
+
+### An `<img>` without a source stays whole across pages
+
+In a PDF, a tall `<img>` with no `src` split across two pages as an empty box. It now moves to the next page whole when it does not fit, as Chromium prints it, and it lays out at the same size as before.
+
+### A negative `calc()` padding clamps to zero
+
+A `padding` written as a `calc()` that comes out negative was applied as a negative padding. It now clamps to zero, as browsers do.
+
+```css
+padding: calc(0px - 4px);
+/* Before: a padding of -4px */
+/* After: a padding of 0 */
+```
+
+### Glyphs, Tailwind classes, and `@font-face` faces stay in the render's `Cache`
+
+Two renderers in one process no longer share glyphs, compiled Tailwind classes, `@font-face` faces, or decoration intercepts. Each `Cache` keeps its own glyphs in the pool it shares with every other kind of data. `glyphs(ImageCacheMode::None)` keeps none.
+
+```rust
+let cache = CacheOptions::builder().glyphs(ImageCacheMode::None).build();
+```
+
+In `@takumi-rs/core` and `@takumi-rs/wasm`, `setGlyphCacheMaxBytes(0)` now keeps no glyphs only in renderers created after the call, and any other size keeps them in the shared pool. In `takumi-js`, it reaches only the renderer behind `render`, not a `Renderer` from `takumi-js/node`.
+
+### Migration
+
+`set_glyph_cache_max_bytes` in `takumi-core` is deprecated. A size of `0` still keeps no glyphs in the caches built after the call, and a larger size no longer bounds them apart.
+
+```diff
+- set_glyph_cache_max_bytes(0);
+- let cache = CacheOptions::builder().build();
++ let cache = CacheOptions::builder().glyphs(ImageCacheMode::None).build();
+```
+
+### An inline element's background and border are a box in the paint tree
+
+In the paint tree, a `display: inline` element with a `background` or `border` now has a box node for each line it sits on, as a `display: inline-block` element already had. The box names the element and holds its `inline-background` and `border` drawables, which the enclosing text node used to hold.
+
+```diff
+  $ takumi paint marked.html -o - --detail drawables
+      text p 8,16 1184x21 "Some marked text" Geist 16px #000000
+        - glyphs text #000000 "Some " at 0,16 line 0 Geist 16px
+        - glyphs text #000000 "marked" at 47.3,16 line 0 Geist 16px
+        - glyphs text #000000 " text" at 103.48,16 line 0 Geist 16px
+-       - fill inline-background …
+-       - fill border …
++     box span 54.3,15 57.19x23 border
++       - fill inline-background rect -0.3,0 57x23 #ffff00
++       - fill border path #ff0000
+```
+
+### `takumi` loads the `@import` rules of a `<style media>` element
+
+The `takumi` command used to drop the `@import` rules of a `<style>` element with a `media` attribute. It now loads them and applies them under that media, as Chrome does.
+
+```html
+<style media="print">
+  @import "print.css";
+</style>
+```
+
+- `ParsedHtml::styles` lists each non-empty CSS `<style>` element in the HTML namespace that applies, so not one inside an inline `<svg>`, with its `text` and `media` apart. That is every untitled one, plus the titled ones in the preferred style sheet set.
+- `StyleElement::css` returns the text inside the `@media` rule that `ParsedHtml::css` holds.
+
+### An SVG image no longer takes the host's color, as in Chromium
+
+An SVG drawn by `<img>`, `background-image`, or another image now draws `currentColor` in its own `color`, or black when it sets none. Only an `svg` element takes the `color` of the box it sits in, whether it is inline in HTML, a JSX `<svg>`, or a `Node` with the `svg` tag name.
+
+```html
+<div style="color: red">
+  <!-- Red before and after -->
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" /></svg>
+  <!-- Before: red. After: black -->
+  <img src="circle.svg" />
+</div>
+```
+
+### Migration
+
+To keep an icon in the host's color, render it as an `svg` element, or give its `Node::image` the `svg` tag name.
+
+```diff
+- Node::image(source)
++ Node::image(source).with_tag_name("svg")
+```
+
+### `parse_html` reports the style sheets a document links
+
+A host can now fetch the CSS a document links and resolve it as a browser does.
+
+```rust
+let parsed = parse_html(html, FromHtmlOptions::default())?;
+// `fetch_css` is your own loader, which returns `Option<String>`
+let css = parsed.css_with_links(|link| fetch_css(&link.href));
+```
+
+- `ParsedHtml::links` lists each `<link rel="stylesheet">` that would load, with its `href` and `media`. It leaves out a `disabled` link and one whose `type` is not CSS.
+- `ParsedHtml::base_href` holds the `href` of the first `<base>` that has one.
+- `ParsedHtml::css_with_links` returns, in document order, the CSS of each non-empty CSS `<style>` element and each fetched link, and wraps a link's `media` in an `@media` rule.
+- Titled and alternate style sheets follow the preferred style sheet set, as in Chrome. Untitled sheets that are not alternate always apply. Of the titled ones, only the preferred set applies. The set is named by whichever comes first in the document, a `<meta http-equiv="default-style">` with a non-empty `content` or a titled sheet that is not alternate.
+
+### `display: contents` renders an element's children in its place
+
+`display: contents` used to be dropped as an unknown value. An element with it now generates no box, and its children, `::before`, and `::after` lay out as children of its parent while they still inherit from the element.
+
+```html
+<!-- The flex container lays out One, Two, and Three as three items -->
+<div style="display: flex">
+  <div style="display: contents">
+    <div>One</div>
+    <div>Two</div>
+  </div>
+  <div>Three</div>
+</div>
+```
+
+- A flex or grid container takes those children as its items.
+- Replaced elements and form controls render nothing with it, as in browsers.
+- The root element computes it to `block`, as in browsers.
+- The Tailwind `contents` class sets it.
+
+### Evict fonts one file at a time from the renderer's cache
+
+Font files that renders load now share the renderer's `maxBytes` pool and leave it one file at a time, least recently used first. A family that keeps gaining files, such as one Google Fonts `text=` subset per title, now stays within `maxBytes`. A render keeps the fonts it uses until it finishes, and fonts from `registerFont` still stay. With `cache.fonts` set to `"none"`, each file goes as soon as the last render using it finishes.
+
+```ts
+const renderer = new Renderer({ cache: { fonts: "none" } });
+```
+
+`fontCacheMaxBytes` no longer bounds the fonts apart. A value of `0` still keeps none, as `"none"` does.
+
+Among equally matching faces of one family, the one listed last now wins every time.
+
+### `break-after: page` inside a flex or grid item starts a new page after the container
+
+In a PDF, `break-after: page` on the last child of a flex or grid item, or on the last row of a table inside one, was dropped, so the content after the container stayed on the same page. The break now carries out through the item and the table, as Chromium prints it, and the content after the container starts a new page.
+
+```html
+<div style="display: flex">
+  <div>
+    <div>First</div>
+    <div style="break-after: page">Ends with a forced break</div>
+  </div>
+</div>
+<div>Starts a new page</div>
+```
+
+### A `break-inside: avoid` box stays on its page when only an absolute box inside it runs past
+
+In a PDF, a `break-inside: avoid` box moved to the next page whole when an absolutely positioned box inside it started past the end of the page, even though the box itself fit. The box now stays where it fits, and only the absolute box continues on the next page, as Chromium prints it.
+
+```html
+<!-- The box fits at the bottom of a page, and the badge starts past it -->
+<div style="position: relative; break-inside: avoid">
+  Kept on the first page
+  <div style="position: absolute; bottom: -40px">Badge</div>
+</div>
+```
+
+### An `svg` element drawn in two text colors shows each color
+
+An `svg` element that inherits `color`, through `color="currentColor"` on its root or a `<style>` rule, now draws in the `color` of each box it sits in. Before, every copy took the first color it was drawn in. An SVG image that uses its host's fonts follows each host too.
+
+### Migration
+
+`SvgSource::vector_ops` is removed. `SvgSource::picture` returns the same ops, shared with the cache.
+
+```diff
+- let ops = source.vector_ops(&host, viewport);
++ let picture = source.picture(&host, viewport);
++ let ops = picture.ops();
+```
+
+### A WOFF font in `@takumi-rs/wasm` fails with an error that says to convert it
+
+`@takumi-rs/wasm` cannot read WOFF fonts. Registering one now fails with an error that names the format, instead of `Unsupported font format`.
+
+```ts
+await renderer.registerFont(woffBytes);
+// Before: Unsupported font format
+// After: This build cannot read WOFF fonts. Convert the font to a format it reads, such as TTF
+```
+
+The fonts docs now list the formats each package reads. In Rust, a `takumi-core` build without the `woff` or `woff2` feature returns `FontError::FormatLeftOut` for that format.
+
+### A flex row whose item margin runs past the page moves to the next page whole
+
+In a PDF, a flex row whose item margin ran past the end of the page stayed on that page and spilled onto the next. The row now reaches as far as that margin, as in Chromium, and moves to the next page whole when it fits there.
+
+```html
+<!-- The item fits on the page, and its margin ends past it -->
+<div style="display: flex">
+  <div style="height: 80px; margin-bottom: 30px">Item</div>
+</div>
+```
+
 ## takumi-core@0.36.0
 
 ### `@font-face` applies `size-adjust`, metric overrides, `font-feature-settings`, and `local()`
