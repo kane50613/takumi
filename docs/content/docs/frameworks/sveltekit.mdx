@@ -81,6 +81,20 @@ Render a Svelte component to HTML on the server. Then pass that HTML and its CSS
   </Step>
 </Steps>
 
+## Deploy to Cloudflare
+
+`@sveltejs/adapter-cloudflare` 8.0.3 resolves server code for Cloudflare Workers but leaves out the plugin that loads `.wasm` imports. Both `vite dev` and `vite build` then stop with this error:
+
+```
+Failed to load url ./takumi_wasm_bg.js (resolved id: ./takumi_wasm_bg.js) in .../@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm. Does the file exist?
+```
+
+Pin the adapter to 8.0.2 until a later release loads `.wasm` imports again. [Issue #2645](https://github.com/kane50613/takumi/issues/2645) tracks the fix.
+
+```npm
+npm i -D @sveltejs/adapter-cloudflare@8.0.2
+```
+
 ## Next steps
 
 See [`ImageResponse`](/docs/reference/image-response) for every option, [Styles](/docs/styles) for the CSS Takumi supports, and [Fonts](/docs/fonts) for loading them.
