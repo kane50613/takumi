@@ -125,6 +125,14 @@ A section repeats only when all of these hold:
 - It is no taller than a quarter of the page area, matching Chromium.
 - None of its cells has a `rowspan` that reaches into the body.
 
+A body row that does not fit breaks across the pages. Give rows `break-inside: avoid` to move one that does not fit to the next page whole:
+
+```css
+tr {
+  break-inside: avoid;
+}
+```
+
 ## Page ranges
 
 `pageRanges` keeps only the listed pages, like a print dialog. Each entry is a 1-based page number or an inclusive span:

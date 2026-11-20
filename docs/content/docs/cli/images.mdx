@@ -11,7 +11,7 @@ takumi image card.html -o card.png --width 1200 --height 630
 
 ## Set the size
 
-`--width` and `--height` set the viewport in CSS pixels, the size the page lays out in. The width defaults to 1200. Without `--height`, the image is as tall as the content, which suits a page whose length you do not know ahead of time.
+`--width` and `--height` set the viewport in CSS pixels, the size the page lays out in. The width defaults to 1200. Without `--height`, the image is as tall as the content, which suits a page whose length you do not know ahead of time. An image holds at most 64 megapixels, so at 1200px wide a page taller than 55,924px needs `--height`.
 
 `--dpr` sets the device pixel ratio. `--dpr 2` lays the page out at the same CSS size and writes twice as many pixels in each direction, for high-density screens:
 
@@ -56,7 +56,7 @@ takumi image photo.html -o photo.webp --quality 80
 takumi image page.html -o pricing.png --selector .pricing-card
 ```
 
-The page still lays out at `--width`, so the element keeps the size it has there. `--selector` takes a type, `#id`, and `.class` written together, such as `section.pricing-card` or `#hero`. It reads no combinators or pseudo-classes, so give the element a class or an id to pick it. An inline element with no background or border draws no box of its own, so `--selector` skips it and can pick a later match. Give it `display: inline-block` to pick it. It writes PNG, JPEG, or WebP, not SVG.
+The page still lays out at `--width`, so the element keeps the size it has there. `--selector` takes a type, an `#id`, and classes, alone or written together, such as `.card`, `section.pricing-card`, or `#hero`. It reads no combinators or pseudo-classes, such as `:nth-child()`, so give the element a class or an id to pick it. An inline element with no background or border draws no box of its own, so `--selector` skips it and can pick a later match. Give it `display: inline-block` to pick it. It writes PNG, JPEG, or WebP, not SVG.
 
 ## Keep a transparent background
 
@@ -99,6 +99,8 @@ Without the flag, the page renders light, and `prefers-color-scheme: light` matc
 ## Draw SVG
 
 An inline `<svg>` element draws as part of the page. An `<img>` whose `src` is an `.svg` file loads like any other image, within the directories the page may read.
+
+An `.svg` output draws text as glyph outlines, so it opens without its fonts, but its text cannot be selected or searched. Images in it are embedded as `data:` URLs, so the file stands alone.
 
 ## Fonts and images in the page
 

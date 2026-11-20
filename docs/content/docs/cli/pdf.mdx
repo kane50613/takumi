@@ -49,6 +49,26 @@ Without `--margin`, the margin on that side grows to fit the header or footer. A
 
 A header or footer file is a fragment of HTML, not a whole page. Its stylesheets and images load like the document's, through the same [file access](/docs/cli/file-access) rules.
 
+## Leave the cover without a header
+
+`--header` and `--footer` draw on every page. For a header the cover leaves out, draw it with an `@page` margin box in the document, and clear it on the first page:
+
+```css
+@page {
+  @top-center {
+    content: "Quarterly report";
+  }
+}
+
+@page :first {
+  @top-center {
+    content: none;
+  }
+}
+```
+
+[Headers & footers](/docs/pdf/headers) covers the margin boxes and the page counters they can show.
+
 ## Add a title, authors, and bookmarks
 
 `--title` sets the title a PDF viewer shows, and `--author` adds an author. Repeat `--author` for more:

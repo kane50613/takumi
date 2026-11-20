@@ -35,7 +35,7 @@ Commands must be written in full. `takumi im` is an error, not `takumi image`.
 
 | Flag                    | Default                                                | Effect                                                                         |
 | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `<input>`               |                                                        | The HTML file to render, or `-` for standard input.                            |
+| `<input>`               |                                                        | The UTF-8 HTML file to render, or `-` for standard input.                      |
 | `-o`, `--output <file>` |                                                        | The file to write, or `-` for standard output. <sup>1</sup>                    |
 | `--list-resources`      |                                                        | Lists the files the document would load and whether it may, without rendering. |
 | `--font <file>`         |                                                        | Registers a font file. <sup>2</sup>                                            |
@@ -112,12 +112,12 @@ A `@page` rule in the document wins over `--page` and `--margin`. In a header or
 
 ## Exit codes
 
-| Code | Meaning                                                            |
-| ---- | ------------------------------------------------------------------ |
-| `0`  | The output was written, or the listing printed.                    |
-| `1`  | The render failed, or raised a warning under `--deny-warnings`.    |
-| `2`  | The command line is wrong. <sup>1</sup>                            |
-| `3`  | The document tried to read a file outside the granted directories. |
+| Code | Meaning                                                                                                 |
+| ---- | ------------------------------------------------------------------------------------------------------- |
+| `0`  | The output was written, or the listing printed.                                                         |
+| `1`  | A file could not be read or written, the render failed, or it raised a warning under `--deny-warnings`. |
+| `2`  | The command line is wrong. <sup>1</sup>                                                                 |
+| `3`  | The document tried to read a file outside the granted directories.                                      |
 
 <sup>1</sup> For example, an unknown flag or command, a value CSS does not accept, or an output
 format takumi does not write.
