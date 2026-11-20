@@ -115,4 +115,4 @@ The `page` property puts an element on a named page, which `@page` rules with th
 }
 ```
 
-`@page wide:first` styles the first page of the document when it is a `wide` page, as `:first` does for unnamed pages. A name without a rule of its own takes the unnamed pages' rules.
+`@page wide:first` styles the first page of the document when it is a `wide` page, as `:first` does for unnamed pages. The unnamed `@page` rules apply to named pages too, page-margin boxes included, and a named rule overrides only what it sets.

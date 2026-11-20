@@ -5,7 +5,7 @@ description: Import takumi-pdf on Node.js, Bun, Cloudflare Workers, Next.js, or 
 
 Use the default import on Node.js, Bun, and Cloudflare Workers. It loads the WebAssembly binary itself. For manual initialization, import `takumi-pdf/no-init`.
 
-A server route returns the bytes with the `application/pdf` content type:
+A server route returns the bytes with the `application/pdf` content type. In Next.js, import from `takumi-pdf/next` instead:
 
 ```ts title="Return a PDF"
 import { render } from "takumi-pdf";
@@ -38,7 +38,7 @@ import wasmUrl from "takumi-pdf/wasm-url";
 await init({ module_or_path: wasmUrl });
 ```
 
-Call `init()` once per page load and await it before the first render. `takumi-pdf/no-init` exports the same API as the default entry, JSX included. To save the bytes as a file, wrap them in a `Blob`:
+Call `init()` once per page load and await it before the first render. `takumi-pdf/no-init` exports the same API as the default entry, so `render()` also takes a React element such as `<Invoice />`. To save the bytes as a file, wrap them in a `Blob`:
 
 ```ts title="Download the PDF"
 import init, { render } from "takumi-pdf/no-init";

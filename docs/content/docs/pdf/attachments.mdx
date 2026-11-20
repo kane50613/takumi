@@ -43,13 +43,13 @@ const pdf = await render(invoice, {
 
 `relationship` takes one of these values.
 
-| Value           | Meaning                                          |
-| --------------- | ------------------------------------------------ |
-| `"source"`      | The document was created from this file.         |
-| `"alternative"` | An alternative representation of the document.   |
-| `"data"`        | The file backs a visual presentation in the PDF. |
-| `"supplement"`  | Additional resources for the document.           |
-| `"unspecified"` | No clear relationship. <sup>1</sup>              |
+| Value           | Meaning                                                           |
+| --------------- | ----------------------------------------------------------------- |
+| `"source"`      | The document was created from this file.                          |
+| `"alternative"` | An alternative representation of the document.                    |
+| `"data"`        | The PDF presents the file's data, as an invoice presents its XML. |
+| `"supplement"`  | Additional resources for the document.                            |
+| `"unspecified"` | No clear relationship. <sup>1</sup>                               |
 
 <sup>1</sup> `"unspecified"` is the default.
 
