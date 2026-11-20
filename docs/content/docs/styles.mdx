@@ -146,12 +146,12 @@ A number, an angle, and the arguments of the trigonometric and exponential funct
 | `orientation`            | `portrait` or `landscape`                                           |
 | `resolution`             | the device pixel ratio, in `dppx`, `x`, `dpi`, or `dpcm`            |
 | `screen`, `print`, `all` | the media type: image renders are `screen`, PDF renders are `print` |
+| `prefers-color-scheme`   | `light`, unless the CLI's `--color-scheme dark` sets `dark`         |
 
 `width`, `height`, `aspect-ratio`, and `resolution` take `min-` and `max-` prefixes and the range syntax. Both `(min-width: 768px)` and `(400px < width <= 700px)` work. Combine queries with `and`, `or`, `not`, and parentheses.
 
 <Callout type="warn">
-  Any other feature, `prefers-color-scheme` included, matches nothing. The rest of the stylesheet
-  still applies.
+  Any other feature matches nothing. The rest of the stylesheet still applies.
 </Callout>
 
 ### Rule objects

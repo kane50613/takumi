@@ -114,7 +114,7 @@ pub mod prelude {
       unicode_range::{UnicodeRange, UnicodeRangeSet},
     },
     style::*,
-    viewport::Viewport,
+    viewport::{ColorScheme, Viewport},
   };
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{

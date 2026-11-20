@@ -86,19 +86,15 @@ PNG and WebP keep the transparency. JPEG has none, so give the page a background
 
 ## Render a dark variant
 
-takumi renders the light color scheme:
+`--color-scheme dark` makes `@media (prefers-color-scheme: dark)` match, so a page that styles its dark colors there renders dark:
 
-- `@media (prefers-color-scheme: dark)` matches nothing, and neither does `prefers-color-scheme: light`.
-- `light-dark()` takes its first color.
-
-To render a dark variant, write the dark colors under a class instead of a media query. Then render a copy of the file whose `<html>` carries that class:
-
-```css
-.dark body {
-  background: #111;
-  color: #eee;
-}
+```sh
+takumi image email.html -o email-dark.png --width 600 --color-scheme dark
 ```
+
+Without the flag, the page renders light, and `prefers-color-scheme: light` matches.
+
+`light-dark()` takes its first color in either scheme. For a dark variant, put the dark colors in a `prefers-color-scheme: dark` rule instead.
 
 ## Draw SVG
 
