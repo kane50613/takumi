@@ -21,3 +21,18 @@ let viewport = Viewport::new((600, 400)).with_color_scheme(ColorScheme::Dark);
 - In Rust, `Viewport::with_color_scheme` sets it, and `ColorScheme` is in the prelude. `Viewport` gains the `color_scheme` field, so a `Viewport { .. }` literal needs it. `Viewport::new` and its `with_*` methods need no change.
 - A rule under `prefers-color-scheme: light` now applies by default, as in a browser.
 - `light-dark()` still takes its first color.
+
+#### Migration
+
+A `Viewport` struct literal names the new field, unless it copies the rest with `..`:
+
+```diff
+  let viewport = Viewport {
+    size: (1200, 630).into(),
+    font_size: 16.0,
+    device_pixel_ratio: 1.0,
+    media_target: MediaTarget::Screen,
+    unit_reference: None,
++   color_scheme: ColorScheme::Light,
+  };
+```
