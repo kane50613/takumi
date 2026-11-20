@@ -5,6 +5,9 @@ import * as wasm from "../dist/export.mjs";
 // importing server chunk, so resolve relative to import.meta.url, not the framework output dir.
 async function resolveWasm() {
   if (typeof process !== "undefined" && process.versions?.node != null) {
+    // Nitro 2 traces this file but its output loads node.mjs at runtime, so name it for the tracer.
+    import.meta.resolve("./node.mjs");
+
     const { readFile } = process.getBuiltinModule("node:fs/promises");
     const path = decodeURIComponent(url.replace(/[?#].*$/, ""));
 
