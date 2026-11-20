@@ -43,8 +43,11 @@ impl GridLine {
 impl<'i> FromCss<'i> for GridLine {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let start = GridPlacement::from_css(input)?;
+    // A lone `<custom-ident>` sets the end line too.
     let end = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
       GridPlacement::from_css(input)?
+    } else if let GridPlacement::Named(name) = &start {
+      GridPlacement::Named(name.clone())
     } else {
       GridPlacement::default()
     };

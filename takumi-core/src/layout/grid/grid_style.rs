@@ -587,6 +587,14 @@ impl GridPosition {
         name: None,
       },
       GridPlacement::Named(name) => Self::NamedArea(name.clone()),
+      GridPlacement::NamedLine(line, name) => Self::Explicit {
+        integer: i32::from(*line),
+        name: Some(name.clone()),
+      },
+      GridPlacement::NamedSpan(span, name) => Self::Span {
+        span: i32::from(*span),
+        name: Some(name.clone()),
+      },
     }
   }
 
