@@ -7,6 +7,9 @@
     "duplicates": "warn"
   },
   "workspaces": {
+    ".": {
+      "entry": [".github/scripts/*.cjs"]
+    },
     "docs": {
       "entry": [
         "src/pages/**/*.{ts,tsx}",
