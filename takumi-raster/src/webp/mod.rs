@@ -48,7 +48,7 @@ impl FrameRegion {
   }
 
   pub(super) fn crop(&self, image: &Bitmap) -> Bitmap {
-    image.crop(self.x, self.y, self.width, self.height)
+    image.crop_inside(self.x, self.y, self.width, self.height)
   }
 }
 
