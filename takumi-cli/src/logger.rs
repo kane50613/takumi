@@ -7,12 +7,13 @@ use std::{
   fmt,
   sync::{
     Mutex,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
   },
   time::Instant,
 };
 
 use log::{Level, LevelFilter, Log, Metadata, Record, SetLoggerError};
+use takumi_core::resources::font::MISSING_FAMILY_LOG_TARGET;
 
 /// The prefix of every target takumi logs under, which the stage name follows.
 const TARGET_PREFIX: &str = "takumi::";
@@ -25,6 +26,10 @@ pub(crate) enum LogLevel {
   /// Each resource loaded, each page, and each font family or image the render found missing.
   Debug,
 }
+
+/// Whether `--list-resources` runs, which marks every font file failed to reach its fallbacks, so
+/// every family it names looks missing.
+static LISTING: AtomicBool = AtomicBool::new(false);
 
 /// The distinct warnings the command has raised, which `-q` hides and still counts.
 static WARNINGS: AtomicUsize = AtomicUsize::new(0);
@@ -82,6 +87,11 @@ impl Logger {
     }
   }
 
+  /// Stops warning of missing font families, which listing resources makes up.
+  pub(crate) fn listing() {
+    LISTING.store(true, Ordering::Relaxed);
+  }
+
   /// Whether `line` has not been printed before.
   fn is_new(&self, line: &str) -> bool {
     self
@@ -100,6 +110,10 @@ impl Log for Logger {
     let Some(stage) = record.target().strip_prefix(TARGET_PREFIX) else {
       return;
     };
+
+    if record.target() == MISSING_FAMILY_LOG_TARGET && LISTING.load(Ordering::Relaxed) {
+      return;
+    }
 
     if record.level() <= Level::Warn {
       let warning = record.args().to_string();
