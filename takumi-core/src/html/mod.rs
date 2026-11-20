@@ -192,6 +192,8 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("colgroup", "display:table-column-group"),
   ("col", "display:table-column"),
   // `html.css` for a text field, which `input_preset` picks by the element's `type`.
+  // Approximate: Blink's `-webkit-small-control` resolves to Arial, which a document rarely loads,
+  // so this names `system-ui`, and a document that loads Arial still draws its fields without it.
   (
     "input",
     "margin:0;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.333333px;font-family:system-ui;color:#000;letter-spacing:0;word-spacing:0;line-height:normal;text-transform:none;text-indent:0;text-shadow:none;display:inline-block;text-align:start;box-sizing:content-box;padding:1px 2px;border:2px inset #767676;background-color:#fff",
