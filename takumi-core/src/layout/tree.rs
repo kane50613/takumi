@@ -3540,7 +3540,11 @@ impl RenderContext {
       self.stylesheet(),
       self.time_ms(),
       &sizing,
-      style.inherited_data.color.resolve(self.current_color),
+      style
+        .inherited_data
+        .color
+        .computed(&sizing)
+        .resolve(self.current_color),
     )
   }
 
@@ -3548,7 +3552,11 @@ impl RenderContext {
   /// against the sizing the pre-animation style produces.
   fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
     let child_sizing = self.child_sizing(&style, &self.sizing, false);
-    let child_current_color = style.inherited_data.color.resolve(self.current_color);
+    let child_current_color = style
+      .inherited_data
+      .color
+      .computed(&child_sizing)
+      .resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,
       style.clone(),

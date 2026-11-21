@@ -6,6 +6,19 @@
     <base href="../../../" />
     <link rel="stylesheet" href="takumi/tests/shared.css" />
     <style>
+      @property --registered {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: black;
+      }
+      @keyframes fade {
+        from {
+          background: currentColor;
+        }
+        to {
+          background: white;
+        }
+      }
       :root {
         --fill: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
       }
@@ -34,6 +47,20 @@
         background: linear-gradient(var(--fill), white);
         box-shadow: 0 6px 0 light-dark(rgb(234, 179, 8), rgb(34, 197, 94));
       }
+      .current {
+        color: rgb(168, 85, 247);
+        background: light-dark(rgb(239, 68, 68), currentColor);
+      }
+      .registered {
+        --registered: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+      }
+      .registered .light {
+        background: var(--registered);
+      }
+      .animated {
+        color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
+        animation: fade 1s paused;
+      }
       .group {
         width: auto;
         height: auto;
@@ -43,7 +70,7 @@
       }
     </style>
   </head>
-  <body style="width: 160px; height: 320px">
+  <body style="width: 160px; height: 300px">
     <div></div>
     <div class="dark"></div>
     <div class="either"></div>
@@ -51,6 +78,11 @@
       <div class="light"></div>
       <div class="ink"></div>
       <div class="shadow"></div>
+      <div class="current"></div>
+      <div class="animated"></div>
+      <div class="group registered">
+        <div class="light"></div>
+      </div>
     </div>
   </body>
 </html>

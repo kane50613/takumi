@@ -883,14 +883,7 @@ fn color_scheme_inherits_and_rejects_an_invalid_value() {
   let child = inherited_style_from_pairs([], &parent);
 
   assert!(parse_declarations_is_err("color-scheme", "light 1px"));
-  assert_eq!(
-    child.inherited_data.color_scheme,
-    ColorSchemes {
-      light: false,
-      dark: true,
-      only: false
-    }
-  );
+  assert_eq!(child.inherited_data.color_scheme.to_css_string(), "dark");
 }
 
 #[test]
@@ -910,7 +903,7 @@ fn a_shorthand_takes_light_dark() {
   assert_eq!(style.box_data.border_top_style, BorderStyle::Solid);
   assert_eq!(
     style.surround_data.border_top_color,
-    ColorInput::LightDark(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]))
+    ColorInput::LightDark(Some(Color([255, 0, 0, 255])), Some(Color([0, 0, 255, 255])))
   );
 }
 

@@ -422,7 +422,9 @@ impl DataType {
         }
         _ => None,
       },
-      Self::Color => ColorInput::from_css(input).ok().map(Item::Color),
+      Self::Color => ColorInput::from_css(input)
+        .ok()
+        .map(|color| Item::Color(sizing.map_or(color, |sizing| color.computed(sizing)))),
       Self::Image => {
         if input
           .try_parse(|input| input.expect_ident_matching("none"))
