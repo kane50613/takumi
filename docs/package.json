@@ -40,7 +40,7 @@
     "tailwindcss": "catalog:",
     "takumi-js": "workspace:*",
     "twoslash": "^0.3.9",
-    "waku": "1.0.0-rc.4",
+    "waku": "1.0.0-rc.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
