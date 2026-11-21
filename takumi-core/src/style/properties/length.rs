@@ -653,6 +653,7 @@ mod tests {
       root_line_height: Some(40.0),
       ch: 7.0,
       ex: 7.0,
+      color_scheme: Default::default(),
     }
   }
 

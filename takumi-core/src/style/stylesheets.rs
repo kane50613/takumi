@@ -1794,6 +1794,7 @@ define_style! {
       font_style: FontStyle where inherit = true,
       font_stretch: FontStretch where inherit = true,
       color: ColorInput where inherit = true,
+      color_scheme: ColorSchemes where inherit = true,
       font_size: FontSize where inherit = true,
       font_family: FontFamily where inherit = true,
       line_height: LineHeight where inherit = true,
