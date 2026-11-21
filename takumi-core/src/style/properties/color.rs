@@ -725,27 +725,52 @@ impl Color {
 
 #[derive(Debug, Clone, Copy)]
 struct ColorMixItem {
-  color: Color,
+  light: Color,
+  dark: Color,
   percentage: Option<PercentageNumber>,
+}
+
+impl ColorMixItem {
+  /// The item's colour in `color_scheme`.
+  fn color(self, color_scheme: ColorScheme) -> Color {
+    match color_scheme {
+      ColorScheme::Light => self.light,
+      ColorScheme::Dark => self.dark,
+    }
+  }
+}
+
+/// The light and dark colours of a `color-mix()` operand, which differ only under `light-dark()`.
+/// <https://drafts.csswg.org/css-color-5/#color-mix>, <https://drafts.csswg.org/css-color-5/#light-dark>
+fn parse_mix_operand<'i>(input: &mut Parser<'i>) -> ParseResult<'i, (Color, Color)> {
+  match ColorInput::from_css(input)?.light_and_dark() {
+    (Some(light), Some(dark)) => Ok((light, dark)),
+    _ => Err(input.new_error_for_next_token()),
+  }
 }
 
 impl<'i> FromCss<'i> for ColorMixItem {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(item) = input.try_parse(|input| -> ParseResult<'i, Self> {
-      let color = Color::from_css(input)?;
+      let (light, dark) = parse_mix_operand(input)?;
       let percentage = input.try_parse(PercentageNumber::from_css).ok();
 
-      Ok(Self { color, percentage })
+      Ok(Self {
+        light,
+        dark,
+        percentage,
+      })
     }) {
       return Ok(item);
     }
 
     input.try_parse(|input| -> ParseResult<'i, Self> {
       let percentage = PercentageNumber::from_css(input)?;
-      let color = Color::from_css(input)?;
+      let (light, dark) = parse_mix_operand(input)?;
 
       Ok(Self {
-        color,
+        light,
+        dark,
         percentage: Some(percentage),
       })
     })
@@ -762,7 +787,8 @@ struct ColorMix {
 }
 
 impl ColorMix {
-  fn evaluate(self) -> Option<Color> {
+  /// The mix of the operands' colours in `color_scheme`.
+  fn evaluate(self, color_scheme: ColorScheme) -> Option<Color> {
     let (p1, p2) = match (self.first.percentage, self.second.percentage) {
       (None, None) => (0.5, 0.5),
       (Some(PercentageNumber(p1)), None) => (p1, (1.0 - p1).max(0.0)),
@@ -781,10 +807,10 @@ impl ColorMix {
     Some(Color::from_dynamic(
       self
         .first
-        .color
+        .color(color_scheme)
         .to_dynamic()
         .interpolate(
-          self.second.color.to_dynamic(),
+          self.second.color(color_scheme).to_dynamic(),
           self.interpolation.color_space,
           self.interpolation.hue_direction,
         )
@@ -842,6 +868,27 @@ impl<'i> FromCss<'i> for ColorInput {
           ColorInput::from_option(light)
         } else {
           ColorInput::LightDark(light, dark)
+        })
+      });
+    }
+
+    if input
+      .try_parse(|input| input.expect_function_matching("color-mix"))
+      .is_ok()
+    {
+      return input.parse_nested_block(|input| {
+        let color_mix = ColorMix::from_css(input)?;
+        let (Some(light), Some(dark)) = (
+          color_mix.evaluate(ColorScheme::Light),
+          color_mix.evaluate(ColorScheme::Dark),
+        ) else {
+          return Err(input.new_error_for_next_token());
+        };
+
+        Ok(if light == dark {
+          ColorInput::Value(light)
+        } else {
+          ColorInput::LightDark(Some(light), Some(dark))
         })
       });
     }
@@ -1021,7 +1068,7 @@ impl<'i> FromCss<'i> for Color {
         "color-mix" => input.parse_nested_block(|input| {
           let color_mix = ColorMix::from_css(input)?;
           color_mix
-            .evaluate()
+            .evaluate(ColorScheme::Light)
             .ok_or_else(|| input.new_error_for_next_token())
         }),
         _ => {
@@ -1147,6 +1194,43 @@ mod tests {
     );
 
     assert_eq!(result, ColorInput::Value(BLUE));
+  }
+
+  #[test]
+  fn color_mix_mixes_each_colour_of_light_dark() {
+    let value = |css| match ColorInput::from_css_str(css) {
+      Ok(ColorInput::Value(color)) => color,
+      other => panic!("{css} gave {other:?}"),
+    };
+
+    assert_eq!(
+      ColorInput::from_css_str("color-mix(in srgb, light-dark(white, black) 25%, red)"),
+      Ok(ColorInput::LightDark(
+        Some(value("color-mix(in srgb, white 25%, red)")),
+        Some(value("color-mix(in srgb, black 25%, red)"))
+      ))
+    );
+    assert_eq!(
+      ColorInput::from_css_str(
+        "color-mix(in oklab, color-mix(in srgb, light-dark(white, black), blue), red)"
+      ),
+      Ok(ColorInput::LightDark(
+        Some(value(
+          "color-mix(in oklab, color-mix(in srgb, white, blue), red)"
+        )),
+        Some(value(
+          "color-mix(in oklab, color-mix(in srgb, black, blue), red)"
+        ))
+      ))
+    );
+    assert_eq!(
+      Color::from_css_str("color-mix(in srgb, light-dark(white, black) 25%, red)"),
+      Ok(value("color-mix(in srgb, white 25%, red)"))
+    );
+    assert!(ColorInput::from_css_str("color-mix(in srgb, currentColor, red)").is_err());
+    assert!(
+      ColorInput::from_css_str("color-mix(in srgb, light-dark(red, currentColor), white)").is_err()
+    );
   }
 
   #[test]
