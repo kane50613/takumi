@@ -3552,10 +3552,29 @@ impl RenderContext {
   /// against the sizing the pre-animation style produces.
   fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
     let child_sizing = self.child_sizing(&style, &self.sizing, false);
+    let animated = self.sample_animations(style.clone(), &child_sizing);
+    let color_scheme = animated
+      .inherited_data
+      .color_scheme
+      .used(self.sizing.viewport.color_scheme);
+
+    // `color-scheme` animates discretely and decides every `light-dark()`, so an animation that
+    // changes it is sampled again in the scheme it gives, as Blink applies `color-scheme` first.
+    if color_scheme == child_sizing.color_scheme {
+      return (animated, child_sizing);
+    }
+
+    let child_sizing = child_sizing.with_color_scheme(color_scheme);
+
+    (self.sample_animations(style, &child_sizing), child_sizing)
+  }
+
+  /// The stylesheet animations on `style` at this render's time, sampled against `child_sizing`.
+  fn sample_animations(&self, style: ComputedStyle, child_sizing: &SizingContext) -> ComputedStyle {
     let child_current_color = style
       .inherited_data
       .color
-      .computed(&child_sizing)
+      .computed(child_sizing)
       .resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,
@@ -3563,15 +3582,13 @@ impl RenderContext {
       child_sizing.clone(),
       child_current_color,
     );
-    let animated = apply_stylesheet_animations(
+    apply_stylesheet_animations(
       style,
       child_context.stylesheet(),
       child_context.time_ms(),
       &child_context.sizing,
       child_context.current_color,
-    );
-
-    (animated, child_sizing)
+    )
   }
 }
 

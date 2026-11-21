@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, serialize_identifier};
+use cssparser::{Parser, Token, parse_important, serialize_identifier};
 
 use crate::{
   style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token},
@@ -70,7 +70,7 @@ impl<'i> FromCss<'i> for ColorSchemes {
 
       if keyword == "only" {
         // `only` comes before or after the whole list, once.
-        if only || (schemes > 0 && !input.is_exhausted()) {
+        if only || (schemes > 0 && !at_end(input)) {
           return Err(unexpected_token!(&Token::Ident(token)));
         }
 
@@ -87,7 +87,7 @@ impl<'i> FromCss<'i> for ColorSchemes {
       });
     }
 
-    if schemes == 0 || !input.is_exhausted() {
+    if schemes == 0 || !at_end(input) {
       return Err(input.new_error_for_next_token());
     }
 
@@ -95,6 +95,15 @@ impl<'i> FromCss<'i> for ColorSchemes {
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["normal", "light", "dark", "only"];
+}
+
+/// Whether the value ends here, or only its `!important` follows, which the declaration reads.
+fn at_end(input: &mut Parser<'_>) -> bool {
+  let state = input.state();
+  let end = input.is_exhausted() || (parse_important(input).is_ok() && input.is_exhausted());
+
+  input.reset(&state);
+  end
 }
 
 impl ToCss for ColorSchemes {

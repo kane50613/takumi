@@ -19,6 +19,13 @@
           background: white;
         }
       }
+      @keyframes to-dark {
+        from,
+        to {
+          color-scheme: dark;
+          background: currentColor;
+        }
+      }
       :root {
         --fill: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
       }
@@ -61,6 +68,14 @@
         color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
         animation: fade 1s paused;
       }
+      .scheme-animated {
+        color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
+        animation: to-dark 1s paused;
+      }
+      svg {
+        display: block;
+        margin: 8px;
+      }
       .group {
         width: auto;
         height: auto;
@@ -70,7 +85,7 @@
       }
     </style>
   </head>
-  <body style="width: 160px; height: 300px">
+  <body style="width: 160px; height: 360px">
     <div></div>
     <div class="dark"></div>
     <div class="either"></div>
@@ -80,9 +95,17 @@
       <div class="shadow"></div>
       <div class="current"></div>
       <div class="animated"></div>
+      <svg width="120" height="16">
+        <rect
+          width="120"
+          height="16"
+          style="fill: light-dark(rgb(239, 68, 68), rgb(59, 130, 246))"
+        />
+      </svg>
       <div class="group registered">
         <div class="light"></div>
       </div>
     </div>
+    <div class="scheme-animated"></div>
   </body>
 </html>

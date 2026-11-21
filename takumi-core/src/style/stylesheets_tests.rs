@@ -883,6 +883,16 @@ fn color_scheme_inherits_and_rejects_an_invalid_value() {
   let child = inherited_style_from_pairs([], &parent);
 
   assert!(parse_declarations_is_err("color-scheme", "light 1px"));
+  for important in ["dark !important", "light dark only !important"] {
+    let style =
+      inherited_style_from_pairs([("color-scheme", important)], &ComputedStyle::default());
+
+    assert_eq!(
+      style.inherited_data.color_scheme.to_css_string(),
+      important.trim_end_matches(" !important"),
+      "{important}"
+    );
+  }
   assert_eq!(child.inherited_data.color_scheme.to_css_string(), "dark");
 }
 
