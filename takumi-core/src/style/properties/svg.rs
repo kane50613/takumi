@@ -85,7 +85,13 @@ pub enum SvgPaint {
   ContextStroke,
 }
 
-impl MakeComputed for SvgPaint {}
+impl MakeComputed for SvgPaint {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let SvgPaint::Color(color) | SvgPaint::Url(_, Some(color)) = self {
+      color.make_computed(sizing);
+    }
+  }
+}
 
 impl Animatable for SvgPaint {
   fn interpolate(

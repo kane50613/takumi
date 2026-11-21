@@ -2,7 +2,10 @@ use std::{cell::Cell, rc::Rc};
 
 use typed_builder::TypedBuilder;
 
-use crate::{geometry::Size, viewport::Viewport};
+use crate::{
+  geometry::Size,
+  viewport::{ColorScheme, Viewport},
+};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]
@@ -44,6 +47,9 @@ pub struct SizingContext {
   /// it has none, as Blink's `FontSizes::Ex`.
   #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
   pub(crate) ex: f32,
+  /// The used color scheme of the element, which `light-dark()` picks a colour by.
+  #[builder(default, setter(skip))]
+  pub(crate) color_scheme: ColorScheme,
 }
 
 /// The pixel bases the `ch` and `ex` units read from the primary font.
@@ -98,10 +104,11 @@ impl SizingContext {
       root_line_height: self.root_line_height.map(|size| self.to_css(size)),
       ch: self.to_css(self.ch),
       ex: self.to_css(self.ex),
+      color_scheme: self.color_scheme,
     }
   }
 
-  /// Whether lengths resolve the same against both, whatever either read of a query container.
+  /// Whether lengths and `light-dark()` resolve the same against both, whatever either read of a query container.
   pub(crate) fn resolves_like(&self, other: &Self) -> bool {
     self.viewport == other.viewport
       && self.container_size == other.container_size
@@ -111,6 +118,7 @@ impl SizingContext {
       && self.root_line_height == other.root_line_height
       && self.ch == other.ch
       && self.ex == other.ex
+      && self.color_scheme == other.color_scheme
   }
 
   /// A copy with its font and line-height metrics replaced, keeping its viewport and container.
@@ -130,6 +138,14 @@ impl SizingContext {
       ch: units.ch,
       ex: units.ex,
       ..self.clone()
+    }
+  }
+
+  /// A copy whose `light-dark()` colours resolve in `color_scheme`.
+  pub(crate) fn with_color_scheme(self, color_scheme: ColorScheme) -> Self {
+    Self {
+      color_scheme,
+      ..self
     }
   }
 

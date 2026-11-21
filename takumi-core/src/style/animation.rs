@@ -821,6 +821,7 @@ mod tests {
       root_line_height: None,
       ch: 16.0 / 2.0,
       ex: 16.0 / 2.0,
+      color_scheme: Default::default(),
     }
   }
 

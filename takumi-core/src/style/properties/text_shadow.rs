@@ -89,6 +89,7 @@ impl MakeComputed for TextShadow {
     self.offset_x.make_computed(sizing);
     self.offset_y.make_computed(sizing);
     self.blur_radius.make_computed(sizing);
+    self.color.make_computed(sizing);
   }
 }
 

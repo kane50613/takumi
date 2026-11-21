@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="420" viewBox="0 0 160 420">
+  <rect x="8" y="8" width="120" height="24" fill="#ef4444"/>
+  <path d="M8 8h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="40" width="120" height="24" fill="#3b82f6"/>
+  <path d="M8 40h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="72" width="120" height="24" fill="#ef4444"/>
+  <path d="M8 72h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="104" width="120" height="24" fill="#ef4444"/>
+  <path d="M8 104h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="136" width="120" height="24" fill="#14b8a6"/>
+  <path d="M8 136h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <clipPath id="cp0">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 168h120v24h-120v-24Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <path d="M8 174h120v24h-120v-24Z" fill="#22c55e"/>
+  </g>
+  <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="68" y1="172" x2="68" y2="188">
+    <stop offset="0" stop-color="#3b82f6"/>
+    <stop offset=".016" stop-color="#3e84f6"/>
+    <stop offset=".032" stop-color="#4186f6"/>
+    <stop offset=".048" stop-color="#4488f6"/>
+    <stop offset=".063" stop-color="#478af7"/>
+    <stop offset=".079" stop-color="#4b8cf7"/>
+    <stop offset=".095" stop-color="#4e8ef7"/>
+    <stop offset=".111" stop-color="#5190f7"/>
+    <stop offset=".127" stop-color="#5492f7"/>
+    <stop offset=".143" stop-color="#5794f7"/>
+    <stop offset=".159" stop-color="#5a96f7"/>
+    <stop offset=".175" stop-color="#5d98f8"/>
+    <stop offset=".19" stop-color="#609af8"/>
+    <stop offset=".206" stop-color="#639cf8"/>
+    <stop offset=".222" stop-color="#679ef8"/>
+    <stop offset=".238" stop-color="#6aa0f8"/>
+    <stop offset=".254" stop-color="#6da2f8"/>
+    <stop offset=".27" stop-color="#70a4f8"/>
+    <stop offset=".286" stop-color="#73a6f9"/>
+    <stop offset=".302" stop-color="#76a8f9"/>
+    <stop offset=".317" stop-color="#79aaf9"/>
+    <stop offset=".333" stop-color="#7cacf9"/>
+    <stop offset=".349" stop-color="#7faef9"/>
+    <stop offset=".365" stop-color="#83b0f9"/>
+    <stop offset=".381" stop-color="#86b2f9"/>
+    <stop offset=".397" stop-color="#89b4fa"/>
+    <stop offset=".413" stop-color="#8cb6fa"/>
+    <stop offset=".429" stop-color="#8fb8fa"/>
+    <stop offset=".444" stop-color="#92bafa"/>
+    <stop offset=".46" stop-color="#95bcfa"/>
+    <stop offset=".476" stop-color="#98befa"/>
+    <stop offset=".492" stop-color="#9bc0fa"/>
+    <stop offset=".508" stop-color="#9fc1fb"/>
+    <stop offset=".524" stop-color="#a2c3fb"/>
+    <stop offset=".54" stop-color="#a5c5fb"/>
+    <stop offset=".556" stop-color="#a8c7fb"/>
+    <stop offset=".571" stop-color="#abc9fb"/>
+    <stop offset=".587" stop-color="#aecbfb"/>
+    <stop offset=".603" stop-color="#b1cdfb"/>
+    <stop offset=".619" stop-color="#b4cffc"/>
+    <stop offset=".635" stop-color="#b7d1fc"/>
+    <stop offset=".651" stop-color="#bbd3fc"/>
+    <stop offset=".667" stop-color="#bed5fc"/>
+    <stop offset=".683" stop-color="#c1d7fc"/>
+    <stop offset=".698" stop-color="#c4d9fc"/>
+    <stop offset=".714" stop-color="#c7dbfc"/>
+    <stop offset=".73" stop-color="#caddfd"/>
+    <stop offset=".746" stop-color="#cddffd"/>
+    <stop offset=".762" stop-color="#d0e1fd"/>
+    <stop offset=".778" stop-color="#d3e3fd"/>
+    <stop offset=".794" stop-color="#d7e5fd"/>
+    <stop offset=".81" stop-color="#dae7fd"/>
+    <stop offset=".825" stop-color="#dde9fd"/>
+    <stop offset=".841" stop-color="#e0ebfe"/>
+    <stop offset=".857" stop-color="#e3edfe"/>
+    <stop offset=".873" stop-color="#e6effe"/>
+    <stop offset=".889" stop-color="#e9f1fe"/>
+    <stop offset=".905" stop-color="#ecf3fe"/>
+    <stop offset=".921" stop-color="#eff5fe"/>
+    <stop offset=".937" stop-color="#f3f7fe"/>
+    <stop offset=".952" stop-color="#f6f9ff"/>
+    <stop offset=".968" stop-color="#f9fbff"/>
+    <stop offset=".984" stop-color="#fcfdff"/>
+    <stop offset="1" stop-color="#fff"/>
+  </linearGradient>
+  <rect x="12" y="172" width="112" height="16" fill="url(#lg1)"/>
+  <path d="M8 168h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="200" width="120" height="24" fill="#a855f7"/>
+  <path d="M8 200h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="232" width="120" height="24" fill="#14b8a6"/>
+  <path d="M8 232h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="288" width="120" height="24" fill="#3b82f6"/>
+  <path d="M8 288h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="320" width="120" height="24" fill="#14b8a6"/>
+  <path d="M8 320h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="352" width="120" height="24" fill="#ef4444"/>
+  <path d="M8 352h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="384" width="120" height="24" fill="#3b82f6"/>
+  <path d="M8 384h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <clipPath id="cp2">
+    <path d="M0 0H120V16H0Z"/>
+  </clipPath>
+  <g transform="matrix(1 0 0 1 8 264)" clip-path="url(#cp2)">
+    <g style="isolation:isolate">
+      <path d="M0 0h120v16h-120Z" fill="#3b82f6"/>
+    </g>
+  </g>
+</svg>
