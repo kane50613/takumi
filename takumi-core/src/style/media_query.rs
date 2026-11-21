@@ -621,6 +621,7 @@ impl MediaQueryList {
       root_line_height: Some(viewport.font_size),
       ch: viewport.font_size / 2.0,
       ex: viewport.font_size / 2.0,
+      color_scheme: viewport.color_scheme,
     };
 
     self

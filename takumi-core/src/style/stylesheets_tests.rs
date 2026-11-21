@@ -472,6 +472,7 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
       root_line_height: None,
       ch: 16.0 / 2.0,
       ex: 16.0 / 2.0,
+      color_scheme: Default::default(),
     });
     computed
   };
@@ -877,6 +878,22 @@ fn parse_style_declaration_expands_border_side_shorthands() {
 }
 
 #[test]
+fn color_scheme_inherits_and_rejects_an_invalid_value() {
+  let parent = inherited_style_from_pairs([("color-scheme", "dark")], &ComputedStyle::default());
+  let child = inherited_style_from_pairs([], &parent);
+
+  assert!(parse_declarations_is_err("color-scheme", "light 1px"));
+  assert_eq!(
+    child.inherited_data.color_scheme,
+    ColorSchemes {
+      light: false,
+      dark: true,
+      only: false
+    }
+  );
+}
+
+#[test]
 fn a_shorthand_takes_light_dark() {
   let style = inherited_style_from_pairs(
     [
@@ -893,7 +910,7 @@ fn a_shorthand_takes_light_dark() {
   assert_eq!(style.box_data.border_top_style, BorderStyle::Solid);
   assert_eq!(
     style.surround_data.border_top_color,
-    ColorInput::Value(Color([255, 0, 0, 255]))
+    ColorInput::LightDark(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]))
   );
 }
 
@@ -1106,6 +1123,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     root_line_height: None,
     ch: 16.0 / 2.0,
     ex: 16.0 / 2.0,
+    color_scheme: Default::default(),
   };
   let border_box = Size {
     width: 100.0,
@@ -1184,6 +1202,7 @@ fn test_position_absolute_blockifies_inline_display() {
     root_line_height: None,
     ch: 16.0 / 2.0,
     ex: 16.0 / 2.0,
+    color_scheme: Default::default(),
   };
 
   style.make_computed(&sizing);
@@ -1207,6 +1226,7 @@ fn test_outline_style_alone_keeps_the_initial_outline_width() {
     root_line_height: None,
     ch: 16.0 / 2.0,
     ex: 16.0 / 2.0,
+    color_scheme: Default::default(),
   };
 
   style.make_computed(&sizing);
@@ -1236,6 +1256,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_line_height: None,
     ch: 32.0 / 2.0,
     ex: 32.0 / 2.0,
+    color_scheme: Default::default(),
   });
 
   let inherited_child = Style::default().inherit(&parent);
@@ -1250,6 +1271,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_line_height: None,
     ch: 32.0 / 2.0,
     ex: 32.0 / 2.0,
+    color_scheme: Default::default(),
   };
   let inherited_font_size = inherited_child
     .inherited_data
@@ -1270,6 +1292,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_line_height: None,
     ch: 10.0 / 2.0,
     ex: 10.0 / 2.0,
+    color_scheme: Default::default(),
   };
 
   let inherited_letter_spacing = child_with_own_font_size
@@ -1604,6 +1627,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     root_line_height: None,
     ch: 16.0 / 2.0,
     ex: 16.0 / 2.0,
+    color_scheme: Default::default(),
   };
   let radius = style.surround_data.border_top_left_radius.x.to_px(
     &sizing,

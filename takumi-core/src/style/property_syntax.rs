@@ -653,6 +653,7 @@ impl Display for Item {
         write!(f, "rgba({r}, {g}, {b}, ")?;
         number(f, serialized_alpha(*alpha), ")")
       }
+      Self::Color(color @ ColorInput::LightDark(..)) => color.to_css(f),
       Self::Transforms(transforms) => transforms.to_css(f),
       Self::Specified(text) => f.write_str(text),
     }

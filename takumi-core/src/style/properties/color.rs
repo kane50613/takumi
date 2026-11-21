@@ -20,6 +20,7 @@ use crate::{
     tw::{Namespace, extract_arbitrary_value},
     unexpected_token,
   },
+  viewport::ColorScheme,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -190,9 +191,20 @@ pub enum ColorInput {
   CurrentColor,
   /// A color value.
   Value(Color),
+  /// `light-dark()`, which computes to one of its colours by the used color scheme.
+  LightDark(Color, Color),
 }
 
-impl MakeComputed for ColorInput {}
+impl MakeComputed for ColorInput {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let ColorInput::LightDark(light, dark) = *self {
+      *self = ColorInput::Value(match sizing.color_scheme {
+        ColorScheme::Light => light,
+        ColorScheme::Dark => dark,
+      });
+    }
+  }
+}
 
 impl Animatable for ColorInput {
   fn interpolate(
@@ -228,7 +240,7 @@ impl ColorInput {
   /// Resolves the color input to a color.
   pub fn resolve(self, current_color: Color) -> Color {
     match self {
-      ColorInput::Value(color) => color,
+      ColorInput::Value(color) | ColorInput::LightDark(color, _) => color,
       ColorInput::CurrentColor => current_color,
     }
   }
@@ -491,6 +503,13 @@ impl ToCss for ColorInput {
     match self {
       Self::CurrentColor => dest.write_str("currentColor"),
       Self::Value(c) => c.to_css(dest),
+      Self::LightDark(light, dark) => {
+        dest.write_str("light-dark(")?;
+        light.to_css(dest)?;
+        dest.write_str(", ")?;
+        dark.to_css(dest)?;
+        dest.write_str(")")
+      }
     }
   }
 }
@@ -788,7 +807,16 @@ impl<'i> FromCss<'i> for ColorInput {
       .try_parse(|input| input.expect_function_matching("light-dark"))
       .is_ok()
     {
-      return parse_light_dark(input);
+      return input.parse_nested_block(|input| {
+        let light = ColorInput::from_css(input)?;
+
+        input.expect_comma()?;
+
+        Ok(match (light, ColorInput::from_css(input)?) {
+          (ColorInput::Value(light), ColorInput::Value(dark)) => ColorInput::LightDark(light, dark),
+          (light, _) => light,
+        })
+      });
     }
 
     Ok(ColorInput::Value(Color::from_css(input)?))
@@ -797,7 +825,7 @@ impl<'i> FromCss<'i> for ColorInput {
   const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
 }
 
-/// The light colour of a `light-dark()` block, since a render has no `color-scheme`.
+/// The light colour of a `light-dark()` block, for a value that holds one colour, such as a gradient stop.
 /// <https://drafts.csswg.org/css-color-5/#light-dark>
 fn parse_light_dark<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
   input.parse_nested_block(|input| {
@@ -1016,18 +1044,22 @@ mod tests {
       root_line_height: None,
       ch: 16.0 / 2.0,
       ex: 16.0 / 2.0,
+      color_scheme: Default::default(),
     }
   }
 
   #[test]
-  fn light_dark_takes_its_light_colour() {
+  fn light_dark_keeps_both_colours_until_computed() {
     assert_eq!(
       Color::from_css_str("light-dark(red, blue)"),
       Ok(Color([255, 0, 0, 255]))
     );
     assert_eq!(
       ColorInput::from_css_str("light-dark(#00ff00, rgb(0 0 255))"),
-      Ok(ColorInput::Value(Color([0, 255, 0, 255])))
+      Ok(ColorInput::LightDark(
+        Color([0, 255, 0, 255]),
+        Color([0, 0, 255, 255])
+      ))
     );
     assert_eq!(
       ColorInput::from_css_str("light-dark(currentColor, blue)"),
@@ -1035,6 +1067,26 @@ mod tests {
     );
     assert!(Color::from_css_str("light-dark(red)").is_err());
     assert!(Color::from_css_str("light-dark(red, 1px)").is_err());
+    assert!(ColorInput::from_css_str("light-dark(red, 1px)").is_err());
+  }
+
+  #[test]
+  fn light_dark_computes_to_the_colour_of_the_used_scheme() {
+    let computed = |color_scheme| {
+      let mut color = ColorInput::LightDark(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]));
+
+      color.make_computed(&sizing().with_color_scheme(color_scheme));
+      color
+    };
+
+    assert_eq!(
+      computed(ColorScheme::Light),
+      ColorInput::Value(Color([255, 0, 0, 255]))
+    );
+    assert_eq!(
+      computed(ColorScheme::Dark),
+      ColorInput::Value(Color([0, 0, 255, 255]))
+    );
   }
 
   #[test]

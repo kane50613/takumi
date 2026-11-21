@@ -3469,8 +3469,8 @@ impl RenderContext {
       child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
       is_document_root,
     );
-    let current_color = style.inherited_data.color.resolve(self.current_color);
     style.make_computed(&sizing);
+    let current_color = style.inherited_data.color.resolve(self.current_color);
     (style, sizing, current_color)
   }
 
@@ -3508,19 +3508,27 @@ impl RenderContext {
       .line_height
       .to_px(&self.sizing, normal_basis);
 
-    self.sizing.with_font_metrics(
-      font_size,
-      self
-        .sizing
-        .root_font_size
-        .or_else(|| is_document_root.then_some(font_size)),
-      line_height,
-      self
-        .sizing
-        .root_line_height
-        .or_else(|| is_document_root.then_some(line_height)),
-      FontUnits { ch, ex },
-    )
+    self
+      .sizing
+      .with_font_metrics(
+        font_size,
+        self
+          .sizing
+          .root_font_size
+          .or_else(|| is_document_root.then_some(font_size)),
+        line_height,
+        self
+          .sizing
+          .root_line_height
+          .or_else(|| is_document_root.then_some(line_height)),
+        FontUnits { ch, ex },
+      )
+      .with_color_scheme(
+        style
+          .inherited_data
+          .color_scheme
+          .used(self.sizing.viewport.color_scheme),
+      )
   }
 
   /// The custom properties the stylesheet animations set on `style` at this render's time.
