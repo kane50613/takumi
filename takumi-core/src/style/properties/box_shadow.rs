@@ -139,6 +139,7 @@ impl MakeComputed for BoxShadow {
     self.offset_y.make_computed(sizing);
     self.blur_radius.make_computed(sizing);
     self.spread_radius.make_computed(sizing);
+    self.color.make_computed(sizing);
   }
 }
 

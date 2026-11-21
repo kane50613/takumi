@@ -456,7 +456,10 @@ pub enum GradientStop {
 impl MakeComputed for GradientStop {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
-      GradientStop::ColorHint { hint, .. } => hint.make_computed(sizing),
+      GradientStop::ColorHint { color, hint } => {
+        color.make_computed(sizing);
+        hint.make_computed(sizing);
+      }
       GradientStop::Hint(hint) => hint.make_computed(sizing),
     }
   }
