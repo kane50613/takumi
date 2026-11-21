@@ -19,6 +19,25 @@
           background: white;
         }
       }
+      @property --ink {
+        syntax: "<color>";
+        inherits: false;
+        initial-value: black;
+      }
+      @keyframes dark-fill {
+        from,
+        to {
+          color-scheme: dark;
+          background: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+        }
+      }
+      @keyframes dark-ink {
+        from,
+        to {
+          color-scheme: dark;
+          --ink: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+        }
+      }
       @keyframes to-dark {
         from,
         to {
@@ -72,6 +91,14 @@
         color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
         animation: to-dark 1s paused;
       }
+      .important-scheme {
+        color-scheme: light !important;
+        animation: dark-fill 1s paused;
+      }
+      .animated-ink {
+        background: var(--ink);
+        animation: dark-ink 1s paused;
+      }
       svg {
         display: block;
         margin: 8px;
@@ -85,7 +112,7 @@
       }
     </style>
   </head>
-  <body style="width: 160px; height: 360px">
+  <body style="width: 160px; height: 420px">
     <div></div>
     <div class="dark"></div>
     <div class="either"></div>
@@ -107,5 +134,7 @@
       </div>
     </div>
     <div class="scheme-animated"></div>
+    <div class="important-scheme"></div>
+    <div class="animated-ink"></div>
   </body>
 </html>

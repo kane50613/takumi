@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="360" viewBox="0 0 160 360">
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="420" viewBox="0 0 160 420">
   <rect x="8" y="8" width="120" height="24" fill="#ef4444"/>
   <path d="M8 8h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
   <rect x="8" y="40" width="120" height="24" fill="#3b82f6"/>
@@ -91,6 +91,10 @@
   <path d="M8 288h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
   <rect x="8" y="320" width="120" height="24" fill="#14b8a6"/>
   <path d="M8 320h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
+  <rect x="8" y="352" width="120" height="24" fill="#ef4444"/>
+  <path d="M8 352h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#eab308" fill-rule="evenodd"/>
+  <rect x="8" y="384" width="120" height="24" fill="#3b82f6"/>
+  <path d="M8 384h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#22c55e" fill-rule="evenodd"/>
   <clipPath id="cp2">
     <path d="M0 0H120V16H0Z"/>
   </clipPath>
