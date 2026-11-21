@@ -1,3 +1,38 @@
+## takumi-pdf@0.21.3
+
+### `render()` returns bytes you can pass to `Response`
+
+`render()` was typed to return `Uint8Array<ArrayBufferLike>`, which TypeScript 5.7 and later reject as a `BodyInit`, so `new Response(pdf)` failed to typecheck. It now returns `Uint8Array<ArrayBuffer>`, as `takumi-js` does.
+
+```ts
+const pdf = await render(html);
+
+return new Response(pdf, { headers: { "content-type": "application/pdf" } });
+```
+
+### takumi-pdf and takumi-paint run under `nitro dev` and in Nuxt builds without config
+
+Two setups no longer fail:
+
+- `nitro dev` used to fail with `Cannot find module .../pkg/takumi_pdf_wasm_bg.js`.
+- A Nuxt production server used to fail with `ERR_MODULE_NOT_FOUND` for `bundlers/node.mjs`.
+
+Remove the workaround if you added one. Both still work if you keep them.
+
+```diff
+ // nitro.config.ts
+ export default defineConfig({
+-  noExternals: ["takumi-pdf"],
+ });
+
+ // nuxt.config.ts
+ export default defineNuxtConfig({
+-  nitro: {
+-    externals: { traceInclude: ["node_modules/takumi-pdf/bundlers/node.mjs"] },
+-  },
+ });
+```
+
 ## takumi-pdf@0.21.0
 
 ### Reuse downloaded bytes across renders, and load Google Fonts for known text
