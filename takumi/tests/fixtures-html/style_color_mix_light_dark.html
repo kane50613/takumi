@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_color_mix_light_dark</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      :root {
+        --ink: light-dark(rgb(15, 23, 42), rgb(241, 245, 249));
+        --accent: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+      }
+      div {
+        display: block;
+        width: 120px;
+        height: 24px;
+        margin: 8px;
+        background: color-mix(in srgb, var(--accent) 40%, white);
+        border: 4px solid color-mix(in oklab, var(--ink) 60%, transparent);
+        box-shadow: 0 4px 0 color-mix(in srgb, var(--accent), var(--ink));
+      }
+      .dark {
+        color-scheme: dark;
+      }
+    </style>
+  </head>
+  <body style="width: 160px; height: 100px">
+    <div></div>
+    <div class="dark"></div>
+  </body>
+</html>
