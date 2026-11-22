@@ -44,6 +44,8 @@ pub(crate) struct RunInfoPart {
   offset: u32,
   num_characters: u32,
   width: f32,
+  /// Offset from a glyph's `character_index` to its index in the source string.
+  source_offset: u32,
 }
 
 impl RunInfoPart {
@@ -59,6 +61,7 @@ impl RunInfoPart {
       offset: 0,
       num_characters: run.num_characters,
       width: run.width,
+      source_offset: run.start_index,
     }
   }
 
@@ -462,10 +465,28 @@ impl ShapeResultView {
     (part.start_index + self.char_index_offset).wrapping_sub(part.offset)
   }
 
-  /// Blink's `ForEachGlyph`.
+  /// Blink's `ForEachGlyph`. Glyph indices count in the view's own order.
   pub(crate) fn for_each_glyph(
     &self,
     initial_advance: f32,
+    glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
+  ) -> f32 {
+    self.for_each_glyph_indexed(initial_advance, false, glyph_callback)
+  }
+
+  /// [`Self::for_each_glyph`] with each glyph's index in the source string.
+  pub(crate) fn for_each_source_glyph(
+    &self,
+    initial_advance: f32,
+    glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
+  ) -> f32 {
+    self.for_each_glyph_indexed(initial_advance, true, glyph_callback)
+  }
+
+  fn for_each_glyph_indexed(
+    &self,
+    initial_advance: f32,
+    source_index: bool,
     mut glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
   ) -> f32 {
     let mut total_advance = initial_advance;
@@ -475,7 +496,11 @@ impl ShapeResultView {
         continue;
       };
       let mut advance = InlineLayoutUnit::from_float_round(total_advance);
-      let character_index_offset = self.character_index_offset_for_glyph_data(part);
+      let character_index_offset = if source_index {
+        part.source_offset
+      } else {
+        self.character_index_offset_for_glyph_data(part)
+      };
 
       for (glyph_data, offset) in part
         .glyph_data_range()

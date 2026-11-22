@@ -253,7 +253,7 @@ where
     self.offset += count;
 
     let fragment = match use_span.unwrap_or(false) {
-      true => GlyphSpan::Spanned(head, &self.text[first_range]),
+      true => GlyphSpan::Spanned(head, self.text.get(first_range).unwrap_or_default()),
       false => GlyphSpan::Unspanned(head),
     };
 
@@ -283,7 +283,10 @@ fn cluster_unicode(glyphs: &[impl Glyph], text: &str, font: &Font) -> Vec<Option
         .count();
 
     if end - start > 1 {
-      let mut rest = nfd.normalize(&text[range]).chars().collect::<Vec<_>>();
+      let mut rest = nfd
+        .normalize(text.get(range).unwrap_or_default())
+        .chars()
+        .collect::<Vec<_>>();
       let mut uncovered = Vec::new();
 
       for (index, glyph) in (start..end).zip(&glyphs[start..end]) {

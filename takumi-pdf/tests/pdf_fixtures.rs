@@ -7693,3 +7693,53 @@ fn a_repeated_svg_image_keeps_each_host_color() {
   assert_eq!(fills("0 0 1 rg"), 1);
   assert_eq!(fills("0 0 0 rg"), 1);
 }
+
+/// Wrapped right-to-left text in a font that kerns its space glyph (Noto Sans Arabic, SIL OFL 1.1).
+#[test]
+fn a_wrapped_kerned_arabic_paragraph_renders_with_its_own_text() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts/noto-sans-arabic-space-kern.ttf"),
+  )
+  .expect("read arabic font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load arabic font");
+
+  let html = include_str!("repro/wrapped-arabic-kerning.html");
+  let kerned = run_pdf_fixture_with("wrapped-kerned-arabic", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((160, 120)))
+      .fonts(fonts)
+      .build()
+  });
+  let unkerned_html = html.replace("<p>", r#"<p style="font-kerning:none">"#);
+  let unkerned = render(
+    PdfOptions::builder()
+      .node(from_html(&unkerned_html, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((160, 120)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render without kerning");
+  let actual_text = |pdf: &[u8]| {
+    inflated_text(pdf)
+      .split("/ActualText")
+      .skip(1)
+      .filter_map(|span| span.split('>').next().map(str::to_string))
+      .collect::<Vec<_>>()
+  };
+  let kerned_text = actual_text(&kerned);
+
+  assert!(
+    !kerned_text.is_empty(),
+    "the Arabic text is mapped back to Unicode"
+  );
+  assert_eq!(
+    kerned_text,
+    actual_text(&unkerned),
+    "kerning leaves the text each glyph maps to alone"
+  );
+}

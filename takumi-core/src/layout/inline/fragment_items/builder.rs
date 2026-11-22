@@ -424,8 +424,9 @@ impl FragmentItems {
       None => 0,
     };
     let mut glyphs: Vec<ItemGlyph> = Vec::with_capacity(shape_result.num_glyphs());
-    let total_advance =
-      shape_result.for_each_glyph(0.0, |character_index, glyph, offset, advance, font_data| {
+    let total_advance = shape_result.for_each_source_glyph(
+      0.0,
+      |character_index, glyph, offset, advance, font_data| {
         glyphs.push(ItemGlyph {
           character_index: character_index + index_offset,
           glyph,
@@ -434,7 +435,8 @@ impl FragmentItems {
           advance,
           font_data: font_data.cloned(),
         });
-      });
+      },
+    );
     let text_end = if child.text_content.is_some() {
       self.text.len()
     } else {

@@ -547,7 +547,7 @@ impl ContentBuilder {
         sc.register_validation_error(ValidationError::ContainsNotDefGlyph(
           pdf_font.font(),
           glyph.location(),
-          text[glyph.text_range()].to_string(),
+          text.get(glyph.text_range()).unwrap_or_default().to_string(),
         ));
       }
     }
