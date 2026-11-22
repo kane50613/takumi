@@ -187,7 +187,7 @@ pub(crate) struct ShapeResultRun {
   pub(crate) width: f32,
   pub(crate) script: Script,
   pub(crate) direction: Direction,
-  /// Source-string offset for `character_index`, when it differs from `start_index`.
+  /// Source-string offset for `character_index` when not `start_index`. Not in Blink.
   pub(crate) source_base: Option<u32>,
 }
 

@@ -32,6 +32,16 @@ pub(crate) enum SegmentSource<'a> {
 }
 
 /// Blink's `RunInfoPart`.
+/// The string a glyph's reported character index counts in.
+#[derive(Clone, Copy)]
+enum GlyphIndexSpace {
+  /// The view's own order, as Blink's `ForEachGlyph` reports it.
+  #[cfg(any(feature = "svg", test))]
+  View,
+  /// The source string.
+  Source,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RunInfoPart {
   /// The result holding the run, and the run's index in it; none for a part without a run.
@@ -44,7 +54,7 @@ pub(crate) struct RunInfoPart {
   offset: u32,
   num_characters: u32,
   width: f32,
-  /// Offset from a glyph's `character_index` to its index in the source string.
+  /// Offset from a glyph's `character_index` to its source index. Blink does not track it.
   source_offset: u32,
 }
 
@@ -462,32 +472,34 @@ impl ShapeResultView {
 
   /// The offset `HarfBuzzRunGlyphData::character_index` takes to index the source string. It may
   /// wrap below zero, as Blink's unsigned one does, until a glyph's index is added.
+  #[cfg(any(feature = "svg", test))]
   fn character_index_offset_for_glyph_data(&self, part: &RunInfoPart) -> u32 {
     (part.start_index + self.char_index_offset).wrapping_sub(part.offset)
   }
 
   /// Blink's `ForEachGlyph`. Glyph indices count in the view's own order.
+  #[cfg(any(feature = "svg", test))]
   pub(crate) fn for_each_glyph(
     &self,
     initial_advance: f32,
     glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
   ) -> f32 {
-    self.for_each_glyph_indexed(initial_advance, false, glyph_callback)
+    self.for_each_glyph_indexed(initial_advance, GlyphIndexSpace::View, glyph_callback)
   }
 
-  /// [`Self::for_each_glyph`] with each glyph's index in the source string.
+  /// [`Self::for_each_glyph`] with source-string indices, which Blink does not report.
   pub(crate) fn for_each_source_glyph(
     &self,
     initial_advance: f32,
     glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
   ) -> f32 {
-    self.for_each_glyph_indexed(initial_advance, true, glyph_callback)
+    self.for_each_glyph_indexed(initial_advance, GlyphIndexSpace::Source, glyph_callback)
   }
 
   fn for_each_glyph_indexed(
     &self,
     initial_advance: f32,
-    source_index: bool,
+    index_space: GlyphIndexSpace,
     mut glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
   ) -> f32 {
     let mut total_advance = initial_advance;
@@ -497,10 +509,10 @@ impl ShapeResultView {
         continue;
       };
       let mut advance = InlineLayoutUnit::from_float_round(total_advance);
-      let character_index_offset = if source_index {
-        part.source_offset
-      } else {
-        self.character_index_offset_for_glyph_data(part)
+      let character_index_offset = match index_space {
+        #[cfg(any(feature = "svg", test))]
+        GlyphIndexSpace::View => self.character_index_offset_for_glyph_data(part),
+        GlyphIndexSpace::Source => part.source_offset,
       };
 
       for (glyph_data, offset) in part
@@ -585,6 +597,13 @@ mod tests {
       assert_eq!((index, glyph), (expected_index, expected_glyph));
       assert!((advance - (expected_advance - advance_offset)).abs() < 1e-3);
     }
+  }
+
+  fn source_glyphs(view: &ShapeResultView) -> Vec<(u32, u16)> {
+    let mut glyphs = Vec::new();
+
+    view.for_each_source_glyph(0.0, |index, glyph, _, _, _| glyphs.push((index, glyph)));
+    glyphs
   }
 
   fn segment(result: &Rc<ShapeResult>, start_index: u32, end_index: u32) -> Segment<'_> {
@@ -839,15 +858,9 @@ mod tests {
         .shape_all(&font, TextDirection::Rtl),
     );
     let view = ShapeResultView::create(&[segment(&first, 0, 9), segment(&second, 9, 13)]);
-    let source = |view: &ShapeResultView| {
-      let mut indices = Vec::new();
-
-      view.for_each_source_glyph(0.0, |index, glyph, _, _, _| indices.push((index, glyph)));
-      indices
-    };
     let rebuilt = ShapeResultView::create_from_result(&Rc::new(view.create_shape_result()));
 
-    assert_eq!(source(&rebuilt), source(&view));
+    assert_eq!(source_glyphs(&rebuilt), source_glyphs(&view));
   }
 
   #[test]
