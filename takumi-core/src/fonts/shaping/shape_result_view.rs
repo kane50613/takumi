@@ -61,7 +61,7 @@ impl RunInfoPart {
       offset: 0,
       num_characters: run.num_characters,
       width: run.width,
-      source_offset: run.start_index,
+      source_offset: run.source_base.unwrap_or(run.start_index),
     }
   }
 
@@ -372,6 +372,7 @@ impl ShapeResultView {
           .glyph_data
           .copy_from_range(part.glyph_data_range(), part.offset);
         new_run.width = part.width;
+        new_run.source_base = Some(part.source_offset.wrapping_add(part.offset));
 
         Some(new_run)
       })
@@ -821,6 +822,32 @@ mod tests {
         result.previous_safe_to_break_offset(offset)
       );
     }
+  }
+
+  #[test]
+  fn rebuilt_composite_view_keeps_source_indices() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, SCHEHERAZADE, "Scheherazade");
+
+    let font = font(&fonts, "Scheherazade");
+    let first = Rc::new(
+      HarfBuzzShaper::new("\u{639}\u{631}\u{628}\u{649} ").shape_all(&font, TextDirection::Rtl),
+    );
+    let second = Rc::new(
+      HarfBuzzShaper::new("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}")
+        .shape_all(&font, TextDirection::Rtl),
+    );
+    let view = ShapeResultView::create(&[segment(&first, 0, 9), segment(&second, 9, 13)]);
+    let source = |view: &ShapeResultView| {
+      let mut indices = Vec::new();
+
+      view.for_each_source_glyph(0.0, |index, glyph, _, _, _| indices.push((index, glyph)));
+      indices
+    };
+    let rebuilt = ShapeResultView::create_from_result(&Rc::new(view.create_shape_result()));
+
+    assert_eq!(source(&rebuilt), source(&view));
   }
 
   #[test]

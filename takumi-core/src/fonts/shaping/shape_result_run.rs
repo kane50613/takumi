@@ -187,6 +187,8 @@ pub(crate) struct ShapeResultRun {
   pub(crate) width: f32,
   pub(crate) script: Script,
   pub(crate) direction: Direction,
+  /// Source-string offset for `character_index`, when it differs from `start_index`.
+  pub(crate) source_base: Option<u32>,
 }
 
 impl ShapeResultRun {
@@ -208,6 +210,7 @@ impl ShapeResultRun {
       width: 0.0,
       script,
       direction,
+      source_base: None,
     }
   }
 
