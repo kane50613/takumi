@@ -7748,12 +7748,12 @@ fn a_wrapped_kerned_arabic_paragraph_renders_with_its_own_text() {
 
   assert!(
     !kerned_text.is_empty(),
-    "the Arabic text is mapped back to Unicode"
+    "the Arabic text has no /ActualText"
   );
   assert_eq!(
     kerned_text,
     actual_texts(&unkerned),
-    "kerning leaves the text each glyph maps to alone"
+    "kerning changed the text the glyphs map to"
   );
 }
 
@@ -7767,10 +7767,7 @@ fn a_justified_wrapped_kerned_arabic_paragraph_keeps_its_text() {
     &fonts,
   ));
 
-  assert!(
-    !start.is_empty(),
-    "the Arabic text is mapped back to Unicode"
-  );
+  assert!(!start.is_empty(), "the Arabic text has no /ActualText");
 
   for align in [
     "text-align:justify",
@@ -7783,7 +7780,7 @@ fn a_justified_wrapped_kerned_arabic_paragraph_keeps_its_text() {
 
     assert_eq!(
       justified, start,
-      "{align} keeps the text each glyph maps to"
+      "{align} changed the text the glyphs map to"
     );
   }
 }
