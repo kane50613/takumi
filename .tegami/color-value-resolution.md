@@ -3,6 +3,23 @@ packages:
   takumi-core: minor
 ---
 
-# `currentColor` in `color-mix()`, and system colours
+# `color-mix()` and relative colours can read `currentColor`, and system colours render
 
-`color-mix()` and relative colours accept `currentColor` and resolve it against the colour of the element that uses them, as Blink does. In `color` itself, `currentColor` is the parent's colour. A relative colour whose origin is `light-dark()` takes the origin of the element's used color scheme. System colours such as `Canvas`, `CanvasText`, `ButtonFace` and `LinkText` are supported, with Chromium's light and dark values.
+These declarations used to be dropped as invalid and now render as they do in Chrome:
+
+- `color-mix()` and relative colours with `currentColor`, which resolve against the colour of the element that uses them. In `color` itself, `currentColor` is the parent's colour.
+- System colours such as `Canvas`, `CanvasText`, `ButtonFace` and `LinkText`, with Chromium's light and dark values.
+
+A relative colour whose origin is `light-dark()` now takes the origin in the element's used color scheme instead of the light one.
+
+`color-mix()` percentages follow Chrome too. A number or a percentage below 0% or above 100% makes the declaration invalid, and percentages that sum to zero mix to transparent.
+
+#### Migration
+
+`ColorInput` is no longer `Copy`, since `color-mix()` and relative colours keep their arguments. Clone a value you move twice.
+
+```diff
+- let fill = color;
++ let fill = color.clone();
+  let stroke = color;
+```

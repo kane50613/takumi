@@ -1191,7 +1191,8 @@ const ALPHA_CHANNEL: usize = 3;
 /// `CSSRelativeColorValue`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum RelativeColorChannel {
-  /// `none`, which resolves to zero.
+  /// `none`, which resolves to zero. Unlike Blink, whose colours keep a missing channel for an
+  /// enclosing `color-mix()` to take from the other colour, the resolved colour has no such channel.
   None,
   /// The origin's channel at this index, [`ALPHA_CHANNEL`] for `alpha`.
   Keyword(usize),
