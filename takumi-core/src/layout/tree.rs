@@ -3513,7 +3513,9 @@ impl RenderContext {
       &high_priority,
     );
 
-    important.apply_longhands(&mut style, inherited_parent, invalid, &high_priority);
+    important.apply(&mut style, inherited_parent, invalid, |longhands| {
+      !longhands.is_empty() && high_priority.contains_all(longhands)
+    });
     style
   }
 
@@ -3634,22 +3636,6 @@ impl ImportantDeclarations<'_> {
       }
       for declaration in invalid.replace(declaration.clone()) {
         declaration.apply_with_parent(style, inherited_parent);
-      }
-    }
-  }
-
-  /// Applies the part of the declarations that sets only `longhands`, `inherit` taking
-  /// `inherited_parent`.
-  fn apply_longhands(
-    &self,
-    style: &mut ComputedStyle,
-    inherited_parent: &ComputedStyle,
-    invalid: &InvalidDeclarations,
-    longhands: &PropertyMask,
-  ) {
-    for &declaration in &self.0 {
-      for declaration in invalid.replace(declaration.clone()) {
-        declaration.apply_longhands_with_parent(style, inherited_parent, longhands);
       }
     }
   }
