@@ -422,9 +422,12 @@ impl DataType {
         }
         _ => None,
       },
-      Self::Color => ColorInput::from_css(input)
-        .ok()
-        .map(|color| Item::Color(sizing.map_or(color, |sizing| color.computed(sizing)))),
+      Self::Color => ColorInput::from_css(input).ok().map(|color| {
+        Item::Color(match sizing {
+          Some(sizing) => color.resolve_color_value(sizing.color_scheme),
+          None => color,
+        })
+      }),
       Self::Image => {
         if input
           .try_parse(|input| input.expect_ident_matching("none"))
@@ -655,7 +658,7 @@ impl Display for Item {
         write!(f, "rgba({r}, {g}, {b}, ")?;
         number(f, serialized_alpha(*alpha), ")")
       }
-      Self::Color(color @ ColorInput::LightDark(..)) => color.to_css(f),
+      Self::Color(color) => color.to_css(f),
       Self::Transforms(transforms) => transforms.to_css(f),
       Self::Specified(text) => f.write_str(text),
     }

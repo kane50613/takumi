@@ -5,7 +5,7 @@ use serde::Deserialize;
 use takumi_bindings_common::{FontScope, input::ImageSource};
 use takumi_core::{
   layout::node::Node,
-  style::{Color, ColorInput, CssSource, FromCssStr},
+  style::{Color, CssSource, FromCssStr},
   viewport::Viewport,
 };
 use takumi_pdf::{
@@ -164,11 +164,9 @@ impl From<PageRangeInput> for PageRange {
 /// The paper color, parsed from a CSS color.
 pub(crate) fn page_background(color: Option<&str>) -> Result<Option<Color>, js_sys::Error> {
   color
-    .map(|color| match ColorInput::from_css_str(color) {
-      Ok(ColorInput::Value(color)) => Ok(color),
-      _ => Err(js_sys::Error::new(&format!(
-        "backgroundColor is not a color: {color}"
-      ))),
+    .map(|color| {
+      Color::from_css_str(color)
+        .map_err(|_| js_sys::Error::new(&format!("backgroundColor is not a color: {color}")))
     })
     .transpose()
 }

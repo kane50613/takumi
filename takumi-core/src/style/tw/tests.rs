@@ -1632,8 +1632,11 @@ fn test_opacity_modifier_mixes_the_variable() {
   let computed = style.inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
   assert_eq!(
-    computed.background_data.background_color,
-    ColorInput::Value(Color([91, 33, 182, 128]))
+    computed
+      .background_data
+      .background_color
+      .resolve(Color::black()),
+    Color([91, 33, 182, 128])
   );
 }
 
@@ -1747,7 +1750,7 @@ fn test_gradient_reads_css_variables() {
     .stops
     .iter()
     .map(|stop| match stop {
-      GradientStop::ColorHint { color, .. } => *color,
+      GradientStop::ColorHint { color, .. } => color.clone(),
       GradientStop::Hint(..) => panic!("expected color stops"),
     })
     .collect();

@@ -56,11 +56,12 @@ use crate::{
   sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
-    Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang, LineHeight,
-    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
-    animated_custom_properties, apply_stylesheet_animations, page_rule::PageContext,
+    Affine, BackgroundImage, BackgroundImages, Color, ColorInput, ComputedStyle, ContentItem,
+    ContentValue, Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang,
+    LineHeight, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
+    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi,
+    WhiteSpaceCollapse, animated_custom_properties, apply_stylesheet_animations,
+    page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -3447,6 +3448,12 @@ impl RenderContext {
     );
     style.make_computed(&sizing);
     let current_color = style.inherited_data.color.resolve(self.current_color);
+
+    // Blink's `Color::ApplyValue`: `currentColor` in a colour function of `color` is the parent's
+    // colour, so the function resolves when `color` computes.
+    if style.inherited_data.color.is_unresolved_color_function() {
+      style.inherited_data_mut().color = ColorInput::Value(current_color);
+    }
     (style, sizing, current_color)
   }
 
@@ -3593,7 +3600,7 @@ impl RenderContext {
       style
         .inherited_data
         .color
-        .computed(&sizing)
+        .resolve_color_value(sizing.color_scheme)
         .resolve(self.current_color),
     )
   }
@@ -3629,7 +3636,7 @@ impl RenderContext {
     let child_current_color = style
       .inherited_data
       .color
-      .computed(child_sizing)
+      .resolve_color_value(child_sizing.color_scheme)
       .resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,

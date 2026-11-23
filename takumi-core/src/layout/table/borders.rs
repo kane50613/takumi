@@ -87,10 +87,10 @@ impl BorderSource {
       }),
       styles: styles.map(collapsed_style),
       colors: [
-        surround.border_top_color,
-        surround.border_right_color,
-        surround.border_bottom_color,
-        surround.border_left_color,
+        &surround.border_top_color,
+        &surround.border_right_color,
+        &surround.border_bottom_color,
+        &surround.border_left_color,
       ]
       .map(|color| color.resolve(context.current_color)),
     }

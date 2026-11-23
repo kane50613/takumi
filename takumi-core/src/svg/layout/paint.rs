@@ -130,10 +130,12 @@ impl SvgLayout<'_> {
         .clone()
         .and_then(|(_, stroke)| stroke)
         .map(|stroke| (stroke.paint, stroke.context)),
-      SvgPaint::Color(color) => color_paint(self.resolve_color(styled, *color), opacity),
+      SvgPaint::Color(color) => color_paint(self.resolve_color(styled, color), opacity),
       SvgPaint::Url(resource, fallback) => {
         let from_fallback = |layout: &Self, opacity: &mut f32| {
-          fallback.and_then(|color| color_paint(layout.resolve_color(styled, color), opacity))
+          fallback
+            .as_ref()
+            .and_then(|color| color_paint(layout.resolve_color(styled, color), opacity))
         };
         let Some(link) = self.reference(resource) else {
           return from_fallback(self, opacity);

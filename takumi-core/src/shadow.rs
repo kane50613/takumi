@@ -21,7 +21,7 @@ pub struct SizedShadow {
 impl SizedShadow {
   /// Creates a new [`SizedShadow`] from a [`BoxShadow`].
   pub(crate) fn from_box_shadow(
-    shadow: BoxShadow,
+    shadow: &BoxShadow,
     sizing: &SizingContext,
     current_color: Color,
     size: Size<f32>,
@@ -37,7 +37,7 @@ impl SizedShadow {
 
   /// Creates a new `SizedShadow` from a `TextShadow`.
   pub fn from_text_shadow(
-    shadow: TextShadow,
+    shadow: &TextShadow,
     sizing: &SizingContext,
     current_color: Color,
     size: Size<f32>,
