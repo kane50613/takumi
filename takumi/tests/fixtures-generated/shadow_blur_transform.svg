@@ -28,7 +28,7 @@
         <feGaussianBlur stdDeviation="4"/>
       </filter>
       <g filter="url(#bl3)">
-        <path d="M-13-13h86v66h-86v-66Zm15 15h56v36h-56v-36Z" fill="#dc2626" fill-rule="evenodd"/>
+        <path d="M-22-22h104v84h-104v-84Zm24 24h56v36h-56v-36Z" fill="#dc2626" fill-rule="evenodd"/>
       </g>
     </g>
   </g>
