@@ -6,7 +6,9 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use cssparser::{Parser, RuleBodyParser, SourceLocation, Token, match_ignore_ascii_case};
+use cssparser::{
+  Delimiter, Parser, RuleBodyParser, SourceLocation, Token, match_ignore_ascii_case,
+};
 use pastey::paste;
 use serde::{Deserialize, de::Error as DeError};
 use smallvec::{SmallVec, smallvec};
@@ -2933,6 +2935,28 @@ impl StyleDeclarationBlock {
     origin: DeclarationOrigin,
   ) -> ParseResult<'i, Self> {
     Self::parse_property(PropertyId::from_kebab_case(name), name, input, origin)
+  }
+
+  /// Parses a declaration's value, which ends at its first top-level `!` unless the property is
+  /// custom or unknown.
+  pub(crate) fn parse_declaration_value<'i>(
+    name: &str,
+    input: &mut Parser<'i>,
+    origin: DeclarationOrigin,
+  ) -> ParseResult<'i, Self> {
+    let property = PropertyId::from_kebab_case(name);
+
+    if matches!(property, PropertyId::Custom | PropertyId::Ignored) {
+      return Self::parse_property(property, name, input, origin);
+    }
+
+    // CSS Syntax takes `!important` off a value before the property's grammar reads it, as Stylo
+    // does with this delimiter.
+    // <https://drafts.csswg.org/css-syntax-3/#consume-declaration>
+    // <https://github.com/servo/stylo/blob/49b39a356d034efd7102f17b20e110aa008b7554/style/properties/declaration_block.rs#L1564-L1566>
+    input.parse_until_before(Delimiter::Bang, |input| {
+      Self::parse_property(property, name, input, origin)
+    })
   }
 
   /// Parses one declaration block for `property`, which `name` names.

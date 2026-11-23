@@ -26,6 +26,19 @@ fn important_wins_over_higher_specificity_normal() {
 }
 
 #[test]
+fn important_shorthand_wins_over_higher_specificity_normal() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { box-sizing: content-box; width: 100px; border: 10px solid red !important; }
+      div.box { border: none; }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 120.0);
+}
+
+#[test]
 fn empty_rule_blocks_do_not_disturb_the_cascade() {
   let root = Node::container([block("box")]);
   let result = measure_with_css(

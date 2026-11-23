@@ -1582,7 +1582,6 @@ css/css-grid/grid-lanes/track-sizing/auto-repeat/row-auto-repeat-025.html
 !css/css-grid/layout-algorithm/grid-track-ignores-max-size-002.html
 !css/css-grid/stretch-grid-item-text-input-overflow.html
 !css/css-grid/subgrid/baseline-001.html
-!css/css-grid/subgrid/grid-gap-003.html
 !css/css-grid/subgrid/grid-gap-007.html
 !css/css-grid/subgrid/grid-gap-008.html
 !css/css-grid/subgrid/grid-gap-009.html
@@ -2455,6 +2454,7 @@ css/css-text-decor/text-decoration-line-013.xht
 css/css-text-decor/text-decoration-line-grammar-error-color-001.html
 css/css-text-decor/text-decoration-line-spelling-error-color-001.html
 css/css-text-decor/text-decoration-line-through-wavy-covers-whole-line-length-001.html
+css/css-text-decor/text-decoration-line.html
 css/css-text-decor/text-decoration-overline-wavy-covers-whole-line-length-001.html
 css/css-text-decor/text-decoration-propagation-01.html
 css/css-text-decor/text-decoration-propagation-02.html
