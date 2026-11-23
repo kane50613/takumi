@@ -7,7 +7,8 @@ use crate::{
   viewport::ColorScheme,
 };
 
-/// `color-scheme`: the color schemes an element can be rendered in, as the ordered list of its keywords.
+/// `color-scheme`: the color schemes an element can be rendered in, as the ordered list of its keywords
+/// with `only` last.
 /// `normal` is the empty list.
 /// <https://drafts.csswg.org/css-color-adjust-1/#color-scheme-prop>
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -75,20 +76,27 @@ impl<'i> FromCss<'i> for ColorSchemes {
         }
 
         only = true;
-      } else if RESERVED.contains(&keyword.as_str()) {
-        return Err(unexpected_token!(&Token::Ident(token)));
-      } else {
-        schemes += 1;
+        continue;
       }
 
+      if RESERVED.contains(&keyword.as_str()) {
+        return Err(unexpected_token!(&Token::Ident(token)));
+      }
+
+      schemes += 1;
       keywords.push(match keyword.as_str() {
-        "light" | "dark" | "only" => keyword.into(),
+        "light" | "dark" => keyword.into(),
         _ => token.as_ref().into(),
       });
     }
 
     if schemes == 0 || !at_end(input) {
       return Err(input.new_error_for_next_token());
+    }
+
+    // Blink keeps `only` last, wherever it was written.
+    if only {
+      keywords.push("only".into());
     }
 
     Ok(Self(keywords.into()))
@@ -143,7 +151,7 @@ mod tests {
       ("light dark", "light dark"),
       ("dark light", "dark light"),
       ("Dark brand", "dark brand"),
-      ("only dark", "only dark"),
+      ("only dark", "dark only"),
       ("light dark only", "light dark only"),
     ] {
       assert_eq!(schemes(css).to_css_string(), serialized, "{css}");
