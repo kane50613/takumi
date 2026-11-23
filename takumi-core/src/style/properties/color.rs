@@ -1102,6 +1102,10 @@ impl ToCss for ColorMixValue {
       color.to_css(dest)?;
 
       match percentage {
+        // Only a math function holds a percentage outside 0% to 100%, and it reparses as one.
+        Some(percentage) if !(0.0..=1.0).contains(&percentage) => {
+          write!(dest, " calc({}%)", significant(percentage * 100.0))
+        }
         Some(percentage) => write!(dest, " {}%", significant(percentage * 100.0)),
         None => Ok(()),
       }
@@ -1901,6 +1905,8 @@ mod tests {
     for css in [
       "color-mix(in srgb, red 0.0000119209%, blue 0.0000119209%)",
       "color-mix(in srgb, currentColor 25%, blue)",
+      "color-mix(in srgb, red calc(120%), blue)",
+      "color-mix(in srgb, red calc(-10%), blue 60%)",
     ] {
       let serialized = ColorInput::from_css_str(css).map(|color| color.to_css_string());
       let reparsed = serialized
