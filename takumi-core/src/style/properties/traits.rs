@@ -632,6 +632,17 @@ impl ToCss for f32 {
   }
 }
 
+/// `value` to the six significant digits Blink serializes a number with.
+pub(crate) fn significant(value: f32) -> f32 {
+  if value == 0.0 || !value.is_finite() {
+    return value;
+  }
+
+  let scale = 10_f64.powi(5 - f64::from(value).abs().log10().floor() as i32);
+
+  ((f64::from(value) * scale).round() / scale) as f32
+}
+
 impl ToCss for u32 {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     write!(dest, "{self}")

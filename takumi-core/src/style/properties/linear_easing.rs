@@ -11,7 +11,7 @@ use cssparser::{ParseError as CssParseError, Parser};
 use crate::style::{
   ParseResult, ToCss,
   interner::{self, Interner},
-  lerp, parse_number_value, parse_percentage_value,
+  lerp, parse_number_value, parse_percentage_value, significant,
 };
 
 /// A `linear()` curve, by its index among the interned curves.
@@ -176,15 +176,4 @@ fn write_points<W: Write>(points: &[Point], dest: &mut W) -> fmt::Result {
     dest.write_char('%')?;
   }
   Ok(())
-}
-
-/// `value` to the six significant digits Blink serializes a number with.
-fn significant(value: f32) -> f32 {
-  if value == 0.0 || !value.is_finite() {
-    return value;
-  }
-
-  let scale = 10_f64.powi(5 - f64::from(value).abs().log10().floor() as i32);
-
-  ((f64::from(value) * scale).round() / scale) as f32
 }

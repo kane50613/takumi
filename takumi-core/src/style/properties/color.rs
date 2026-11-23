@@ -19,6 +19,7 @@ use crate::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
     PercentageNumber, SizingContext, ToCss,
     math::mul_div_255,
+    significant,
     tw::TailwindPropertyParser,
     tw::{Namespace, extract_arbitrary_value},
     unexpected_token,
@@ -909,7 +910,7 @@ impl ToCss for ColorMixValue {
       color.to_css(dest)?;
 
       match percentage {
-        Some(PercentageNumber(percentage)) => write!(dest, " {}%", percentage * 100.0),
+        Some(PercentageNumber(percentage)) => write!(dest, " {}%", significant(percentage * 100.0)),
         None => Ok(()),
       }
     };
@@ -1065,7 +1066,7 @@ impl RelativeColorChannel {
       Self::Keyword(ALPHA_CHANNEL) => dest.write_str("alpha"),
       Self::Keyword(keyword) => dest.write_str(channel_names(cs)[keyword]),
       Self::Number(value) => value.to_css(dest),
-      Self::Percentage(unit_value) => write!(dest, "{}%", unit_value * 100.0),
+      Self::Percentage(unit_value) => write!(dest, "{}%", significant(unit_value * 100.0)),
       Self::Angle(degrees) => write!(dest, "{degrees}deg"),
     }
   }
@@ -1445,6 +1446,7 @@ mod tests {
       "rgb(from currentColor b g r / alpha)",
       "hsl(from light-dark(rgb(255, 0, 0), rgb(0, 0, 255)) 120deg s 50%)",
       "oklch(from rgb(255, 0, 0) l c none / 0.5)",
+      "color-mix(in srgb, rgb(255, 255, 255), rgb(0, 0, 0) 30%)",
     ] {
       let Ok(color) = ColorInput::from_css_str(css) else {
         panic!("{css} did not parse");
