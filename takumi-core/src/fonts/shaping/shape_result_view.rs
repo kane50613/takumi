@@ -801,8 +801,9 @@ mod tests {
     let font = font(&fonts, "Scheherazade");
     let shape_rtl =
       |text: &str| Rc::new(HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Rtl));
+    let text = "\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}";
     let line_start = shape_rtl("\u{639}\u{631}\u{628}\u{649} ");
-    let result = shape_rtl("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}");
+    let result = shape_rtl(text);
     let indexed = |view: &ShapeResultView| {
       glyphs(view)
         .into_iter()
@@ -811,7 +812,22 @@ mod tests {
     };
     let expected = indexed(&ShapeResultView::create_from_result(&result));
     let view = ShapeResultView::create(&[segment(&line_start, 0, 9), segment(&result, 9, 13)]);
-    let rebuilt = ShapeResultView::create_from_result(&Rc::new(view.create_shape_result()));
+    let rebuilt_result = view.create_shape_result();
+    let rebuilt = ShapeResultView::create_from_result(&Rc::new(rebuilt_result.clone()));
+    let last_word = ShapeResultView::create_from_view_range(&view, 9, 13);
+
+    assert_eq!(
+      indexed(&last_word),
+      indexed(&ShapeResultView::create_from_result_range(&result, 9, 13))
+    );
+
+    for offset in (1..=13).filter(|&offset| text.is_char_boundary(offset as usize)) {
+      assert_eq!(
+        view.previous_safe_to_break_offset(offset),
+        rebuilt_result.previous_safe_to_break_offset(offset),
+        "previous safe break before {offset}"
+      );
+    }
 
     assert_eq!(indexed(&view), expected);
     assert_eq!(indexed(&rebuilt), expected);
