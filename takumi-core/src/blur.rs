@@ -1,9 +1,11 @@
 //! Gaussian blur by decimation, as filtra's `filtra_core::blur` plans it and its
 //! `filtra_kernels::blur` runs it, under the notice in LICENSE-FILTRA. Each axis halves with
 //! `[1, 3, 3, 1] / 8` until a variance of at most 4 is left, blurs that rest with a small Gaussian
-//! and doubles back with `[1, 3] / 4`, so a pixel costs the same at any sigma. Approximate: Chrome
-//! blurs with Skia's three-box passes, which this differs from by a few levels of 255, lying
-//! closer to the exact Gaussian.
+//! and doubles back with `[1, 3] / 4`. Each level holds half the pixels of the one before along a
+//! halved axis, so the work grows slowly with sigma. Approximate: Chrome blurs with Skia's
+//! three-box passes, which this differs from by a few levels of 255, lying closer to the exact
+//! Gaussian, and halving pairs pixels by their position, so past a variance of 4 a pixel spreads
+//! slightly unevenly, mirrored when it moves by one pixel.
 
 use std::{array, mem};
 
@@ -35,7 +37,8 @@ pub fn blur_rgba(pixels: &mut [[u8; 4]], width: usize, height: usize, sigma: f32
   blur_rgba_axes(pixels, width, height, Point { x: sigma, y: sigma });
 }
 
-/// Blurs premultiplied RGBA pixels in place with a sigma for each axis, as `feGaussianBlur` has.
+/// Blurs premultiplied RGBA pixels in place with a sigma for each axis, as `feGaussianBlur` has,
+/// capped as Skia's `SkBlurImageFilter` caps every image filter's blur.
 #[inline]
 pub(crate) fn blur_rgba_axes(
   pixels: &mut [[u8; 4]],
@@ -43,8 +46,19 @@ pub(crate) fn blur_rgba_axes(
   height: usize,
   sigma: Point<f32>,
 ) {
-  blur_in_place(pixels, width, height, sigma);
+  let cap = |sigma: f32| {
+    if sigma > MAX_IMAGE_FILTER_SIGMA {
+      MAX_IMAGE_FILTER_SIGMA
+    } else {
+      sigma
+    }
+  };
+
+  blur_in_place(pixels, width, height, sigma.map(cap));
 }
+
+/// Skia's `kMaxSigma` in `SkBlurImageFilter.cpp`.
+const MAX_IMAGE_FILTER_SIGMA: f32 = 532.0;
 
 /// Blurs an alpha mask in place, as [`blur_rgba`] does.
 #[inline]
@@ -78,23 +92,14 @@ pub fn blur_alpha_region(
     width: image.width,
     height: image.height,
   });
-  let source = Image {
-    pixels: mask.as_chunks::<1>().0,
-    spans: spans(mask_at),
-  };
-  // The image clips the mask, as it would once drawn into it.
-  let shown = intersect(source.spans, image);
-  let clipped;
-  let source = if shown == source.spans {
-    source
-  } else {
-    clipped = source.part(shown);
-    Image {
-      pixels: &clipped,
-      spans: shown,
-    }
-  };
   let region = spans(region);
+  let reach = reach(sigma).ceil() as i64;
+  // The image clips the mask, as it would once drawn into it, and no pixel past the blur's reach
+  // of the region touches it.
+  let footprint = intersect(image, region.map(|span| span.grow(reach)));
+  let Some(source) = Image::new(mask.as_chunks::<1>().0, spans(mask_at)).within(footprint) else {
+    return pixels.into_flattened();
+  };
   let blur = Blur::new(
     Point { x: sigma, y: sigma },
     source.spans,
@@ -126,43 +131,54 @@ fn blur_in_place<const N: usize>(
 
   let source = pixels.to_vec();
 
-  blur.run(
-    Image {
-      pixels: &source,
-      spans: rect,
-    },
-    pixels,
-    rect,
-  );
+  blur.run(Image::new(&source, rect), pixels, rect);
 }
 
-/// Pixels of `N` channels on a rectangle, row by row.
+/// Pixels of `N` channels on a rectangle, row by row, `stride` pixels apart.
 #[derive(Clone, Copy)]
 struct Image<'a, const N: usize> {
   pixels: &'a [[u8; N]],
   spans: [Span; 2],
+  stride: usize,
 }
 
 impl<'a, const N: usize> Image<'a, N> {
+  /// The pixels of `spans`, packed row by row.
+  fn new(pixels: &'a [[u8; N]], spans: [Span; 2]) -> Self {
+    Self {
+      pixels,
+      spans,
+      stride: spans[0].len(),
+    }
+  }
+
+  /// The part of the image inside `rect`, if any.
+  fn within(self, rect: [Span; 2]) -> Option<Self> {
+    let spans = intersect(self.spans, rect);
+
+    if spans.iter().any(|span| span.is_empty()) {
+      return None;
+    }
+
+    let offset = (spans[1].0 - self.spans[1].0) as usize * self.stride
+      + (spans[0].0 - self.spans[0].0) as usize;
+
+    Some(Self {
+      pixels: &self.pixels[offset..],
+      spans,
+      stride: self.stride,
+    })
+  }
+
   /// Row `y`, if the image has it.
   fn row(&self, y: i64) -> Option<&'a [[u8; N]]> {
     let [x, rows] = self.spans;
 
     rows.contains(y).then(|| {
-      let start = (y - rows.0) as usize * x.len();
+      let start = (y - rows.0) as usize * self.stride;
 
       &self.pixels[start..start + x.len()]
     })
-  }
-
-  /// The pixels of `rect`, which lies inside the image.
-  fn part(&self, rect: [Span; 2]) -> Vec<[u8; N]> {
-    let left = (rect[0].0 - self.spans[0].0) as usize;
-
-    (rect[1].0..rect[1].1)
-      .filter_map(|y| self.row(y))
-      .flat_map(|row| row[left..left + rect[0].len()].iter().copied())
-      .collect()
   }
 
   /// Writes the image to `target`, the pixels of `rect`, transparent where it has none.
@@ -276,10 +292,9 @@ impl Blur {
       plane.clear();
       plane.resize(pass.spans[0].len() * pass.spans[1].len(), [0; N]);
 
-      let input = current.as_ref().map_or(source, |(pixels, spans)| Image {
-        pixels,
-        spans: *spans,
-      });
+      let input = current
+        .as_ref()
+        .map_or(source, |(pixels, spans)| Image::new(pixels, *spans));
 
       pass.fill(input, weights, &mut plane, pass.spans);
       if let Some((previous, _)) = current.replace((plane, pass.spans)) {
@@ -287,10 +302,9 @@ impl Blur {
       }
     }
 
-    let input = current.as_ref().map_or(source, |(pixels, spans)| Image {
-      pixels,
-      spans: *spans,
-    });
+    let input = current
+      .as_ref()
+      .map_or(source, |(pixels, spans)| Image::new(pixels, *spans));
 
     last.fill(input, weights, target, rect);
   }
@@ -767,9 +781,11 @@ impl Span {
 
 /// The columns and rows of `placement`.
 fn spans(placement: Placement) -> [Span; 2] {
+  let span = |start: i32, len: u32| Span::new(start.into(), i64::from(start) + i64::from(len));
+
   [
-    Span::new(placement.left.into(), placement.right().into()),
-    Span::new(placement.top.into(), placement.bottom().into()),
+    span(placement.left, placement.width),
+    span(placement.top, placement.height),
   ]
 }
 
@@ -881,7 +897,7 @@ impl Layout {
 mod tests {
   use super::{
     Axis, Layout, Placement, Point, Size, Span, blur_alpha, blur_alpha_region, blur_rgba,
-    blur_rgba_axes, reach,
+    blur_rgba_axes, reach, spans,
   };
 
   #[test]
@@ -1038,6 +1054,67 @@ mod tests {
         [0; 64]
       );
     }
+  }
+
+  /// A mask beside the image on one axis and across it on the other blurs to a transparent region.
+  #[test]
+  fn a_mask_beside_the_image_blurs_to_a_transparent_region() {
+    let image = Size {
+      width: 8,
+      height: 8,
+    };
+    let region = Placement {
+      left: 0,
+      top: 0,
+      width: 8,
+      height: 8,
+    };
+
+    for (left, top) in [(9, 2), (2, 9), (-3, 2), (2, -3)] {
+      let mask_at = Placement {
+        left,
+        top,
+        width: 1,
+        height: 1,
+      };
+
+      assert_eq!(
+        blur_alpha_region(&[255], mask_at, image, region, 2.0),
+        [0; 64],
+        "mask at ({left}, {top})"
+      );
+    }
+  }
+
+  #[test]
+  fn a_placement_past_i32_keeps_its_far_edge() {
+    let wide = Placement {
+      left: 0,
+      top: -5,
+      width: 1 << 31,
+      height: u32::MAX,
+    };
+
+    assert_eq!(
+      spans(wide),
+      [Span(0, 1 << 31), Span(-5, i64::from(u32::MAX) - 5)]
+    );
+  }
+
+  /// An image filter blurs no wider than Skia's `SkBlurImageFilter` lets it.
+  #[test]
+  fn an_image_filter_blur_stops_widening_at_the_skia_cap() {
+    let (width, height) = (3, 4001);
+    let blurred = |sigma: f32| {
+      let mut pixels = vec![[0u8; 4]; width * height];
+
+      pixels[(height - 1000) / 2 * width..(height + 1000) / 2 * width].fill([255; 4]);
+      blur_rgba_axes(&mut pixels, width, height, Point { x: 0.0, y: sigma });
+      pixels
+    };
+
+    assert!(blurred(1000.0) == blurred(532.0));
+    assert!(blurred(500.0) != blurred(532.0));
   }
 
   /// The coverage of a box with rounded corners, antialiased, as a shadow's mask is.

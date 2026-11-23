@@ -5,4 +5,11 @@ packages:
 
 # Blurs and shadows render faster
 
-`blur()`, `backdrop-filter`, `drop-shadow()`, `feGaussianBlur`, `box-shadow`, and `text-shadow` blur by decimation, ported from filtra, instead of with Skia's three-box passes. Their pixels no longer match Chrome byte for byte. They differ by a few levels out of 255 and lie closer to the exact Gaussian.
+These effects render faster, and their pixels can change after upgrading:
+
+- `filter: blur()` and `drop-shadow()`
+- `backdrop-filter`
+- `box-shadow` and `text-shadow`
+- SVG `feGaussianBlur`
+
+Review the diffs if you compare renders against pixel-exact snapshots.
