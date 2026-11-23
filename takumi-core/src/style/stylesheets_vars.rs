@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use cssparser::{Parser, Token, TokenSerializationType};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CssInput, CustomProperties};
+use crate::style::{ComputedStyle, CssInput, CustomProperties, StyleDeclaration};
 
 const MAX_VAR_DEPTH: u32 = 100;
 const MAX_VAR_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -446,12 +446,13 @@ pub(crate) fn resolve_var_references(
   resolver.resolve_value(specified_value, 0)
 }
 
-/// Applies a deferred declaration, reporting whether substitution produced a
-/// value so a caller with a fallback can use it.
+/// Applies the declarations of a deferred declaration's substituted value that `applies` accepts,
+/// reporting whether substitution produced a value so a caller with a fallback can use it.
 pub(crate) fn apply_deferred_declaration(
   style: &mut ComputedStyle,
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
+  applies: impl Fn(&StyleDeclaration) -> bool,
 ) -> bool {
   let Some(resolved_value) =
     resolve_var_references(&deferred.specified_value, &style.custom_properties)
@@ -467,7 +468,9 @@ pub(crate) fn apply_deferred_declaration(
   };
 
   for declaration in declarations {
-    declaration.apply(style, parent);
+    if applies(&declaration) {
+      declaration.apply(style, parent);
+    }
   }
 
   true

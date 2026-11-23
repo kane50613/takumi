@@ -982,3 +982,22 @@ fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
   assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
   assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
 }
+
+/// An important declaration whose `var()` resets `color-scheme` beats the animation before
+/// the colours that read it compute, as its literal form does.
+#[test]
+fn an_important_var_declaration_resets_color_scheme_before_colours_compute() {
+  let css = |all: &str| {
+    format!(
+      "
+    @property --ink {{ syntax: '<color>'; inherits: false; initial-value: black }}
+    @keyframes ink {{ from, to {{ color-scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) }} }}
+    .a {{ all: {all} !important; animation: ink 1s paused !important; background-color: var(--ink) !important; display: block !important; width: 4px !important; height: 4px !important }}"
+    )
+  };
+
+  assert_eq!(
+    first_pixel_with_css("a", &css("var(--missing, initial)")),
+    first_pixel_with_css("a", &css("initial"))
+  );
+}
