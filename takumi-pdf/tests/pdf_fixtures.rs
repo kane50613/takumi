@@ -3925,6 +3925,36 @@ fn repeating_gradients() {
   });
 }
 
+/// Gradients whose stops are each opaque or transparent paint opaque inside a clip, with no soft
+/// mask for Apple's readers to drop, and a gradient fading to transparent keeps its colour.
+#[test]
+fn hard_stop_gradients() {
+  let pdf = run_pdf_fixture("hard-stop-gradients", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 20px; row-gap: 16px; background-color: #fffbec; font-size: 32px; color: #1c2452;">
+      <div>A <span style="background: linear-gradient(transparent 55%, #f4ef3a 55%); font-weight: 800;">highlighted</span> word</div>
+      <div>A <span style="background: linear-gradient(transparent 58%, #f4ef3a 58%, #f4ef3a 92%, transparent 92%);">marked</span> word</div>
+      <div style="display: flex; column-gap: 16px;">
+        <div style="width: 120px; height: 60px; background-image: repeating-linear-gradient(45deg, #4357e0 0px, #4357e0 6px, transparent 6px, transparent 14px);"></div>
+        <div style="width: 120px; height: 60px; background-image: linear-gradient(to right, #ff5a5f, transparent, #4357e0);"></div>
+      </div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse hard-stop fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((440, 240)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/S/Luminosity").count(),
+    1,
+    "expected a soft mask for the fade alone"
+  );
+}
+
 /// Decoration lines with custom colors, letter spacing, and variable weight.
 #[test]
 fn text_decorations() {
