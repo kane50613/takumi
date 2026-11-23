@@ -916,3 +916,82 @@ fn color_mix_of_current_color_in_color_mixes_the_parent_colour() {
 
   assert_eq!(image.as_raw()[..4], [128, 0, 128, 255]);
 }
+
+/// The first pixel of a 4px block with `class` under `css`, rendered at time 0.
+fn first_pixel_with_css(class: &str, css: &str) -> Vec<u8> {
+  let image = takumi::render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((4, 4)))
+      .node(styled_block(
+        class,
+        serde_json::json!({ "width": "4px", "height": "4px" }),
+      ))
+      .stylesheet(StyleSheet::parse_loosy(css).into())
+      .fonts(&crate::test_utils::CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  image.as_raw()[..4].to_vec()
+}
+
+/// `color-scheme` cascades its declarations, its animation, and its `!important` declarations
+/// before the colours that read it, as Blink's `ApplyHighPriority` applies it, so every
+/// `light-dark()` resolves in the scheme that wins.
+#[test]
+fn light_dark_resolves_in_the_color_scheme_that_wins_the_cascade() {
+  const KEYFRAMES: &str = "
+    @keyframes to-dark { from, to { color-scheme: dark } }
+    @keyframes to-light { from, to { color-scheme: light } }
+    @keyframes fill { from, to { background-color: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    .static { background-color: light-dark(rgb(255,0,0), rgb(0,0,255)) }";
+  let (red, blue) = (vec![255, 0, 0, 255], vec![0, 0, 255, 255]);
+
+  for (rule, expected) in [
+    (".a { animation: to-dark 1s paused }", &blue),
+    (".a { animation: fill 1s paused, to-dark 1s paused }", &blue),
+    (".a { animation: to-dark 1s paused, fill 1s paused }", &blue),
+    (
+      ".a { color-scheme: light !important; animation: to-dark 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: light !important; animation: to-dark 1s paused, fill 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: dark; animation: to-light 1s paused, fill 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: light; animation: fill 1s paused, to-dark 1s paused }",
+      &blue,
+    ),
+  ] {
+    let class = if rule.contains("fill 1s") {
+      "a"
+    } else {
+      "a static"
+    };
+
+    assert_eq!(
+      &first_pixel_with_css(class, &format!("{KEYFRAMES} {rule}")),
+      expected,
+      "{rule}"
+    );
+  }
+}
+
+/// A keyframed custom property resolves its `light-dark()` in the scheme an animation of
+/// `color-scheme` gives.
+#[test]
+fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
+  let css = "
+    @property --ink { syntax: '<color>'; inherits: false; initial-value: black }
+    @keyframes ink { from, to { color-scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    .a { background-color: var(--ink); animation: ink 1s paused }
+    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }";
+
+  assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
+  assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
+}
