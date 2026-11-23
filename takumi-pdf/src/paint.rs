@@ -209,9 +209,140 @@ pub(crate) fn pdf_stop(offset: f32, rgba: [u8; 4]) -> Stop {
 }
 
 pub(crate) fn pdf_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
-  resolved
+  premultiplied_stops(resolved)
+    .into_iter()
+    .map(|(position, rgba)| pdf_stop((position - base) / span, rgba))
+    .collect()
+}
+
+/// `resolved` with each transparent stop taking its neighbours' colours: the previous stop's
+/// toward it and the next stop's past it, split in two where they differ. A PDF shading
+/// interpolates colour apart from the alpha, where CSS interpolates premultiplied, which keeps a
+/// colour toward a transparent stop instead of fading it through the stop's own colour.
+fn premultiplied_stops(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])> {
+  let visible = |index: usize| resolved[index].color.0[3] != 0;
+  let colour = |index: usize| {
+    let [r, g, b, _] = resolved[index].color.0;
+
+    [r, g, b, 0]
+  };
+  let mut stops = Vec::with_capacity(resolved.len());
+
+  for (index, stop) in resolved.iter().enumerate() {
+    if visible(index) {
+      stops.push((stop.position, stop.color.0));
+      continue;
+    }
+
+    let previous = (0..index).rev().find(|&other| visible(other)).map(colour);
+    let next = (index + 1..resolved.len())
+      .find(|&other| visible(other))
+      .map(colour);
+
+    match (previous, next) {
+      (Some(previous), Some(next)) if previous != next => {
+        stops.push((stop.position, previous));
+        stops.push((stop.position, next));
+      }
+      (previous, next) => stops.push((stop.position, previous.or(next).unwrap_or(stop.color.0))),
+    }
+  }
+  stops
+}
+
+/// The stretches of a gradient's axis, from `0` to `axis_length`, that `stops` paint opaque,
+/// when each stop is opaque or transparent and the alpha changes only at hard stops. Drawing the
+/// gradient opaque clipped to them then needs no soft mask, a construct Apple's PDF readers can
+/// leave out, painting what lies under the transparent stops. `None` when the alpha blends or
+/// never drops to zero.
+pub(crate) fn opaque_runs(
+  stops: &[ResolvedGradientStop],
+  repeating: bool,
+  axis_length: f32,
+) -> Option<Vec<[f32; 2]>> {
+  // How many periods a repeating gradient tiles before it keeps its soft mask instead.
+  const MAX_RUNS: usize = 512;
+
+  let opaque = |stop: &ResolvedGradientStop| stop.color.0[3] == u8::MAX;
+  let binary = stops
     .iter()
-    .map(|stop| pdf_stop((stop.position - base) / span, stop.color.0))
+    .all(|stop| matches!(stop.color.0[3], 0 | u8::MAX));
+  let hard = stops
+    .windows(2)
+    .all(|pair| opaque(&pair[0]) == opaque(&pair[1]) || pair[0].position >= pair[1].position);
+  let (first, last) = (stops.first()?, stops.last()?);
+
+  if !binary || !hard || stops.iter().all(opaque) {
+    return None;
+  }
+
+  // The runs of one pass along the stops, the padded ends reaching past the axis.
+  let (before, after) = if repeating {
+    (first.position, last.position)
+  } else {
+    (f32::NEG_INFINITY, f32::INFINITY)
+  };
+  let mut runs: Vec<[f32; 2]> = Vec::new();
+  let mut start = opaque(first).then_some(before);
+
+  for pair in stops.windows(2) {
+    match (opaque(&pair[0]), opaque(&pair[1])) {
+      (false, true) => start = Some(pair[1].position),
+      (true, false) => runs.extend(start.take().map(|start| [start, pair[0].position])),
+      _ => {}
+    }
+  }
+  runs.extend(start.map(|start| [start, after]));
+
+  if !repeating {
+    return Some(clamp_runs(runs, axis_length));
+  }
+
+  let period = last.position - first.position;
+
+  if period <= 0.0 {
+    return None;
+  }
+
+  let periods = (first.position / period).ceil() as i64
+    ..=((axis_length - first.position) / period).floor() as i64;
+  let mut tiled = Vec::new();
+
+  for shift in (periods.start() - 1)..=(periods.end() + 1) {
+    for [start, end] in &runs {
+      tiled.push([start + shift as f32 * period, end + shift as f32 * period]);
+    }
+    if tiled.len() > MAX_RUNS {
+      return None;
+    }
+  }
+
+  Some(clamp_runs(tiled, axis_length))
+}
+
+/// `runs` kept to the axis, a pixel past each end, with touching runs joined.
+fn clamp_runs(runs: Vec<[f32; 2]>, axis_length: f32) -> Vec<[f32; 2]> {
+  let mut clamped: Vec<[f32; 2]> = Vec::new();
+
+  for [start, end] in runs {
+    let [start, end] = [start.max(-1.0), end.min(axis_length + 1.0)];
+
+    if start >= end {
+      continue;
+    }
+    match clamped.last_mut() {
+      Some(previous) if previous[1] >= start => previous[1] = previous[1].max(end),
+      _ => clamped.push([start, end]),
+    }
+  }
+  clamped
+}
+
+/// [`pdf_stops`] drawn opaque.
+pub(crate) fn opaque_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
+  premultiplied_stops(resolved)
+    .into_iter()
+    .map(|(position, [r, g, b, _])| pdf_stop((position - base) / span, [r, g, b, u8::MAX]))
     .collect()
 }
 
@@ -237,15 +368,16 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   };
   let period = period * scale;
   let cycles = cycles as usize;
-  let mut stops = Vec::with_capacity(cycles * resolved.len());
+  let period_stops = premultiplied_stops(resolved);
+  let mut stops = Vec::with_capacity(cycles * period_stops.len());
 
   for cycle in 0..cycles {
     let offset = first + cycle as f32 * period;
 
-    for stop in resolved {
+    for &(position, rgba) in &period_stops {
       stops.push(pdf_stop(
-        (offset + (stop.position - first) * scale) / extent,
-        stop.color.0,
+        (offset + (position - first) * scale) / extent,
+        rgba,
       ));
     }
   }
