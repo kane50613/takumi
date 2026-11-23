@@ -1794,6 +1794,7 @@ define_style! {
       font_style: FontStyle where inherit = true,
       font_stretch: FontStretch where inherit = true,
       color: ColorInput where inherit = true,
+      color_scheme: ColorSchemes where inherit = true,
       font_size: FontSize where inherit = true,
       font_family: FontFamily where inherit = true,
       line_height: LineHeight where inherit = true,
@@ -2619,7 +2620,7 @@ fn resolve_declared_custom_properties(
 /// The winning `font-size` and `line-height` declarations in a relative-unit cycle with registered
 /// custom properties, which act as `unset` while those properties take their initial values.
 /// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct InvalidDeclarations {
   declarations: Vec<DeferredDeclaration>,
   names: Vec<String>,

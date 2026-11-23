@@ -456,7 +456,10 @@ pub enum GradientStop {
 impl MakeComputed for GradientStop {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
-      GradientStop::ColorHint { hint, .. } => hint.make_computed(sizing),
+      GradientStop::ColorHint { color, hint } => {
+        color.make_computed(sizing);
+        hint.make_computed(sizing);
+      }
       GradientStop::Hint(hint) => hint.make_computed(sizing),
     }
   }
@@ -898,6 +901,7 @@ mod tests {
       root_line_height: None,
       ch: 16.0 / 2.0,
       ex: 16.0 / 2.0,
+      color_scheme: Default::default(),
     }
   }
 

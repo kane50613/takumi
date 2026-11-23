@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_color_scheme_light_dark</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @property --registered {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: black;
+      }
+      @keyframes fade {
+        from {
+          background: currentColor;
+        }
+        to {
+          background: white;
+        }
+      }
+      @property --ink {
+        syntax: "<color>";
+        inherits: false;
+        initial-value: black;
+      }
+      @keyframes dark-fill {
+        from,
+        to {
+          color-scheme: dark;
+          background: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+        }
+      }
+      @keyframes dark-ink {
+        from,
+        to {
+          color-scheme: dark;
+          --ink: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+        }
+      }
+      @keyframes to-dark {
+        from,
+        to {
+          color-scheme: dark;
+          background: currentColor;
+        }
+      }
+      :root {
+        --fill: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+      }
+      div {
+        display: block;
+        width: 120px;
+        height: 24px;
+        margin: 8px;
+        background: var(--fill);
+        border: 4px solid light-dark(rgb(234, 179, 8), rgb(34, 197, 94));
+      }
+      .dark {
+        color-scheme: dark;
+      }
+      .either {
+        color-scheme: light dark;
+      }
+      .light {
+        color-scheme: light;
+      }
+      .ink {
+        color: light-dark(rgb(168, 85, 247), rgb(20, 184, 166));
+        background: currentColor;
+      }
+      .shadow {
+        background: linear-gradient(var(--fill), white);
+        box-shadow: 0 6px 0 light-dark(rgb(234, 179, 8), rgb(34, 197, 94));
+      }
+      .current {
+        color: rgb(168, 85, 247);
+        background: light-dark(rgb(239, 68, 68), currentColor);
+      }
+      .registered {
+        --registered: light-dark(rgb(239, 68, 68), rgb(59, 130, 246));
+      }
+      .registered .light {
+        background: var(--registered);
+      }
+      .animated {
+        color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
+        animation: fade 1s paused;
+      }
+      .scheme-animated {
+        color: light-dark(rgb(239, 68, 68), rgb(20, 184, 166));
+        animation: to-dark 1s paused;
+      }
+      .important-scheme {
+        color-scheme: light !important;
+        animation: dark-fill 1s paused;
+      }
+      .animated-ink {
+        background: var(--ink);
+        animation: dark-ink 1s paused;
+      }
+      svg {
+        display: block;
+        margin: 8px;
+      }
+      .group {
+        width: auto;
+        height: auto;
+        margin: 0;
+        border: 0;
+        background: none;
+      }
+    </style>
+  </head>
+  <body style="width: 160px; height: 420px">
+    <div></div>
+    <div class="dark"></div>
+    <div class="either"></div>
+    <div class="group dark">
+      <div class="light"></div>
+      <div class="ink"></div>
+      <div class="shadow"></div>
+      <div class="current"></div>
+      <div class="animated"></div>
+      <svg width="120" height="16">
+        <rect
+          width="120"
+          height="16"
+          style="fill: light-dark(rgb(239, 68, 68), rgb(59, 130, 246))"
+        />
+      </svg>
+      <div class="group registered">
+        <div class="light"></div>
+      </div>
+    </div>
+    <div class="scheme-animated"></div>
+    <div class="important-scheme"></div>
+    <div class="animated-ink"></div>
+  </body>
+</html>

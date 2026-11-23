@@ -57,12 +57,12 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, FontUnits, KeyframesRule, LineHeight, MatchedStyleKey, Position,
-    PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, animated_custom_properties,
-    apply_stylesheet_animations, page_rule::PageContext,
+    Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang, LineHeight,
+    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
+    animated_custom_properties, apply_stylesheet_animations, page_rule::PageContext,
   },
-  viewport::Viewport,
+  viewport::{ColorScheme, Viewport},
 };
 
 /// A render-tree child paired with its layout node id.
@@ -3405,18 +3405,71 @@ impl RenderContext {
       .stylesheet()
       .keyframes
       .iter()
-      .any(KeyframesRule::animates_custom_properties)
-      .then(|| style_layers.clone());
+      .any(KeyframesRule::animates_custom_properties);
+    let context = (lang, is_document_root);
+    let recascade = recascade.then(|| style_layers.clone());
+    let cascaded = style_layers.inherit_element(&inherited_parent, lang, is_document_root);
+    let resample = (!cascaded.0.misc1_data.animation_name.is_empty()).then(|| cascaded.clone());
+    let (mut style, mut child_sizing_for_final) = self.animated_child_style(
+      cascaded,
+      recascade.as_ref(),
+      &inherited_parent,
+      &important,
+      context,
+      None,
+    );
 
-    let (mut style, mut invalid) =
-      style_layers.inherit_element(&inherited_parent, lang, is_document_root);
+    // `color-scheme` animates discretely and decides every `light-dark()` the animations sample, so
+    // when the scheme that wins, `!important` included, is not the one they were sampled in, they
+    // are sampled again in it, as Blink applies `color-scheme` before the colours that read it.
+    if let (Some(sampled), Some(cascaded)) = (&child_sizing_for_final, resample) {
+      let color_scheme = style
+        .inherited_data
+        .color_scheme
+        .used(self.sizing.viewport.color_scheme);
+
+      if color_scheme != sampled.color_scheme {
+        (style, child_sizing_for_final) = self.animated_child_style(
+          cascaded,
+          recascade.as_ref(),
+          &inherited_parent,
+          &important,
+          context,
+          Some(color_scheme),
+        );
+      }
+    }
+
+    let sizing = self.child_sizing(
+      &style,
+      child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
+      is_document_root,
+    );
+    style.make_computed(&sizing);
+    let current_color = style.inherited_data.color.resolve(self.current_color);
+    (style, sizing, current_color)
+  }
+
+  /// `style` with its animations sampled at this render's time, in `color_scheme` or the scheme of
+  /// the style before them, and its important declarations applied over them, with the sizing the
+  /// animations were sampled against when it has any. `recascade` holds the element's layers when
+  /// an animated custom property has to cascade through them again.
+  fn animated_child_style(
+    &self,
+    (mut style, mut invalid): (ComputedStyle, InvalidDeclarations),
+    recascade: Option<&NodeStyle>,
+    inherited_parent: &ComputedStyle,
+    important: &[&StyleDeclaration],
+    (lang, is_document_root): (Option<Lang>, bool),
+    color_scheme: Option<ColorScheme>,
+  ) -> (ComputedStyle, Option<SizingContext>) {
     let mut tainted = PropertyMask::new();
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
     if let Some(style_layers) = recascade
       && !style.misc1_data.animation_name.is_empty()
     {
-      let mut animated = self.animated_custom_properties(&style);
+      let mut animated = self.animated_custom_properties(&style, color_scheme);
 
       // An important declaration outranks the animation of the same custom property.
       animated.retain(|(name, _)| {
@@ -3433,10 +3486,10 @@ impl RenderContext {
 
         let (mut animated_style, animated_invalid) = animated
           .into_iter()
-          .fold(style_layers, |layers, (name, value)| {
+          .fold(style_layers.clone(), |layers, (name, value)| {
             layers.with(StyleDeclaration::CustomProperty(name, value))
           })
-          .inherit_element(&inherited_parent, lang, is_document_root);
+          .inherit_element(inherited_parent, lang, is_document_root);
 
         animated_style.copy_longhands(&tainted, &style);
         style = animated_style;
@@ -3444,7 +3497,7 @@ impl RenderContext {
       }
     }
     if !style.misc1_data.animation_name.is_empty() {
-      let (animated, child_sizing) = self.animated_style(style);
+      let (animated, child_sizing) = self.animated_style(style, color_scheme);
 
       style = animated;
       child_sizing_for_final = Some(child_sizing);
@@ -3453,25 +3506,18 @@ impl RenderContext {
     // Important declarations outrank an animation, and `inherit` among them needs the parent the
     // first pass resolved against. A tainted animation longhand keeps the value the first pass
     // restored, since no animation reaches it.
-    for &declaration in &important {
+    for &declaration in important {
       let longhands = declaration.affected_longhands();
 
       if !longhands.is_empty() && tainted.contains_all(&longhands) {
         continue;
       }
       for declaration in invalid.replace(declaration.clone()) {
-        declaration.apply_with_parent(&mut style, &inherited_parent);
+        declaration.apply_with_parent(&mut style, inherited_parent);
       }
     }
 
-    let sizing = self.child_sizing(
-      &style,
-      child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
-      is_document_root,
-    );
-    let current_color = style.inherited_data.color.resolve(self.current_color);
-    style.make_computed(&sizing);
-    (style, sizing, current_color)
+    (style, child_sizing_for_final)
   }
 
   /// The sizing a child with `style` resolves against. Its font size resolves in
@@ -3508,54 +3554,96 @@ impl RenderContext {
       .line_height
       .to_px(&self.sizing, normal_basis);
 
-    self.sizing.with_font_metrics(
-      font_size,
-      self
-        .sizing
-        .root_font_size
-        .or_else(|| is_document_root.then_some(font_size)),
-      line_height,
-      self
-        .sizing
-        .root_line_height
-        .or_else(|| is_document_root.then_some(line_height)),
-      FontUnits { ch, ex },
-    )
+    self
+      .sizing
+      .with_font_metrics(
+        font_size,
+        self
+          .sizing
+          .root_font_size
+          .or_else(|| is_document_root.then_some(font_size)),
+        line_height,
+        self
+          .sizing
+          .root_line_height
+          .or_else(|| is_document_root.then_some(line_height)),
+        FontUnits { ch, ex },
+      )
+      .with_color_scheme(
+        style
+          .inherited_data
+          .color_scheme
+          .used(self.sizing.viewport.color_scheme),
+      )
   }
 
   /// The custom properties the stylesheet animations set on `style` at this render's time.
-  fn animated_custom_properties(&self, style: &ComputedStyle) -> Vec<(String, String)> {
-    let sizing = self.child_sizing(style, &self.sizing, false);
+  fn animated_custom_properties(
+    &self,
+    style: &ComputedStyle,
+    color_scheme: Option<ColorScheme>,
+  ) -> Vec<(String, String)> {
+    let sizing = self.animation_sizing(style, color_scheme);
 
     animated_custom_properties(
       style,
       self.stylesheet(),
       self.time_ms(),
       &sizing,
-      style.inherited_data.color.resolve(self.current_color),
+      style
+        .inherited_data
+        .color
+        .computed(&sizing)
+        .resolve(self.current_color),
     )
   }
 
-  /// Samples the stylesheet animations on `style` at this render's time,
-  /// against the sizing the pre-animation style produces.
-  fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
-    let child_sizing = self.child_sizing(&style, &self.sizing, false);
-    let child_current_color = style.inherited_data.color.resolve(self.current_color);
+  /// Samples the stylesheet animations on `style` at this render's time, against the sizing the
+  /// pre-animation style produces, in `color_scheme` when one is given.
+  fn animated_style(
+    &self,
+    style: ComputedStyle,
+    color_scheme: Option<ColorScheme>,
+  ) -> (ComputedStyle, SizingContext) {
+    let child_sizing = self.animation_sizing(&style, color_scheme);
+
+    (self.sample_animations(style, &child_sizing), child_sizing)
+  }
+
+  /// The sizing animations on `style` are sampled against, in `color_scheme` when one is given.
+  fn animation_sizing(
+    &self,
+    style: &ComputedStyle,
+    color_scheme: Option<ColorScheme>,
+  ) -> SizingContext {
+    let sizing = self.child_sizing(style, &self.sizing, false);
+
+    match color_scheme {
+      Some(color_scheme) => sizing.with_color_scheme(color_scheme),
+      None => sizing,
+    }
+  }
+
+  /// The stylesheet animations on `style` at this render's time, sampled against `child_sizing`.
+  fn sample_animations(&self, style: ComputedStyle, child_sizing: &SizingContext) -> ComputedStyle {
+    let child_current_color = style
+      .inherited_data
+      .color
+      .computed(child_sizing)
+      .resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,
       style.clone(),
       child_sizing.clone(),
       child_current_color,
     );
-    let animated = apply_stylesheet_animations(
+    apply_stylesheet_animations(
       style,
       child_context.stylesheet(),
       child_context.time_ms(),
       &child_context.sizing,
       child_context.current_color,
-    );
-
-    (animated, child_sizing)
+    )
   }
 }
 
