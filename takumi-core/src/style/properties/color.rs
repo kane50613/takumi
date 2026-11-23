@@ -1904,11 +1904,15 @@ mod tests {
   fn test_color_mix_percentages_survive_serialization() {
     for css in [
       "color-mix(in srgb, red 0.0000119209%, blue 0.0000119209%)",
+      "color-mix(in srgb, red 0.00001192094%, blue 0%)",
       "color-mix(in srgb, currentColor 25%, blue)",
       "color-mix(in srgb, red calc(120%), blue)",
       "color-mix(in srgb, red calc(-10%), blue 60%)",
     ] {
       let serialized = ColorInput::from_css_str(css).map(|color| color.to_css_string());
+
+      assert!(serialized.is_ok(), "{css}");
+
       let reparsed = serialized
         .clone()
         .and_then(|serialized| ColorInput::from_css_str(&serialized))
