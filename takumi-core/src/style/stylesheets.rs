@@ -2932,7 +2932,16 @@ impl StyleDeclarationBlock {
     input: &mut Parser<'i>,
     origin: DeclarationOrigin,
   ) -> ParseResult<'i, Self> {
-    let property = PropertyId::from_kebab_case(name);
+    Self::parse_property(PropertyId::from_kebab_case(name), name, input, origin)
+  }
+
+  /// Parses one declaration block for `property`, which `name` names.
+  fn parse_property<'i>(
+    property: PropertyId,
+    name: &str,
+    input: &mut Parser<'i>,
+    origin: DeclarationOrigin,
+  ) -> ParseResult<'i, Self> {
     let start = input.position();
 
     if property == PropertyId::Ignored {
