@@ -189,10 +189,14 @@ impl<'a> SvgLayout<'a> {
     reads
   }
 
-  /// `color` in the context of `styled`. Approximate: any colour that reads `currentColor` counts
-  /// as a read of the host's, even under an ancestor's own `color`.
+  /// `color` in the context of `styled`. Approximate: a colour reading `currentColor` under an
+  /// ancestor's own `color` counts as a read of the host's, and one under a `color` that mixed the
+  /// host's, such as `color-mix(in srgb, currentColor, red)`, does not.
   fn resolve_color(&self, styled: &Styled, color: &ColorInput) -> Color {
-    if self.inherits_color && color.reads_current_color() {
+    if self.inherits_color
+      && color.reads_current_color()
+      && styled.style().inherited_data.color == ColorInput::CurrentColor
+    {
       self.read(HostReads {
         color: true,
         fonts: false,
