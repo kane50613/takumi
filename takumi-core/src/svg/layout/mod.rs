@@ -250,10 +250,9 @@ impl<'a> SvgLayout<'a> {
         PreserveAspectRatio::default(),
       ),
     };
-    let background = match root.style().background_data.background_color {
-      ColorInput::Value(color) if color.0[3] != 0 => Some(color),
-      _ => None,
-    };
+    let background =
+      Some(self.resolve_color(&root, &root.style().background_data.background_color))
+        .filter(|color| color.0[3] != 0);
     let scope = Scope::root(view_box_rect);
     let mut tree = Container::new(Affine::IDENTITY);
 
