@@ -11,7 +11,7 @@ use crate::style::{
 };
 
 /// Represents a text shadow with all its properties.
-#[derive(Debug, Clone, PartialEq, Copy, TypedBuilder)]
+#[derive(Debug, Clone, PartialEq, TypedBuilder)]
 #[builder(field_defaults(default))]
 #[non_exhaustive]
 pub struct TextShadow {

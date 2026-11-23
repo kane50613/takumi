@@ -137,7 +137,7 @@ impl ToCss for LineWidth {
 }
 
 /// Parsed `border` value.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Border {
   /// Border width.

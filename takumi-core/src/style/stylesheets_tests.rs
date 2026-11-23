@@ -908,8 +908,8 @@ fn a_shorthand_takes_light_dark() {
   );
   assert_eq!(style.box_data.border_top_style, BorderStyle::Solid);
   assert_eq!(
-    style.surround_data.border_top_color,
-    ColorInput::LightDark(Some(Color([255, 0, 0, 255])), Some(Color([0, 0, 255, 255])))
+    Ok(style.surround_data.border_top_color.clone()),
+    ColorInput::from_css_str("light-dark(red, blue)")
   );
 }
 

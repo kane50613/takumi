@@ -11,7 +11,7 @@ use crate::style::{
 
 /// Represents a box shadow with all its properties.
 /// Construct with [`BoxShadow::builder`].
-#[derive(Debug, Clone, PartialEq, Copy, TypedBuilder)]
+#[derive(Debug, Clone, PartialEq, TypedBuilder)]
 #[builder(field_defaults(default))]
 #[non_exhaustive]
 pub struct BoxShadow {
@@ -337,7 +337,11 @@ mod tests {
     ];
 
     for (css, expected) in cases {
-      assert_eq!(BoxShadow::from_css_str(css), Ok(*expected), "css: {css}");
+      assert_eq!(
+        BoxShadow::from_css_str(css),
+        Ok(expected.clone()),
+        "css: {css}"
+      );
     }
   }
 

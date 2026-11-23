@@ -971,7 +971,7 @@ impl SvgDocument {
         self.close("feComponentTransfer")
       }
       Filter::DropShadow(shadow) => {
-        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, context.current_color, size);
+        let resolved = SizedShadow::from_text_shadow(shadow, sizing, context.current_color, size);
         let color = Rgba(resolved.color.0);
         self.empty(
           "feGaussianBlur",

@@ -1320,7 +1320,7 @@ fn test_measure_inline_atomic_containers_fixture() {
         )))
         .border_width(Sides([Px(5.0).into(); 4]))
         .border_style(Sides([BorderStyle::Solid; 4]))
-        .border_color(Sides([ColorInput::Value(border_color); 4])),
+        .border_color(Sides::from(ColorInput::Value(border_color))),
     )
   };
 
@@ -1357,7 +1357,7 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with(StyleDeclaration::font_size(Px(24.0).into()))
       .border_width(Sides([Px(6.0).into(); 4]))
       .border_style(Sides([BorderStyle::Solid; 4]))
-      .border_color(Sides([ColorInput::Value(Color([40, 40, 40, 255])); 4])),
+      .border_color(Sides::from(ColorInput::Value(Color([40, 40, 40, 255])))),
   )])
   .with_style(
     Style::default()

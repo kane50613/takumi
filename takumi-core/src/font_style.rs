@@ -157,7 +157,7 @@ fn resolved_text_shadows(
         .iter()
         .map(|shadow| {
           SizedShadow::from_text_shadow(
-            *shadow,
+            shadow,
             &context.sizing,
             context.current_color,
             Size::new(context.sizing.font_size, context.sizing.font_size),
@@ -265,13 +265,16 @@ impl<'s> SizedFontStyle<'s> {
       color: style
         .misc_inherited1_data
         .webkit_text_fill_color
-        .unwrap_or(style.inherited_data.color)
+        .as_ref()
+        .unwrap_or(&style.inherited_data.color)
         .resolve(context.current_color),
       text_stroke_color: style
         .misc_inherited1_data
         .webkit_text_stroke_color
-        .unwrap_or_default()
-        .resolve(context.current_color),
+        .as_ref()
+        .map_or(context.current_color, |color| {
+          color.resolve(context.current_color)
+        }),
       text_decorations: context.text_decorations.clone(),
     }
   }

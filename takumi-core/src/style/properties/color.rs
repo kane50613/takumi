@@ -1,4 +1,7 @@
-use std::fmt::{self, Display};
+use std::{
+  fmt::{self, Display},
+  sync::Arc,
+};
 
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb, parse_color};
 use cssparser::{
@@ -182,8 +185,9 @@ impl From<[f32; 4]> for Color {
   }
 }
 
-/// Represents a color input value.
-#[derive(Debug, Clone, PartialEq, Copy, Default)]
+/// A `<color>` value: as specified, the tree of Blink's colour `CSSValue`s, and once computed,
+/// Blink's `StyleColor`.
+#[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub enum ColorInput {
   /// Inherit from the `color` value.
@@ -191,18 +195,20 @@ pub enum ColorInput {
   CurrentColor,
   /// A color value.
   Value(Color),
-  /// A colour that depends on the used color scheme, from `light-dark()` or a `color-mix()` of
-  /// one, computing to its light or its dark colour. `None` is `currentColor`.
-  LightDark(Option<Color>, Option<Color>),
+  /// A `light-dark()` pair, computing to one of its colours by the used color scheme.
+  LightDark(Arc<LightDarkValuePair>),
+  /// A `color-mix()`, which stays unresolved once computed while an operand depends on
+  /// `currentColor`.
+  ColorMix(Arc<ColorMixValue>),
+  /// A relative colour, which stays unresolved once computed while its origin depends on
+  /// `currentColor`.
+  RelativeColor(Arc<RelativeColorValue>),
 }
 
 impl MakeComputed for ColorInput {
   fn make_computed(&mut self, sizing: &SizingContext) {
-    if let ColorInput::LightDark(light, dark) = *self {
-      *self = ColorInput::from_option(match sizing.color_scheme {
-        ColorScheme::Light => light,
-        ColorScheme::Dark => dark,
-      });
+    if !matches!(self, ColorInput::CurrentColor | ColorInput::Value(_)) {
+      *self = self.resolve_color_value(sizing.color_scheme);
     }
   }
 }
@@ -216,9 +222,10 @@ impl Animatable for ColorInput {
     sizing: &SizingContext,
     current_color: CurrentColor,
   ) {
-    let (from, to) = (from.computed(sizing), to.computed(sizing));
+    let from = from.resolve_color_value(sizing.color_scheme);
+    let to = to.resolve_color_value(sizing.color_scheme);
 
-    *self = match (from, to) {
+    *self = match (&from, &to) {
       (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
       // Animating a color is not `color-mix()`: every colour this engine holds is
       // a legacy sRGB one, and those interpolate in sRGB with premultiplied alpha.
@@ -240,32 +247,40 @@ impl ColorInput {
     ColorInput::Value(Color::transparent())
   }
 
-  /// Resolves the color input to a color, the light one of an uncomputed `light-dark()`.
-  pub fn resolve(self, current_color: Color) -> Color {
+  /// Blink's `StyleColor::Resolve`: the used colour, with `currentColor` as `current_color`.
+  pub fn resolve(&self, current_color: Color) -> Color {
     match self {
-      ColorInput::Value(color) | ColorInput::LightDark(Some(color), _) => color,
-      ColorInput::CurrentColor | ColorInput::LightDark(None, _) => current_color,
+      ColorInput::CurrentColor => current_color,
+      ColorInput::Value(color) => *color,
+      ColorInput::ColorMix(color_mix) => color_mix.resolve(current_color),
+      ColorInput::RelativeColor(relative_color) => relative_color.resolve(current_color),
+      // Unlike Blink, which resolves only computed values, a value never computed resolves in the
+      // light color scheme.
+      ColorInput::LightDark(_) => self
+        .resolve_color_value(ColorScheme::Light)
+        .resolve(current_color),
     }
   }
 
-  /// This input as `sizing` computes it, `light-dark()` taking the colour of its color scheme.
-  pub(crate) fn computed(mut self, sizing: &SizingContext) -> Self {
-    self.make_computed(sizing);
-    self
-  }
-
-  /// A colour, or `currentColor` for `None`.
-  fn from_option(color: Option<Color>) -> Self {
-    color.map_or(ColorInput::CurrentColor, ColorInput::Value)
-  }
-
-  /// The light and the dark colour this input takes, `None` for `currentColor`.
-  fn light_and_dark(self) -> (Option<Color>, Option<Color>) {
+  /// Blink's `ResolveColorValue`: the computed value in `color_scheme`, a colour unless it depends
+  /// on `currentColor`.
+  pub(crate) fn resolve_color_value(&self, color_scheme: ColorScheme) -> Self {
     match self {
-      ColorInput::Value(color) => (Some(color), Some(color)),
-      ColorInput::CurrentColor => (None, None),
-      ColorInput::LightDark(light, dark) => (light, dark),
+      ColorInput::CurrentColor | ColorInput::Value(_) => self.clone(),
+      ColorInput::LightDark(pair) => pair.resolve(color_scheme).resolve_color_value(color_scheme),
+      ColorInput::ColorMix(color_mix) => color_mix.resolve_color_value(color_scheme),
+      ColorInput::RelativeColor(relative_color) => relative_color.resolve_color_value(color_scheme),
     }
+  }
+
+  /// Blink's `StyleColor::IsAbsoluteColor`, for a computed value.
+  fn is_absolute_color(&self) -> bool {
+    matches!(self, ColorInput::Value(_))
+  }
+
+  /// Blink's `StyleColor::IsUnresolvedColorFunction`, for a computed value.
+  pub(crate) fn is_unresolved_color_function(&self) -> bool {
+    matches!(self, ColorInput::ColorMix(_) | ColorInput::RelativeColor(_))
   }
 }
 
@@ -525,14 +540,10 @@ impl ToCss for ColorInput {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::CurrentColor => dest.write_str("currentColor"),
-      Self::Value(c) => c.to_css(dest),
-      Self::LightDark(light, dark) => {
-        dest.write_str("light-dark(")?;
-        Self::from_option(*light).to_css(dest)?;
-        dest.write_str(", ")?;
-        Self::from_option(*dark).to_css(dest)?;
-        dest.write_str(")")
-      }
+      Self::Value(color) => color.to_css(dest),
+      Self::LightDark(pair) => pair.to_css(dest),
+      Self::ColorMix(color_mix) => color_mix.to_css(dest),
+      Self::RelativeColor(relative_color) => relative_color.to_css(dest),
     }
   }
 }
@@ -721,195 +732,196 @@ impl Color {
       255,
     ])
   }
+
+  /// Blink's `Color::FromColorMix`.
+  fn from_color_mix(
+    interpolation: ColorInterpolationMethod,
+    color1: Color,
+    color2: Color,
+    percentage: f32,
+    alpha_multiplier: f32,
+  ) -> Self {
+    Color::from_dynamic(
+      color1
+        .to_dynamic()
+        .interpolate(
+          color2.to_dynamic(),
+          interpolation.color_space,
+          interpolation.hue_direction,
+        )
+        .eval(percentage)
+        .multiply_alpha(alpha_multiplier),
+    )
+  }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct ColorMixItem {
-  light: Color,
-  dark: Color,
-  percentage: Option<PercentageNumber>,
+/// Blink's `CSSLightDarkValuePair`, of colours.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LightDarkValuePair {
+  first: ColorInput,
+  second: ColorInput,
 }
 
-impl ColorMixItem {
-  /// The item's colour in `color_scheme`.
-  fn color(self, color_scheme: ColorScheme) -> Color {
+impl LightDarkValuePair {
+  /// Blink's `ResolveLightDarkPair`: the colour of `color_scheme`.
+  fn resolve(&self, color_scheme: ColorScheme) -> &ColorInput {
     match color_scheme {
-      ColorScheme::Light => self.light,
-      ColorScheme::Dark => self.dark,
+      ColorScheme::Light => &self.first,
+      ColorScheme::Dark => &self.second,
     }
   }
 }
 
-/// The light and dark colours of a `color-mix()` operand, which differ only under `light-dark()`.
-/// <https://drafts.csswg.org/css-color-5/#color-mix>, <https://drafts.csswg.org/css-color-5/#light-dark>
-fn parse_mix_operand<'i>(input: &mut Parser<'i>) -> ParseResult<'i, (Color, Color)> {
-  match ColorInput::from_css(input)?.light_and_dark() {
-    (Some(light), Some(dark)) => Ok((light, dark)),
-    _ => Err(input.new_error_for_next_token()),
-  }
-}
-
-impl<'i> FromCss<'i> for ColorMixItem {
+impl<'i> FromCss<'i> for LightDarkValuePair {
+  /// Blink's `ConsumeLightDark`, inside the function's block.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(item) = input.try_parse(|input| -> ParseResult<'i, Self> {
-      let (light, dark) = parse_mix_operand(input)?;
-      let percentage = input.try_parse(PercentageNumber::from_css).ok();
+    let first = ColorInput::from_css(input)?;
 
-      Ok(Self {
-        light,
-        dark,
-        percentage,
-      })
-    }) {
-      return Ok(item);
-    }
+    input.expect_comma()?;
 
-    input.try_parse(|input| -> ParseResult<'i, Self> {
-      let percentage = PercentageNumber::from_css(input)?;
-      let (light, dark) = parse_mix_operand(input)?;
-
-      Ok(Self {
-        light,
-        dark,
-        percentage: Some(percentage),
-      })
+    Ok(Self {
+      first,
+      second: ColorInput::from_css(input)?,
     })
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["<color and percentage>"];
+  const VALID_TOKENS: &'static [&'static str] = &["<light-dark()>"];
 }
 
-#[derive(Debug, Clone, Copy)]
-struct ColorMix {
+impl ToCss for LightDarkValuePair {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str("light-dark(")?;
+    self.first.to_css(dest)?;
+    dest.write_str(", ")?;
+    self.second.to_css(dest)?;
+    dest.write_str(")")
+  }
+}
+
+/// Blink's `CSSColorMixValue`, and once computed, its `StyleColor::UnresolvedColorMix`.
+// Unlike Blink's `UnresolvedColorMix`, an unresolved mix keeps the percentages as written.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColorMixValue {
+  color1: ColorInput,
+  color2: ColorInput,
+  percentage1: Option<PercentageNumber>,
+  percentage2: Option<PercentageNumber>,
   interpolation: ColorInterpolationMethod,
-  first: ColorMixItem,
-  second: ColorMixItem,
 }
 
-impl ColorMix {
-  /// The mix of the operands' colours in `color_scheme`.
-  fn evaluate(self, color_scheme: ColorScheme) -> Option<Color> {
-    let (p1, p2) = match (self.first.percentage, self.second.percentage) {
+impl ColorMixValue {
+  /// Blink's `CSSColorMixValue::NormalizePercentages`: the amount of the second colour and the
+  /// alpha multiplier.
+  // Unlike Blink, which clamps each percentage to 0% to 100%, percentages over 100% are scaled.
+  fn normalize_percentages(&self) -> (f32, f32) {
+    let (p1, p2) = match (self.percentage1, self.percentage2) {
       (None, None) => (0.5, 0.5),
       (Some(PercentageNumber(p1)), None) => (p1, (1.0 - p1).max(0.0)),
       (None, Some(PercentageNumber(p2))) => ((1.0 - p2).max(0.0), p2),
       (Some(PercentageNumber(p1)), Some(PercentageNumber(p2))) => (p1, p2),
     };
-    let sum = p1 + p2;
+    let percentage_sum = p1 + p2;
 
-    if sum <= f32::EPSILON {
-      return None;
+    if percentage_sum <= f32::EPSILON {
+      return (0.5, 0.0);
     }
 
-    let weight_2 = p2 / sum;
-    let alpha_multiplier = sum.min(1.0);
+    (p2 / percentage_sum, percentage_sum.min(1.0))
+  }
 
-    Some(Color::from_dynamic(
-      self
-        .first
-        .color(color_scheme)
-        .to_dynamic()
-        .interpolate(
-          self.second.color(color_scheme).to_dynamic(),
-          self.interpolation.color_space,
-          self.interpolation.hue_direction,
-        )
-        .eval(weight_2)
-        .multiply_alpha(alpha_multiplier),
-    ))
+  /// Blink's `ResolveColorValueImpl` for a `CSSColorMixValue`.
+  fn resolve_color_value(&self, color_scheme: ColorScheme) -> ColorInput {
+    let color_mix = Self {
+      color1: self.color1.resolve_color_value(color_scheme),
+      color2: self.color2.resolve_color_value(color_scheme),
+      percentage1: self.percentage1,
+      percentage2: self.percentage2,
+      interpolation: self.interpolation,
+    };
+
+    // https://drafts.csswg.org/css-color-5/#resolving-mix
+    if color_mix.color1.is_absolute_color() && color_mix.color2.is_absolute_color() {
+      ColorInput::Value(color_mix.resolve(Color::transparent()))
+    } else {
+      ColorInput::ColorMix(Arc::new(color_mix))
+    }
+  }
+
+  /// Blink's `StyleColor::UnresolvedColorMix::Resolve`.
+  fn resolve(&self, current_color: Color) -> Color {
+    let (mix_amount, alpha_multiplier) = self.normalize_percentages();
+
+    Color::from_color_mix(
+      self.interpolation,
+      self.color1.resolve(current_color),
+      self.color2.resolve(current_color),
+      mix_amount,
+      alpha_multiplier,
+    )
   }
 }
 
-impl<'i> FromCss<'i> for ColorMix {
+/// A `color-mix()` colour and its percentage, which can come before it, as Blink's
+/// `ConsumeColorMixFunction` reads them.
+fn parse_color_mix_operand<'i>(
+  input: &mut Parser<'i>,
+) -> ParseResult<'i, (ColorInput, Option<PercentageNumber>)> {
+  if let Ok(color) = input.try_parse(ColorInput::from_css) {
+    return Ok((color, input.try_parse(PercentageNumber::from_css).ok()));
+  }
+
+  let percentage = PercentageNumber::from_css(input)?;
+
+  Ok((ColorInput::from_css(input)?, Some(percentage)))
+}
+
+impl<'i> FromCss<'i> for ColorMixValue {
+  /// Blink's `ConsumeColorMixFunction`, inside the function's block.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let interpolation = ColorInterpolationMethod::from_css(input)?;
 
     input.expect_comma()?;
-    let first = ColorMixItem::from_css(input)?;
+    let (color1, percentage1) = parse_color_mix_operand(input)?;
     input.expect_comma()?;
-    let second = ColorMixItem::from_css(input)?;
+    let (color2, percentage2) = parse_color_mix_operand(input)?;
+    let color_mix = Self {
+      color1,
+      color2,
+      percentage1,
+      percentage2,
+      interpolation,
+    };
 
-    if !input.is_exhausted() {
+    // Unlike Blink, which mixes them to transparent, percentages summing to zero are invalid.
+    if color_mix.normalize_percentages().1 <= f32::EPSILON {
       return Err(input.new_error_for_next_token());
     }
 
-    Ok(Self {
-      interpolation,
-      first,
-      second,
-    })
+    Ok(color_mix)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<color-mix()>"];
 }
 
-impl<'i> FromCss<'i> for ColorInput {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if input
-      .try_parse(|input| input.expect_ident_matching("currentcolor"))
-      .is_ok()
-    {
-      return Ok(ColorInput::CurrentColor);
-    }
+impl ToCss for ColorMixValue {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let write_operand = |dest: &mut W, color: &ColorInput, percentage: Option<PercentageNumber>| {
+      color.to_css(dest)?;
 
-    if input
-      .try_parse(|input| input.expect_function_matching("light-dark"))
-      .is_ok()
-    {
-      return input.parse_nested_block(|input| {
-        let light = ColorInput::from_css(input)?;
+      match percentage {
+        Some(PercentageNumber(percentage)) => write!(dest, " {}%", percentage * 100.0),
+        None => Ok(()),
+      }
+    };
 
-        input.expect_comma()?;
-
-        let (light, _) = light.light_and_dark();
-        let (_, dark) = ColorInput::from_css(input)?.light_and_dark();
-
-        Ok(if light == dark {
-          ColorInput::from_option(light)
-        } else {
-          ColorInput::LightDark(light, dark)
-        })
-      });
-    }
-
-    if input
-      .try_parse(|input| input.expect_function_matching("color-mix"))
-      .is_ok()
-    {
-      return input.parse_nested_block(|input| {
-        let color_mix = ColorMix::from_css(input)?;
-        let (Some(light), Some(dark)) = (
-          color_mix.evaluate(ColorScheme::Light),
-          color_mix.evaluate(ColorScheme::Dark),
-        ) else {
-          return Err(input.new_error_for_next_token());
-        };
-
-        Ok(if light == dark {
-          ColorInput::Value(light)
-        } else {
-          ColorInput::LightDark(Some(light), Some(dark))
-        })
-      });
-    }
-
-    Ok(ColorInput::Value(Color::from_css(input)?))
+    dest.write_str("color-mix(")?;
+    self.interpolation.to_css(dest)?;
+    dest.write_str(", ")?;
+    write_operand(dest, &self.color1, self.percentage1)?;
+    dest.write_str(", ")?;
+    write_operand(dest, &self.color2, self.percentage2)?;
+    dest.write_str(")")
   }
-
-  const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
-}
-
-/// The light colour of a `light-dark()` block, for a value that holds one colour, such as a gradient stop.
-/// <https://drafts.csswg.org/css-color-5/#light-dark>
-fn parse_light_dark<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
-  input.parse_nested_block(|input| {
-    let light = T::from_css(input)?;
-
-    input.expect_comma()?;
-    T::from_css(input)?;
-
-    Ok(light)
-  })
 }
 
 /// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
@@ -924,6 +936,19 @@ fn relative_target_cs(name: &str) -> Option<ColorSpaceTag> {
     "oklch" => ColorSpaceTag::Oklch,
     _ => return None,
   })
+}
+
+/// The function a relative colour in `cs` serializes as, the inverse of [`relative_target_cs`].
+fn relative_function_name(cs: ColorSpaceTag) -> &'static str {
+  match cs {
+    ColorSpaceTag::Hsl => "hsl",
+    ColorSpaceTag::Hwb => "hwb",
+    ColorSpaceTag::Lab => "lab",
+    ColorSpaceTag::Lch => "lch",
+    ColorSpaceTag::Oklab => "oklab",
+    ColorSpaceTag::Oklch => "oklch",
+    _ => "rgb",
+  }
 }
 
 fn channel_names(cs: ColorSpaceTag) -> [&'static str; 3] {
@@ -948,7 +973,7 @@ fn channel_keyword_scale(cs: ColorSpaceTag) -> f32 {
 
 fn channel_percentage_scale(cs: ColorSpaceTag, index: usize) -> f32 {
   match (cs, index) {
-    (_, 3) => 1.0,
+    (_, ALPHA_CHANNEL) => 1.0,
     (ColorSpaceTag::Srgb, _) => 255.0,
     (ColorSpaceTag::Hsl, _) | (ColorSpaceTag::Hwb, _) => 100.0,
     (ColorSpaceTag::Lab, 0) | (ColorSpaceTag::Lch, 0) => 100.0,
@@ -967,119 +992,218 @@ fn is_hue_slot(cs: ColorSpaceTag, index: usize) -> bool {
   )
 }
 
-fn parse_relative_slot<'i>(
-  input: &mut Parser<'i>,
-  target_cs: ColorSpaceTag,
-  index: usize,
-  keyword_values: [f32; 4],
-) -> ParseResult<'i, f32> {
-  let token = input.next()?.clone();
-  let is_hue = is_hue_slot(target_cs, index);
-  match &token {
-    Token::Ident(ident) => {
-      if ident.eq_ignore_ascii_case("none") {
-        return Ok(0.0);
-      }
-      if ident.eq_ignore_ascii_case("alpha") {
-        return Ok(keyword_values[3]);
-      }
-      for (i, name) in channel_names(target_cs).iter().enumerate() {
-        if !name.is_empty() && ident.eq_ignore_ascii_case(name) {
-          return Ok(keyword_values[i]);
+/// The index of the alpha channel among a relative colour's channels.
+const ALPHA_CHANNEL: usize = 3;
+
+/// A channel of a relative colour as written, one of the channel `CSSValue`s of Blink's
+/// `CSSRelativeColorValue`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RelativeColorChannel {
+  /// `none`, which resolves to zero.
+  None,
+  /// The origin's channel at this index, [`ALPHA_CHANNEL`] for `alpha`.
+  Keyword(usize),
+  /// A number.
+  Number(f32),
+  /// A percentage, from 0 to 1.
+  Percentage(f32),
+  /// An angle, in degrees.
+  Angle(f32),
+}
+
+impl RelativeColorChannel {
+  /// The channel at `index` of a relative colour in `cs`.
+  fn parse<'i>(input: &mut Parser<'i>, cs: ColorSpaceTag, index: usize) -> ParseResult<'i, Self> {
+    let token = input.next()?;
+    let is_hue = is_hue_slot(cs, index);
+
+    match token {
+      Token::Ident(ident) => {
+        if ident.eq_ignore_ascii_case("none") {
+          return Ok(Self::None);
         }
+
+        if ident.eq_ignore_ascii_case("alpha") {
+          return Ok(Self::Keyword(ALPHA_CHANNEL));
+        }
+
+        channel_names(cs)
+          .iter()
+          .position(|name| !name.is_empty() && ident.eq_ignore_ascii_case(name))
+          .map(Self::Keyword)
+          .ok_or_else(|| unexpected_token!(ColorInput, token))
       }
-      Err(unexpected_token!(Color, &token))
+      Token::Number { value, .. } => Ok(Self::Number(*value)),
+      Token::Percentage { unit_value, .. } if !is_hue => Ok(Self::Percentage(*unit_value)),
+      Token::Dimension { value, unit, .. } if is_hue => {
+        Ok(Self::Angle(match_ignore_ascii_case! { unit.as_ref(),
+          "deg" => *value,
+          "grad" => *value / 400.0 * 360.0,
+          "turn" => *value * 360.0,
+          "rad" => value.to_degrees(),
+          _ => return Err(unexpected_token!(ColorInput, token)),
+        }))
+      }
+      _ => Err(unexpected_token!(ColorInput, token)),
     }
-    Token::Number { value, .. } => Ok(*value),
-    Token::Percentage { unit_value, .. } if !is_hue => {
-      Ok(*unit_value * channel_percentage_scale(target_cs, index))
+  }
+
+  /// The channel's value at `index` of a colour in `cs`, with the origin's channels as
+  /// `keyword_values`.
+  fn value(self, keyword_values: [f32; 4], cs: ColorSpaceTag, index: usize) -> f32 {
+    match self {
+      Self::None => 0.0,
+      Self::Keyword(keyword) => keyword_values[keyword],
+      Self::Number(value) | Self::Angle(value) => value,
+      Self::Percentage(unit_value) => unit_value * channel_percentage_scale(cs, index),
     }
-    Token::Dimension { value, unit, .. } if is_hue => Ok(match_ignore_ascii_case! { unit.as_ref(),
-      "deg" => *value,
-      "grad" => *value / 400.0 * 360.0,
-      "turn" => *value * 360.0,
-      "rad" => value.to_degrees(),
-      _ => return Err(unexpected_token!(Color, &token)),
-    }),
-    _ => Err(unexpected_token!(Color, &token)),
+  }
+
+  fn to_css<W: fmt::Write>(self, dest: &mut W, cs: ColorSpaceTag) -> fmt::Result {
+    match self {
+      Self::None => dest.write_str("none"),
+      Self::Keyword(ALPHA_CHANNEL) => dest.write_str("alpha"),
+      Self::Keyword(keyword) => dest.write_str(channel_names(cs)[keyword]),
+      Self::Number(value) => value.to_css(dest),
+      Self::Percentage(unit_value) => write!(dest, "{}%", unit_value * 100.0),
+      Self::Angle(degrees) => write!(dest, "{degrees}deg"),
+    }
   }
 }
 
-/// `calc()` expressions in component slots are not yet supported.
-fn parse_relative_color<'i>(
-  input: &mut Parser<'i>,
-  target_cs: ColorSpaceTag,
-) -> ParseResult<'i, Color> {
-  let origin_start = input.position();
-  let origin_token = input.next()?.clone();
-  match &origin_token {
-    Token::Hash(_) | Token::IDHash(_) | Token::Ident(_) => {}
-    Token::Function(_) => {
-      input.parse_nested_block(|inner| -> ParseResult<'i, ()> {
-        while inner.next().is_ok() {}
-        Ok(())
-      })?;
-    }
-    _ => return Err(unexpected_token!(Color, &origin_token)),
-  }
-
-  let scale = channel_keyword_scale(target_cs);
-  let origin_color = Color::from_css_str(input.slice_from(origin_start).trim())
-    .map_err(|_| unexpected_token!(Color, &origin_token))?;
-  let converted = origin_color.to_dynamic().convert(target_cs);
-  let [k0, k1, k2, k_alpha] = converted.components;
-  let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
-
-  let s0 = parse_relative_slot(input, target_cs, 0, keyword_values)?;
-  let s1 = parse_relative_slot(input, target_cs, 1, keyword_values)?;
-  let s2 = parse_relative_slot(input, target_cs, 2, keyword_values)?;
-  let alpha = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-    parse_relative_slot(input, target_cs, 3, keyword_values)?
-  } else {
-    k_alpha
-  };
-
-  let new_components = [s0 / scale, s1 / scale, s2 / scale, alpha.clamp(0.0, 1.0)];
-  Ok(Color::from_dynamic(
-    converted.map(|_, _, _, _| new_components),
-  ))
+/// Blink's `CSSRelativeColorValue`, and once computed, its `StyleColor::UnresolvedRelativeColor`.
+// `calc()` expressions in channels are not yet supported.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RelativeColorValue {
+  origin_color: ColorInput,
+  color_interpolation_space: ColorSpaceTag,
+  channels: [RelativeColorChannel; 3],
+  alpha: Option<RelativeColorChannel>,
 }
 
-impl<'i> FromCss<'i> for Color {
+impl RelativeColorValue {
+  /// The relative colour in `cs` after the `from` keyword of its function's block.
+  fn parse<'i>(input: &mut Parser<'i>, cs: ColorSpaceTag) -> ParseResult<'i, Self> {
+    let origin_color = ColorInput::from_css(input)?;
+    let channels = [
+      RelativeColorChannel::parse(input, cs, 0)?,
+      RelativeColorChannel::parse(input, cs, 1)?,
+      RelativeColorChannel::parse(input, cs, 2)?,
+    ];
+    let alpha = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+      Some(RelativeColorChannel::parse(input, cs, ALPHA_CHANNEL)?)
+    } else {
+      None
+    };
+
+    Ok(Self {
+      origin_color,
+      color_interpolation_space: cs,
+      channels,
+      alpha,
+    })
+  }
+
+  /// Blink's `ResolveColorValueImpl` for a `CSSRelativeColorValue`.
+  fn resolve_color_value(&self, color_scheme: ColorScheme) -> ColorInput {
+    let relative_color = Self {
+      origin_color: self.origin_color.resolve_color_value(color_scheme),
+      color_interpolation_space: self.color_interpolation_space,
+      channels: self.channels,
+      alpha: self.alpha,
+    };
+
+    // https://drafts.csswg.org/css-color-5/#resolving-rcs
+    if relative_color.origin_color.is_absolute_color() {
+      ColorInput::Value(relative_color.resolve(Color::transparent()))
+    } else {
+      ColorInput::RelativeColor(Arc::new(relative_color))
+    }
+  }
+
+  /// Blink's `StyleColor::UnresolvedRelativeColor::Resolve`.
+  fn resolve(&self, current_color: Color) -> Color {
+    let cs = self.color_interpolation_space;
+    let scale = channel_keyword_scale(cs);
+    let origin = self
+      .origin_color
+      .resolve(current_color)
+      .to_dynamic()
+      .convert(cs);
+    let [k0, k1, k2, k_alpha] = origin.components;
+    let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
+    let [c0, c1, c2] = [0, 1, 2].map(|index| self.channels[index].value(keyword_values, cs, index));
+    let alpha = self.alpha.map_or(k_alpha, |alpha| {
+      alpha.value(keyword_values, cs, ALPHA_CHANNEL)
+    });
+    let components = [c0 / scale, c1 / scale, c2 / scale, alpha.clamp(0.0, 1.0)];
+
+    Color::from_dynamic(origin.map(|_, _, _, _| components))
+  }
+}
+
+impl ToCss for RelativeColorValue {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let cs = self.color_interpolation_space;
+
+    write!(dest, "{}(from ", relative_function_name(cs))?;
+    self.origin_color.to_css(dest)?;
+
+    for channel in self.channels {
+      dest.write_char(' ')?;
+      channel.to_css(dest, cs)?;
+    }
+
+    if let Some(alpha) = self.alpha {
+      dest.write_str(" / ")?;
+      alpha.to_css(dest, cs)?;
+    }
+
+    dest.write_char(')')
+  }
+}
+
+impl<'i> FromCss<'i> for ColorInput {
+  /// Blink's `ConsumeColor`.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let position = input.position();
     let token = input.next()?;
 
     match *token {
-      Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
-        .map(|(r, g, b, a)| Color([r, g, b, (a * 255.0) as u8]))
-        .map_err(|_| unexpected_token!(token)),
       Token::Ident(ref ident) => {
-        if ident.eq_ignore_ascii_case("transparent") {
-          return Ok(Color::transparent());
+        if ident.eq_ignore_ascii_case("currentcolor") {
+          return Ok(ColorInput::CurrentColor);
         }
 
-        parse_named_color(ident)
-          .map(|(r, g, b)| Color([r, g, b, 255]))
-          .map_err(|_| unexpected_token!(token))
-      }
-      Token::Function(ref name) => match_ignore_ascii_case! { name,
-        "light-dark" => parse_light_dark(input),
-        "color-mix" => input.parse_nested_block(|input| {
-          let color_mix = ColorMix::from_css(input)?;
-          color_mix
-            .evaluate(ColorScheme::Light)
-            .ok_or_else(|| input.new_error_for_next_token())
-        }),
-        _ => {
-          let token = Token::Function(name.clone());
-          let target_cs = relative_target_cs(name);
+        if ident.eq_ignore_ascii_case("transparent") {
+          return Ok(ColorInput::transparent());
+        }
 
-          input.parse_nested_block(|input| {
-            if let Some(cs) = target_cs
-              && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
+        if let Ok((r, g, b)) = parse_named_color(ident) {
+          return Ok(ColorInput::Value(Color([r, g, b, 255])));
+        }
+
+        Err(unexpected_token!(token))
+      }
+      Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
+        .map(|(r, g, b, a)| ColorInput::Value(Color([r, g, b, (a * 255.0) as u8])))
+        .map_err(|_| unexpected_token!(token)),
+      Token::Function(ref name) => {
+        let name = name.clone();
+
+        match_ignore_ascii_case! { &*name,
+          "light-dark" => input
+            .parse_nested_block(LightDarkValuePair::from_css)
+            .map(|pair| ColorInput::LightDark(Arc::new(pair))),
+          "color-mix" => input
+            .parse_nested_block(ColorMixValue::from_css)
+            .map(|color_mix| ColorInput::ColorMix(Arc::new(color_mix))),
+          _ => input.parse_nested_block(|input| {
+            if let Some(cs) = relative_target_cs(&name)
+              && input.try_parse(|input| input.expect_ident_matching("from")).is_ok()
             {
-              return parse_relative_color(input, cs);
+              return RelativeColorValue::parse(input, cs)
+                .map(|relative_color| ColorInput::RelativeColor(Arc::new(relative_color)));
             }
 
             while input.next().is_ok() {}
@@ -1089,14 +1213,34 @@ impl<'i> FromCss<'i> for Color {
             function.push(')');
 
             parse_color(&function)
-              .map(Color::from_dynamic)
-              .map_err(|_| unexpected_token!(&token))
-          })
+              .map(|color| ColorInput::Value(Color::from_dynamic(color)))
+              .map_err(|_| unexpected_token!(&Token::Function(name.clone())))
+          }),
         }
-      },
+      }
       _ => Err(unexpected_token!(token)),
     }
   }
+
+  const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
+}
+
+impl<'i> FromCss<'i> for Color {
+  /// A `<color>` that resolves without a current colour, in the light color scheme.
+  // Unlike Blink's `ConsumeAbsoluteColor`, which rejects it, `light-dark()` takes its light colour.
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let start = input.state();
+
+    match ColorInput::from_css(input)?.resolve_color_value(ColorScheme::Light) {
+      ColorInput::Value(color) => Ok(color),
+      _ => {
+        input.reset(&start);
+
+        Err(unexpected_token!(input.next()?))
+      }
+    }
+  }
+
   const VALID_TOKENS: &'static [&'static str] = &["<color>"];
 }
 
@@ -1123,25 +1267,28 @@ mod tests {
     sizing().with_color_scheme(color_scheme)
   }
 
+  /// `css` parsed and computed in the light color scheme.
+  fn computed(css: &str) -> Option<ColorInput> {
+    ColorInput::from_css_str(css)
+      .ok()
+      .map(|color| color.resolve_color_value(ColorScheme::Light))
+  }
+
+  /// `css` parsed and computed in `color_scheme`, then resolved against `current_color`.
+  fn used(css: &str, color_scheme: ColorScheme, current_color: Color) -> Option<Color> {
+    ColorInput::from_css_str(css).ok().map(|mut color| {
+      color.make_computed(&in_scheme(color_scheme));
+      color.resolve(current_color)
+    })
+  }
+
   #[test]
   fn light_dark_keeps_both_colours_until_computed() {
     assert_eq!(Color::from_css_str("light-dark(red, blue)"), Ok(RED));
-    assert_eq!(
+    assert!(matches!(
       ColorInput::from_css_str("light-dark(#ff0000, rgb(0 0 255))"),
-      Ok(ColorInput::LightDark(Some(RED), Some(BLUE)))
-    );
-    assert_eq!(
-      ColorInput::from_css_str("light-dark(currentColor, blue)"),
-      Ok(ColorInput::LightDark(None, Some(BLUE)))
-    );
-    assert_eq!(
-      ColorInput::from_css_str("light-dark(light-dark(red, green), light-dark(lime, blue))"),
-      Ok(ColorInput::LightDark(Some(RED), Some(BLUE)))
-    );
-    assert_eq!(
-      ColorInput::from_css_str("light-dark(red, red)"),
-      Ok(ColorInput::Value(RED))
-    );
+      Ok(ColorInput::LightDark(_))
+    ));
     assert!(Color::from_css_str("light-dark(red)").is_err());
     assert!(Color::from_css_str("light-dark(red, 1px)").is_err());
     assert!(ColorInput::from_css_str("light-dark(red, 1px)").is_err());
@@ -1149,35 +1296,42 @@ mod tests {
 
   #[test]
   fn light_dark_computes_to_the_colour_of_the_used_scheme() {
-    let both = ColorInput::LightDark(Some(RED), Some(BLUE));
-    let current = ColorInput::LightDark(Some(RED), None);
+    for (css, light, dark) in [
+      (
+        "light-dark(red, blue)",
+        ColorInput::Value(RED),
+        ColorInput::Value(BLUE),
+      ),
+      (
+        "light-dark(red, currentColor)",
+        ColorInput::Value(RED),
+        ColorInput::CurrentColor,
+      ),
+      (
+        "light-dark(light-dark(red, lime), light-dark(lime, blue))",
+        ColorInput::Value(RED),
+        ColorInput::Value(BLUE),
+      ),
+    ] {
+      let Ok(color) = ColorInput::from_css_str(css) else {
+        panic!("{css} did not parse");
+      };
 
-    assert_eq!(
-      both.computed(&in_scheme(ColorScheme::Light)),
-      ColorInput::Value(RED)
-    );
-    assert_eq!(
-      both.computed(&in_scheme(ColorScheme::Dark)),
-      ColorInput::Value(BLUE)
-    );
-    assert_eq!(
-      current.computed(&in_scheme(ColorScheme::Light)),
-      ColorInput::Value(RED)
-    );
-    assert_eq!(
-      current.computed(&in_scheme(ColorScheme::Dark)),
-      ColorInput::CurrentColor
-    );
-    assert_eq!(
-      ColorInput::from_css_str("light-dark(red, currentColor)").map(|color| color.to_css_string()),
-      Ok("light-dark(rgb(255, 0, 0), currentColor)".to_owned())
-    );
+      assert_eq!(
+        color.resolve_color_value(ColorScheme::Light),
+        light,
+        "{css}"
+      );
+      assert_eq!(color.resolve_color_value(ColorScheme::Dark), dark, "{css}");
+    }
   }
 
   #[test]
   fn animating_light_dark_takes_the_colours_of_the_used_scheme() {
     let mut result = ColorInput::default();
-    let endpoint = ColorInput::LightDark(Some(RED), Some(BLUE));
+    let Ok(endpoint) = ColorInput::from_css_str("light-dark(red, blue)") else {
+      panic!("light-dark() did not parse");
+    };
 
     result.interpolate(
       &endpoint,
@@ -1191,42 +1345,116 @@ mod tests {
   }
 
   #[test]
-  fn color_mix_mixes_each_colour_of_light_dark() {
-    let value = |css| match ColorInput::from_css_str(css) {
-      Ok(ColorInput::Value(color)) => color,
-      other => panic!("{css} gave {other:?}"),
-    };
+  fn color_mix_mixes_the_colour_of_light_dark_in_the_used_scheme() {
+    for (css, light, dark) in [
+      (
+        "color-mix(in srgb, light-dark(white, black) 25%, red)",
+        "color-mix(in srgb, white 25%, red)",
+        "color-mix(in srgb, black 25%, red)",
+      ),
+      (
+        "color-mix(in oklab, color-mix(in srgb, light-dark(white, black), blue), red)",
+        "color-mix(in oklab, color-mix(in srgb, white, blue), red)",
+        "color-mix(in oklab, color-mix(in srgb, black, blue), red)",
+      ),
+    ] {
+      assert_eq!(
+        used(css, ColorScheme::Light, RED),
+        used(light, ColorScheme::Light, RED),
+        "{css}"
+      );
+      assert_eq!(
+        used(css, ColorScheme::Dark, RED),
+        used(dark, ColorScheme::Light, RED),
+        "{css}"
+      );
+    }
 
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, light-dark(white, black) 25%, red)"),
-      Ok(ColorInput::LightDark(
-        Some(value("color-mix(in srgb, white 25%, red)")),
-        Some(value("color-mix(in srgb, black 25%, red)"))
-      ))
-    );
-    assert_eq!(
-      ColorInput::from_css_str(
-        "color-mix(in oklab, color-mix(in srgb, light-dark(white, black), blue), red)"
-      ),
-      Ok(ColorInput::LightDark(
-        Some(value(
-          "color-mix(in oklab, color-mix(in srgb, white, blue), red)"
-        )),
-        Some(value(
-          "color-mix(in oklab, color-mix(in srgb, black, blue), red)"
-        ))
-      ))
-    );
-    assert_eq!(
-      Color::from_css_str("color-mix(in srgb, light-dark(white, black) 25%, red)"),
-      Ok(value("color-mix(in srgb, white 25%, red)"))
-    );
-    assert!(ColorInput::from_css_str("color-mix(in srgb, currentColor, red)").is_err());
-    assert!(
-      ColorInput::from_css_str("color-mix(in srgb, light-dark(red, currentColor), white)").is_err()
+      Color::from_css_str("color-mix(in srgb, light-dark(white, black) 25%, red)").ok(),
+      used(
+        "color-mix(in srgb, white 25%, red)",
+        ColorScheme::Light,
+        RED
+      )
     );
   }
 
+  #[test]
+  fn color_mix_of_current_color_resolves_at_use() {
+    let css = "color-mix(in srgb, currentColor 25%, white)";
+    let Some(computed) = computed(css) else {
+      panic!("{css} did not parse");
+    };
+
+    assert!(computed.is_unresolved_color_function());
+    assert_eq!(
+      computed.resolve(RED),
+      Color([255, 191, 191, 255]),
+      "against red"
+    );
+    assert_eq!(
+      computed.resolve(BLUE),
+      Color([191, 191, 255, 255]),
+      "against blue"
+    );
+    assert_eq!(
+      used(
+        "color-mix(in srgb, light-dark(white, currentColor), black)",
+        ColorScheme::Dark,
+        BLUE
+      ),
+      Some(Color([0, 0, 128, 255]))
+    );
+    assert!(Color::from_css_str(css).is_err());
+  }
+
+  #[test]
+  fn relative_colour_takes_the_origin_of_the_used_scheme() {
+    let css = "rgb(from light-dark(red, blue) r g b / 0.5)";
+
+    assert_eq!(
+      used(css, ColorScheme::Light, Color::black()),
+      Some(Color([255, 0, 0, 128]))
+    );
+    assert_eq!(
+      used(css, ColorScheme::Dark, Color::black()),
+      Some(Color([0, 0, 255, 128]))
+    );
+  }
+
+  #[test]
+  fn relative_colour_of_current_color_resolves_at_use() {
+    let Some(computed) = computed("rgb(from currentColor b g r)") else {
+      panic!("the relative colour did not parse");
+    };
+
+    assert!(computed.is_unresolved_color_function());
+    assert_eq!(computed.resolve(RED), BLUE);
+    assert_eq!(computed.resolve(BLUE), RED);
+  }
+
+  #[test]
+  fn specified_colours_serialize_as_written() {
+    for css in [
+      "currentColor",
+      "light-dark(rgb(255, 0, 0), currentColor)",
+      "color-mix(in srgb, currentColor 25%, rgb(255, 255, 255))",
+      "color-mix(in lch longer hue, rgb(255, 0, 0), rgb(0, 0, 255) 40%)",
+      "color-mix(in oklab, light-dark(rgb(255, 255, 255), rgb(0, 0, 0)), rgb(255, 0, 0))",
+      "rgb(from currentColor b g r / alpha)",
+      "hsl(from light-dark(rgb(255, 0, 0), rgb(0, 0, 255)) 120deg s 50%)",
+      "oklch(from rgb(255, 0, 0) l c none / 0.5)",
+    ] {
+      let Ok(color) = ColorInput::from_css_str(css) else {
+        panic!("{css} did not parse");
+      };
+      let serialized = color.to_css_string();
+
+      assert_eq!(serialized, css);
+      assert_eq!(ColorInput::from_css_str(&serialized), Ok(color), "{css}");
+    }
+  }
   #[test]
   fn animating_a_colour_interpolates_in_srgb() {
     let mut result = ColorInput::default();
@@ -1309,213 +1537,182 @@ mod tests {
   #[test]
   fn test_parse_color_mix_srgb_default_percentages() {
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red, blue)"),
-      Ok(ColorInput::Value(Color([128, 0, 128, 255])))
+      computed("color-mix(in srgb, red, blue)"),
+      Some(ColorInput::Value(Color([128, 0, 128, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_equivalent_percentage_syntaxes() {
-    let canonical = ColorInput::from_css_str("color-mix(in srgb, red 25%, blue 75%)");
+    let canonical = computed("color-mix(in srgb, red 25%, blue 75%)");
 
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in srgb, 25% red, 75% blue)")
-    );
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in srgb, red 25%, 75% blue)")
-    );
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in srgb, red 25%, blue)")
-    );
-    assert_eq!(canonical, Ok(ColorInput::Value(Color([64, 0, 191, 255]))));
+    assert_eq!(canonical, computed("color-mix(in srgb, 25% red, 75% blue)"));
+    assert_eq!(canonical, computed("color-mix(in srgb, red 25%, 75% blue)"));
+    assert_eq!(canonical, computed("color-mix(in srgb, red 25%, blue)"));
+    assert_eq!(canonical, Some(ColorInput::Value(Color([64, 0, 191, 255]))));
   }
 
   #[test]
   fn test_parse_color_mix_lch_missing_percentage_equivalence() {
-    let canonical = ColorInput::from_css_str("color-mix(in lch, purple 50%, plum 50%)");
+    let canonical = computed("color-mix(in lch, purple 50%, plum 50%)");
 
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 50%, plum)")
-    );
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple, plum 50%)")
-    );
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple, plum)")
-    );
-    assert_eq!(
-      canonical,
-      ColorInput::from_css_str("color-mix(in lch, plum, purple)")
-    );
+    assert_eq!(canonical, computed("color-mix(in lch, purple 50%, plum)"));
+    assert_eq!(canonical, computed("color-mix(in lch, purple, plum 50%)"));
+    assert_eq!(canonical, computed("color-mix(in lch, purple, plum)"));
+    assert_eq!(canonical, computed("color-mix(in lch, plum, purple)"));
   }
 
   #[test]
   fn test_parse_color_mix_lch_normalizes_equal_opaque_percentages() {
-    let canonical = ColorInput::from_css_str("color-mix(in lch, purple 50%, plum 50%)");
+    let canonical = computed("color-mix(in lch, purple 50%, plum 50%)");
 
     assert_eq!(
       canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 55%, plum 55%)")
+      computed("color-mix(in lch, purple 55%, plum 55%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 70%, plum 70%)")
+      computed("color-mix(in lch, purple 70%, plum 70%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 95%, plum 95%)")
+      computed("color-mix(in lch, purple 95%, plum 95%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 125%, plum 125%)")
+      computed("color-mix(in lch, purple 125%, plum 125%)")
     );
     assert_eq!(
       canonical,
-      ColorInput::from_css_str("color-mix(in lch, purple 9999%, plum 9999%)")
+      computed("color-mix(in lch, purple 9999%, plum 9999%)")
     );
   }
 
   #[test]
   fn test_parse_color_mix_endpoint_percentages_return_endpoint_colors() {
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red 100%, blue 0%)"),
-      ColorInput::from_css_str("red")
+      computed("color-mix(in srgb, red 100%, blue 0%)"),
+      computed("red")
     );
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red 0%, blue 100%)"),
-      ColorInput::from_css_str("blue")
+      computed("color-mix(in srgb, red 0%, blue 100%)"),
+      computed("blue")
     );
   }
 
   #[test]
   fn test_parse_color_mix_alpha_multiplier_under_100_percent() {
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red 30%, blue 30%)"),
-      Ok(ColorInput::Value(Color([128, 0, 128, 153])))
+      computed("color-mix(in srgb, red 30%, blue 30%)"),
+      Some(ColorInput::Value(Color([128, 0, 128, 153])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_hue_directions_change_result() {
     assert_eq!(
-      ColorInput::from_css_str(
-        "color-mix(in hsl shorter hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
-      ),
-      Ok(ColorInput::Value(Color([191, 86, 64, 255])))
+      computed("color-mix(in hsl shorter hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",),
+      Some(ColorInput::Value(Color([191, 86, 64, 255])))
     );
     assert_eq!(
-      ColorInput::from_css_str(
-        "color-mix(in hsl decreasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
-      ),
-      Ok(ColorInput::Value(Color([191, 86, 64, 255])))
+      computed("color-mix(in hsl decreasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",),
+      Some(ColorInput::Value(Color([191, 86, 64, 255])))
     );
     assert_eq!(
-      ColorInput::from_css_str(
-        "color-mix(in hsl longer hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
-      ),
-      Ok(ColorInput::Value(Color([64, 169, 191, 255])))
+      computed("color-mix(in hsl longer hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",),
+      Some(ColorInput::Value(Color([64, 169, 191, 255])))
     );
     assert_eq!(
-      ColorInput::from_css_str(
-        "color-mix(in hsl increasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",
-      ),
-      Ok(ColorInput::Value(Color([64, 169, 191, 255])))
+      computed("color-mix(in hsl increasing hue, hsl(50deg 50% 50%), hsl(330deg 50% 50%))",),
+      Some(ColorInput::Value(Color([64, 169, 191, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_over_100_percent_normalizes_weights() {
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red 120%, blue 80%)"),
-      Ok(ColorInput::Value(Color([153, 0, 102, 255])))
+      computed("color-mix(in srgb, red 120%, blue 80%)"),
+      Some(ColorInput::Value(Color([153, 0, 102, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_unknown_color_space() {
-    assert!(ColorInput::from_css_str("color-mix(in unknown, red, blue)").is_err());
+    assert!(computed("color-mix(in unknown, red, blue)").is_none());
   }
 
   #[test]
   fn test_parse_color_mix_hue_method_with_non_cylindrical_space_errors() {
-    assert!(ColorInput::from_css_str("color-mix(in srgb longer hue, red, blue)").is_err());
+    assert!(computed("color-mix(in srgb longer hue, red, blue)").is_none());
   }
 
   #[test]
   fn test_parse_color_mix_malformed_missing_comma_errors() {
-    assert!(ColorInput::from_css_str("color-mix(in srgb, red blue)").is_err());
+    assert!(computed("color-mix(in srgb, red blue)").is_none());
   }
 
   #[test]
   fn test_parse_color_mix_zero_sum_percentages_errors() {
-    assert!(ColorInput::from_css_str("color-mix(in srgb, red 0%, blue 0%)").is_err());
+    assert!(computed("color-mix(in srgb, red 0%, blue 0%)").is_none());
   }
 
   #[test]
   fn test_parse_color_mix_accepts_number_as_percentage() {
     assert_eq!(
-      ColorInput::from_css_str("color-mix(in srgb, red 0.5, blue 0.5)"),
-      Ok(ColorInput::Value(Color([128, 0, 128, 255])))
+      computed("color-mix(in srgb, red 0.5, blue 0.5)"),
+      Some(ColorInput::Value(Color([128, 0, 128, 255])))
     );
   }
 
   #[test]
   fn test_parse_color_mix_nested_color_mix() {
-    assert!(
-      ColorInput::from_css_str("color-mix(in srgb, color-mix(in srgb, red, blue), white)").is_ok()
-    );
+    assert!(computed("color-mix(in srgb, color-mix(in srgb, red, blue), white)").is_some());
   }
 
   #[test]
   fn test_parse_relative_oklch_keywords_only() {
-    let relative = ColorInput::from_css_str("oklch(from oklch(0.7 0.15 30) l c h / 0.5)");
-    let direct = ColorInput::from_css_str("oklch(0.7 0.15 30 / 0.5)");
+    let relative = computed("oklch(from oklch(0.7 0.15 30) l c h / 0.5)");
+    let direct = computed("oklch(0.7 0.15 30 / 0.5)");
     assert_eq!(relative, direct);
   }
 
   #[test]
   fn test_parse_relative_oklch_keywords_only_from_named_color() {
-    assert!(ColorInput::from_css_str("oklch(from red l c h)").is_ok());
+    assert!(computed("oklch(from red l c h)").is_some());
   }
 
   #[test]
   fn test_parse_relative_rgb_keywords_only_scales_to_255() {
     assert_eq!(
-      ColorInput::from_css_str("rgb(from #336699 r g b)"),
-      ColorInput::from_css_str("rgb(51 102 153)"),
+      computed("rgb(from #336699 r g b)"),
+      computed("rgb(51 102 153)"),
     );
   }
 
   #[test]
   fn test_parse_relative_rgb_drops_origin_alpha_when_alpha_omitted() {
     assert_eq!(
-      ColorInput::from_css_str("rgb(from rgb(10 20 30 / 0.5) r g b / 0.25)"),
-      ColorInput::from_css_str("rgba(10, 20, 30, 0.25)"),
+      computed("rgb(from rgb(10 20 30 / 0.5) r g b / 0.25)"),
+      computed("rgba(10, 20, 30, 0.25)"),
     );
   }
 
   #[test]
   fn test_parse_relative_hsl_with_dimension_hue() {
-    assert!(ColorInput::from_css_str("hsl(from red 120deg s l)").is_ok());
+    assert!(computed("hsl(from red 120deg s l)").is_some());
   }
 
   #[test]
   fn test_parse_relative_oklch_substitutes_origin_alpha() {
     assert_eq!(
-      ColorInput::from_css_str("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
-      ColorInput::from_css_str("oklch(0.5 0.1 200 / 0.4)"),
+      computed("oklch(from oklch(0.5 0.1 200 / 0.4) l c h / alpha)",),
+      computed("oklch(0.5 0.1 200 / 0.4)"),
     );
   }
 
   #[test]
   fn test_parse_relative_color_with_color_mix_origin() {
-    assert!(ColorInput::from_css_str("lch(from color-mix(in srgb, red, blue) l c h)").is_ok());
+    assert!(computed("lch(from color-mix(in srgb, red, blue) l c h)").is_some());
   }
 
   #[test]

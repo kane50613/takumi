@@ -489,7 +489,7 @@ impl<'c> BoxPainter<'c> {
     };
     let resolve = |shadow: &BoxShadow| {
       SizedShadow::from_box_shadow(
-        *shadow,
+        shadow,
         &self.context.sizing,
         self.context.current_color,
         self.layout.size,

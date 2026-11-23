@@ -286,7 +286,7 @@ impl TailwindPropertyParser for TwBlur {
 }
 
 /// Tailwind `drop-shadow-*`, themable through `--drop-shadow-*`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TwDropShadow {
   /// The shadow the preset falls back to.
   pub shadow: TextShadow,
