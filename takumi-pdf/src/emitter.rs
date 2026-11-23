@@ -53,9 +53,8 @@ use crate::{
   inline::{InlineCache, visit_inline_layout},
   options::{PT_PER_PX, PdfError},
   paint::{
-    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, opaque_runs,
-    opaque_stops, pdf_path, pdf_stops, pop_transforms, positioned, positioned_pdf_stops, rect_path,
-    shape_path, spread,
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, pdf_path,
+    pdf_stops, pop_transforms, positioned_pdf_stops, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::TagCollector,
@@ -63,7 +62,7 @@ use crate::{
   window::{LineFrame, Window},
   writer::{
     Data,
-    geom::{Path as PdfPath, PathBuilder, Point, Rect as PdfRect, Transform},
+    geom::{Path as PdfPath, Point, Rect as PdfRect, Transform},
     mask::{Mask, MaskType},
     num::NormalizedF32,
     paint::{
@@ -615,30 +614,23 @@ impl Emitter<'_> {
       surface.pop();
       return;
     }
-    let Some((paint, clip)) = self.gradient_paint(image, node, size, at, pattern_space) else {
+    let Some(paint) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
     let Some(path) = PdfRect::from_xywh(at.x, at.y, w, h).and_then(rect_path) else {
       return;
     };
 
-    if let Some(clip) = &clip {
-      surface.push_clip_path(clip, &FillRule::NonZero);
-    }
     surface.set_fill(Some(Fill {
       paint,
       opacity: NormalizedF32::ONE,
       rule: FillRule::NonZero,
     }));
     surface.draw_path(&path);
-    if clip.is_some() {
-      surface.pop();
-    }
   }
 
-  /// The writer paint of a gradient layer, with the clip it paints opaque through when it needs
-  /// one instead of a soft mask. `pattern_space` carries the stream's default space, per PDF
-  /// 32000-1 8.7.3.1.
+  /// The writer paint of a gradient layer. `pattern_space` carries the stream's default space,
+  /// per PDF 32000-1 8.7.3.1.
   fn gradient_paint(
     &self,
     image: &BackgroundImage,
@@ -646,13 +638,12 @@ impl Emitter<'_> {
     size: Size<f32>,
     at: CorePoint<f32>,
     pattern_space: Transform,
-  ) -> Option<(Paint, Option<PdfPath>)> {
+  ) -> Option<Paint> {
     let CorePoint { x, y } = at;
     let (w, h) = (size.width, size.height);
     let sizing = &node.context.sizing;
     let current_color = node.context.current_color;
 
-    let mut clip = None;
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
         let mut geometry = gradient.resolve_geometry(w, h, sizing, current_color);
@@ -675,31 +666,6 @@ impl Emitter<'_> {
         };
         let (x1, y1) = point_at(t0);
         let (x2, y2) = point_at(t1);
-        let runs = opaque_runs(&positioned(resolved), gradient.repeating, axis_length);
-        let stops = match &runs {
-          Some(_) => opaque_stops(resolved, base, span),
-          None => pdf_stops(resolved, base, span),
-        };
-
-        if let Some(runs) = runs {
-          // Across the gradient line, far enough to cover the box either side.
-          let (across_x, across_y) = (-dir_y * (w + h), dir_x * (w + h));
-          let mut builder = PathBuilder::new();
-
-          if runs.is_empty() {
-            return None;
-          }
-          for [start, end] in runs {
-            let ((sx, sy), (ex, ey)) = (point_at(start), point_at(end));
-
-            builder.move_to(sx + across_x, sy + across_y);
-            builder.line_to(ex + across_x, ey + across_y);
-            builder.line_to(ex - across_x, ey - across_y);
-            builder.line_to(sx - across_x, sy - across_y);
-            builder.close();
-          }
-          clip = builder.finish();
-        }
 
         PdfLinearGradient {
           x1,
@@ -708,7 +674,7 @@ impl Emitter<'_> {
           y2,
           transform: pattern_space,
           spread_method: spread(gradient.repeating),
-          stops,
+          stops: pdf_stops(resolved, base, span),
           anti_alias: false,
         }
         .into()
@@ -796,7 +762,7 @@ impl Emitter<'_> {
       BackgroundImage::Url(_) | BackgroundImage::None => return None,
     };
 
-    Some((paint, clip))
+    Some(paint)
   }
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.

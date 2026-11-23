@@ -3925,8 +3925,8 @@ fn repeating_gradients() {
   });
 }
 
-/// Gradients whose stops are each opaque or transparent paint opaque inside a clip, with no soft
-/// mask for Apple's readers to drop, and a gradient fading to transparent keeps its colour.
+/// Hard stops write no zero-width stitching subdomain, and gradients toward transparent keep
+/// their colour.
 #[test]
 fn hard_stop_gradients() {
   let pdf = run_pdf_fixture("hard-stop-gradients", |fonts| {
@@ -3947,12 +3947,24 @@ fn hard_stop_gradients() {
       .build()
   });
   let haystack = inflated_text(&pdf);
+  let bounds: Vec<Vec<f32>> = haystack
+    .split("/Bounds[")
+    .skip(1)
+    .map(|rest| {
+      rest[..rest.find(']').unwrap()]
+        .split_whitespace()
+        .map(|number| number.parse().unwrap())
+        .collect()
+    })
+    .collect();
 
-  assert_eq!(
-    haystack.matches("/S/Luminosity").count(),
-    1,
-    "expected a soft mask for the fade alone"
-  );
+  assert!(!bounds.is_empty(), "expected stitched gradients");
+  for bounds in bounds {
+    assert!(
+      bounds.windows(2).all(|pair| pair[0] < pair[1]),
+      "zero-width subdomain in {bounds:?}"
+    );
+  }
 }
 
 /// Decoration lines with custom colors, letter spacing, and variable weight.
