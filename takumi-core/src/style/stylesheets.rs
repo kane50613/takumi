@@ -106,6 +106,24 @@ pub(crate) struct DeferredDeclaration {
 }
 
 impl StyleDeclaration {
+  /// Applies the part of this declaration that sets only `longhands`, substituting `var()` first.
+  pub(crate) fn apply_longhands_with_parent(
+    self,
+    style: &mut ComputedStyle,
+    parent: &ComputedStyle,
+    longhands: &PropertyMask,
+  ) {
+    let affected = self.affected_longhands();
+
+    if !affected.is_empty() && longhands.contains_all(&affected) {
+      self.apply_with_parent(style, parent);
+    } else if let Self::Deferred(deferred) = &self
+      && affected.intersects(longhands)
+    {
+      deferred.apply_longhands_with_parent(style, parent, longhands);
+    }
+  }
+
   /// The declaration that waits for `var()` to substitute, when this is one.
   fn deferred(&self) -> Option<&DeferredDeclaration> {
     match self {
@@ -120,11 +138,28 @@ impl DeferredDeclaration {
   /// Applies its substituted value, or `unset` when it is
   /// [invalid at computed-value time](https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time).
   fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
-    if apply_deferred_declaration(style, Some(parent), self) {
+    self.apply_longhands_with_parent(style, parent, &self.property.target_longhands());
+  }
+
+  /// [`Self::apply_with_parent`] for the part of its value that sets only `longhands`.
+  fn apply_longhands_with_parent(
+    &self,
+    style: &mut ComputedStyle,
+    parent: &ComputedStyle,
+    longhands: &PropertyMask,
+  ) {
+    let applies =
+      |declaration: &StyleDeclaration| longhands.contains_all(&declaration.affected_longhands());
+
+    if apply_deferred_declaration(style, Some(parent), self, applies) {
       return;
     }
 
-    for longhand in self.property.target_longhands().iter() {
+    let mut unset = self.property.target_longhands();
+
+    unset.intersect(longhands);
+
+    for longhand in unset.iter() {
       StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset)
         .apply_with_parent(style, parent);
     }
@@ -168,7 +203,7 @@ impl TwVarRef {
   fn apply(&self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
     let defined = style.custom_properties.contains(self.name.as_ref());
 
-    if defined && apply_deferred_declaration(style, parent, &self.deferred) {
+    if defined && apply_deferred_declaration(style, parent, &self.deferred, |_| true) {
       return;
     }
 
@@ -1537,7 +1572,7 @@ macro_rules! define_style {
                 .declare(name.to_owned(), value.to_owned(), None);
             }
             Self::Deferred(deferred) => {
-              apply_deferred_declaration(style, None, deferred);
+              apply_deferred_declaration(style, None, deferred, |_| true);
             }
             Self::VarRef(var_ref) => var_ref.apply(style, None),
             $($(Self::[<$longhand:camel>](value) => style.[<$group _mut>]().$longhand.clone_from(value),)*)*
