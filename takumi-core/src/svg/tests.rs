@@ -124,7 +124,7 @@ fn the_host_color_is_what_current_color_is() {
 fn a_colour_function_of_current_color_reads_the_host_color() {
   for body in [
     r#"<rect width="10" height="10" fill="color-mix(in srgb, currentColor, red)"/>"#,
-    r#"<rect width="10" height="10" style="color: color-mix(in srgb, currentColor, red)" fill="currentColor"/>"#,
+    r#"<rect width="10" height="10" fill="none" stroke="rgb(from currentColor r g b)"/>"#,
   ] {
     let reads = SvgDocument::parse(&svg(body)).ok().and_then(|document| {
       document

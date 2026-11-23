@@ -283,6 +283,7 @@ impl ColorInput {
   }
 
   /// Whether resolving this computed value reads the current colour.
+  #[cfg(feature = "svg")]
   pub(crate) fn reads_current_color(&self) -> bool {
     *self == ColorInput::CurrentColor || self.is_unresolved_color_function()
   }
