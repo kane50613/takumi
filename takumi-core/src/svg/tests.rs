@@ -383,6 +383,29 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
 }
 
 #[test]
+fn a_root_background_of_current_color_paints() {
+  let ops = SvgDocument::parse(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10" style="color: blue; background-color: color-mix(in srgb, currentColor, red)"><rect width="5" height="5"/></svg>"#,
+  )
+  .ok()
+  .and_then(|document| {
+    document
+      .ops(
+        SvgHost::Image {
+          current_color: Some(BLACK),
+          fonts: None,
+          cache: None,
+        },
+        document.declared_size(),
+      )
+      .map(|(ops, _)| ops)
+  })
+  .unwrap_or_default();
+
+  assert_eq!(fills(&ops), [Some(Color([128, 0, 128, 255])), Some(BLACK)]);
+}
+
+#[test]
 fn a_use_sizes_a_symbol_against_the_viewport_around_it() {
   let ops = ops(
     r##"<symbol id="s" viewBox="0 0 10 10"><rect width="10" height="10"/></symbol>
