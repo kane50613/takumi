@@ -153,29 +153,23 @@ impl_css_enum!(
 mod tests {
 
   use super::*;
-  use crate::{geometry::Size, viewport::Viewport};
+  use crate::viewport::Viewport;
 
   fn sizing() -> SizingContext {
-    SizingContext {
-      viewport: Viewport {
+    SizingContext::builder()
+      .viewport(Viewport {
         size: (200, 100).into(),
         font_size: 16.0,
         device_pixel_ratio: 2.0,
         media_target: Default::default(),
         unit_reference: None,
         color_scheme: Default::default(),
-      },
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 10.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      ch: 16.0 / 2.0,
-      ex: 16.0 / 2.0,
-      color_scheme: Default::default(),
-    }
+      })
+      .font_size(10.0)
+      .line_height(0.0)
+      .ch(16.0 / 2.0)
+      .ex(16.0 / 2.0)
+      .build()
   }
 
   #[test]

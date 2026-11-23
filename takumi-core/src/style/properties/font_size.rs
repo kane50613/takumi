@@ -195,26 +195,19 @@ mod tests {
 
   use super::*;
   use crate::{
-    geometry::Size,
     style::{FromCssStr, SizingContext},
     viewport::Viewport,
   };
 
   #[test]
   fn relative_keywords_scale_inherited_size() {
-    let sizing = SizingContext {
-      viewport: Viewport::new((1200, 630)),
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 20.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      ch: 20.0 / 2.0,
-      ex: 20.0 / 2.0,
-      color_scheme: Default::default(),
-    };
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(20.0)
+      .line_height(0.0)
+      .ch(20.0 / 2.0)
+      .ex(20.0 / 2.0)
+      .build();
 
     assert_eq!(FontSize::from_css_str("larger"), Ok(FontSize::Larger));
     assert_eq!(FontSize::from_css_str("smaller"), Ok(FontSize::Smaller));
@@ -232,19 +225,13 @@ mod tests {
 
   #[test]
   fn resolves_medium_keyword_to_default_font_size() {
-    let sizing = SizingContext {
-      viewport: Viewport::new((1200, 630)),
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 16.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      ch: 16.0 / 2.0,
-      ex: 16.0 / 2.0,
-      color_scheme: Default::default(),
-    };
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(16.0)
+      .line_height(0.0)
+      .ch(16.0 / 2.0)
+      .ex(16.0 / 2.0)
+      .build();
 
     assert_eq!(FontSize::default().to_px(&sizing, sizing.font_size), 16.0);
   }
@@ -255,19 +242,14 @@ mod tests {
 
     let viewport = Viewport::new((1200, 630)).with_device_pixel_ratio(2.0);
     let root_font_size_device_px = DEFAULT_FONT_SIZE * viewport.device_pixel_ratio;
-    let sizing = SizingContext {
-      viewport,
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: root_font_size_device_px,
-      root_font_size: Some(root_font_size_device_px),
-      line_height: 0.0,
-      root_line_height: None,
-      ch: root_font_size_device_px / 2.0,
-      ex: root_font_size_device_px / 2.0,
-      color_scheme: Default::default(),
-    };
+    let sizing = SizingContext::builder()
+      .viewport(viewport)
+      .font_size(root_font_size_device_px)
+      .root_font_size(Some(root_font_size_device_px))
+      .line_height(0.0)
+      .ch(root_font_size_device_px / 2.0)
+      .ex(root_font_size_device_px / 2.0)
+      .build();
 
     assert_eq!(
       FontSize::Length(Length::Rem(0.5)).to_px(&sizing, sizing.font_size),
