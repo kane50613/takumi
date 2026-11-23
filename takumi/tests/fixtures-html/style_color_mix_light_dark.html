@@ -22,10 +22,16 @@
       .dark {
         color-scheme: dark;
       }
+      .relative {
+        background: hsl(from var(--accent) h s 75%);
+        box-shadow: 0 4px 0 color-mix(in srgb, rgb(from var(--ink) r g b / 50%), white);
+      }
     </style>
   </head>
-  <body style="width: 160px; height: 100px">
+  <body style="width: 160px; height: 180px">
     <div></div>
     <div class="dark"></div>
+    <div class="relative"></div>
+    <div class="relative dark"></div>
   </body>
 </html>

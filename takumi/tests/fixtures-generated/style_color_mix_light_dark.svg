@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100" viewBox="0 0 160 100">
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="180" viewBox="0 0 160 180">
   <clipPath id="cp0">
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 8h120v24h-120v-24Z" clip-rule="evenodd"/>
   </clipPath>
@@ -15,4 +15,20 @@
   </g>
   <rect x="8" y="40" width="120" height="24" fill="#b1cdfb"/>
   <path d="M8 40h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#f1f5f9" fill-opacity=".6" fill-rule="evenodd"/>
+  <clipPath id="cp2">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 72h120v24h-120v-24Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <path d="M8 76h120v24h-120v-24Z" fill="#afb1b8" fill-opacity=".753"/>
+  </g>
+  <rect x="8" y="72" width="120" height="24" fill="#f58a8a"/>
+  <path d="M8 72h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#0f172a" fill-opacity=".6" fill-rule="evenodd"/>
+  <clipPath id="cp3">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 104h120v24h-120v-24Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+    <path d="M8 108h120v24h-120v-24Z" fill="#fafcfd" fill-opacity=".753"/>
+  </g>
+  <rect x="8" y="104" width="120" height="24" fill="#85b1f9"/>
+  <path d="M8 104h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#f1f5f9" fill-opacity=".6" fill-rule="evenodd"/>
 </svg>

@@ -191,8 +191,8 @@ pub enum ColorInput {
   CurrentColor,
   /// A color value.
   Value(Color),
-  /// A colour that depends on the used color scheme, from `light-dark()` or a `color-mix()` of
-  /// one, computing to its light or its dark colour. `None` is `currentColor`.
+  /// A colour that depends on the used color scheme through a `light-dark()` in it, computing to
+  /// its light or its dark colour. `None` is `currentColor`.
   LightDark(Option<Color>, Option<Color>),
 }
 
@@ -257,15 +257,6 @@ impl ColorInput {
   /// A colour, or `currentColor` for `None`.
   fn from_option(color: Option<Color>) -> Self {
     color.map_or(ColorInput::CurrentColor, ColorInput::Value)
-  }
-
-  /// The light and the dark colour this input takes, `None` for `currentColor`.
-  fn light_and_dark(self) -> (Option<Color>, Option<Color>) {
-    match self {
-      ColorInput::Value(color) => (Some(color), Some(color)),
-      ColorInput::CurrentColor => (None, None),
-      ColorInput::LightDark(light, dark) => (light, dark),
-    }
   }
 }
 
@@ -725,58 +716,40 @@ impl Color {
 
 #[derive(Debug, Clone, Copy)]
 struct ColorMixItem {
-  light: Color,
-  dark: Color,
+  color: Color,
   percentage: Option<PercentageNumber>,
 }
 
 impl ColorMixItem {
-  /// The item's colour in `color_scheme`.
-  fn color(self, color_scheme: ColorScheme) -> Color {
-    match color_scheme {
-      ColorScheme::Light => self.light,
-      ColorScheme::Dark => self.dark,
-    }
-  }
-}
-
-/// The light and dark colours of a `color-mix()` operand, which differ only under `light-dark()`.
-/// <https://drafts.csswg.org/css-color-5/#color-mix>, <https://drafts.csswg.org/css-color-5/#light-dark>
-fn parse_mix_operand<'i>(input: &mut Parser<'i>) -> ParseResult<'i, (Color, Color)> {
-  match ColorInput::from_css(input)?.light_and_dark() {
-    (Some(light), Some(dark)) => Ok((light, dark)),
-    _ => Err(input.new_error_for_next_token()),
-  }
-}
-
-impl<'i> FromCss<'i> for ColorMixItem {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  /// An operand of `color-mix()` as it computes in `scheme`.
+  /// <https://drafts.csswg.org/css-color-5/#color-mix>
+  fn parse<'i>(input: &mut Parser<'i>, scheme: &mut SchemeRead) -> ParseResult<'i, Self> {
     if let Ok(item) = input.try_parse(|input| -> ParseResult<'i, Self> {
-      let (light, dark) = parse_mix_operand(input)?;
+      let color = parse_mix_operand(input, scheme)?;
       let percentage = input.try_parse(PercentageNumber::from_css).ok();
 
-      Ok(Self {
-        light,
-        dark,
-        percentage,
-      })
+      Ok(Self { color, percentage })
     }) {
       return Ok(item);
     }
 
     input.try_parse(|input| -> ParseResult<'i, Self> {
       let percentage = PercentageNumber::from_css(input)?;
-      let (light, dark) = parse_mix_operand(input)?;
+      let color = parse_mix_operand(input, scheme)?;
 
       Ok(Self {
-        light,
-        dark,
+        color,
         percentage: Some(percentage),
       })
     })
   }
+}
 
-  const VALID_TOKENS: &'static [&'static str] = &["<color and percentage>"];
+fn parse_mix_operand<'i>(
+  input: &mut Parser<'i>,
+  scheme: &mut SchemeRead,
+) -> ParseResult<'i, Color> {
+  parse_color_in(input, scheme)?.ok_or_else(|| input.new_error_for_next_token())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -787,8 +760,28 @@ struct ColorMix {
 }
 
 impl ColorMix {
-  /// The mix of the operands' colours in `color_scheme`.
-  fn evaluate(self, color_scheme: ColorScheme) -> Option<Color> {
+  /// The arguments of `color-mix()` as they compute in `scheme`.
+  fn parse<'i>(input: &mut Parser<'i>, scheme: &mut SchemeRead) -> ParseResult<'i, Self> {
+    let interpolation = ColorInterpolationMethod::from_css(input)?;
+
+    input.expect_comma()?;
+    let first = ColorMixItem::parse(input, scheme)?;
+    input.expect_comma()?;
+    let second = ColorMixItem::parse(input, scheme)?;
+
+    if !input.is_exhausted() {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(Self {
+      interpolation,
+      first,
+      second,
+    })
+  }
+
+  /// The mix of the two operands, `None` when both percentages are zero.
+  fn evaluate(self) -> Option<Color> {
     let (p1, p2) = match (self.first.percentage, self.second.percentage) {
       (None, None) => (0.5, 0.5),
       (Some(PercentageNumber(p1)), None) => (p1, (1.0 - p1).max(0.0)),
@@ -807,10 +800,10 @@ impl ColorMix {
     Some(Color::from_dynamic(
       self
         .first
-        .color(color_scheme)
+        .color
         .to_dynamic()
         .interpolate(
-          self.second.color(color_scheme).to_dynamic(),
+          self.second.color.to_dynamic(),
           self.interpolation.color_space,
           self.interpolation.hue_direction,
         )
@@ -820,96 +813,116 @@ impl ColorMix {
   }
 }
 
-impl<'i> FromCss<'i> for ColorMix {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let interpolation = ColorInterpolationMethod::from_css(input)?;
+/// The color scheme a colour parses in, and whether a `light-dark()` in it read the scheme.
+struct SchemeRead {
+  scheme: ColorScheme,
+  read: bool,
+}
 
-    input.expect_comma()?;
-    let first = ColorMixItem::from_css(input)?;
-    input.expect_comma()?;
-    let second = ColorMixItem::from_css(input)?;
-
-    if !input.is_exhausted() {
-      return Err(input.new_error_for_next_token());
+impl SchemeRead {
+  fn new(scheme: ColorScheme) -> Self {
+    Self {
+      scheme,
+      read: false,
     }
-
-    Ok(Self {
-      interpolation,
-      first,
-      second,
-    })
   }
-
-  const VALID_TOKENS: &'static [&'static str] = &["<color-mix()>"];
 }
 
 impl<'i> FromCss<'i> for ColorInput {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if input
-      .try_parse(|input| input.expect_ident_matching("currentcolor"))
-      .is_ok()
-    {
-      return Ok(ColorInput::CurrentColor);
+    let start = input.state();
+    let mut light = SchemeRead::new(ColorScheme::Light);
+    let light_color = parse_color_in(input, &mut light)?;
+
+    if !light.read {
+      return Ok(ColorInput::from_option(light_color));
     }
 
-    if input
-      .try_parse(|input| input.expect_function_matching("light-dark"))
-      .is_ok()
-    {
-      return input.parse_nested_block(|input| {
-        let light = ColorInput::from_css(input)?;
+    input.reset(&start);
 
-        input.expect_comma()?;
+    let dark_color = parse_color_in(input, &mut SchemeRead::new(ColorScheme::Dark))?;
 
-        let (light, _) = light.light_and_dark();
-        let (_, dark) = ColorInput::from_css(input)?.light_and_dark();
-
-        Ok(if light == dark {
-          ColorInput::from_option(light)
-        } else {
-          ColorInput::LightDark(light, dark)
-        })
-      });
-    }
-
-    if input
-      .try_parse(|input| input.expect_function_matching("color-mix"))
-      .is_ok()
-    {
-      return input.parse_nested_block(|input| {
-        let color_mix = ColorMix::from_css(input)?;
-        let (Some(light), Some(dark)) = (
-          color_mix.evaluate(ColorScheme::Light),
-          color_mix.evaluate(ColorScheme::Dark),
-        ) else {
-          return Err(input.new_error_for_next_token());
-        };
-
-        Ok(if light == dark {
-          ColorInput::Value(light)
-        } else {
-          ColorInput::LightDark(Some(light), Some(dark))
-        })
-      });
-    }
-
-    Ok(ColorInput::Value(Color::from_css(input)?))
+    Ok(if light_color == dark_color {
+      ColorInput::from_option(light_color)
+    } else {
+      ColorInput::LightDark(light_color, dark_color)
+    })
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
 }
 
-/// The light colour of a `light-dark()` block, for a value that holds one colour, such as a gradient stop.
+/// A colour as it computes in `scheme`, `None` for `currentColor`.
 /// <https://drafts.csswg.org/css-color-5/#light-dark>
-fn parse_light_dark<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
-  input.parse_nested_block(|input| {
-    let light = T::from_css(input)?;
+fn parse_color_in<'i>(
+  input: &mut Parser<'i>,
+  scheme: &mut SchemeRead,
+) -> ParseResult<'i, Option<Color>> {
+  let position = input.position();
+  let token = input.next()?;
 
-    input.expect_comma()?;
-    T::from_css(input)?;
+  match *token {
+    Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
+      .map(|(r, g, b, a)| Some(Color([r, g, b, (a * 255.0) as u8])))
+      .map_err(|_| unexpected_token!(Color, token)),
+    Token::Ident(ref ident) => {
+      if ident.eq_ignore_ascii_case("currentcolor") {
+        return Ok(None);
+      }
 
-    Ok(light)
-  })
+      if ident.eq_ignore_ascii_case("transparent") {
+        return Ok(Some(Color::transparent()));
+      }
+
+      parse_named_color(ident)
+        .map(|(r, g, b)| Some(Color([r, g, b, 255])))
+        .map_err(|_| unexpected_token!(Color, token))
+    }
+    Token::Function(ref name) => match_ignore_ascii_case! { name,
+      "light-dark" => input.parse_nested_block(|input| {
+        let light = parse_color_in(input, scheme)?;
+
+        input.expect_comma()?;
+
+        let dark = parse_color_in(input, scheme)?;
+
+        scheme.read = true;
+        Ok(match scheme.scheme {
+          ColorScheme::Light => light,
+          ColorScheme::Dark => dark,
+        })
+      }),
+      "color-mix" => input.parse_nested_block(|input| {
+        ColorMix::parse(input, scheme)?
+          .evaluate()
+          .map(Some)
+          .ok_or_else(|| input.new_error_for_next_token())
+      }),
+      _ => {
+        let token = Token::Function(name.clone());
+        let target_cs = relative_target_cs(name);
+
+        input.parse_nested_block(|input| {
+          if let Some(cs) = target_cs
+            && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
+          {
+            return parse_relative_color(input, cs, scheme).map(Some);
+          }
+
+          while input.next().is_ok() {}
+
+          let mut function = input.slice_from(position).to_string();
+
+          function.push(')');
+
+          parse_color(&function)
+            .map(|color| Some(Color::from_dynamic(color)))
+            .map_err(|_| unexpected_token!(Color, &token))
+        })
+      }
+    },
+    _ => Err(unexpected_token!(Color, token)),
+  }
 }
 
 /// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
@@ -1009,23 +1022,11 @@ fn parse_relative_slot<'i>(
 fn parse_relative_color<'i>(
   input: &mut Parser<'i>,
   target_cs: ColorSpaceTag,
+  scheme: &mut SchemeRead,
 ) -> ParseResult<'i, Color> {
-  let origin_start = input.position();
-  let origin_token = input.next()?.clone();
-  match &origin_token {
-    Token::Hash(_) | Token::IDHash(_) | Token::Ident(_) => {}
-    Token::Function(_) => {
-      input.parse_nested_block(|inner| -> ParseResult<'i, ()> {
-        while inner.next().is_ok() {}
-        Ok(())
-      })?;
-    }
-    _ => return Err(unexpected_token!(Color, &origin_token)),
-  }
-
+  let origin_color =
+    parse_color_in(input, scheme)?.ok_or_else(|| input.new_error_for_next_token())?;
   let scale = channel_keyword_scale(target_cs);
-  let origin_color = Color::from_css_str(input.slice_from(origin_start).trim())
-    .map_err(|_| unexpected_token!(Color, &origin_token))?;
   let converted = origin_color.to_dynamic().convert(target_cs);
   let [k0, k1, k2, k_alpha] = converted.components;
   let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
@@ -1046,56 +1047,19 @@ fn parse_relative_color<'i>(
 }
 
 impl<'i> FromCss<'i> for Color {
+  /// The colour in the light scheme, for a value that holds one colour, such as a gradient stop.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let position = input.position();
+    let start = input.state();
+
+    if let Some(color) = parse_color_in(input, &mut SchemeRead::new(ColorScheme::Light))? {
+      return Ok(color);
+    }
+
+    input.reset(&start);
+
     let token = input.next()?;
 
-    match *token {
-      Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
-        .map(|(r, g, b, a)| Color([r, g, b, (a * 255.0) as u8]))
-        .map_err(|_| unexpected_token!(token)),
-      Token::Ident(ref ident) => {
-        if ident.eq_ignore_ascii_case("transparent") {
-          return Ok(Color::transparent());
-        }
-
-        parse_named_color(ident)
-          .map(|(r, g, b)| Color([r, g, b, 255]))
-          .map_err(|_| unexpected_token!(token))
-      }
-      Token::Function(ref name) => match_ignore_ascii_case! { name,
-        "light-dark" => parse_light_dark(input),
-        "color-mix" => input.parse_nested_block(|input| {
-          let color_mix = ColorMix::from_css(input)?;
-          color_mix
-            .evaluate(ColorScheme::Light)
-            .ok_or_else(|| input.new_error_for_next_token())
-        }),
-        _ => {
-          let token = Token::Function(name.clone());
-          let target_cs = relative_target_cs(name);
-
-          input.parse_nested_block(|input| {
-            if let Some(cs) = target_cs
-              && input.try_parse(|i| i.expect_ident_matching("from")).is_ok()
-            {
-              return parse_relative_color(input, cs);
-            }
-
-            while input.next().is_ok() {}
-
-            let mut function = input.slice_from(position).to_string();
-
-            function.push(')');
-
-            parse_color(&function)
-              .map(Color::from_dynamic)
-              .map_err(|_| unexpected_token!(&token))
-          })
-        }
-      },
-      _ => Err(unexpected_token!(token)),
-    }
+    Err(unexpected_token!(token))
   }
   const VALID_TOKENS: &'static [&'static str] = &["<color>"];
 }
@@ -1225,6 +1189,38 @@ mod tests {
     assert!(
       ColorInput::from_css_str("color-mix(in srgb, light-dark(red, currentColor), white)").is_err()
     );
+  }
+
+  #[test]
+  fn a_relative_colour_takes_its_origin_in_each_scheme() {
+    let value = |css| match ColorInput::from_css_str(css) {
+      Ok(ColorInput::Value(color)) => color,
+      other => panic!("{css} gave {other:?}"),
+    };
+
+    assert_eq!(
+      ColorInput::from_css_str("rgb(from light-dark(red, blue) r g b)"),
+      Ok(ColorInput::LightDark(Some(RED), Some(BLUE)))
+    );
+    assert_eq!(
+      ColorInput::from_css_str("hsl(from light-dark(red, blue) h s l / 50%)"),
+      Ok(ColorInput::LightDark(
+        Some(value("hsl(from red h s l / 50%)")),
+        Some(value("hsl(from blue h s l / 50%)"))
+      ))
+    );
+    assert_eq!(
+      ColorInput::from_css_str("color-mix(in srgb, rgb(from light-dark(red, blue) r g b), blue)"),
+      Ok(ColorInput::LightDark(
+        Some(value("color-mix(in srgb, red, blue)")),
+        Some(BLUE)
+      ))
+    );
+    assert_eq!(
+      Color::from_css_str("rgb(from light-dark(red, blue) r g b)"),
+      Ok(RED)
+    );
+    assert!(ColorInput::from_css_str("rgb(from currentColor r g b)").is_err());
   }
 
   #[test]
