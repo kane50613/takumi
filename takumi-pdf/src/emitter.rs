@@ -54,7 +54,8 @@ use crate::{
   options::{PT_PER_PX, PdfError},
   paint::{
     draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, opaque_runs,
-    opaque_stops, pdf_path, pdf_stop, pdf_stops, pop_transforms, rect_path, shape_path, spread,
+    opaque_stops, pdf_path, pdf_stops, pop_transforms, positioned, positioned_pdf_stops, rect_path,
+    shape_path, spread,
   },
   shadow::Band,
   tags::TagCollector,
@@ -674,7 +675,7 @@ impl Emitter<'_> {
         };
         let (x1, y1) = point_at(t0);
         let (x2, y2) = point_at(t1);
-        let runs = opaque_runs(resolved, gradient.repeating, axis_length);
+        let runs = opaque_runs(&positioned(resolved), gradient.repeating, axis_length);
         let stops = match &runs {
           Some(_) => opaque_stops(resolved, base, span),
           None => pdf_stops(resolved, base, span),
@@ -762,25 +763,18 @@ impl Emitter<'_> {
           return None;
         }
         const SWEEP_STOPS: usize = 64;
-        let samples: Vec<ResolvedGradientStop> = (0..=SWEEP_STOPS)
+        let samples: Vec<(f32, [u8; 4])> = (0..=SWEEP_STOPS)
           .map(|i| {
             let t = i as f32 / SWEEP_STOPS as f32;
             let index =
               tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
             let color = tile.lut.sample(index).demultiply();
+            let rgba = Color([color.red(), color.green(), color.blue(), color.alpha()]);
 
-            ResolvedGradientStop {
-              color: Color(self.filtered(Color([
-                color.red(),
-                color.green(),
-                color.blue(),
-                color.alpha(),
-              ]))),
-              position: t,
-            }
+            (t, self.filtered(rgba))
           })
           .collect();
-        let stops = pdf_stops(&samples, 0.0, 1.0);
+        let stops = positioned_pdf_stops(&samples, 0.0, 1.0);
         let (ccx, ccy) = (x + tile.cx, y + tile.cy);
 
         SweepGradient {

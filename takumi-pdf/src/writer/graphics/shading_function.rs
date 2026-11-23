@@ -911,3 +911,40 @@ fn serialize_exponential(
   exp.finish();
   root_ref
 }
+
+#[cfg(test)]
+mod tests {
+  use super::{NormalizedF32, Stop, separate_coincident_stops};
+  use crate::writer::graphics::color::rgb;
+
+  fn offsets(offsets: &[f32]) -> Vec<f32> {
+    let mut stops: Vec<Stop> = offsets
+      .iter()
+      .map(|&offset| Stop {
+        offset: NormalizedF32::new(offset).unwrap(),
+        color: rgb::Color::new(0, 0, 0).into(),
+        opacity: NormalizedF32::ONE,
+      })
+      .collect();
+
+    separate_coincident_stops(&mut stops);
+    stops.iter().map(|stop| stop.offset.get()).collect()
+  }
+
+  #[test]
+  fn coincident_stops_move_apart_as_skia_moves_them() {
+    let nudge = 0.00001;
+
+    assert_eq!(
+      offsets(&[0.0, 0.55, 0.55, 1.0]),
+      [0.0, 0.55, 0.55 + nudge, 1.0]
+    );
+    assert_eq!(
+      offsets(&[0.0, 0.5, 0.5, 0.5, 1.0]),
+      [0.0, 0.5, 0.5 + nudge, 1.0]
+    );
+    assert_eq!(offsets(&[0.0, 0.5, 1.0, 1.0]), [0.0, 0.5, 1.0 - nudge, 1.0]);
+    // A stop before the one ahead of it moves up to it.
+    assert_eq!(offsets(&[0.0, 0.6, 0.4, 1.0]), [0.0, 0.6, 0.6 + nudge, 1.0]);
+  }
+}

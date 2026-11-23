@@ -209,9 +209,21 @@ pub(crate) fn pdf_stop(offset: f32, rgba: [u8; 4]) -> Stop {
 }
 
 pub(crate) fn pdf_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
-  premultiplied_stops(resolved)
+  positioned_pdf_stops(&positioned(resolved), base, span)
+}
+
+/// Writer stops of `(position, rgba)` stops, as [`pdf_stops`] makes them.
+pub(crate) fn positioned_pdf_stops(stops: &[(f32, [u8; 4])], base: f32, span: f32) -> Vec<Stop> {
+  premultiplied_stops(stops)
     .into_iter()
     .map(|(position, rgba)| pdf_stop((position - base) / span, rgba))
+    .collect()
+}
+
+pub(crate) fn positioned(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])> {
+  resolved
+    .iter()
+    .map(|stop| (stop.position, stop.color.0))
     .collect()
 }
 
@@ -219,35 +231,35 @@ pub(crate) fn pdf_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32)
 /// toward it and the next stop's past it, split in two where they differ. A PDF shading
 /// interpolates colour apart from the alpha, where CSS interpolates premultiplied, which keeps a
 /// colour toward a transparent stop instead of fading it through the stop's own colour.
-fn premultiplied_stops(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])> {
-  let visible = |index: usize| resolved[index].color.0[3] != 0;
+fn premultiplied_stops(stops: &[(f32, [u8; 4])]) -> Vec<(f32, [u8; 4])> {
+  let visible = |index: usize| stops[index].1[3] != 0;
   let colour = |index: usize| {
-    let [r, g, b, _] = resolved[index].color.0;
+    let [r, g, b, _] = stops[index].1;
 
     [r, g, b, 0]
   };
-  let mut stops = Vec::with_capacity(resolved.len());
+  let mut premultiplied = Vec::with_capacity(stops.len());
 
-  for (index, stop) in resolved.iter().enumerate() {
+  for (index, &(position, rgba)) in stops.iter().enumerate() {
     if visible(index) {
-      stops.push((stop.position, stop.color.0));
+      premultiplied.push((position, rgba));
       continue;
     }
 
     let previous = (0..index).rev().find(|&other| visible(other)).map(colour);
-    let next = (index + 1..resolved.len())
+    let next = (index + 1..stops.len())
       .find(|&other| visible(other))
       .map(colour);
 
     match (previous, next) {
       (Some(previous), Some(next)) if previous != next => {
-        stops.push((stop.position, previous));
-        stops.push((stop.position, next));
+        premultiplied.push((position, previous));
+        premultiplied.push((position, next));
       }
-      (previous, next) => stops.push((stop.position, previous.or(next).unwrap_or(stop.color.0))),
+      (previous, next) => premultiplied.push((position, previous.or(next).unwrap_or(rgba))),
     }
   }
-  stops
+  premultiplied
 }
 
 /// The stretches of a gradient's axis, from `0` to `axis_length`, that `stops` paint opaque,
@@ -256,20 +268,18 @@ fn premultiplied_stops(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])>
 /// leave out, painting what lies under the transparent stops. `None` when the alpha blends or
 /// never drops to zero.
 pub(crate) fn opaque_runs(
-  stops: &[ResolvedGradientStop],
+  stops: &[(f32, [u8; 4])],
   repeating: bool,
   axis_length: f32,
 ) -> Option<Vec<[f32; 2]>> {
   // How many periods a repeating gradient tiles before it keeps its soft mask instead.
   const MAX_RUNS: usize = 512;
 
-  let opaque = |stop: &ResolvedGradientStop| stop.color.0[3] == u8::MAX;
-  let binary = stops
-    .iter()
-    .all(|stop| matches!(stop.color.0[3], 0 | u8::MAX));
+  let opaque = |stop: &(f32, [u8; 4])| stop.1[3] == u8::MAX;
+  let binary = stops.iter().all(|stop| matches!(stop.1[3], 0 | u8::MAX));
   let hard = stops
     .windows(2)
-    .all(|pair| opaque(&pair[0]) == opaque(&pair[1]) || pair[0].position >= pair[1].position);
+    .all(|pair| opaque(&pair[0]) == opaque(&pair[1]) || pair[0].0 >= pair[1].0);
   let (first, last) = (stops.first()?, stops.last()?);
 
   if !binary || !hard || stops.iter().all(opaque) {
@@ -278,7 +288,7 @@ pub(crate) fn opaque_runs(
 
   // The runs of one pass along the stops, the padded ends reaching past the axis.
   let (before, after) = if repeating {
-    (first.position, last.position)
+    (first.0, last.0)
   } else {
     (f32::NEG_INFINITY, f32::INFINITY)
   };
@@ -287,8 +297,8 @@ pub(crate) fn opaque_runs(
 
   for pair in stops.windows(2) {
     match (opaque(&pair[0]), opaque(&pair[1])) {
-      (false, true) => start = Some(pair[1].position),
-      (true, false) => runs.extend(start.take().map(|start| [start, pair[0].position])),
+      (false, true) => start = Some(pair[1].0),
+      (true, false) => runs.extend(start.take().map(|start| [start, pair[0].0])),
       _ => {}
     }
   }
@@ -298,14 +308,14 @@ pub(crate) fn opaque_runs(
     return Some(clamp_runs(runs, axis_length));
   }
 
-  let period = last.position - first.position;
+  let period = last.0 - first.0;
 
   if period <= 0.0 {
     return None;
   }
 
-  let periods = (first.position / period).ceil() as i64
-    ..=((axis_length - first.position) / period).floor() as i64;
+  let periods =
+    (first.0 / period).ceil() as i64..=((axis_length - first.0) / period).floor() as i64;
   let mut tiled = Vec::new();
 
   for shift in (periods.start() - 1)..=(periods.end() + 1) {
@@ -340,7 +350,7 @@ fn clamp_runs(runs: Vec<[f32; 2]>, axis_length: f32) -> Vec<[f32; 2]> {
 
 /// [`pdf_stops`] drawn opaque.
 pub(crate) fn opaque_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
-  premultiplied_stops(resolved)
+  premultiplied_stops(&positioned(resolved))
     .into_iter()
     .map(|(position, [r, g, b, _])| pdf_stop((position - base) / span, [r, g, b, u8::MAX]))
     .collect()
@@ -368,7 +378,7 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   };
   let period = period * scale;
   let cycles = cycles as usize;
-  let period_stops = premultiplied_stops(resolved);
+  let period_stops = premultiplied_stops(&positioned(resolved));
   let mut stops = Vec::with_capacity(cycles * period_stops.len());
 
   for cycle in 0..cycles {
@@ -478,4 +488,76 @@ pub(crate) fn fill_from_rgba(rgba: [u8; 4], opacity: f32) -> Fill {
 /// A value clamped into `0..=1`, with NaN read as one.
 pub(crate) fn normalized(value: f32) -> NormalizedF32 {
   NormalizedF32::new(value.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{opaque_runs, premultiplied_stops};
+
+  const CLEAR: [u8; 4] = [0, 0, 0, 0];
+  const YELLOW: [u8; 4] = [244, 239, 58, 255];
+
+  #[test]
+  fn a_highlighter_paints_only_past_its_hard_stops() {
+    assert_eq!(
+      opaque_runs(&[(34.0, CLEAR), (34.0, YELLOW)], false, 62.0),
+      Some(vec![[34.0, 63.0]])
+    );
+    assert_eq!(
+      opaque_runs(
+        &[(58.0, CLEAR), (58.0, YELLOW), (92.0, YELLOW), (92.0, CLEAR)],
+        false,
+        100.0
+      ),
+      Some(vec![[58.0, 92.0]])
+    );
+  }
+
+  #[test]
+  fn an_alpha_that_blends_keeps_the_soft_mask() {
+    let half = [244, 239, 58, 128];
+
+    assert_eq!(
+      opaque_runs(&[(0.0, YELLOW), (100.0, CLEAR)], false, 100.0),
+      None
+    );
+    assert_eq!(
+      opaque_runs(&[(0.0, half), (100.0, half)], false, 100.0),
+      None
+    );
+    assert_eq!(
+      opaque_runs(&[(0.0, YELLOW), (100.0, YELLOW)], false, 100.0),
+      None
+    );
+  }
+
+  #[test]
+  fn repeating_stripes_tile_their_runs_across_the_axis() {
+    let stripes = [(0.0, YELLOW), (10.0, YELLOW), (10.0, CLEAR), (20.0, CLEAR)];
+
+    assert_eq!(
+      opaque_runs(&stripes, true, 45.0),
+      Some(vec![[0.0, 10.0], [20.0, 30.0], [40.0, 46.0]])
+    );
+  }
+
+  #[test]
+  fn a_transparent_stop_keeps_the_colours_beside_it() {
+    let red = [255, 0, 0, 255];
+    let blue = [0, 0, 255, 255];
+
+    assert_eq!(
+      premultiplied_stops(&[(0.0, red), (100.0, CLEAR)]),
+      [(0.0, red), (100.0, [255, 0, 0, 0])]
+    );
+    assert_eq!(
+      premultiplied_stops(&[(0.0, red), (50.0, CLEAR), (100.0, blue)]),
+      [
+        (0.0, red),
+        (50.0, [255, 0, 0, 0]),
+        (50.0, [0, 0, 255, 0]),
+        (100.0, blue)
+      ]
+    );
+  }
 }
