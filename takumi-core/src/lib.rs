@@ -32,7 +32,7 @@
 /// Style resolution and box/inline layout.
 pub mod layout;
 
-/// Gaussian blur of pixels, as Skia's raster blur engine runs it.
+/// Gaussian blur of pixels by decimation, as filtra runs it.
 pub mod blur;
 /// Render context threading style, sizing, and resources through layout.
 pub mod context;

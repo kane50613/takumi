@@ -420,7 +420,7 @@ impl Run<'_> {
         }
         Some(Image::new(pixmap, ColorSpace::Srgb))
       }
-      // `FEGaussianBlur` in `fe_gaussian_blur.cc`, which Skia blurs as CSS `blur()` is.
+      // `FEGaussianBlur` in `fe_gaussian_blur.cc`, blurred as CSS `blur()` is.
       Kind::GaussianBlur {
         std_dev_x,
         std_dev_y,
