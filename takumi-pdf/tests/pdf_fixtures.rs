@@ -3925,8 +3925,8 @@ fn repeating_gradients() {
   });
 }
 
-/// Hard stops write no zero-width stitching subdomain, and gradients toward transparent keep
-/// their colour.
+/// Hard stops write no zero-width stitching subdomain, stops each opaque or transparent paint
+/// through a clip with no soft mask, and gradients toward transparent keep their colour.
 #[test]
 fn hard_stop_gradients() {
   let pdf = run_pdf_fixture("hard-stop-gradients", |fonts| {
@@ -3958,6 +3958,11 @@ fn hard_stop_gradients() {
     })
     .collect();
 
+  assert_eq!(
+    haystack.matches("/S/Luminosity").count(),
+    1,
+    "expected a soft mask for the fade alone"
+  );
   assert!(!bounds.is_empty(), "expected stitched gradients");
   for bounds in bounds {
     assert!(

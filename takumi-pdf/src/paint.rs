@@ -220,7 +220,7 @@ pub(crate) fn positioned_pdf_stops(stops: &[(f32, [u8; 4])], base: f32, span: f3
     .collect()
 }
 
-fn positioned(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])> {
+pub(crate) fn positioned(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4])> {
   resolved
     .iter()
     .map(|stop| (stop.position, stop.color.0))
@@ -319,6 +319,100 @@ fn premultiplied_curve(from: (f32, [u8; 4]), to: (f32, [u8; 4]), out: &mut Vec<(
       ));
     }
   }
+}
+
+/// The stretches of a gradient's axis, from `0` to `axis_length`, that `stops` paint opaque,
+/// when each stop is opaque or transparent and the alpha changes only at hard stops. Drawing the
+/// gradient opaque clipped to them then needs no soft mask, which Apple's PDF renderer can draw
+/// wrong, as macOS does under a background clipped to text. `None` when the alpha blends or never
+/// drops to zero.
+pub(crate) fn opaque_runs(
+  stops: &[(f32, [u8; 4])],
+  repeating: bool,
+  axis_length: f32,
+) -> Option<Vec<[f32; 2]>> {
+  // How many periods a repeating gradient tiles before it keeps its soft mask instead.
+  const MAX_RUNS: usize = 512;
+
+  let opaque = |stop: &(f32, [u8; 4])| stop.1[3] == u8::MAX;
+  let binary = stops.iter().all(|stop| matches!(stop.1[3], 0 | u8::MAX));
+  let hard = stops
+    .windows(2)
+    .all(|pair| opaque(&pair[0]) == opaque(&pair[1]) || pair[0].0 >= pair[1].0);
+  let (first, last) = (stops.first()?, stops.last()?);
+
+  if !binary || !hard || stops.iter().all(opaque) {
+    return None;
+  }
+
+  // The runs of one pass along the stops, the padded ends reaching past the axis.
+  let (before, after) = if repeating {
+    (first.0, last.0)
+  } else {
+    (f32::NEG_INFINITY, f32::INFINITY)
+  };
+  let mut runs: Vec<[f32; 2]> = Vec::new();
+  let mut start = opaque(first).then_some(before);
+
+  for pair in stops.windows(2) {
+    match (opaque(&pair[0]), opaque(&pair[1])) {
+      (false, true) => start = Some(pair[1].0),
+      (true, false) => runs.extend(start.take().map(|start| [start, pair[0].0])),
+      _ => {}
+    }
+  }
+  runs.extend(start.map(|start| [start, after]));
+
+  if !repeating {
+    return Some(clamp_runs(runs, axis_length));
+  }
+
+  let period = last.0 - first.0;
+
+  if period <= 0.0 {
+    return None;
+  }
+
+  let periods =
+    (first.0 / period).ceil() as i64..=((axis_length - first.0) / period).floor() as i64;
+  let mut tiled = Vec::new();
+
+  for shift in (periods.start() - 1)..=(periods.end() + 1) {
+    for [start, end] in &runs {
+      tiled.push([start + shift as f32 * period, end + shift as f32 * period]);
+    }
+    if tiled.len() > MAX_RUNS {
+      return None;
+    }
+  }
+
+  Some(clamp_runs(tiled, axis_length))
+}
+
+/// `runs` kept to the axis, a pixel past each end, with touching runs joined.
+fn clamp_runs(runs: Vec<[f32; 2]>, axis_length: f32) -> Vec<[f32; 2]> {
+  let mut clamped: Vec<[f32; 2]> = Vec::new();
+
+  for [start, end] in runs {
+    let [start, end] = [start.max(-1.0), end.min(axis_length + 1.0)];
+
+    if start >= end {
+      continue;
+    }
+    match clamped.last_mut() {
+      Some(previous) if previous[1] >= start => previous[1] = previous[1].max(end),
+      _ => clamped.push([start, end]),
+    }
+  }
+  clamped
+}
+
+/// [`pdf_stops`] drawn opaque.
+pub(crate) fn opaque_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
+  premultiplied_stops(&positioned(resolved))
+    .into_iter()
+    .map(|(position, [r, g, b, _])| pdf_stop((position - base) / span, [r, g, b, u8::MAX]))
+    .collect()
 }
 
 /// Tiles one period of repeating stops across `extent` (the full gradient
@@ -457,9 +551,54 @@ pub(crate) fn normalized(value: f32) -> NormalizedF32 {
 
 #[cfg(test)]
 mod tests {
-  use super::premultiplied_stops;
+  use super::{opaque_runs, premultiplied_stops};
 
   const CLEAR: [u8; 4] = [0, 0, 0, 0];
+  const YELLOW: [u8; 4] = [244, 239, 58, 255];
+
+  #[test]
+  fn a_highlighter_paints_only_past_its_hard_stops() {
+    assert_eq!(
+      opaque_runs(&[(34.0, CLEAR), (34.0, YELLOW)], false, 62.0),
+      Some(vec![[34.0, 63.0]])
+    );
+    assert_eq!(
+      opaque_runs(
+        &[(58.0, CLEAR), (58.0, YELLOW), (92.0, YELLOW), (92.0, CLEAR)],
+        false,
+        100.0
+      ),
+      Some(vec![[58.0, 92.0]])
+    );
+  }
+
+  #[test]
+  fn an_alpha_that_blends_keeps_the_soft_mask() {
+    let half = [244, 239, 58, 128];
+
+    assert_eq!(
+      opaque_runs(&[(0.0, YELLOW), (100.0, CLEAR)], false, 100.0),
+      None
+    );
+    assert_eq!(
+      opaque_runs(&[(0.0, half), (100.0, half)], false, 100.0),
+      None
+    );
+    assert_eq!(
+      opaque_runs(&[(0.0, YELLOW), (100.0, YELLOW)], false, 100.0),
+      None
+    );
+  }
+
+  #[test]
+  fn repeating_stripes_tile_their_runs_across_the_axis() {
+    let stripes = [(0.0, YELLOW), (10.0, YELLOW), (10.0, CLEAR), (20.0, CLEAR)];
+
+    assert_eq!(
+      opaque_runs(&stripes, true, 45.0),
+      Some(vec![[0.0, 10.0], [20.0, 30.0], [40.0, 46.0]])
+    );
+  }
 
   #[test]
   fn a_transparent_stop_keeps_the_colours_beside_it() {
