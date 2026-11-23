@@ -41,21 +41,27 @@ pub struct KeyframesRule {
   pub media_queries: Vec<MediaQueryList>,
 }
 
-/// Applies a stylesheet's matching animations to a style at the given time.
+/// Applies a stylesheet's matching animations of `longhands` to a style at the given time.
 pub(crate) fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
   stylesheet: &StyleSheet,
   time: u64,
   sizing: &SizingContext,
   current_color: Color,
+  longhands: &PropertyMask,
 ) -> ComputedStyle {
-  if base_style.misc1_data.animation_name.is_empty() {
+  let animations: Vec<ActiveAnimation> =
+    active_animations(&base_style, stylesheet, time, sizing.viewport)
+      .filter(|animation| animation.keyframes.animates(longhands))
+      .collect();
+
+  if animations.is_empty() {
     return base_style;
   }
 
   let base_snapshot = base_style.clone();
 
-  for animation in active_animations(&base_snapshot, stylesheet, time, sizing.viewport) {
+  for animation in animations {
     let resolved_frames = resolve_keyframes(&animation.keyframes, &base_snapshot);
     let Some(segment) =
       sample_keyframe_segment(&resolved_frames, &base_snapshot, animation.sample.progress)
@@ -66,10 +72,13 @@ pub(crate) fn apply_stylesheet_animations(
     let eased_progress = animation
       .timing_function
       .apply(segment.progress, animation.sample.before);
+    let mut animated_properties = segment.animated_properties;
+
+    animated_properties.intersect(longhands);
     base_style.apply_interpolated_properties(
       segment.from_style,
       segment.to_style,
-      &segment.animated_properties,
+      &animated_properties,
       eased_progress,
       sizing,
       current_color,
@@ -138,7 +147,7 @@ struct ActiveAnimation<'s> {
 
 /// The animations `base_style` names that `time` falls in or fills, in `animation-name` order.
 fn active_animations<'s>(
-  base_style: &'s ComputedStyle,
+  base_style: &ComputedStyle,
   stylesheet: &'s StyleSheet,
   time: u64,
   viewport: Viewport,
@@ -258,6 +267,15 @@ impl KeyframesRule {
     };
 
     (from, to, local)
+  }
+
+  /// Whether a keyframe declares one of `longhands`.
+  fn animates(&self, longhands: &PropertyMask) -> bool {
+    self
+      .keyframes
+      .iter()
+      .flat_map(|keyframe| keyframe.declarations.iter())
+      .any(|declaration| declaration.affected_longhands().intersects(longhands))
   }
 
   /// Whether a keyframe declares a custom property.
@@ -769,9 +787,16 @@ mod tests {
     };
 
     let at = |time: u64| {
-      apply_stylesheet_animations(style.clone(), &stylesheet, time, &sizing(), current_color())
-        .surround_data
-        .corner_top_left_shape
+      apply_stylesheet_animations(
+        style.clone(),
+        &stylesheet,
+        time,
+        &sizing(),
+        current_color(),
+        &PropertyMask::new().complement(),
+      )
+      .surround_data
+      .corner_top_left_shape
     };
 
     assert_eq!(at(0), Superellipse::SQUIRCLE);
@@ -803,7 +828,14 @@ mod tests {
       }),
       ..Default::default()
     };
-    let animated = apply_stylesheet_animations(style, &stylesheet, 0, &sizing(), current_color());
+    let animated = apply_stylesheet_animations(
+      style,
+      &stylesheet,
+      0,
+      &sizing(),
+      current_color(),
+      &PropertyMask::new().complement(),
+    );
 
     assert_eq!(animated.svg_data.opacity.0, 0.5);
   }

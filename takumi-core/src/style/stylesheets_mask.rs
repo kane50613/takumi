@@ -43,6 +43,33 @@ impl PropertyMask {
     }
   }
 
+  pub(crate) fn intersect(&mut self, other: &Self) {
+    for (word, other_word) in self.words.iter_mut().zip(other.words) {
+      *word &= other_word;
+    }
+  }
+
+  pub(crate) fn intersects(&self, other: &Self) -> bool {
+    self
+      .words
+      .iter()
+      .zip(other.words)
+      .any(|(word, other_word)| word & other_word != 0)
+  }
+
+  /// Every longhand this mask does not hold.
+  pub(crate) fn complement(&self) -> Self {
+    let mut complement = Self {
+      words: self.words.map(|word| !word),
+    };
+    let tail = LonghandId::COUNT % Self::BITS_PER_WORD;
+
+    if tail != 0 {
+      complement.words[Self::WORD_COUNT - 1] &= (1usize << tail) - 1;
+    }
+    complement
+  }
+
   pub(crate) fn contains_all(&self, other: &Self) -> bool {
     self
       .words

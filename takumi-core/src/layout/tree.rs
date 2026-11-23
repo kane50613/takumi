@@ -58,12 +58,12 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ColorInput, ComputedStyle, ContentItem,
     ContentValue, Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang,
-    LineHeight, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
+    LineHeight, LonghandId, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi,
     WhiteSpaceCollapse, animated_custom_properties, apply_stylesheet_animations,
     page_rule::PageContext,
   },
-  viewport::{ColorScheme, Viewport},
+  viewport::Viewport,
 };
 
 /// A render-tree child paired with its layout node id.
@@ -3382,24 +3382,26 @@ impl RenderContext {
 
     let (style_layers, element_important) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
-    let important: Vec<&StyleDeclaration> = matched
-      .unlayered_important()
-      .iter()
-      .map(|declarations| declarations.iter())
-      .chain(
-        matched
-          .layered_important()
-          .iter()
-          .map(|declarations| declarations.iter()),
-      )
-      .chain(
-        element_important
-          .inline
-          .iter()
-          .map(|declarations| declarations.iter()),
-      )
-      .flatten()
-      .collect();
+    let important = ImportantDeclarations(
+      matched
+        .unlayered_important()
+        .iter()
+        .map(|declarations| declarations.iter())
+        .chain(
+          matched
+            .layered_important()
+            .iter()
+            .map(|declarations| declarations.iter()),
+        )
+        .chain(
+          element_important
+            .inline
+            .iter()
+            .map(|declarations| declarations.iter()),
+        )
+        .flatten()
+        .collect(),
+    );
     // An animated custom property cascades above the element's declarations, before `var()`
     // substitutes it, so the element cascades again with it.
     let recascade = self
@@ -3410,36 +3412,13 @@ impl RenderContext {
     let context = (lang, is_document_root);
     let recascade = recascade.then(|| style_layers.clone());
     let cascaded = style_layers.inherit_element(&inherited_parent, lang, is_document_root);
-    let resample = (!cascaded.0.misc1_data.animation_name.is_empty()).then(|| cascaded.clone());
-    let (mut style, mut child_sizing_for_final) = self.animated_child_style(
+    let (mut style, child_sizing_for_final) = self.animated_child_style(
       cascaded,
       recascade.as_ref(),
       &inherited_parent,
       &important,
       context,
-      None,
     );
-
-    // `color-scheme` animates discretely and decides every `light-dark()` the animations sample, so
-    // when the scheme that wins, `!important` included, is not the one they were sampled in, they
-    // are sampled again in it, as Blink applies `color-scheme` before the colours that read it.
-    if let (Some(sampled), Some(cascaded)) = (&child_sizing_for_final, resample) {
-      let color_scheme = style
-        .inherited_data
-        .color_scheme
-        .used(self.sizing.viewport.color_scheme);
-
-      if color_scheme != sampled.color_scheme {
-        (style, child_sizing_for_final) = self.animated_child_style(
-          cascaded,
-          recascade.as_ref(),
-          &inherited_parent,
-          &important,
-          context,
-          Some(color_scheme),
-        );
-      }
-    }
 
     let sizing = self.child_sizing(
       &style,
@@ -3457,74 +3436,87 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// `style` with its animations sampled at this render's time, in `color_scheme` or the scheme of
-  /// the style before them, and its important declarations applied over them, with the sizing the
-  /// animations were sampled against when it has any. `recascade` holds the element's layers when
-  /// an animated custom property has to cascade through them again.
+  /// `style` with its animations sampled at this render's time and its important declarations
+  /// applied over them, with the sizing the animations were sampled against when it has any.
+  /// `recascade` holds the element's layers when an animated custom property has to cascade
+  /// through them again.
   fn animated_child_style(
     &self,
     (mut style, mut invalid): (ComputedStyle, InvalidDeclarations),
     recascade: Option<&NodeStyle>,
     inherited_parent: &ComputedStyle,
-    important: &[&StyleDeclaration],
+    important: &ImportantDeclarations<'_>,
     (lang, is_document_root): (Option<Lang>, bool),
-    color_scheme: Option<ColorScheme>,
   ) -> (ComputedStyle, Option<SizingContext>) {
     let mut tainted = PropertyMask::new();
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
-    if let Some(style_layers) = recascade
-      && !style.misc1_data.animation_name.is_empty()
-    {
-      let mut animated = self.animated_custom_properties(&style, color_scheme);
-
-      // An important declaration outranks the animation of the same custom property.
-      animated.retain(|(name, _)| {
-        !important.iter().any(|declaration| {
-          matches!(declaration, StyleDeclaration::CustomProperty(important, _) if important == name.as_str())
-        })
-      });
-      if !animated.is_empty() {
-        // An animated custom property is animation-tainted, so an animation property that reads
-        // it keeps the value from before the animation, as Chromium keeps it.
-        // <https://drafts.csswg.org/css-variables-1/#animation-tainted>
-        let names: Vec<&str> = animated.iter().map(|(name, _)| name.as_str()).collect();
-        tainted = style_layers.animation_longhands_reading(&names);
-
-        let (mut animated_style, animated_invalid) = animated
-          .into_iter()
-          .fold(style_layers.clone(), |layers, (name, value)| {
-            layers.with(StyleDeclaration::CustomProperty(name, value))
-          })
-          .inherit_element(inherited_parent, lang, is_document_root);
-
-        animated_style.copy_longhands(&tainted, &style);
-        style = animated_style;
-        invalid = animated_invalid;
-      }
-    }
     if !style.misc1_data.animation_name.is_empty() {
-      let (animated, child_sizing) = self.animated_style(style, color_scheme);
+      style = self.apply_high_priority(style, inherited_parent, important, &invalid);
+      if let Some(style_layers) = recascade {
+        let mut animated = self.animated_custom_properties(&style);
 
-      style = animated;
+        // An important declaration outranks the animation of the same custom property.
+        animated.retain(|(name, _)| !important.declares_custom_property(name));
+        if !animated.is_empty() {
+          // An animated custom property is animation-tainted, so an animation property that reads
+          // it keeps the value from before the animation, as Chromium keeps it.
+          // <https://drafts.csswg.org/css-variables-1/#animation-tainted>
+          let names: Vec<&str> = animated.iter().map(|(name, _)| name.as_str()).collect();
+          tainted = style_layers.animation_longhands_reading(&names);
+
+          let (mut animated_style, animated_invalid) = animated
+            .into_iter()
+            .fold(style_layers.clone(), |layers, (name, value)| {
+              layers.with(StyleDeclaration::CustomProperty(name, value))
+            })
+            .inherit_element(inherited_parent, lang, is_document_root);
+
+          animated_style.copy_longhands(&tainted, &style);
+          invalid = animated_invalid;
+          style = self.apply_high_priority(animated_style, inherited_parent, important, &invalid);
+        }
+      }
+
+      let child_sizing = self.child_sizing(&style, &self.sizing, false);
+
+      style = self.sample_animations(style, &child_sizing);
       child_sizing_for_final = Some(child_sizing);
     }
 
     // Important declarations outrank an animation, and `inherit` among them needs the parent the
     // first pass resolved against. A tainted animation longhand keeps the value the first pass
     // restored, since no animation reaches it.
-    for &declaration in important {
-      let longhands = declaration.affected_longhands();
-
-      if !longhands.is_empty() && tainted.contains_all(&longhands) {
-        continue;
-      }
-      for declaration in invalid.replace(declaration.clone()) {
-        declaration.apply_with_parent(&mut style, inherited_parent);
-      }
-    }
+    important.apply(&mut style, inherited_parent, &invalid, |longhands| {
+      longhands.is_empty() || !tainted.contains_all(longhands)
+    });
 
     (style, child_sizing_for_final)
+  }
+
+  /// Blink's `StyleCascade::ApplyHighPriority`, approximate: animations and important declarations
+  /// apply over the cascaded style instead of in one cascade with its declarations.
+  fn apply_high_priority(
+    &self,
+    style: ComputedStyle,
+    inherited_parent: &ComputedStyle,
+    important: &ImportantDeclarations<'_>,
+    invalid: &InvalidDeclarations,
+  ) -> ComputedStyle {
+    let high_priority = LonghandId::high_priority();
+    let mut style = apply_stylesheet_animations(
+      style,
+      self.stylesheet(),
+      self.time_ms(),
+      &self.sizing,
+      self.current_color,
+      &high_priority,
+    );
+
+    important.apply(&mut style, inherited_parent, invalid, |longhands| {
+      !longhands.is_empty() && high_priority.contains_all(longhands)
+    });
+    style
   }
 
   /// The sizing a child with `style` resolves against. Its font size resolves in
@@ -3585,12 +3577,8 @@ impl RenderContext {
   }
 
   /// The custom properties the stylesheet animations set on `style` at this render's time.
-  fn animated_custom_properties(
-    &self,
-    style: &ComputedStyle,
-    color_scheme: Option<ColorScheme>,
-  ) -> Vec<(String, String)> {
-    let sizing = self.animation_sizing(style, color_scheme);
+  fn animated_custom_properties(&self, style: &ComputedStyle) -> Vec<(String, String)> {
+    let sizing = self.child_sizing(style, &self.sizing, false);
 
     animated_custom_properties(
       style,
@@ -3605,33 +3593,8 @@ impl RenderContext {
     )
   }
 
-  /// Samples the stylesheet animations on `style` at this render's time, against the sizing the
-  /// pre-animation style produces, in `color_scheme` when one is given.
-  fn animated_style(
-    &self,
-    style: ComputedStyle,
-    color_scheme: Option<ColorScheme>,
-  ) -> (ComputedStyle, SizingContext) {
-    let child_sizing = self.animation_sizing(&style, color_scheme);
-
-    (self.sample_animations(style, &child_sizing), child_sizing)
-  }
-
-  /// The sizing animations on `style` are sampled against, in `color_scheme` when one is given.
-  fn animation_sizing(
-    &self,
-    style: &ComputedStyle,
-    color_scheme: Option<ColorScheme>,
-  ) -> SizingContext {
-    let sizing = self.child_sizing(style, &self.sizing, false);
-
-    match color_scheme {
-      Some(color_scheme) => sizing.with_color_scheme(color_scheme),
-      None => sizing,
-    }
-  }
-
-  /// The stylesheet animations on `style` at this render's time, sampled against `child_sizing`.
+  /// The stylesheet animations on `style` at this render's time, sampled against `child_sizing`,
+  /// but for the high-priority longhands [`Self::apply_high_priority`] applied.
   fn sample_animations(&self, style: ComputedStyle, child_sizing: &SizingContext) -> ComputedStyle {
     let child_current_color = style
       .inherited_data
@@ -3650,7 +3613,38 @@ impl RenderContext {
       child_context.time_ms(),
       &child_context.sizing,
       child_context.current_color,
+      &LonghandId::high_priority().complement(),
     )
+  }
+}
+
+/// The element's important declarations, which cascade above its animations.
+struct ImportantDeclarations<'a>(Vec<&'a StyleDeclaration>);
+
+impl ImportantDeclarations<'_> {
+  /// Applies the declarations whose longhands `applies` accepts, `inherit` taking `inherited_parent`.
+  fn apply(
+    &self,
+    style: &mut ComputedStyle,
+    inherited_parent: &ComputedStyle,
+    invalid: &InvalidDeclarations,
+    applies: impl Fn(&PropertyMask) -> bool,
+  ) {
+    for &declaration in &self.0 {
+      if !applies(&declaration.affected_longhands()) {
+        continue;
+      }
+      for declaration in invalid.replace(declaration.clone()) {
+        declaration.apply_with_parent(style, inherited_parent);
+      }
+    }
+  }
+
+  /// Whether one declares the custom property `name`.
+  fn declares_custom_property(&self, name: &str) -> bool {
+    self.0.iter().any(|declaration| {
+      matches!(declaration, StyleDeclaration::CustomProperty(important, _) if important == name)
+    })
   }
 }
 

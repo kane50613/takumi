@@ -486,6 +486,11 @@ macro_rules! define_style {
             .collect()
         }
 
+        /// Blink's high-priority longhands, only `color-scheme` yet, not `color`, fonts, or `zoom`.
+        pub(crate) fn high_priority() -> PropertyMask {
+          [Self::ColorScheme].into_iter().collect()
+        }
+
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
         pub(crate) fn css_name(self) -> &'static str {
           static NAMES: OnceLock<Box<[Box<str>]>> = OnceLock::new();
