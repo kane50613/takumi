@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_color_value_resolution</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      div {
+        display: inline-block;
+        vertical-align: top;
+        width: 64px;
+        height: 16px;
+        margin: 4px;
+      }
+      .dark {
+        color-scheme: dark;
+      }
+      .mix {
+        background: color-mix(in srgb, currentColor 50%, white);
+        border: 4px solid color-mix(in srgb, currentColor, black);
+      }
+      .red {
+        color: rgb(220, 38, 38);
+      }
+      .blue {
+        color: rgb(37, 99, 235);
+      }
+      .relative {
+        background: rgb(from light-dark(rgb(239, 68, 68), rgb(59, 130, 246)) r g b / 0.6);
+        border: 4px solid hsl(from light-dark(rgb(239, 68, 68), rgb(59, 130, 246)) h s 30%);
+      }
+      .system {
+        background: ButtonFace;
+        border: 4px solid LinkText;
+      }
+      .canvas {
+        background: Canvas;
+        border: 4px solid CanvasText;
+      }
+    </style>
+  </head>
+  <body style="width: 160px; height: 104px">
+    <div class="mix red"></div>
+    <div class="mix blue"></div>
+    <div class="relative"></div>
+    <div class="relative dark"></div>
+    <div class="system"></div>
+    <div class="system dark"></div>
+    <div class="canvas"></div>
+    <div class="canvas dark"></div>
+  </body>
+</html>

@@ -900,3 +900,19 @@ fn light_dark_follows_the_preferred_scheme_color_scheme_lists() {
     );
   }
 }
+
+/// A `color-mix()` of `currentColor` in `color` mixes the parent's colour once, and descendants
+/// inherit the mixed colour, as Blink's `Color::ApplyValue` resolves it.
+#[test]
+fn color_mix_of_current_color_in_color_mixes_the_parent_colour() {
+  use crate::test_utils::render_node;
+
+  let page = Node::from_html(
+    r#"<div style="color:rgb(0,0,255)"><div style="color:color-mix(in srgb,currentColor,rgb(255,0,0))"><div style="width:4px;height:4px;background-color:currentColor"></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let image = render_node(page, Viewport::new((4, 4)));
+
+  assert_eq!(image.as_raw()[..4], [128, 0, 128, 255]);
+}

@@ -17,7 +17,7 @@ use crate::{
   resources::image_buffer::premultiply_pixel,
   style::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
-    PercentageNumber, SizingContext, ToCss,
+    PercentageNumber, SizingContext, ToCss, impl_css_enum,
     math::mul_div_255,
     significant,
     tw::TailwindPropertyParser,
@@ -196,6 +196,8 @@ pub enum ColorInput {
   CurrentColor,
   /// A color value.
   Value(Color),
+  /// A system colour keyword, computing to its colour in the used color scheme.
+  System(SystemColor),
   /// A `light-dark()` pair, computing to one of its colours by the used color scheme.
   LightDark(Arc<LightDarkValuePair>),
   /// A `color-mix()`, which stays unresolved once computed while an operand depends on
@@ -257,7 +259,7 @@ impl ColorInput {
       ColorInput::RelativeColor(relative_color) => relative_color.resolve(current_color),
       // Unlike Blink, which resolves only computed values, a value never computed resolves in the
       // light color scheme.
-      ColorInput::LightDark(_) => self
+      ColorInput::System(_) | ColorInput::LightDark(_) => self
         .resolve_color_value(ColorScheme::Light)
         .resolve(current_color),
     }
@@ -268,6 +270,7 @@ impl ColorInput {
   pub(crate) fn resolve_color_value(&self, color_scheme: ColorScheme) -> Self {
     match self {
       ColorInput::CurrentColor | ColorInput::Value(_) => self.clone(),
+      ColorInput::System(system_color) => ColorInput::Value(system_color.color(color_scheme)),
       ColorInput::LightDark(pair) => pair.resolve(color_scheme).resolve_color_value(color_scheme),
       ColorInput::ColorMix(color_mix) => color_mix.resolve_color_value(color_scheme),
       ColorInput::RelativeColor(relative_color) => relative_color.resolve_color_value(color_scheme),
@@ -542,6 +545,7 @@ impl ToCss for ColorInput {
     match self {
       Self::CurrentColor => dest.write_str("currentColor"),
       Self::Value(color) => color.to_css(dest),
+      Self::System(system_color) => system_color.to_css(dest),
       Self::LightDark(pair) => pair.to_css(dest),
       Self::ColorMix(color_mix) => color_mix.to_css(dest),
       Self::RelativeColor(relative_color) => relative_color.to_css(dest),
@@ -753,6 +757,176 @@ impl Color {
         .eval(percentage)
         .multiply_alpha(alpha_multiplier),
     )
+  }
+}
+
+/// A system colour keyword, one Blink's `StyleColor::IsSystemColorIncludingDeprecated` accepts.
+// Blink's `Highlight`, `HighlightText`, `SelectedItem` and `SelectedItemText` follow the platform's
+// selection colours, which this engine has none of, so they are not parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SystemColor {
+  /// `ActiveBorder`, deprecated for `ButtonBorder`.
+  ActiveBorder,
+  /// `ActiveCaption`, deprecated for `Canvas`.
+  ActiveCaption,
+  /// `ActiveText`.
+  ActiveText,
+  /// `AppWorkspace`, deprecated for `Canvas`.
+  AppWorkspace,
+  /// `Background`, deprecated for `Canvas`.
+  Background,
+  /// `ButtonBorder`.
+  ButtonBorder,
+  /// `ButtonFace`.
+  ButtonFace,
+  /// `ButtonHighlight`, deprecated for `ButtonFace`.
+  ButtonHighlight,
+  /// `ButtonShadow`, deprecated for `ButtonFace`.
+  ButtonShadow,
+  /// `ButtonText`.
+  ButtonText,
+  /// `Canvas`.
+  Canvas,
+  /// `CanvasText`.
+  CanvasText,
+  /// `CaptionText`, deprecated for `CanvasText`.
+  CaptionText,
+  /// `Field`.
+  Field,
+  /// `FieldText`.
+  FieldText,
+  /// `GrayText`.
+  GrayText,
+  /// `InactiveBorder`, deprecated for `ButtonBorder`.
+  InactiveBorder,
+  /// `InactiveCaption`, deprecated for `Canvas`.
+  InactiveCaption,
+  /// `InactiveCaptionText`, deprecated for `GrayText`.
+  InactiveCaptionText,
+  /// `InfoBackground`, deprecated for `Canvas`.
+  InfoBackground,
+  /// `InfoText`, deprecated for `CanvasText`.
+  InfoText,
+  /// `LinkText`.
+  LinkText,
+  /// `Mark`.
+  Mark,
+  /// `MarkText`.
+  MarkText,
+  /// `Menu`, deprecated for `Canvas`.
+  Menu,
+  /// `MenuText`, deprecated for `CanvasText`.
+  MenuText,
+  /// `Scrollbar`, deprecated for `Canvas`.
+  Scrollbar,
+  /// `ThreeDDarkShadow`, deprecated for `ButtonBorder`.
+  ThreeDDarkShadow,
+  /// `ThreeDFace`, deprecated for `ButtonFace`.
+  ThreeDFace,
+  /// `ThreeDHighlight`, deprecated for `ButtonBorder`.
+  ThreeDHighlight,
+  /// `ThreeDLightShadow`, deprecated for `ButtonBorder`.
+  ThreeDLightShadow,
+  /// `ThreeDShadow`, deprecated for `ButtonBorder`.
+  ThreeDShadow,
+  /// `VisitedText`.
+  VisitedText,
+  /// `Window`, deprecated for `Canvas`.
+  Window,
+  /// `WindowFrame`, deprecated for `ButtonBorder`.
+  WindowFrame,
+  /// `WindowText`, deprecated for `CanvasText`.
+  WindowText,
+}
+
+impl_css_enum!(
+  ident keyword SystemColor,
+  "activeborder" => SystemColor::ActiveBorder,
+  "activecaption" => SystemColor::ActiveCaption,
+  "activetext" => SystemColor::ActiveText,
+  "appworkspace" => SystemColor::AppWorkspace,
+  "background" => SystemColor::Background,
+  "buttonborder" => SystemColor::ButtonBorder,
+  "buttonface" => SystemColor::ButtonFace,
+  "buttonhighlight" => SystemColor::ButtonHighlight,
+  "buttonshadow" => SystemColor::ButtonShadow,
+  "buttontext" => SystemColor::ButtonText,
+  "canvas" => SystemColor::Canvas,
+  "canvastext" => SystemColor::CanvasText,
+  "captiontext" => SystemColor::CaptionText,
+  "field" => SystemColor::Field,
+  "fieldtext" => SystemColor::FieldText,
+  "graytext" => SystemColor::GrayText,
+  "inactiveborder" => SystemColor::InactiveBorder,
+  "inactivecaption" => SystemColor::InactiveCaption,
+  "inactivecaptiontext" => SystemColor::InactiveCaptionText,
+  "infobackground" => SystemColor::InfoBackground,
+  "infotext" => SystemColor::InfoText,
+  "linktext" => SystemColor::LinkText,
+  "mark" => SystemColor::Mark,
+  "marktext" => SystemColor::MarkText,
+  "menu" => SystemColor::Menu,
+  "menutext" => SystemColor::MenuText,
+  "scrollbar" => SystemColor::Scrollbar,
+  "threeddarkshadow" => SystemColor::ThreeDDarkShadow,
+  "threedface" => SystemColor::ThreeDFace,
+  "threedhighlight" => SystemColor::ThreeDHighlight,
+  "threedlightshadow" => SystemColor::ThreeDLightShadow,
+  "threedshadow" => SystemColor::ThreeDShadow,
+  "visitedtext" => SystemColor::VisitedText,
+  "window" => SystemColor::Window,
+  "windowframe" => SystemColor::WindowFrame,
+  "windowtext" => SystemColor::WindowText,
+);
+
+impl SystemColor {
+  /// Blink's `LayoutTheme::DefaultSystemColor`.
+  fn color(self, color_scheme: ColorScheme) -> Color {
+    let by_scheme = |light: u32, dark: u32| {
+      Color::from_rgb(match color_scheme {
+        ColorScheme::Light => light,
+        ColorScheme::Dark => dark,
+      })
+    };
+
+    match self {
+      SystemColor::ActiveText => Color::from_rgb(0xff0000),
+      SystemColor::ButtonBorder
+      | SystemColor::ActiveBorder
+      | SystemColor::InactiveBorder
+      | SystemColor::ThreeDDarkShadow
+      | SystemColor::ThreeDHighlight
+      | SystemColor::ThreeDLightShadow
+      | SystemColor::ThreeDShadow
+      | SystemColor::WindowFrame => by_scheme(0x767676, 0x6b6b6b),
+      SystemColor::ButtonFace
+      | SystemColor::ButtonHighlight
+      | SystemColor::ButtonShadow
+      | SystemColor::ThreeDFace => by_scheme(0xefefef, 0x6b6b6b),
+      SystemColor::Canvas
+      | SystemColor::ActiveCaption
+      | SystemColor::AppWorkspace
+      | SystemColor::Background
+      | SystemColor::InactiveCaption
+      | SystemColor::InfoBackground
+      | SystemColor::Menu
+      | SystemColor::Scrollbar
+      | SystemColor::Window => by_scheme(0xffffff, 0x121212),
+      SystemColor::ButtonText
+      | SystemColor::CanvasText
+      | SystemColor::CaptionText
+      | SystemColor::InfoText
+      | SystemColor::MenuText
+      | SystemColor::WindowText
+      | SystemColor::FieldText => by_scheme(0x000000, 0xffffff),
+      SystemColor::Field => by_scheme(0xffffff, 0x3b3b3b),
+      SystemColor::GrayText | SystemColor::InactiveCaptionText => Color::from_rgb(0x808080),
+      SystemColor::LinkText => by_scheme(0x0000ee, 0x9e9eff),
+      SystemColor::Mark => Color::from_rgb(0xffff00),
+      SystemColor::MarkText => Color::from_rgb(0x000000),
+      SystemColor::VisitedText => by_scheme(0x551a8b, 0xd0adf0),
+    }
   }
 }
 
@@ -1184,7 +1358,9 @@ impl<'i> FromCss<'i> for ColorInput {
           return Ok(ColorInput::Value(Color([r, g, b, 255])));
         }
 
-        Err(unexpected_token!(token))
+        SystemColor::from_keyword(ident)
+          .map(ColorInput::System)
+          .ok_or_else(|| unexpected_token!(token))
       }
       Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
         .map(|(r, g, b, a)| ColorInput::Value(Color([r, g, b, (a * 255.0) as u8])))
@@ -1228,7 +1404,8 @@ impl<'i> FromCss<'i> for ColorInput {
 
 impl<'i> FromCss<'i> for Color {
   /// A `<color>` that resolves without a current colour, in the light color scheme.
-  // Unlike Blink's `ConsumeAbsoluteColor`, which rejects it, `light-dark()` takes its light colour.
+  // Unlike Blink's `ConsumeAbsoluteColor`, which rejects them, `light-dark()` and system colours
+  // take their light colour.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let start = input.state();
 
@@ -1436,6 +1613,48 @@ mod tests {
   }
 
   #[test]
+  fn system_colours_compute_by_the_used_scheme() {
+    for (css, light, dark) in [
+      ("Canvas", Color::white(), Color::from_rgb(0x121212)),
+      ("CanvasText", Color::black(), Color::white()),
+      (
+        "ButtonFace",
+        Color::from_rgb(0xefefef),
+        Color::from_rgb(0x6b6b6b),
+      ),
+      (
+        "threedface",
+        Color::from_rgb(0xefefef),
+        Color::from_rgb(0x6b6b6b),
+      ),
+      (
+        "LinkText",
+        Color::from_rgb(0x0000ee),
+        Color::from_rgb(0x9e9eff),
+      ),
+      (
+        "GrayText",
+        Color::from_rgb(0x808080),
+        Color::from_rgb(0x808080),
+      ),
+    ] {
+      assert_eq!(used(css, ColorScheme::Light, RED), Some(light), "{css}");
+      assert_eq!(used(css, ColorScheme::Dark, RED), Some(dark), "{css}");
+    }
+
+    assert_eq!(
+      used(
+        "color-mix(in srgb, Canvas, CanvasText)",
+        ColorScheme::Dark,
+        RED
+      ),
+      Some(Color([137, 137, 137, 255]))
+    );
+    assert_eq!(Color::from_css_str("Canvas"), Ok(Color::white()));
+    assert!(ColorInput::from_css_str("Highlight").is_err());
+  }
+
+  #[test]
   fn specified_colours_serialize_as_written() {
     for css in [
       "currentColor",
@@ -1447,6 +1666,7 @@ mod tests {
       "hsl(from light-dark(rgb(255, 0, 0), rgb(0, 0, 255)) 120deg s 50%)",
       "oklch(from rgb(255, 0, 0) l c none / 0.5)",
       "color-mix(in srgb, rgb(255, 255, 255), rgb(0, 0, 0) 30%)",
+      "color-mix(in srgb, canvas, buttontext 30%)",
     ] {
       let Ok(color) = ColorInput::from_css_str(css) else {
         panic!("{css} did not parse");
