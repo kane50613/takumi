@@ -17,9 +17,9 @@ use crate::{
   resources::image_buffer::premultiply_pixel,
   style::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
-    PercentageNumber, SizingContext, ToCss, impl_css_enum,
+    SizingContext, ToCss, impl_css_enum,
     math::mul_div_255,
-    significant,
+    parse_percentage_value, significant,
     tw::TailwindPropertyParser,
     tw::{Namespace, extract_arbitrary_value},
     unexpected_token,
@@ -979,25 +979,27 @@ impl ToCss for LightDarkValuePair {
 pub struct ColorMixValue {
   color1: ColorInput,
   color2: ColorInput,
-  percentage1: Option<PercentageNumber>,
-  percentage2: Option<PercentageNumber>,
+  percentage1: Option<f32>,
+  percentage2: Option<f32>,
   interpolation: ColorInterpolationMethod,
 }
 
 impl ColorMixValue {
   /// Blink's `CSSColorMixValue::NormalizePercentages`: the amount of the second colour and the
   /// alpha multiplier.
-  // Unlike Blink, which clamps each percentage to 0% to 100%, percentages over 100% are scaled.
   fn normalize_percentages(&self) -> (f32, f32) {
-    let (p1, p2) = match (self.percentage1, self.percentage2) {
+    let p1 = self.percentage1.map(|p1| p1.clamp(0.0, 1.0));
+    let p2 = self.percentage2.map(|p2| p2.clamp(0.0, 1.0));
+    let (p1, p2) = match (p1, p2) {
       (None, None) => (0.5, 0.5),
-      (Some(PercentageNumber(p1)), None) => (p1, (1.0 - p1).max(0.0)),
-      (None, Some(PercentageNumber(p2))) => ((1.0 - p2).max(0.0), p2),
-      (Some(PercentageNumber(p1)), Some(PercentageNumber(p2))) => (p1, p2),
+      (Some(p1), None) => (p1, 1.0 - p1),
+      (None, Some(p2)) => (1.0 - p2, p2),
+      (Some(p1), Some(p2)) => (p1, p2),
     };
     let percentage_sum = p1 + p2;
 
-    if percentage_sum <= f32::EPSILON {
+    // https://drafts.csswg.org/css-color-5/#color-mix-result
+    if percentage_sum == 0.0 {
       return (0.5, 0.0);
     }
 
@@ -1040,14 +1042,31 @@ impl ColorMixValue {
 /// `ConsumeColorMixFunction` reads them.
 fn parse_color_mix_operand<'i>(
   input: &mut Parser<'i>,
-) -> ParseResult<'i, (ColorInput, Option<PercentageNumber>)> {
+) -> ParseResult<'i, (ColorInput, Option<f32>)> {
   if let Ok(color) = input.try_parse(ColorInput::from_css) {
-    return Ok((color, input.try_parse(PercentageNumber::from_css).ok()));
+    return Ok((color, input.try_parse(parse_color_mix_percentage).ok()));
   }
 
-  let percentage = PercentageNumber::from_css(input)?;
+  let percentage = parse_color_mix_percentage(input)?;
 
   Ok((ColorInput::from_css(input)?, Some(percentage)))
+}
+
+/// A `color-mix()` percentage as a fraction, as Blink's `ConsumeColorMixFunction` reads it: a
+/// literal outside 0% to 100% is invalid, and a math function clamps when the mix resolves.
+fn parse_color_mix_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
+  let start = input.state();
+
+  if let Ok(&Token::Percentage { unit_value, .. }) = input.next() {
+    if (0.0..=1.0).contains(&unit_value) {
+      return Ok(unit_value);
+    }
+
+    return Err(input.new_error_for_next_token());
+  }
+
+  input.reset(&start);
+  parse_percentage_value(input)
 }
 
 impl<'i> FromCss<'i> for ColorMixValue {
@@ -1059,20 +1078,13 @@ impl<'i> FromCss<'i> for ColorMixValue {
     let (color1, percentage1) = parse_color_mix_operand(input)?;
     input.expect_comma()?;
     let (color2, percentage2) = parse_color_mix_operand(input)?;
-    let color_mix = Self {
+    Ok(Self {
       color1,
       color2,
       percentage1,
       percentage2,
       interpolation,
-    };
-
-    // Unlike Blink, which mixes them to transparent, percentages summing to zero are invalid.
-    if color_mix.normalize_percentages().1 <= f32::EPSILON {
-      return Err(input.new_error_for_next_token());
-    }
-
-    Ok(color_mix)
+    })
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<color-mix()>"];
@@ -1080,11 +1092,11 @@ impl<'i> FromCss<'i> for ColorMixValue {
 
 impl ToCss for ColorMixValue {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let write_operand = |dest: &mut W, color: &ColorInput, percentage: Option<PercentageNumber>| {
+    let write_operand = |dest: &mut W, color: &ColorInput, percentage: Option<f32>| {
       color.to_css(dest)?;
 
       match percentage {
-        Some(PercentageNumber(percentage)) => write!(dest, " {}%", significant(percentage * 100.0)),
+        Some(percentage) => write!(dest, " {}%", significant(percentage * 100.0)),
         None => Ok(()),
       }
     };
@@ -1800,14 +1812,6 @@ mod tests {
       canonical,
       computed("color-mix(in lch, purple 95%, plum 95%)")
     );
-    assert_eq!(
-      canonical,
-      computed("color-mix(in lch, purple 125%, plum 125%)")
-    );
-    assert_eq!(
-      canonical,
-      computed("color-mix(in lch, purple 9999%, plum 9999%)")
-    );
   }
 
   #[test]
@@ -1851,11 +1855,10 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_color_mix_over_100_percent_normalizes_weights() {
-    assert_eq!(
-      computed("color-mix(in srgb, red 120%, blue 80%)"),
-      Some(ColorInput::Value(Color([153, 0, 102, 255])))
-    );
+  fn test_parse_color_mix_rejects_percentages_outside_0_to_100() {
+    assert!(computed("color-mix(in srgb, red 120%, blue 80%)").is_none());
+    assert!(computed("color-mix(in srgb, currentColor -10%, blue 60%)").is_none());
+    assert!(computed("color-mix(in srgb, red, -10% blue)").is_none());
   }
 
   #[test]
@@ -1874,16 +1877,32 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_color_mix_zero_sum_percentages_errors() {
-    assert!(computed("color-mix(in srgb, red 0%, blue 0%)").is_none());
+  fn test_parse_color_mix_zero_sum_percentages_mix_to_transparent() {
+    assert_eq!(
+      computed("color-mix(in srgb, red 0%, blue 0%)"),
+      Some(ColorInput::Value(Color([128, 0, 128, 0])))
+    );
   }
 
   #[test]
-  fn test_parse_color_mix_accepts_number_as_percentage() {
-    assert_eq!(
-      computed("color-mix(in srgb, red 0.5, blue 0.5)"),
-      Some(ColorInput::Value(Color([128, 0, 128, 255])))
-    );
+  fn test_parse_color_mix_rejects_a_number_as_percentage() {
+    assert!(computed("color-mix(in srgb, red 0.5, blue 0.5)").is_none());
+  }
+
+  #[test]
+  fn test_color_mix_percentages_survive_serialization() {
+    for css in [
+      "color-mix(in srgb, red 0.0000119209%, blue 0.0000119209%)",
+      "color-mix(in srgb, currentColor 25%, blue)",
+    ] {
+      let serialized = ColorInput::from_css_str(css).map(|color| color.to_css_string());
+      let reparsed = serialized
+        .clone()
+        .and_then(|serialized| ColorInput::from_css_str(&serialized))
+        .map(|color| color.to_css_string());
+
+      assert_eq!(reparsed, serialized, "{css}");
+    }
   }
 
   #[test]
