@@ -191,8 +191,8 @@ pub enum ColorInput {
   CurrentColor,
   /// A color value.
   Value(Color),
-  /// `light-dark()`, which computes to its light or its dark colour by the used color scheme.
-  /// `None` is `currentColor`.
+  /// A colour that depends on the used color scheme, from `light-dark()` or a `color-mix()` of
+  /// one, computing to its light or its dark colour. `None` is `currentColor`.
   LightDark(Option<Color>, Option<Color>),
 }
 
