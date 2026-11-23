@@ -8,6 +8,7 @@ use std::{borrow::Cow, sync::Arc};
 #[cfg(feature = "svg")]
 use crate::style::{ValueError, properties::filter_reference::FilterReference};
 use crate::{
+  blur,
   filter::TransferFunction,
   scene::SceneBounds,
   style::{
@@ -84,19 +85,10 @@ impl BlurType {
     }
   }
 
-  /// Multiplier from radius to the extent the blur visibly reaches.
-  #[inline]
-  fn extent_multiplier(self) -> f32 {
-    match self {
-      BlurType::Filter => 3.0,
-      BlurType::Shadow => 1.5,
-    }
-  }
-
-  /// How far a blur of `radius` visibly reaches.
+  /// How far a blur of `radius` carries ink, linear in `radius` so a transform's scale carries it.
   #[inline]
   pub fn extent(self, radius: f32) -> f32 {
-    radius * self.extent_multiplier()
+    blur::reach(self.to_sigma(radius))
   }
 }
 

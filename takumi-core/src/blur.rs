@@ -15,6 +15,19 @@ use crate::geometry::{Placement, Point, Size};
 /// Smallest sigma that blurs, Skia's `SkBlurEngine::IsEffectivelyIdentity`.
 pub(crate) const MIN_SIGMA: f32 = 0.03;
 
+/// How many pixels away a blur of `sigma` can carry a pixel's ink: an upper bound, linear so a
+/// transform's scale carries it, past the three deviations Chrome's blur reaches.
+pub(crate) fn reach(sigma: f32) -> f32 {
+  if !sigma.is_finite() || sigma <= MIN_SIGMA {
+    return 0.0;
+  }
+
+  REACH_PER_SIGMA * sigma + 1.0
+}
+
+/// The decimated support grows at most 4.9 pixels per unit of sigma, past one pixel.
+const REACH_PER_SIGMA: f32 = 5.0;
+
 /// Blurs premultiplied RGBA pixels in place, treating pixels past the edges as transparent.
 // Inlined so the loops compile at the caller's opt-level, not takumi-core's "z".
 #[inline]
@@ -866,7 +879,10 @@ impl Layout {
 
 #[cfg(test)]
 mod tests {
-  use super::{Placement, Point, Size, blur_alpha, blur_alpha_region, blur_rgba, blur_rgba_axes};
+  use super::{
+    Axis, Layout, Placement, Point, Size, Span, blur_alpha, blur_alpha_region, blur_rgba,
+    blur_rgba_axes, reach,
+  };
 
   #[test]
   fn a_blur_keeps_the_ink_it_spreads() {
@@ -933,6 +949,21 @@ mod tests {
         (spread - sigma).abs() < 0.05 * sigma + 0.15,
         "sigma {sigma} spread {spread}"
       );
+    }
+  }
+
+  /// No pixel spreads past [`reach`], so a source cut that far out blurs as the whole one does.
+  #[test]
+  fn the_reach_covers_the_support() {
+    let mut sigma = 0.031f32;
+
+    while sigma < 2000.0 {
+      let axis = Axis::new(sigma);
+      let everywhere = Span(i64::MIN / 4, i64::MAX / 4);
+      let layout = Layout::new(&axis, axis.halvings, Span(0, 1), everywhere);
+
+      assert!((-layout.up[0].0) as f32 <= reach(sigma), "sigma {sigma}");
+      sigma *= 1.01;
     }
   }
 
