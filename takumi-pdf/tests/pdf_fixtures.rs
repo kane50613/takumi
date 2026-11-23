@@ -7698,7 +7698,8 @@ fn a_repeated_svg_image_keeps_each_host_color() {
 fn arabic_space_kern_fonts() -> Fonts {
   let mut fonts = Fonts::default();
   let data = fs::read(
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts/noto-sans-arabic-space-kern.ttf"),
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("tests/fonts/noto-sans-arabic-space-kern.subset.ttf"),
   )
   .expect("read arabic font");
 
