@@ -282,6 +282,11 @@ impl ColorInput {
     matches!(self, ColorInput::Value(_))
   }
 
+  /// Whether resolving this computed value reads the current colour.
+  pub(crate) fn reads_current_color(&self) -> bool {
+    *self == ColorInput::CurrentColor || self.is_unresolved_color_function()
+  }
+
   /// Blink's `StyleColor::IsUnresolvedColorFunction`, for a computed value.
   pub(crate) fn is_unresolved_color_function(&self) -> bool {
     matches!(self, ColorInput::ColorMix(_) | ColorInput::RelativeColor(_))
