@@ -257,7 +257,7 @@ impl ShapeResultView {
     };
 
     let mut logical_end = 0;
-    let placed: SmallVec<[(&Segment<'_>, &PartSource<'_>, u32); 2]> = segments
+    let mut placed: SmallVec<[(&Segment<'_>, &PartSource<'_>, u32); 2]> = segments
       .iter()
       .zip(&sources)
       .map(|(segment, source)| {
@@ -268,14 +268,12 @@ impl ShapeResultView {
       })
       .collect();
 
-    if view.is_ltr() {
-      for &(segment, source, logical_start) in &placed {
-        view.populate_run_info_parts(source, segment, logical_start);
-      }
-    } else {
-      for &(segment, source, logical_start) in placed.iter().rev() {
-        view.populate_run_info_parts(source, segment, logical_start);
-      }
+    if view.is_rtl() {
+      placed.reverse();
+    }
+
+    for (segment, source, logical_start) in placed {
+      view.populate_run_info_parts(source, segment, logical_start);
     }
 
     view
@@ -312,10 +310,8 @@ impl ShapeResultView {
     }])
   }
 
-  /// Blink's `PopulateRunInfoParts`, given the segment's character offset in the view.
-  ///
-  /// Blink offsets each segment by the characters populated before it, which for RTL are the
-  /// logically later segments, so its indices then miss the source string.
+  /// Blink's `PopulateRunInfoParts`, offset by the segment's logical start rather than the
+  /// characters populated so far, which in RTL belong to the logically later segments.
   fn populate_run_info_parts(
     &mut self,
     source: &PartSource<'_>,

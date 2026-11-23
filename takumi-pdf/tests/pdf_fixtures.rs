@@ -7694,7 +7694,7 @@ fn a_repeated_svg_image_keeps_each_host_color() {
   assert_eq!(fills("0 0 0 rg"), 1);
 }
 
-/// Noto Sans Arabic (SIL OFL 1.1), whose space glyph kerns against letters.
+/// Noto Sans Arabic (SIL OFL 1.1) with an added `kern` lookup between `space` and each letter.
 fn arabic_space_kern_fonts() -> Fonts {
   let mut fonts = Fonts::default();
   let data = fs::read(
@@ -7717,55 +7717,46 @@ fn actual_texts(pdf: &[u8]) -> Vec<String> {
     .collect()
 }
 
-fn render_arabic_paragraph(html: &str, fonts: &Fonts) -> Vec<u8> {
-  render(
-    PdfOptions::builder()
-      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
-      .viewport(Viewport::new((160, 120)))
-      .fonts(fonts)
-      .build(),
-  )
-  .expect("render the arabic paragraph")
+/// A right-to-left paragraph that wraps after a space the font kerns.
+fn wrapped_arabic_paragraph<'a>(fonts: &'a Fonts, style: &str) -> PdfOptions<'a> {
+  let html = format!(
+    r#"<html dir="rtl"><body style="font-family:Noto Sans Arabic;font-size:15px;width:130px"><p style="{style}">يلعب الأطفال في الحديقة بعد الظهر</p></body></html>"#
+  );
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse the doc"))
+    .viewport(Viewport::new((160, 120)))
+    .fonts(fonts)
+    .build()
 }
 
-/// Wrapped right-to-left text in a font that kerns its space glyph (Noto Sans Arabic, SIL OFL 1.1).
 #[test]
 fn a_wrapped_kerned_arabic_paragraph_renders_with_its_own_text() {
   let fonts = arabic_space_kern_fonts();
-  let html = include_str!("repro/wrapped-arabic-kerning.html");
-  let kerned = run_pdf_fixture_with("wrapped-kerned-arabic", &fonts, |fonts| {
-    PdfOptions::builder()
-      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
-      .viewport(Viewport::new((160, 120)))
-      .fonts(fonts)
-      .build()
-  });
-  let unkerned = render_arabic_paragraph(
-    &html.replace("<p>", r#"<p style="font-kerning:none">"#),
+  let kerned = actual_texts(&run_pdf_fixture_with(
+    "wrapped-kerned-arabic",
     &fonts,
-  );
-  let kerned_text = actual_texts(&kerned);
+    |fonts| wrapped_arabic_paragraph(fonts, ""),
+  ));
+  let unkerned = actual_texts(&render_pinned(wrapped_arabic_paragraph(
+    &fonts,
+    "font-kerning:none",
+  )));
 
-  assert!(
-    !kerned_text.is_empty(),
-    "the Arabic text has no /ActualText"
-  );
+  assert!(!kerned.is_empty(), "the Arabic text has no /ActualText");
   assert_eq!(
-    kerned_text,
-    actual_texts(&unkerned),
+    kerned, unkerned,
     "kerning changed the text the glyphs map to"
   );
 }
 
-/// Justified wrapped right-to-left text keeps the `/ActualText` of start-aligned text.
 #[test]
 fn a_justified_wrapped_kerned_arabic_paragraph_keeps_its_text() {
   let fonts = arabic_space_kern_fonts();
-  let html = include_str!("repro/wrapped-arabic-kerning.html");
-  let start = actual_texts(&render_arabic_paragraph(
-    &html.replace("<p>", r#"<p style="text-align:start">"#),
+  let start = actual_texts(&render_pinned(wrapped_arabic_paragraph(
     &fonts,
-  ));
+    "text-align:start",
+  )));
 
   assert!(!start.is_empty(), "the Arabic text has no /ActualText");
 
@@ -7773,10 +7764,7 @@ fn a_justified_wrapped_kerned_arabic_paragraph_keeps_its_text() {
     "text-align:justify",
     "text-align:justify;text-align-last:justify",
   ] {
-    let justified = actual_texts(&render_arabic_paragraph(
-      &html.replace("<p>", &format!(r#"<p style="{align}">"#)),
-      &fonts,
-    ));
+    let justified = actual_texts(&render_pinned(wrapped_arabic_paragraph(&fonts, align)));
 
     assert_eq!(
       justified, start,
