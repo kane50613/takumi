@@ -32,16 +32,6 @@ pub(crate) enum SegmentSource<'a> {
 }
 
 /// Blink's `RunInfoPart`.
-/// The string a glyph's reported character index counts in.
-#[derive(Clone, Copy)]
-enum GlyphIndexSpace {
-  /// The view's own order, as Blink's `ForEachGlyph` reports it.
-  #[cfg(any(feature = "svg", test))]
-  View,
-  /// The source string.
-  Source,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct RunInfoPart {
   /// The result holding the run, and the run's index in it; none for a part without a run.
@@ -54,8 +44,6 @@ pub(crate) struct RunInfoPart {
   offset: u32,
   num_characters: u32,
   width: f32,
-  /// Offset from a glyph's `character_index` to its source index. Blink does not track it.
-  source_offset: u32,
 }
 
 impl RunInfoPart {
@@ -71,7 +59,6 @@ impl RunInfoPart {
       offset: 0,
       num_characters: run.num_characters,
       width: run.width,
-      source_offset: run.source_base.unwrap_or(run.start_index),
     }
   }
 
@@ -218,6 +205,11 @@ impl<'a> PartSource<'a> {
       },
     }
   }
+
+  /// The characters `segment` takes from this source.
+  fn num_characters_in(&self, segment: &Segment<'_>) -> u32 {
+    segment.end_index.min(self.end_index) - segment.start_index.max(self.start_index)
+  }
 }
 
 /// Blink's `ShapeResultView`.
@@ -264,13 +256,25 @@ impl ShapeResultView {
       char_index_offset,
     };
 
+    let mut logical_end = 0;
+    let placed: SmallVec<[(&Segment<'_>, &PartSource<'_>, u32); 2]> = segments
+      .iter()
+      .zip(&sources)
+      .map(|(segment, source)| {
+        let logical_start = logical_end;
+
+        logical_end += source.num_characters_in(segment);
+        (segment, source, logical_start)
+      })
+      .collect();
+
     if view.is_ltr() {
-      for (segment, source) in segments.iter().zip(&sources) {
-        view.populate_run_info_parts(source, segment);
+      for &(segment, source, logical_start) in &placed {
+        view.populate_run_info_parts(source, segment, logical_start);
       }
     } else {
-      for (segment, source) in segments.iter().zip(&sources).rev() {
-        view.populate_run_info_parts(source, segment);
+      for &(segment, source, logical_start) in placed.iter().rev() {
+        view.populate_run_info_parts(source, segment, logical_start);
       }
     }
 
@@ -308,12 +312,20 @@ impl ShapeResultView {
     }])
   }
 
-  /// Blink's `PopulateRunInfoParts`.
-  fn populate_run_info_parts(&mut self, source: &PartSource<'_>, segment: &Segment<'_>) {
+  /// Blink's `PopulateRunInfoParts`, given the segment's character offset in the view.
+  ///
+  /// Blink offsets each segment by the characters populated before it, which for RTL are the
+  /// logically later segments, so its indices then miss the source string.
+  fn populate_run_info_parts(
+    &mut self,
+    source: &PartSource<'_>,
+    segment: &Segment<'_>,
+    logical_start: u32,
+  ) {
     let source_start = segment.start_index.max(source.start_index);
-    let index_diff = i64::from(self.start_index + self.num_characters) - i64::from(source_start);
+    let index_diff = i64::from(self.start_index + logical_start) - i64::from(source_start);
 
-    self.num_characters += segment.end_index.min(source.end_index) - source_start;
+    self.num_characters += source.num_characters_in(segment);
 
     let is_ltr = source.direction == TextDirection::Ltr;
 
@@ -382,7 +394,6 @@ impl ShapeResultView {
           .glyph_data
           .copy_from_range(part.glyph_data_range(), part.offset);
         new_run.width = part.width;
-        new_run.source_base = Some(part.source_offset.wrapping_add(part.offset));
 
         Some(new_run)
       })
@@ -472,34 +483,14 @@ impl ShapeResultView {
 
   /// The offset `HarfBuzzRunGlyphData::character_index` takes to index the source string. It may
   /// wrap below zero, as Blink's unsigned one does, until a glyph's index is added.
-  #[cfg(any(feature = "svg", test))]
   fn character_index_offset_for_glyph_data(&self, part: &RunInfoPart) -> u32 {
     (part.start_index + self.char_index_offset).wrapping_sub(part.offset)
   }
 
-  /// Blink's `ForEachGlyph`. Glyph indices count in the view's own order.
-  #[cfg(any(feature = "svg", test))]
+  /// Blink's `ForEachGlyph`.
   pub(crate) fn for_each_glyph(
     &self,
     initial_advance: f32,
-    glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
-  ) -> f32 {
-    self.for_each_glyph_indexed(initial_advance, GlyphIndexSpace::View, glyph_callback)
-  }
-
-  /// [`Self::for_each_glyph`] with source-string indices, which Blink does not report.
-  pub(crate) fn for_each_source_glyph(
-    &self,
-    initial_advance: f32,
-    glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
-  ) -> f32 {
-    self.for_each_glyph_indexed(initial_advance, GlyphIndexSpace::Source, glyph_callback)
-  }
-
-  fn for_each_glyph_indexed(
-    &self,
-    initial_advance: f32,
-    index_space: GlyphIndexSpace,
     mut glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
   ) -> f32 {
     let mut total_advance = initial_advance;
@@ -509,11 +500,7 @@ impl ShapeResultView {
         continue;
       };
       let mut advance = InlineLayoutUnit::from_float_round(total_advance);
-      let character_index_offset = match index_space {
-        #[cfg(any(feature = "svg", test))]
-        GlyphIndexSpace::View => self.character_index_offset_for_glyph_data(part),
-        GlyphIndexSpace::Source => part.source_offset,
-      };
+      let character_index_offset = self.character_index_offset_for_glyph_data(part);
 
       for (glyph_data, offset) in part
         .glyph_data_range()
@@ -597,13 +584,6 @@ mod tests {
       assert_eq!((index, glyph), (expected_index, expected_glyph));
       assert!((advance - (expected_advance - advance_offset)).abs() < 1e-3);
     }
-  }
-
-  fn source_glyphs(view: &ShapeResultView) -> Vec<(u32, u16)> {
-    let mut glyphs = Vec::new();
-
-    view.for_each_source_glyph(0.0, |index, glyph, _, _, _| glyphs.push((index, glyph)));
-    glyphs
   }
 
   fn segment(result: &Rc<ShapeResult>, start_index: u32, end_index: u32) -> Segment<'_> {
@@ -816,6 +796,31 @@ mod tests {
     assert_eq!((last_word.num_glyphs(), glyphs(&last_word).len()), (3, 3));
   }
 
+  #[test]
+  fn rtl_composite_view_indexes_the_source_string() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, SCHEHERAZADE, "Scheherazade");
+
+    let font = font(&fonts, "Scheherazade");
+    let shape_rtl =
+      |text: &str| Rc::new(HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Rtl));
+    let line_start = shape_rtl("\u{639}\u{631}\u{628}\u{649} ");
+    let result = shape_rtl("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}");
+    let indexed = |view: &ShapeResultView| {
+      glyphs(view)
+        .into_iter()
+        .map(|(character_index, glyph, _)| (character_index, glyph))
+        .collect::<Vec<_>>()
+    };
+    let expected = indexed(&ShapeResultView::create_from_result(&result));
+    let view = ShapeResultView::create(&[segment(&line_start, 0, 9), segment(&result, 9, 13)]);
+    let rebuilt = ShapeResultView::create_from_result(&Rc::new(view.create_shape_result()));
+
+    assert_eq!(indexed(&view), expected);
+    assert_eq!(indexed(&rebuilt), expected);
+  }
+
   /// Blink's `PreviousSafeToBreak`: a view of Hebrew with points finds the safe offsets the
   /// result it creates caches. Blink's offsets are characters; these are their UTF-8 bytes.
   #[test]
@@ -841,26 +846,6 @@ mod tests {
         result.previous_safe_to_break_offset(offset)
       );
     }
-  }
-
-  #[test]
-  fn rebuilt_composite_view_keeps_source_indices() {
-    let mut fonts = Fonts::default();
-
-    register(&mut fonts, SCHEHERAZADE, "Scheherazade");
-
-    let font = font(&fonts, "Scheherazade");
-    let first = Rc::new(
-      HarfBuzzShaper::new("\u{639}\u{631}\u{628}\u{649} ").shape_all(&font, TextDirection::Rtl),
-    );
-    let second = Rc::new(
-      HarfBuzzShaper::new("\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}")
-        .shape_all(&font, TextDirection::Rtl),
-    );
-    let view = ShapeResultView::create(&[segment(&first, 0, 9), segment(&second, 9, 13)]);
-    let rebuilt = ShapeResultView::create_from_result(&Rc::new(view.create_shape_result()));
-
-    assert_eq!(source_glyphs(&rebuilt), source_glyphs(&view));
   }
 
   #[test]
