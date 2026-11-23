@@ -6806,9 +6806,8 @@ fn page_sized_boxes<'g>(fonts: &'g Fonts, page: PageOptions, height: &str) -> Pd
     .build()
 }
 
-/// A box exactly as tall as the content window fills one page and no more,
-/// even when layout snaps its edges to whole pixels and the window is
-/// fractional (A4 is 1122.52px tall).
+/// A box as tall as the page takes one page, in whole pixels or not, as the
+/// page area rounds up to whole pixels (A4 is 1122.52px tall).
 #[test]
 fn a_box_as_tall_as_the_window_fills_exactly_one_page() {
   let fonts = fonts();
@@ -6838,6 +6837,34 @@ fn a_box_as_tall_as_the_window_fills_exactly_one_page() {
     page_count(&render_pinned(page_sized_boxes(&fonts, a4, "1122.52px"))),
     3,
     "a4 in rounded px"
+  );
+}
+
+/// A box a forced break puts at the top of an A4 page paints on that page
+/// only, not as a line along the bottom of the page before it.
+#[test]
+fn a_box_at_the_top_of_a_page_paints_only_on_that_page() {
+  let fonts = fonts();
+  let html = r##"<div style="height: 200px"></div>
+    <div style="break-before: page; height: 200px"></div>
+    <div style="break-before: page; height: 100px; background-color: #0d0035"></div>"##;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        margin: PageMargins::uniform(0.0),
+        ..PageOptions::A4
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 3);
+  assert_eq!(
+    inflated_text(&pdf).matches("0.051 0 0.2078 rg").count(),
+    1,
+    "the box must paint on its own page only"
   );
 }
 

@@ -77,6 +77,14 @@ impl PageFrame {
       return Err(PdfError::InvalidPageSize);
     }
 
+    // Blink lays content out on the page area rounded up to whole px, and Chromium's printing
+    // rounds it up too, so the clip takes the same area.
+    // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/page_border_box_layout_algorithm.cc>
+    // Approximate: viewport units take this area too. Blink rounds the page to whole px and
+    // floors its area for them, so `vh` here can be a pixel taller.
+    // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/layout_view.cc>
+    let content = content.map(f32::ceil);
+
     Ok(Self {
       size: page.size(),
       page_size,
@@ -106,6 +114,7 @@ impl PageFrame {
     let area = page_box.area();
     let origin = page_box.area_origin();
     let size = page_box.size;
+    let content = area.map(f32::ceil);
 
     Ok(Self {
       size,
@@ -117,9 +126,9 @@ impl PageFrame {
         bottom: size.height - origin.y - area.height,
         left: origin.x,
       },
-      content_width: area.width,
-      window_height: area.height,
-      page_area: print_viewport(area.width, Some(area.height), area),
+      content_width: content.width,
+      window_height: content.height,
+      page_area: print_viewport(content.width, Some(content.height), content),
       ..self
     })
   }

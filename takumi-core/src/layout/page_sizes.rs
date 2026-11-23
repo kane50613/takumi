@@ -154,8 +154,8 @@ impl PageRules {
   }
 }
 
-/// The page area and the page name of each page laid out so far. The pages stack in the block
-/// direction.
+/// The page area, rounded up to whole px, and the page name of each page laid out so far. The
+/// pages stack in the block direction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PageSizes {
   sizes: Vec<Size<f32>>,

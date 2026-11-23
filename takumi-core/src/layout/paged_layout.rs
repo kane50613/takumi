@@ -215,7 +215,9 @@ impl<'r> PagedLayout<'r> {
 
   /// The space page `page` lays the root out in under the style of the page named `name`.
   fn page_space(&self, page: usize, name: PageName) -> Result<PageSpace> {
-    let size = self.sizer.size(page, &name);
+    // Blink's `CreateConstraintSpaceForPageArea` rounds the page area up to whole px.
+    // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/page_border_box_layout_algorithm.cc>
+    let size = self.sizer.size(page, &name).map(f32::ceil);
     let top = self.sizes.top(page);
     let bottom = top + size.height;
 
@@ -427,7 +429,7 @@ impl<'r> PagedLayout<'r> {
     self.sizes.len()
   }
 
-  /// The size of each page laid out.
+  /// The page area of each page laid out, rounded up to whole px.
   pub fn sizes(&self) -> &PageSizes {
     &self.sizes
   }
