@@ -1007,11 +1007,16 @@ mod tests {
   #[test]
   fn a_large_sigma_on_one_axis_still_blurs_the_other() {
     let (width, height) = (32, 32);
-    let mut pixels = vec![[255u8; 4]; width * height];
+    let blurred = |y: f32| {
+      let mut pixels = vec![[0u8; 4]; width * height];
 
-    blur_rgba_axes(&mut pixels, width, height, Point { x: 400.0, y: 1.0 });
+      pixels[12 * width..20 * width].fill([255; 4]);
+      blur_rgba_axes(&mut pixels, width, height, Point { x: 400.0, y });
+      pixels
+    };
 
-    assert!(pixels[16 * width + 16][3] > 0);
+    assert!(blurred(1.0)[11 * width + 16][3] > 0);
+    assert_eq!(blurred(0.0)[11 * width + 16][3], 0);
   }
 
   #[test]
