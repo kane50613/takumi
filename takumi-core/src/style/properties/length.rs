@@ -635,26 +635,21 @@ mod tests {
   use crate::{geometry::Size, style::calc::CalcFormula, viewport::Viewport};
 
   fn sizing() -> SizingContext {
-    SizingContext {
-      viewport: Viewport {
+    SizingContext::builder()
+      .viewport(Viewport {
         size: (200, 100).into(),
         font_size: 16.0,
         device_pixel_ratio: 2.0,
         media_target: Default::default(),
         unit_reference: None,
         color_scheme: Default::default(),
-      },
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 10.0,
-      root_font_size: None,
-      line_height: 30.0,
-      root_line_height: Some(40.0),
-      ch: 7.0,
-      ex: 7.0,
-      color_scheme: Default::default(),
-    }
+      })
+      .font_size(10.0)
+      .line_height(30.0)
+      .root_line_height(Some(40.0))
+      .ch(7.0)
+      .ex(7.0)
+      .build()
   }
 
   fn assert_near(lhs: f32, rhs: f32) {

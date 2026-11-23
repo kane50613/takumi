@@ -461,19 +461,15 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
 
     let mut computed = style.inherit(&ComputedStyle::default());
 
-    computed.make_computed(&SizingContext {
-      viewport: Viewport::new((1200, 630)),
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 16.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      ch: 16.0 / 2.0,
-      ex: 16.0 / 2.0,
-      color_scheme: Default::default(),
-    });
+    computed.make_computed(
+      &SizingContext::builder()
+        .viewport(Viewport::new((1200, 630)))
+        .font_size(16.0)
+        .line_height(0.0)
+        .ch(16.0 / 2.0)
+        .ex(16.0 / 2.0)
+        .build(),
+    );
     computed
   };
 
@@ -1134,19 +1130,13 @@ fn test_offset_shorthand_expands() {
 #[test]
 fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
   let mut style = ComputedStyle::default();
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 16.0 / 2.0,
-    ex: 16.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(16.0)
+    .line_height(0.0)
+    .ch(16.0 / 2.0)
+    .ex(16.0 / 2.0)
+    .build();
   let border_box = Size {
     width: 100.0,
     height: 40.0,
@@ -1213,19 +1203,13 @@ fn test_position_absolute_blockifies_inline_display() {
   ])
   .inherit(&ComputedStyle::default());
 
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 16.0 / 2.0,
-    ex: 16.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(16.0)
+    .line_height(0.0)
+    .ch(16.0 / 2.0)
+    .ex(16.0 / 2.0)
+    .build();
 
   style.make_computed(&sizing);
 
@@ -1237,19 +1221,13 @@ fn test_outline_style_alone_keeps_the_initial_outline_width() {
   let mut style = style_with([StyleDeclaration::outline_style(BorderStyle::Solid)])
     .inherit(&ComputedStyle::default());
 
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 16.0 / 2.0,
-    ex: 16.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(16.0)
+    .line_height(0.0)
+    .ch(16.0 / 2.0)
+    .ex(16.0 / 2.0)
+    .build();
 
   style.make_computed(&sizing);
 
@@ -1267,34 +1245,24 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     StyleDeclaration::line_height(LineHeight::Length(Length::Em(1.5))),
   ])
   .inherit(&ComputedStyle::default());
-  parent.make_computed(&SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 32.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 32.0 / 2.0,
-    ex: 32.0 / 2.0,
-    color_scheme: Default::default(),
-  });
+  parent.make_computed(
+    &SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(32.0)
+      .line_height(0.0)
+      .ch(32.0 / 2.0)
+      .ex(32.0 / 2.0)
+      .build(),
+  );
 
   let inherited_child = Style::default().inherit(&parent);
-  let inherited_child_sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 32.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 32.0 / 2.0,
-    ex: 32.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let inherited_child_sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(32.0)
+    .line_height(0.0)
+    .ch(32.0 / 2.0)
+    .ex(32.0 / 2.0)
+    .build();
   let inherited_font_size = inherited_child
     .inherited_data
     .font_size
@@ -1303,19 +1271,13 @@ fn test_inherited_em_text_lengths_are_computed_once() {
 
   let child_with_own_font_size =
     style_with([StyleDeclaration::font_size(Length::Px(10.0).into())]).inherit(&parent);
-  let child_sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 10.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 10.0 / 2.0,
-    ex: 10.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let child_sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(10.0)
+    .line_height(0.0)
+    .ch(10.0 / 2.0)
+    .ex(10.0 / 2.0)
+    .build();
 
   let inherited_letter_spacing = child_with_own_font_size
     .inherited_data
@@ -1638,19 +1600,13 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     [("border-radius", "calc(infinity * 1px)")],
     &ComputedStyle::default(),
   );
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_read: None,
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    ch: 16.0 / 2.0,
-    ex: 16.0 / 2.0,
-    color_scheme: Default::default(),
-  };
+  let sizing = SizingContext::builder()
+    .viewport(Viewport::new((1200, 630)))
+    .font_size(16.0)
+    .line_height(0.0)
+    .ch(16.0 / 2.0)
+    .ex(16.0 / 2.0)
+    .build();
   let radius = style.surround_data.border_top_left_radius.x.to_px(
     &sizing,
     sizing.viewport.size.width.unwrap_or_default() as f32,
