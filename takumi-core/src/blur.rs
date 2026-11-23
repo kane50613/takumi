@@ -1,8 +1,8 @@
 //! Gaussian blur by decimation, as filtra's `filtra_core::blur` plans it and its
 //! `filtra_kernels::blur` runs it, under the notice in LICENSE-FILTRA. Each axis halves with
 //! `[1, 3, 3, 1] / 8` until a variance of at most 4 is left, blurs that rest with a small Gaussian
-//! and doubles back with `[1, 3] / 4`. Each level holds half the pixels of the one before along a
-//! halved axis, so the work grows slowly with sigma. Approximate: Chrome blurs with Skia's
+//! and doubles back with `[1, 3] / 4`. A level's spans generally shrink by half along a halved
+//! axis, down to a few pixels, so the work grows slowly with sigma. Approximate: Chrome blurs with Skia's
 //! three-box passes, which this differs from by a few levels of 255, lying closer to the exact
 //! Gaussian, and halving pairs pixels by their position, so past a variance of 4 a pixel spreads
 //! slightly unevenly, mirrored when it moves by one pixel.
@@ -227,7 +227,7 @@ impl Blur {
 
     // Halving and doubling each add a variance of 0.75 in the finer grid, and a variance in the
     // coarser grid is four times as large in the finer one, so the passes add up to the requested
-    // variance. Each level has half the pixels of the one before along every halved axis.
+    // variance. A level's spans generally shrink by half along a halved axis, down to a few pixels.
     let levels = axes[0].halvings.max(axes[1].halvings);
     let layout: [Layout; 2] =
       array::from_fn(|a| Layout::new(&axes[a], levels, source[a], target[a]));
