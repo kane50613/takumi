@@ -852,3 +852,38 @@ fn font_size_breaks_a_cycle_with_a_font_relative_registered_length() {
   );
   assert_eq!(size("font-size: var(--prefix--x, 25px)"), (50.0, 25.0));
 }
+
+/// `light-dark()` follows the used color scheme, which the viewport's preference picks among the
+/// schemes `color-scheme` lists.
+#[test]
+fn light_dark_follows_the_preferred_scheme_color_scheme_lists() {
+  use crate::test_utils::render_node;
+
+  let first_pixel = |color_scheme: &str, preferred: ColorScheme| {
+    let page = Node::from_html(
+      &format!(
+        r#"<div style="width:4px;height:4px;color-scheme:{color_scheme};background-color:light-dark(rgb(255,0,0),rgb(0,0,255))"></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses");
+    let image = render_node(page, Viewport::new((4, 4)).with_color_scheme(preferred));
+
+    image.as_raw()[..4].to_vec()
+  };
+  let (red, blue) = (vec![255, 0, 0, 255], vec![0, 0, 255, 255]);
+
+  for (color_scheme, preferred, expected) in [
+    ("light dark", ColorScheme::Dark, &blue),
+    ("light dark", ColorScheme::Light, &red),
+    ("dark", ColorScheme::Light, &blue),
+    ("light", ColorScheme::Dark, &red),
+    ("normal", ColorScheme::Dark, &red),
+  ] {
+    assert_eq!(
+      &first_pixel(color_scheme, preferred),
+      expected,
+      "color-scheme: {color_scheme} preferring {preferred:?}"
+    );
+  }
+}
