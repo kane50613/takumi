@@ -2620,7 +2620,7 @@ fn resolve_declared_custom_properties(
 /// The winning `font-size` and `line-height` declarations in a relative-unit cycle with registered
 /// custom properties, which act as `unset` while those properties take their initial values.
 /// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct InvalidDeclarations {
   declarations: Vec<DeferredDeclaration>,
   names: Vec<String>,

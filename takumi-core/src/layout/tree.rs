@@ -57,10 +57,10 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Direction, Display, Float, FontUnits, KeyframesRule, Lang, LineHeight, MatchedStyleKey,
-    Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, animated_custom_properties,
-    apply_stylesheet_animations, page_rule::PageContext,
+    Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang, LineHeight,
+    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
+    animated_custom_properties, apply_stylesheet_animations, page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -3407,10 +3407,12 @@ impl RenderContext {
       .iter()
       .any(KeyframesRule::animates_custom_properties);
     let context = (lang, is_document_root);
-    let resample = (!self.stylesheet().keyframes.is_empty()).then(|| style_layers.clone());
+    let recascade = recascade.then(|| style_layers.clone());
+    let cascaded = style_layers.inherit_element(&inherited_parent, lang, is_document_root);
+    let resample = (!cascaded.0.misc1_data.animation_name.is_empty()).then(|| cascaded.clone());
     let (mut style, mut child_sizing_for_final) = self.animated_child_style(
-      style_layers,
-      recascade,
+      cascaded,
+      recascade.as_ref(),
       &inherited_parent,
       &important,
       context,
@@ -3420,7 +3422,7 @@ impl RenderContext {
     // `color-scheme` animates discretely and decides every `light-dark()` the animations sample, so
     // when the scheme that wins, `!important` included, is not the one they were sampled in, they
     // are sampled again in it, as Blink applies `color-scheme` before the colours that read it.
-    if let (Some(sampled), Some(style_layers)) = (&child_sizing_for_final, resample) {
+    if let (Some(sampled), Some(cascaded)) = (&child_sizing_for_final, resample) {
       let color_scheme = style
         .inherited_data
         .color_scheme
@@ -3428,8 +3430,8 @@ impl RenderContext {
 
       if color_scheme != sampled.color_scheme {
         (style, child_sizing_for_final) = self.animated_child_style(
-          style_layers,
-          recascade,
+          cascaded,
+          recascade.as_ref(),
           &inherited_parent,
           &important,
           context,
@@ -3448,21 +3450,19 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// The element's style with its animations sampled at this render's time, in `color_scheme` or
-  /// the scheme of the style before them, and its important declarations applied over them, with
-  /// the sizing the animations were sampled against when it has any.
+  /// `style` with its animations sampled at this render's time, in `color_scheme` or the scheme of
+  /// the style before them, and its important declarations applied over them, with the sizing the
+  /// animations were sampled against when it has any. `recascade` holds the element's layers when
+  /// an animated custom property has to cascade through them again.
   fn animated_child_style(
     &self,
-    style_layers: NodeStyle,
-    recascade: bool,
+    (mut style, mut invalid): (ComputedStyle, InvalidDeclarations),
+    recascade: Option<&NodeStyle>,
     inherited_parent: &ComputedStyle,
     important: &[&StyleDeclaration],
     (lang, is_document_root): (Option<Lang>, bool),
     color_scheme: Option<ColorScheme>,
   ) -> (ComputedStyle, Option<SizingContext>) {
-    let recascade = recascade.then(|| style_layers.clone());
-    let (mut style, mut invalid) =
-      style_layers.inherit_element(inherited_parent, lang, is_document_root);
     let mut tainted = PropertyMask::new();
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
@@ -3486,7 +3486,7 @@ impl RenderContext {
 
         let (mut animated_style, animated_invalid) = animated
           .into_iter()
-          .fold(style_layers, |layers, (name, value)| {
+          .fold(style_layers.clone(), |layers, (name, value)| {
             layers.with(StyleDeclaration::CustomProperty(name, value))
           })
           .inherit_element(inherited_parent, lang, is_document_root);
