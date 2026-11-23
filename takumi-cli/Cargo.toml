@@ -29,7 +29,7 @@ pkg-url = "{ repo }/releases/download/takumi-cli@{ version }/takumi-{ target }.z
 pkg-fmt = "zip"
 
 [dependencies]
-cap-std = "3"
+cap-std = "4"
 encoding_rs = "0.8"
 clap_complete = "4.6"
 cssparser.workspace = true
