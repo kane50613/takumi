@@ -140,8 +140,8 @@ impl Filter {
   /// from `bounds`, or reads to fill them, under `transform` from local to device px.
   /// Approximate: cc maps in the surface's scaled space and draws that into device space, where
   /// takumi maps in device space, so a deviation takes the transform's scale components and a
-  /// shadow offset its whole linear part; a reference filter stays unmapped, where cc asks its
-  /// image filter.
+  /// shadow offset its whole linear part; a blur spreads as far as takumi's reaches, past cc's
+  /// three deviations; a reference filter stays unmapped, where cc asks its image filter.
   /// <https://source.chromium.org/chromium/chromium/src/+/main:cc/paint/filter_operation.cc>
   pub fn map_bounds(
     &self,
@@ -151,8 +151,14 @@ impl Filter {
     direction: MapDirection,
   ) -> SceneBounds {
     let (scale_x, scale_y) = transform.scale_components();
-    // cc's `MapStdDeviation`: three scaled standard deviations.
-    let spread = |sigma: f32| ((sigma * scale_x * 3.0).abs(), (sigma * scale_y * 3.0).abs());
+    // The decimated blur's reach at each scaled deviation, where cc's `MapStdDeviation` takes
+    // three of them.
+    let spread = |sigma: f32| {
+      (
+        blur::reach((sigma * scale_x).abs()),
+        blur::reach((sigma * scale_y).abs()),
+      )
+    };
     let outset = |(x, y): (f32, f32), (dx, dy): (f32, f32)| {
       SceneBounds::enclosing(
         bounds.left as f32 - x + dx,
@@ -592,15 +598,15 @@ mod tests {
   }
 
   #[test]
-  fn a_blur_reaches_three_scaled_deviations_both_ways() {
+  fn a_blur_reaches_as_far_as_its_scaled_deviation_carries_both_ways() {
     for direction in [MapDirection::Forward, MapDirection::Reverse] {
       assert_eq!(
         map("blur(10px)", Affine::IDENTITY, direction),
-        rect(-30, -30, 130, 80)
+        rect(-51, -51, 151, 101)
       );
       assert_eq!(
         map("blur(10px)", Affine::scale(2.0, 2.0), direction),
-        rect(-60, -60, 160, 110)
+        rect(-101, -101, 201, 151)
       );
     }
   }
@@ -618,7 +624,7 @@ mod tests {
 
     assert_eq!(
       map("blur(10px)", quarter_turn, MapDirection::Forward),
-      rect(-30, -30, 130, 80)
+      rect(-51, -51, 151, 101)
     );
   }
 
@@ -628,11 +634,11 @@ mod tests {
 
     assert_eq!(
       map(shadow, Affine::IDENTITY, MapDirection::Forward),
-      rect(0, -1, 116, 61)
+      rect(-1, -6, 121, 66)
     );
     assert_eq!(
       map(shadow, Affine::IDENTITY, MapDirection::Reverse),
-      rect(-16, -11, 100, 51)
+      rect(-21, -16, 101, 56)
     );
   }
 
@@ -642,7 +648,7 @@ mod tests {
 
     assert_eq!(
       expand_filter_bounds(&filters, rect(0, 0, 100, 50), &sizing(), Affine::IDENTITY),
-      rect(-16, -11, 116, 61)
+      rect(-21, -16, 121, 66)
     );
   }
 
