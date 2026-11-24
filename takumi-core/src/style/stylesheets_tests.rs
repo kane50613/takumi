@@ -987,6 +987,25 @@ fn style_declaration_block_from_str_tracks_important_declarations() {
 }
 
 #[test]
+fn style_attribute_important_after_multi_token_values() {
+  let block = StyleDeclarationBlock::parse_loosy(
+    "background: red !important; border-bottom: 8px solid red !important",
+  );
+  let ignored = &block.ignored;
+
+  assert!(
+    ignored.is_empty(),
+    "no declaration should be dropped: {ignored:?}"
+  );
+  for longhand in [LonghandId::BackgroundColor, LonghandId::BorderBottomColor] {
+    assert!(
+      block.importance.longhands.contains(&longhand),
+      "{longhand:?} should be important"
+    );
+  }
+}
+
+#[test]
 fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   let background_url = "https://placehold.co/80x80/22c55e/white";
   let mask_url = "https://placehold.co/40x40/000000/white";

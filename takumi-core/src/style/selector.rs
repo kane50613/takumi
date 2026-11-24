@@ -507,7 +507,8 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let mut declarations =
-      StyleDeclarationBlock::parse(&name, input, self.origin).map_err(ParseError::into)?;
+      StyleDeclarationBlock::parse_declaration_value(&name, input, self.origin)
+        .map_err(ParseError::into)?;
     if input.try_parse(parse_important).is_ok() {
       declarations.mark_important();
     }
@@ -2070,6 +2071,26 @@ mod tests {
         .height,
       Length::Px(20.0).into()
     );
+  }
+
+  #[test]
+  fn test_parse_stylesheet_important_after_multi_token_values() {
+    for declaration in [
+      "background: red",
+      "border-bottom: 8px solid red",
+      "font: bold 12px serif",
+      "box-shadow: 1px 1px red",
+      "transform: scale(2)",
+    ] {
+      let normal = parse_stylesheet(&format!(".a {{ {declaration}; }}"));
+      let important = parse_stylesheet(&format!(".a {{ {declaration} !important; }}"));
+
+      assert_eq!(
+        important.rules[0].important_declarations.declarations,
+        normal.rules[0].normal_declarations.declarations,
+        "`{declaration} !important` should mark what `{declaration}` sets important"
+      );
+    }
   }
 
   #[test]
