@@ -3,7 +3,7 @@ title: Void
 description: Return Open Graph images from Void routes written in Hono JSX, on Cloudflare or on the Node.js target.
 ---
 
-[Void](https://void.cloud) routes run on Hono, and Takumi renders Hono JSX as it renders React, so a route returns an `ImageResponse` with no adapter package. On Cloudflare, Takumi runs on its WebAssembly backend. On the Node.js target, it runs on its native addon.
+[Void](https://void.cloud) routes run on Hono. Takumi draws Hono JSX as the HTML that Hono's `c.html()` would send, so a route returns an `ImageResponse` with no adapter package. On Cloudflare, Takumi runs on its WebAssembly backend. On the Node.js target, it runs on its native addon.
 
 <Steps>
   <Step>
@@ -60,7 +60,7 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
     });
     ```
 
-    JSX escapes `title` as text, so a request cannot inject markup through it.
+    Hono escapes `title` as it renders the JSX, so a request cannot inject markup through it.
 
   </Step>
   <Step>
@@ -73,7 +73,7 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
 
 ## Load data while rendering
 
-An async component can fetch or query what the image shows. Takumi waits for it and draws what Hono's `c.html()` would send as the page, so a `Suspense` boundary shows its children, not its fallback:
+An async component can fetch or query what the image shows. Takumi waits for it, as `c.html()` does, so a `Suspense` boundary shows its children, not its fallback. Context and `ErrorBoundary` work as they do in Hono too:
 
 ```tsx title="routes/og/[slug].tsx"
 import { Suspense } from "hono/jsx/streaming";
