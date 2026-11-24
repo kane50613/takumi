@@ -750,7 +750,7 @@ impl Span {
 
   /// The span extended by `by` pixels on both sides.
   fn grow(self, by: i64) -> Span {
-    self.map(|a, b| (a - by, b + by))
+    self.map(|a, b| (a.saturating_sub(by), b.saturating_add(by)))
   }
 
   /// The pixels that halving this span makes non-zero.
@@ -1104,6 +1104,28 @@ mod tests {
       spans(wide),
       [Span(0, 1 << 31), Span(-5, i64::from(u32::MAX) - 5)]
     );
+  }
+
+  #[test]
+  fn a_sigma_past_any_image_blurs_without_overflow() {
+    let at = Placement {
+      left: 0,
+      top: 0,
+      width: 4,
+      height: 4,
+    };
+    let blurred = blur_alpha_region(
+      &[255; 16],
+      at,
+      Size {
+        width: 4,
+        height: 4,
+      },
+      at,
+      1e30,
+    );
+
+    assert_eq!(blurred.len(), 16);
   }
 
   /// An image filter blurs no wider than Skia's `SkBlurImageFilter` lets it.
