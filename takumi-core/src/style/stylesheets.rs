@@ -2556,7 +2556,8 @@ impl ComputedStyle {
 }
 
 impl Style {
-  /// The keyword its last `text-align` declaration sets.
+  /// The keyword its last `text-align` declaration sets, none when that declaration is a CSS-wide
+  /// keyword or waits for `var()`.
   pub(crate) fn declared_text_align(&self) -> Option<TextAlign> {
     self
       .declarations
@@ -2566,7 +2567,15 @@ impl Style {
       .find_map(|declaration| match declaration {
         StyleDeclaration::TextAlign(text_align) => Some(Some(*text_align)),
         StyleDeclaration::CssWideKeyword(LonghandId::TextAlign, _) => Some(None),
-        _ => None,
+        declaration => declaration
+          .deferred()
+          .is_some_and(|deferred| {
+            deferred
+              .property
+              .target_longhands()
+              .contains(&LonghandId::TextAlign)
+          })
+          .then_some(None),
       })
       .flatten()
   }
