@@ -69,7 +69,7 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
 
 ## Load data while rendering
 
-Takumi waits for async components, so a `Suspense` boundary draws its children, not its fallback:
+Takumi waits for async components, so a `Suspense` boundary draws its children, not its fallback. With React's JSX, import `Suspense` from `react` instead:
 
 ```tsx title="routes/og/[slug].tsx"
 import { Suspense } from "hono/jsx/streaming";
