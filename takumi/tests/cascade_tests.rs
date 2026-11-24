@@ -995,3 +995,54 @@ fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
   assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
   assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
 }
+
+/// The width and height `.box` measures to under `css`.
+fn box_size(css: &str) -> (f32, f32) {
+  let measured = measure_with_css(Node::container([block("box")]), css);
+
+  (measured.children[0].width, measured.children[0].height)
+}
+
+/// `color` and the font longhands are high priority, so they apply before the other longhands and
+/// against the parent, as Blink's `ApplyHighPriority` applies them, animated or not.
+#[test]
+fn animations_read_the_font_and_colour_the_high_priority_longhands_give() {
+  // An animated element's `em` font size reads its parent's font size.
+  assert_eq!(
+    box_size(
+      "@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+       .box { font-size: 2em; height: 1em; animation: fade 1s }"
+    )
+    .1,
+    32.0
+  );
+  // An animated font size interpolates an `em` against the parent's font size.
+  assert_eq!(
+    box_size(
+      "@keyframes f { from { font-size: 1em } to { font-size: 40px } }
+       .box { font-size: 30px; height: 1em; animation: f 1000ms linear -500ms }"
+    )
+    .1,
+    28.0
+  );
+  // Another animation reads the animated font size.
+  assert_eq!(
+    box_size(
+      "@keyframes f { from, to { font-size: 20px } }
+       @keyframes w { from { width: 10em } to { width: 100px } }
+       .box { animation: w 1000ms linear -500ms, f 1s }"
+    )
+    .0,
+    150.0
+  );
+  // Another animation reads the animated colour as `currentColor`.
+  assert_eq!(
+    first_pixel_with_css(
+      "a",
+      "@keyframes c { from, to { color: rgb(0,0,255) } }
+       @keyframes b { from { background-color: currentColor } to { background-color: rgb(0,255,0) } }
+       .a { color: rgb(255,0,0); animation: b 1s paused, c 1s paused }"
+    ),
+    [0, 0, 255, 255]
+  );
+}

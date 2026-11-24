@@ -488,9 +488,36 @@ macro_rules! define_style {
             .collect()
         }
 
-        /// Blink's high-priority longhands, only `color-scheme` yet, not `color`, fonts, or `zoom`.
-        pub(crate) fn high_priority() -> PropertyMask {
-          [Self::ColorScheme].into_iter().collect()
+        /// Blink's high-priority longhands by their `priority` in `css_properties.json5`, the
+        /// highest first. Each group applies before the next, and all before the other longhands.
+        pub(crate) fn high_priority() -> [PropertyMask; 2] {
+          [
+            [Self::ColorScheme, Self::Position].into_iter().collect(),
+            [
+              Self::Color,
+              Self::Direction,
+              Self::FontFamily,
+              Self::FontFeatureSettings,
+              Self::FontKerning,
+              Self::FontLanguageOverride,
+              Self::FontOpticalSizing,
+              Self::FontSize,
+              Self::FontStretch,
+              Self::FontStyle,
+              Self::FontSynthesisSmallCaps,
+              Self::FontSynthesisStyle,
+              Self::FontSynthesisWeight,
+              Self::FontVariantCaps,
+              Self::FontVariantEastAsian,
+              Self::FontVariantLigatures,
+              Self::FontVariantNumeric,
+              Self::FontVariantPosition,
+              Self::FontVariationSettings,
+              Self::FontWeight,
+            ]
+            .into_iter()
+            .collect(),
+          ]
         }
 
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
