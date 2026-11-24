@@ -43,6 +43,21 @@ function hasDeclarations(declarations: Declarations | undefined): declarations i
   return declarations !== undefined && Object.keys(declarations).length > 0;
 }
 
+/**
+ * Whether `value` is a node tree rather than a JSX element, which also carries a `type` but has `props`.
+ *
+ * @internal
+ */
+export function isNode(value: unknown): value is Node {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    (value.type === "container" || value.type === "text" || value.type === "image") &&
+    !("props" in value)
+  );
+}
+
 export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   const node: ContainerNode = {
     type: "container",

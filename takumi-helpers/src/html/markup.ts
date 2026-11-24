@@ -12,8 +12,11 @@ import { isAsciiWhitespace, isUnrenderedElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
 /** Converts HTML into nodes, `<style>` contents into stylesheets, and `<img>` and `<svg>` into images. */
-export function fromStaticMarkup(markup: string): ConvertedNodes {
-  return new NodeBuilder(new NodeMetadataReader()).build(parse(markup) as UltraHtmlDocumentNode);
+export function fromStaticMarkup(
+  markup: string,
+  metadata: NodeMetadataReader = new NodeMetadataReader(),
+): ConvertedNodes {
+  return new NodeBuilder(metadata).build(parse(markup) as UltraHtmlDocumentNode);
 }
 
 class NodeBuilder {
