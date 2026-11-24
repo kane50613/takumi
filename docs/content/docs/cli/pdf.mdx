@@ -98,10 +98,10 @@ Give the poster one page with no margin, and size its root box with `100vh`, whi
 takumi pdf poster.html -o poster.pdf --page A1 --margin 0
 ```
 
-A height in pixels that rounds past the page adds a blank page. To find content that runs past the page, give `takumi paint` the page size in CSS pixels, `--width 2245 --height 3179` for A1, and look for the boxes it marks past the bottom edge:
+A height in pixels that rounds past the page adds a blank page. To find content that runs past the page, give `takumi paint` the page size in CSS pixels, rounded up, `--width 2246 --height 3179` for A1, and look for the boxes it marks past the bottom edge:
 
 ```sh
-takumi paint poster.html -o - --width 2245 --height 3179
+takumi paint poster.html -o - --width 2246 --height 3179
 ```
 
 ## Put one slide on each page

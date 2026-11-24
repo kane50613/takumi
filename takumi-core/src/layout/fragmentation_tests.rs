@@ -551,6 +551,34 @@ fn paged_layout_stops_at_its_page_limit() {
   assert!(matches!(stepped.next_page(), Err(Error::TooManyPages(2))));
 }
 
+/// A fractional page area rounds up to whole px, so each page starts on a whole px.
+#[test]
+fn a_fractional_page_area_rounds_up_to_whole_px() {
+  let breaks = render(
+    root([block("a", "h100"), block("b", "h100 page")]),
+    ".h100 { height: 100px } .page { break-before: page }",
+  );
+  let (_, sizes) = LayoutResults::compute_pages(
+    &breaks,
+    PageSizer::uniform(Size {
+      width: 300.5,
+      height: 200.5,
+    }),
+    usize::MAX,
+  )
+  .expect("pages lay out");
+
+  assert_eq!(sizes.len(), 2);
+  assert_eq!(
+    sizes.size(0),
+    Size {
+      width: 301.0,
+      height: 201.0,
+    }
+  );
+  assert_eq!(sizes.top(1), 201.0);
+}
+
 /// A page the sizer gives no area fails the layout, and a page not laid out yet reaches nothing.
 #[test]
 fn a_page_without_area_fails_and_an_unlaid_page_reaches_nothing() {
