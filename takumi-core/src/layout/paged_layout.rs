@@ -319,6 +319,9 @@ impl<'r> PagedLayout<'r> {
     if let Some(token) = &self.break_token {
       self.pin_pending_boxes(token, &mut chain, &mut pinned);
     }
+    if let Some(token) = self.page_areas.break_token() {
+      self.pin_resumed_out_of_flow(token, &mut chain, &mut pinned);
+    }
     pinned
   }
 
@@ -357,8 +360,7 @@ impl<'r> PagedLayout<'r> {
     if self
       .pending
       .is_containing_block(self.tree.render_node(token.node).context.box_id())
-      || self.clips_to_rounded_box(token.node)
-      || self.paints_background_image(token.node)
+      || self.paints_by_stitched_box(token.node)
     {
       *pinned = (*pinned).min(self.start_page(chain));
     }
@@ -376,6 +378,37 @@ impl<'r> PagedLayout<'r> {
         chain.pop();
       }
     }
+  }
+
+  /// Keeps the first page of a box the page areas resume, or of a box inside it, open until the box
+  /// ends when its stitched box shapes its paint, as [`Self::pin_pending_boxes`] does in flow.
+  fn pin_resumed_out_of_flow(
+    &self,
+    token: &BlockBreakToken,
+    chain: &mut Vec<NodeId>,
+    pinned: &mut usize,
+  ) {
+    for child in &token.child_break_tokens {
+      let BreakToken::Block(child) = child else {
+        continue;
+      };
+
+      if child.is_break_before {
+        continue;
+      }
+      chain.push(child.node);
+      if self.paints_by_stitched_box(child.node) {
+        *pinned = (*pinned).min(self.start_page(chain));
+      }
+      self.pin_resumed_out_of_flow(child, chain, pinned);
+      chain.pop();
+    }
+  }
+
+  /// Whether the height of `node`'s stitched box, unknown until its last fragment, shapes what it
+  /// paints on every page.
+  fn paints_by_stitched_box(&self, node: NodeId) -> bool {
+    self.clips_to_rounded_box(node) || self.paints_background_image(node)
   }
 
   /// Whether `node` clips its content to rounded corners, which the height of its stitched box,

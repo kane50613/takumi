@@ -43,6 +43,11 @@ impl PageAreas {
     self.break_token.is_some()
   }
 
+  /// Where the next page's area resumes, if it does.
+  pub(crate) fn break_token(&self) -> Option<&BlockBreakToken> {
+    self.break_token.as_deref()
+  }
+
   /// Lays out the page area of page `page`, attached to the root's fragment `fragment_index` at
   /// `origin`, then repeats the fixed boxes.
   pub(crate) fn lay_out(

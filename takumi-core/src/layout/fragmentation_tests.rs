@@ -2160,6 +2160,32 @@ fn a_background_image_keeps_its_pages_open_until_it_ends() {
   }
 }
 
+/// An absolute box the page areas go on laying out keeps its pages open until it ends when it
+/// paints a background image or clips to rounded corners, as an in-flow box does. One painting a
+/// colour leaves them alone.
+#[test]
+fn a_resumed_absolute_box_keeps_its_pages_open_until_it_ends() {
+  for (painted, finalized) in [
+    ("background: linear-gradient(red, blue)", [0, 0, 3, 4, 5]),
+    ("overflow: hidden; border-radius: 50%", [0, 0, 3, 4, 5]),
+    ("background: red", [1, 2, 3, 4, 5]),
+  ] {
+    let tree = render(
+      root([block("absolute", "absolute"), block("flow", "flow")]),
+      &format!(
+        ".absolute {{ position: absolute; top: 0; width: 100px; height: 300px; {painted} }} \
+         .flow {{ height: 500px }}"
+      ),
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{painted}"
+    );
+  }
+}
+
 /// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
 /// shapes the corners on every page. A square clip leaves them alone.
 #[test]
