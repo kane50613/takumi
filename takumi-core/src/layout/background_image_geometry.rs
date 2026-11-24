@@ -1,7 +1,8 @@
 //! Where a `background-image` or `mask-image` layer paints: Blink's `BackgroundImageGeometry`
-//! (`third_party/blink/renderer/core/paint/background_image_geometry.cc`) for a box painted in one
-//! piece, the parts of `BoxBackgroundPaintContext` it reads, and the tiling `DrawTiledBackground`
-//! (`box_painter_base.cc`) derives from it. Follows Blink under the notice in LICENSE-CHROMIUM.
+//! (`third_party/blink/renderer/core/paint/background_image_geometry.cc`) for a box, or a fragment
+//! of a box broken across pages, the parts of `BoxBackgroundPaintContext` it reads, and the tiling
+//! `DrawTiledBackground` (`box_painter_base.cc`) derives from it. Follows Blink under the notice in
+//! LICENSE-CHROMIUM.
 
 use smallvec::SmallVec;
 
@@ -10,14 +11,14 @@ use crate::resources::image::ImageSource;
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{border::BorderProperties, node::resolve_image},
+  layout::{border::BorderProperties, node::resolve_image, tree::StitchedFragment},
   layout_unit::{
     BoxStrut, LayoutUnit, UnitOffset, UnitRect, UnitSize, snap_size_to_pixel_allowing_zero,
   },
   style::{
     BackgroundClip, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
-    BackgroundSize, BlendMode, BorderCollapse, BorderStyle, ComputedStyle, IntrinsicSizing, Length,
-    PositionComponent, PositionValue, SizingContext,
+    BackgroundSize, BlendMode, BorderCollapse, BorderStyle, BoxDecorationBreak, ComputedStyle,
+    IntrinsicSizing, Length, PositionComponent, PositionValue, SizingContext,
   },
 };
 
@@ -260,7 +261,10 @@ struct SnappedAndUnsnappedOutsets {
   unsnapped: BoxStrut,
 }
 
-/// Blink's `BoxBackgroundPaintContext` for a box painted in one piece.
+/// Blink's `BoxBackgroundPaintContext` for a box, or a fragment of a box broken across pages.
+///
+/// Approximate: a repeated fragment, as a table header on each page, positions as a box in one piece,
+/// where Blink's `IsOnlyForNode` counts it as one of several fragments.
 #[derive(Debug, Clone, Copy)]
 pub struct BoxBackgroundPaintContext {
   /// Where the border box sits in the space it snaps to pixels in.
@@ -270,7 +274,15 @@ pub struct BoxBackgroundPaintContext {
   padding: BoxStrut,
   /// Blink's `BorderEdge::ObscuresBackground` per side.
   obscuring: Rect<bool>,
+  /// Blink's `DisallowBorderDerivedAdjustment`.
   disallow_border_derived_adjustment: bool,
+  /// Blink's `positioning_size_override_`: the size of the box's fragments stitched together.
+  positioning_size_override: UnitSize,
+  /// Blink's `element_positioning_area_offset_`: where the fragment starts in its stitched box
+  /// when its decorations slice.
+  element_positioning_area_offset: UnitOffset,
+  /// Blink's `box_has_multiple_fragments_`.
+  box_has_multiple_fragments: bool,
 }
 
 impl BoxBackgroundPaintContext {
@@ -282,6 +294,40 @@ impl BoxBackgroundPaintContext {
     border: &BorderProperties,
     paint_offset: Point<f32>,
   ) -> Self {
+    Self::of_fragment(
+      style,
+      StitchedFragment::unbroken(layout),
+      border,
+      paint_offset,
+    )
+  }
+
+  /// The context of `fragment` with `style`, its borders from `border`, its border box at
+  /// `paint_offset` in the space Blink snaps it in, as Blink's
+  /// `BoxBackgroundPaintContext(const PhysicalBoxFragment&)` sets it up.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_background_paint_context.cc>
+  pub(crate) fn of_fragment(
+    style: &ComputedStyle,
+    fragment: StitchedFragment,
+    border: &BorderProperties,
+    paint_offset: Point<f32>,
+  ) -> Self {
+    let layout = fragment.layout;
+    let box_has_multiple_fragments = fragment.is_broken;
+    // Blink's `OffsetInStitchedFragments`: the fragment's inline size by the stitched block size.
+    let positioning_size_override = UnitSize {
+      width: LayoutUnit::from_float_round(layout.size.width),
+      height: LayoutUnit::from_float_round(fragment.stitched.size.height),
+    };
+    let element_positioning_area_offset =
+      if style.box_data.box_decoration_break == BoxDecorationBreak::Slice {
+        UnitOffset {
+          left: LayoutUnit::ZERO,
+          top: LayoutUnit::from_float_round(fragment.block_offset),
+        }
+      } else {
+        UnitOffset::default()
+      };
     let strut = |sides: Rect<f32>| BoxStrut {
       top: LayoutUnit::from_float(sides.top),
       right: LayoutUnit::from_float(sides.right),
@@ -307,8 +353,11 @@ impl BoxBackgroundPaintContext {
         ),
         left: obscures(border.width.left, border.color.left.0, border.style.left),
       },
-      disallow_border_derived_adjustment: style.inherited_data.border_collapse
-        == BorderCollapse::Collapse,
+      disallow_border_derived_adjustment: box_has_multiple_fragments
+        || style.inherited_data.border_collapse == BorderCollapse::Collapse,
+      positioning_size_override,
+      element_positioning_area_offset,
+      box_has_multiple_fragments,
     }
   }
 
@@ -327,7 +376,21 @@ impl BoxBackgroundPaintContext {
         left: false,
       },
       disallow_border_derived_adjustment: false,
+      positioning_size_override: UnitSize::default(),
+      element_positioning_area_offset: UnitOffset::default(),
+      box_has_multiple_fragments: false,
     }
+  }
+
+  /// Blink's `NormalPositioningArea`: a fragment of a broken box positions in the stitched box.
+  fn normal_positioning_area(&self, paint_rect: UnitRect) -> UnitRect {
+    if self.box_has_multiple_fragments {
+      return UnitRect {
+        offset: UnitOffset::default(),
+        size: self.positioning_size_override,
+      };
+    }
+    paint_rect
   }
 
   /// Blink's `ContouredBorderGeometry::PixelSnappedContouredInnerBorder(...).Rect()`.
@@ -435,7 +498,7 @@ impl BackgroundImageGeometry {
       unsnapped_dest_rect: paint_rect,
       ..Self::default()
     };
-    let mut unsnapped_positioning_area = paint_rect;
+    let mut unsnapped_positioning_area = paint_context.normal_positioning_area(paint_rect);
     let mut snapped_positioning_area = UnitRect::default();
     let mut unsnapped_box_offset = UnitOffset::default();
     let mut snapped_box_offset = UnitOffset::default();
@@ -456,7 +519,7 @@ impl BackgroundImageGeometry {
     );
     geometry.calculate_repeat_and_position(
       fill_layer,
-      UnitOffset::default(),
+      paint_context.element_positioning_area_offset,
       unsnapped_positioning_area.size,
       snapped_positioning_area.size,
       unsnapped_box_offset,
@@ -1139,16 +1202,91 @@ mod tests {
   }
 
   fn calculate(fill_layer: &FillLayer, size: Size<f32>) -> BackgroundImageGeometry {
-    let paint_context = BoxBackgroundPaintContext::mask(size, Point::ZERO);
+    calculate_in(
+      fill_layer,
+      &BoxBackgroundPaintContext::mask(size, Point::ZERO),
+    )
+  }
 
+  fn calculate_in(
+    fill_layer: &FillLayer,
+    paint_context: &BoxBackgroundPaintContext,
+  ) -> BackgroundImageGeometry {
     BackgroundImageGeometry::calculate(
       fill_layer,
-      &paint_context,
+      paint_context,
       paint_context.border_box,
       &SizingContext::builder()
         .viewport(Viewport::new((1200, 630)))
         .build(),
     )
+  }
+
+  /// The block-axis tile origins of `fill_layer` on the last fragment, 100px tall, of a box 300px
+  /// tall broken across pages, whose decorations break as `decoration_break` says.
+  fn origins_in_last_fragment(
+    fill_layer: &FillLayer,
+    decoration_break: BoxDecorationBreak,
+  ) -> Vec<f32> {
+    let layout = ComputedLayout {
+      size: Size {
+        width: 100.0,
+        height: 100.0,
+      },
+      ..ComputedLayout::default()
+    };
+    let fragment = StitchedFragment {
+      layout,
+      stitched: ComputedLayout {
+        size: Size {
+          width: 100.0,
+          height: 300.0,
+        },
+        ..layout
+      },
+      block_offset: 200.0,
+      is_broken: true,
+    };
+    let mut style = ComputedStyle::default();
+
+    style.box_data_mut().box_decoration_break = decoration_break;
+
+    let paint_context = BoxBackgroundPaintContext::of_fragment(
+      &style,
+      fragment,
+      &BorderProperties::default(),
+      Point::ZERO,
+    );
+    let tiling = calculate_in(fill_layer, &paint_context)
+      .tiling(&fill_layer.image)
+      .unwrap();
+
+    assert_eq!(tiling.image_size.height, 300.0);
+    tiling.origins().1.to_vec()
+  }
+
+  /// A sliced fragment positions its layer in the box's fragments stitched together, so it shows
+  /// the part of the layer below the fragments before it, as Blink's `OffsetInStitchedFragments`
+  /// places it.
+  #[test]
+  fn a_sliced_fragment_continues_the_stitched_layer() {
+    let fill_layer = layer("auto", "left top", "no-repeat", IntrinsicSizing::default());
+
+    assert_eq!(
+      origins_in_last_fragment(&fill_layer, BoxDecorationBreak::Slice),
+      [-200.0]
+    );
+  }
+
+  /// A cloned fragment sizes its layer to the stitched box too, but starts it at its own top.
+  #[test]
+  fn a_cloned_fragment_restarts_the_stitched_layer() {
+    let fill_layer = layer("auto", "left top", "no-repeat", IntrinsicSizing::default());
+
+    assert_eq!(
+      origins_in_last_fragment(&fill_layer, BoxDecorationBreak::Clone),
+      [0.0]
+    );
   }
 
   /// `round` rescales the axis it applies to, and an `auto` axis follows the tile's own ratio.

@@ -184,7 +184,7 @@ impl<'c> BoxBackground<'c> {
           .background_image
           .as_deref()
           .unwrap_or_default(),
-        &BoxBackgroundPaintContext::new(style, layout, &border, paint_offset),
+        &BoxBackgroundPaintContext::of_fragment(style, fragment, &border, paint_offset),
         context,
       ),
     }

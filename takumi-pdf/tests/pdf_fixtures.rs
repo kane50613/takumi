@@ -3451,6 +3451,78 @@ fn paged_rounded_clip_waits_for_the_whole_box() {
   assert!(first_page.contains("75 -225 c"), "{first_page}");
 }
 
+/// A box broken across pages positions its background in the box its fragments stitch into, as
+/// Chromium prints it: a sliced gradient and a covering image run once down the whole box, each
+/// page going on where the page before stopped, and a cloned gradient sized to the whole box starts
+/// again at the top of each page. The first page waits for the whole box, though the stream reaches
+/// it before the box ends.
+#[test]
+fn paged_backgrounds_span_the_stitched_box() {
+  let pdf = run_pdf_fixture("paged-backgrounds-stitched", |fonts| {
+    let source = r#"<div style="display: flex; column-gap: 10px">
+      <div style="width: 60px; height: 250px; background-image: linear-gradient(#0d0035, #00a6a0)"></div>
+      <div style="width: 60px; height: 250px; background-image: linear-gradient(#0d0035, #00a6a0); box-decoration-break: clone"></div>
+      <div style="width: 60px; height: 250px; background: url(checker) center / cover no-repeat"></div>
+    </div>"#;
+    let buffer =
+      ImageBuffer::from_rgba_bytes(checker_pixels(), 8, 8).expect("checker image buffer");
+
+    PdfOptions::builder()
+      .node(
+        from_html(source, FromHtmlOptions::default()).expect("parse stitched background fixture"),
+      )
+      .page(PageOptions {
+        width: 200.0,
+        height: 100.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .images(HashMap::from([(
+        "checker".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .fonts(fonts)
+      .build()
+  });
+  let streams = content_streams(&pdf);
+
+  assert_eq!(page_count(&pdf), 3);
+  // Each page draws the boxes in px from where they start, `above` px over the page's top.
+  for (page, above) in [0, 100, 200].into_iter().enumerate() {
+    let content = String::from_utf8_lossy(&streams[page]);
+    let top = 75 + above * 3 / 4;
+    let from_box_top = format!("0.75 0 0 -0.75 0 {top} cm");
+
+    // The sliced gradient is one tile as tall as the whole box, starting where the box does.
+    assert!(
+      content.contains(&format!("{from_box_top}/Pattern cs/p0 scn 0 0 60 250 re")),
+      "{content}"
+    );
+    // The cloned gradient is as tall, and starts again at the top of the page.
+    assert!(
+      content.contains(&format!(
+        "{from_box_top}/Pattern cs/p1 scn 70 {above} 60 250 re"
+      )),
+      "{content}"
+    );
+
+    // The covering image is 250px tall, as the whole box is, and goes on up the page.
+    let image = content
+      .lines()
+      .find_map(|line| line.strip_prefix("q ")?.strip_suffix(" cm/x0 Do"))
+      .expect("a drawn covering image");
+    let matrix: Vec<f32> = image
+      .split_whitespace()
+      .map(|number| number.parse().expect("a matrix number"))
+      .collect();
+    let &[_, _, _, height, _, y] = matrix.as_slice() else {
+      panic!("the image matrix has six numbers: {image}");
+    };
+
+    assert!((height - 187.5).abs() < 0.01, "{image}");
+    assert!((y - (above as f32 * 0.75 - 112.5)).abs() < 0.01, "{image}");
+  }
+}
+
 /// Content a transform or `position: relative` moves past the last page adds the pages it reaches,
 /// as Chromium prints it, while a shadow and content its box clips add none.
 #[test]

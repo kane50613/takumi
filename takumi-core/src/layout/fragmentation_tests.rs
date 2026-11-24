@@ -2139,6 +2139,27 @@ fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {
     .collect()
 }
 
+/// A box painting a background image keeps its pages open until it ends, since its whole height
+/// places the image on every page. A background colour leaves them alone.
+#[test]
+fn a_background_image_keeps_its_pages_open_until_it_ends() {
+  for (background, finalized) in [
+    ("linear-gradient(red, blue)", [0, 0, 0, 4]),
+    ("red", [1, 2, 3, 4]),
+  ] {
+    let tree = render(
+      root([Node::container([block("child", "tall")]).with_class_name("block painted")]),
+      &format!(".painted {{ background: {background} }} .tall {{ height: 400px }}"),
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{background}"
+    );
+  }
+}
+
 /// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
 /// shapes the corners on every page. A square clip leaves them alone.
 #[test]

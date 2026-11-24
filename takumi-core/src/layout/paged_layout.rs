@@ -342,8 +342,8 @@ impl<'r> PagedLayout<'r> {
   }
 
   // A box a containing block holds back, or placed from the block's start in a later fragment,
-  // keeps the block's first page open until it is laid out. A box clipping to rounded corners keeps
-  // its own first page open until it ends.
+  // keeps the block's first page open until it is laid out. A box clipping to rounded corners, or
+  // painting a background image, keeps its own first page open until it ends.
   fn pin_pending_boxes(
     &self,
     token: &BlockBreakToken,
@@ -358,6 +358,7 @@ impl<'r> PagedLayout<'r> {
       .pending
       .is_containing_block(self.tree.render_node(token.node).context.box_id())
       || self.clips_to_rounded_box(token.node)
+      || self.paints_background_image(token.node)
     {
       *pinned = (*pinned).min(self.start_page(chain));
     }
@@ -393,6 +394,18 @@ impl<'r> PagedLayout<'r> {
       ]
       .into_iter()
       .any(|radius| radius != square)
+  }
+
+  /// Whether `node` paints a background image in its stitched box, whose height, unknown until its
+  /// last fragment, places the image on every page. A table positions its own in each fragment's
+  /// grid.
+  fn paints_background_image(&self, node: NodeId) -> bool {
+    let render_node = self.tree.render_node(node);
+    let style = &render_node.context.style;
+
+    render_node.paints_own_box()
+      && !style.base_data.display.is_table()
+      && style.has_background_image()
   }
 
   fn update_pending(&mut self) {
