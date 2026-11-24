@@ -54,8 +54,7 @@ use crate::{
   options::{PT_PER_PX, PdfError},
   paint::{
     draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, opaque_runs,
-    opaque_stops, pdf_path, pdf_stops, pop_transforms, positioned, positioned_pdf_stops, rect_path,
-    shape_path, spread,
+    pdf_path, pdf_stops, pop_transforms, positioned, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::TagCollector,
@@ -675,19 +674,21 @@ impl Emitter<'_> {
         };
         let (x1, y1) = point_at(t0);
         let (x2, y2) = point_at(t1);
-        let runs = opaque_runs(&positioned(resolved), gradient.repeating, axis_length);
-        let stops = match &runs {
-          Some(_) => opaque_stops(resolved, base, span),
-          None => pdf_stops(resolved, base, span),
-        };
+        let positioned = positioned(resolved);
+        let mut stops = pdf_stops(&positioned, base, span);
 
-        if let Some(runs) = runs {
+        if let Some(runs) = opaque_runs(&positioned, gradient.repeating, axis_length) {
+          if runs.is_empty() {
+            return None;
+          }
+
           // Across the gradient line, far enough to cover the box either side.
           let (across_x, across_y) = (-dir_y * (w + h), dir_x * (w + h));
           let mut builder = PathBuilder::new();
 
-          if runs.is_empty() {
-            return None;
+          // The clip, not a soft mask, carries the alpha.
+          for stop in &mut stops {
+            stop.opacity = NormalizedF32::ONE;
           }
           for [start, end] in runs {
             let ((sx, sy), (ex, ey)) = (point_at(start), point_at(end));
@@ -729,7 +730,7 @@ impl Emitter<'_> {
         let stops = if gradient.repeating {
           expanded_radial_stops(resolved, extent)
         } else {
-          pdf_stops(resolved, 0.0, extent)
+          pdf_stops(&positioned(resolved), 0.0, extent)
         };
         let scale_x = (radius_x / extent).max(1e-6);
         let scale_y = (radius_y / extent).max(1e-6);
@@ -774,7 +775,7 @@ impl Emitter<'_> {
             (t, self.filtered(rgba))
           })
           .collect();
-        let stops = positioned_pdf_stops(&samples, 0.0, 1.0);
+        let stops = pdf_stops(&samples, 0.0, 1.0);
         let (ccx, ccy) = (x + tile.cx, y + tile.cy);
 
         SweepGradient {

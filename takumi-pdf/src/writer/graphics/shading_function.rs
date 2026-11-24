@@ -421,7 +421,6 @@ fn separate_coincident_stops(stops: &mut Vec<Stop>) {
     }
   }
 
-  // At most half the gap toward `neighbour`, so the offsets keep their order.
   let nudged = |offset: NormalizedF32, neighbour: NormalizedF32| {
     let gap = neighbour.get() - offset.get();
 

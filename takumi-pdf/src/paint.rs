@@ -208,12 +208,8 @@ pub(crate) fn pdf_stop(offset: f32, rgba: [u8; 4]) -> Stop {
   }
 }
 
-pub(crate) fn pdf_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
-  positioned_pdf_stops(&positioned(resolved), base, span)
-}
-
-/// Writer stops of `(position, rgba)` stops, as [`pdf_stops`] makes them.
-pub(crate) fn positioned_pdf_stops(stops: &[(f32, [u8; 4])], base: f32, span: f32) -> Vec<Stop> {
+/// Writer stops of `(position, rgba)` stops, placed from `base` over `span` and premultiplied.
+pub(crate) fn pdf_stops(stops: &[(f32, [u8; 4])], base: f32, span: f32) -> Vec<Stop> {
   premultiplied_stops(stops)
     .into_iter()
     .map(|(position, rgba)| pdf_stop((position - base) / span, rgba))
@@ -407,14 +403,6 @@ fn clamp_runs(runs: Vec<[f32; 2]>, axis_length: f32) -> Vec<[f32; 2]> {
     }
   }
   clamped
-}
-
-/// [`pdf_stops`] drawn opaque.
-pub(crate) fn opaque_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
-  premultiplied_stops(&positioned(resolved))
-    .into_iter()
-    .map(|(position, [r, g, b, _])| pdf_stop((position - base) / span, [r, g, b, u8::MAX]))
-    .collect()
 }
 
 /// Tiles one period of repeating stops across `extent` (the full gradient
