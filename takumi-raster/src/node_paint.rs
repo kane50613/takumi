@@ -38,49 +38,52 @@ use crate::{
   union_alpha_masks,
 };
 
-/// Paints a box's own decorations, bottom to top: outset shadows, background, through
-/// `text_clip` when it has one, inset shadows, and border when `paints_border`.
+/// Paints the own decorations of the box `painter` paints, bottom to top: outset shadows,
+/// background, through `text_clip` when it has one, inset shadows, and border when `paints_border`.
 pub(crate) fn draw_box_shell(
-  context: &RenderContext,
+  painter: &BoxPainter<'_>,
   canvas: &mut Canvas,
-  layout: Layout,
   text_clip: Option<&TextClip>,
   paints_border: bool,
 ) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
+  let context = painter.context();
 
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_normal_box_shadows(Point::ZERO, device);
   })?;
-  draw_background(context, canvas, layout, text_clip)?;
+  draw_background(painter, canvas, text_clip)?;
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_inset_box_shadows(Point::ZERO, device);
   })?;
   if paints_border {
-    draw_border(context, canvas, layout)?;
+    CanvasDevice::paint(canvas, context, |device| {
+      painter.paint_border(Point::ZERO, device);
+    })?;
   }
   Ok(())
 }
 
-/// Paints a box's own decorations as its part in a table paints them.
+/// Paints the own decorations of the box `painter` paints as its part in a table paints them.
 pub(crate) fn draw_table_box_shell(
-  context: &RenderContext,
+  painter: &BoxPainter<'_>,
   canvas: &mut Canvas,
-  layout: Layout,
   text_clip: Option<&TextClip>,
   table: TableDecorations,
 ) -> Result<()> {
+  let context = painter.context();
+  let layout = painter.layout();
+
   match table {
-    TableDecorations::None => draw_box_shell(context, canvas, layout, text_clip, true),
+    TableDecorations::None => draw_box_shell(painter, canvas, text_clip, true),
     TableDecorations::Cell {
       paints_border,
       clip: None,
-    } => draw_box_shell(context, canvas, layout, text_clip, paints_border),
+    } => draw_box_shell(painter, canvas, text_clip, paints_border),
     TableDecorations::Cell {
       paints_border,
       clip: Some(clip),
     } => within_cell(canvas, context.transform, clip, |canvas| {
-      draw_box_shell(context, canvas, layout, text_clip, paints_border)
+      draw_box_shell(painter, canvas, text_clip, paints_border)
     }),
     TableDecorations::Table {
       grid,
@@ -92,7 +95,12 @@ pub(crate) fn draw_table_box_shell(
 
       grid_context.transform =
         context.transform * Affine::translation(grid_offset.x, grid_offset.y);
-      draw_box_shell(&grid_context, canvas, grid, text_clip, paints_border)?;
+      draw_box_shell(
+        &BoxPainter::new(&grid_context, grid),
+        canvas,
+        text_clip,
+        paints_border,
+      )?;
 
       for column in columns {
         for background in column.cells {
@@ -108,8 +116,6 @@ pub(crate) fn draw_table_box_shell(
       Ok(())
     }
     TableDecorations::Part { cells } => {
-      let painter = BoxPainter::new(context, layout);
-
       CanvasDevice::paint(canvas, context, |device| {
         painter.paint_normal_box_shadows(Point::ZERO, device);
       })?;
@@ -144,7 +150,7 @@ fn draw_cell_background(
   };
 
   within_cell(canvas, transform, background.cell, |canvas| {
-    draw_background(&part_context, canvas, part_layout, None)
+    draw_background(&BoxPainter::new(&part_context, part_layout), canvas, None)
   })
 }
 
@@ -931,12 +937,11 @@ impl GlyphDevice for CanvasDevice<'_> {
 }
 
 pub(crate) fn draw_background(
-  context: &RenderContext,
+  painter: &BoxPainter<'_>,
   canvas: &mut Canvas,
-  layout: Layout,
   text_clip: Option<&TextClip>,
 ) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
+  let context = painter.context();
   let background = painter.background();
   let mut device = CanvasDevice::of(canvas, context);
 
@@ -1151,16 +1156,6 @@ fn draw_clipped_background(
   }
 
   Ok(())
-}
-
-pub(crate) fn draw_border(
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  CanvasDevice::paint(canvas, context, |device| {
-    BoxPainter::new(context, layout).paint_border(Point::ZERO, device);
-  })
 }
 
 /// A box's outline and the device state it paints with, kept until the box's children are done.

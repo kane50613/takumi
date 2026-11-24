@@ -109,8 +109,8 @@ impl BoxPainter<'_> {
   /// box.
   pub fn paint_inset_box_shadows<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let shadows = self.shadows().inset;
-    let (offset, size) = self.snapped.contoured_inset(self.layout.border, false);
-    let unsnapped = ClipBox::padding_box(*self.border(), self.layout);
+    let (offset, size) = self.snapped.contoured_inset(self.layout().border, false);
+    let unsnapped = ClipBox::padding_box(*self.border(), self.layout());
     let padding_box = ClipBox {
       offset,
       size,

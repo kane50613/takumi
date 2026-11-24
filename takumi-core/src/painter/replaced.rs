@@ -26,7 +26,7 @@ impl BoxPainter<'_> {
   /// Places replaced content of `intrinsic` size in the box by `object-fit` and
   /// `object-position`, snapped to pixels as Blink's `ImagePainter::PaintIntoRect` draws it.
   pub fn replaced_content(&self, intrinsic: Size<f32>) -> ReplacedContent {
-    let layout = self.layout;
+    let layout = self.layout();
     let content_box = ClipBox::content_box(*self.border(), layout);
     let unsnapped = ReplacedPlacement::new(self.context, content_box.size, intrinsic);
     let content_offset = layout.content_box_offset();

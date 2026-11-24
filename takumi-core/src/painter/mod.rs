@@ -28,14 +28,18 @@ pub use self::{
 
 use crate::{
   context::RenderContext,
+  error::Result,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
     border::{BorderDash, BorderProperties},
     clip::push_ellipse,
     decoration::{ClipBox, ContourOrigin, OutlineGeometry},
+    layout_view::LayoutView,
+    tree::StitchedFragment,
   },
+  scene::NodePaint,
   shadow::SizedShadow,
-  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
+  style::{Affine, BoxShadow, Color, FillRule, Overflow, SpacePair},
 };
 
 /// How far a layer's paint can reach: a rectangle of `size` at the origin under `transform`, as
@@ -398,7 +402,8 @@ pub struct BoxShadows {
 /// Everything a backend needs to paint one box, decided once.
 pub struct BoxPainter<'c> {
   context: &'c RenderContext,
-  layout: ComputedLayout,
+  /// The fragment it paints, placed in its box's fragments stitched together.
+  fragment: StitchedFragment,
   border: BorderProperties,
   /// The border box its decorations paint in.
   snapped: SnappedBox,
@@ -407,9 +412,27 @@ pub struct BoxPainter<'c> {
 impl<'c> BoxPainter<'c> {
   /// Prepares the box at `layout` for painting.
   pub fn new(context: &'c RenderContext, layout: ComputedLayout) -> Self {
+    Self::of_fragment(context, StitchedFragment::unbroken(layout))
+  }
+
+  /// Prepares the fragment `paint` paints, from `results`, for painting in `context`.
+  pub fn of(
+    results: LayoutView<'_>,
+    paint: &NodePaint,
+    context: &'c RenderContext,
+  ) -> Result<Self> {
+    Ok(Self::of_fragment(
+      context,
+      paint.stitched_fragment(results)?,
+    ))
+  }
+
+  fn of_fragment(context: &'c RenderContext, fragment: StitchedFragment) -> Self {
+    let layout = fragment.layout;
+
     Self {
       context,
-      layout,
+      fragment,
       border: BorderProperties::from_context(context, layout.size, layout.border),
       snapped: SnappedBox::new(context.box_paint_offset(layout), layout.size),
     }
@@ -431,6 +454,11 @@ impl<'c> BoxPainter<'c> {
     self.context
   }
 
+  /// The layout of the box it paints.
+  pub fn layout(&self) -> ComputedLayout {
+    self.fragment.layout
+  }
+
   /// The box's border geometry, corners included.
   pub fn border(&self) -> &BorderProperties {
     &self.border
@@ -439,16 +467,16 @@ impl<'c> BoxPainter<'c> {
   /// The area the box clips its background to, per `background-clip`, relative to the snapped
   /// border box.
   pub fn background_clip(&self) -> BackgroundClipArea {
-    BackgroundClipArea::new(self.context, self.layout, self.border, &self.snapped)
+    BackgroundClipArea::new(self.context, self.layout(), self.border, &self.snapped)
   }
 
   /// The box's background, resolved.
   pub fn background(&self) -> BoxBackground<'c> {
-    BoxBackground::new(
+    BoxBackground::of_fragment(
       self.context,
-      self.layout,
+      self.fragment,
       self.border,
-      self.context.box_paint_offset(self.layout),
+      self.context.box_paint_offset(self.layout()),
     )
   }
 
@@ -492,7 +520,7 @@ impl<'c> BoxPainter<'c> {
         *shadow,
         &self.context.sizing,
         self.context.current_color,
-        self.layout.size,
+        self.layout().size,
       )
     };
     let visible = |shadow: &SizedShadow| shadow.color.0[3] != 0;
@@ -527,7 +555,7 @@ impl<'c> BoxPainter<'c> {
 
     style.misc1_data.clip_path.as_ref()?.fill_shape(
       self.context,
-      self.layout.size,
+      self.layout().size,
       style.misc_inherited_data.clip_rule,
     )
   }
@@ -551,11 +579,7 @@ impl<'c> BoxPainter<'c> {
       .resolve(current_color)
       .0[3]
       != 0
-      || style
-        .background_data
-        .background_image
-        .as_deref()
-        .is_some_and(|images| images.iter().any(BackgroundImage::paints));
+      || style.has_background_image();
     let shadows = self.shadows();
 
     (background && self.background_clip().shape(self.snapped.size()).is_some())

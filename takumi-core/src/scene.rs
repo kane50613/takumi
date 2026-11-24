@@ -80,6 +80,14 @@ impl NodePaint {
       None => results.fragment_layout(self.node_id, self.fragment_index),
     }
   }
+
+  /// The fragment it paints placed in its box's fragments stitched together, from `results`.
+  pub(crate) fn stitched_fragment(&self, results: LayoutView<'_>) -> Result<StitchedFragment> {
+    match &self.inline_layer {
+      Some(layer) => Ok(StitchedFragment::unbroken(layer.layout)),
+      None => results.stitched_fragment(self.node_id, self.fragment_index),
+    }
+  }
 }
 
 /// Device-space integer bounds of a node or stacking context's paint output.

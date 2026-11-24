@@ -2,7 +2,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
-  painter::{OwnContent, TableDecorations, TextClip, paint_collapsed_borders},
+  painter::{BoxPainter, OwnContent, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
 use tiny_skia::PixmapMut;
@@ -126,7 +126,12 @@ impl ScenePainter<'_, '_> {
         let text_clip = TextClip::of(root, results, chunk.node, context)?;
         let table = TableDecorations::of(root, results, chunk.node)?;
 
-        draw_table_box_shell(context, canvas, layout, text_clip.as_ref(), table)
+        draw_table_box_shell(
+          &BoxPainter::of(results, chunk.node, context)?,
+          canvas,
+          text_clip.as_ref(),
+          table,
+        )
       }
       ChunkPart::CollapsedBorders if node.paints_collapsed_borders() => {
         let mut result = Ok(());

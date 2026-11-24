@@ -278,10 +278,11 @@ impl Emitter<'_> {
     }
   }
 
-  /// Paints shadows, backgrounds, and borders in CSS order.
+  /// Paints the shadows, backgrounds, and borders of the box `painter` paints, in CSS order.
   fn emit_decorations(
     &self,
     node: &RenderNode,
+    painter: &BoxPainter<'_>,
     frame: BoxFrame,
     text_clip: Option<&TextClip>,
     table: TableDecorations,
@@ -292,19 +293,19 @@ impl Emitter<'_> {
     }
 
     match table {
-      TableDecorations::None => self.emit_box(node, frame, text_clip, true, surface),
+      TableDecorations::None => self.emit_box(node, painter, frame, text_clip, true, surface),
       TableDecorations::Cell {
         paints_border,
         clip: None,
       } => {
-        self.emit_box(node, frame, text_clip, paints_border, surface);
+        self.emit_box(node, painter, frame, text_clip, paints_border, surface);
       }
       TableDecorations::Cell {
         paints_border,
         clip: Some(clip),
       } => {
         self.within_cell(frame.origin, clip, surface, |surface| {
-          self.emit_box(node, frame, text_clip, paints_border, surface);
+          self.emit_box(node, painter, frame, text_clip, paints_border, surface);
         });
       }
       TableDecorations::Table {
@@ -315,7 +316,14 @@ impl Emitter<'_> {
       } => {
         let grid_frame = BoxFrame::new(grid, frame.origin + grid_offset);
 
-        self.emit_box(node, grid_frame, text_clip, paints_border, surface);
+        self.emit_box(
+          node,
+          &BoxPainter::new(&node.context, grid),
+          grid_frame,
+          text_clip,
+          paints_border,
+          surface,
+        );
         for column in columns {
           let Some(source) = node.node_at_path(&column.path) else {
             continue;
@@ -329,8 +337,6 @@ impl Emitter<'_> {
         }
       }
       TableDecorations::Part { cells } => {
-        let painter = BoxPainter::new(&node.context, frame.layout);
-
         painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
         for background in cells {
           self.emit_cell_background(node, frame, background, surface);
@@ -340,20 +346,19 @@ impl Emitter<'_> {
     }
   }
 
-  /// Emits the box's shadows, background, through `text_clip` when it has one, and its border
-  /// when `paints_border`.
+  /// Emits the shadows, background, through `text_clip` when it has one, and border when
+  /// `paints_border` of the box `painter` paints.
   fn emit_box(
     &self,
     node: &RenderNode,
+    painter: &BoxPainter<'_>,
     frame: BoxFrame,
     text_clip: Option<&TextClip>,
     paints_border: bool,
     surface: &mut Surface,
   ) {
-    let painter = BoxPainter::new(&node.context, frame.layout);
-
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
-    self.emit_background(node, frame, surface);
+    self.emit_background(node, painter, frame, surface);
     if let Some(text_clip) = text_clip {
       let painted = text_clip.paint_background(
         frame.origin,
@@ -376,10 +381,14 @@ impl Emitter<'_> {
     }
   }
 
-  /// Emits the box's background colour and image layers.
-  fn emit_background(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
-    let painter = BoxPainter::new(&node.context, frame.layout);
-
+  /// Emits the background colour and image layers of the box `painter` paints.
+  fn emit_background(
+    &self,
+    node: &RenderNode,
+    painter: &BoxPainter<'_>,
+    frame: BoxFrame,
+    surface: &mut Surface,
+  ) {
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
     self.emit_background_layers(node, &painter.background(), frame, surface);
   }
@@ -410,7 +419,12 @@ impl Emitter<'_> {
     };
 
     self.within_cell(frame.origin, background.cell, surface, |surface| {
-      self.emit_background(node, BoxFrame::new(layout, frame.origin + at), surface);
+      self.emit_background(
+        node,
+        &BoxPainter::new(&node.context, layout),
+        BoxFrame::new(layout, frame.origin + at),
+        surface,
+      );
     });
   }
 
@@ -1228,7 +1242,14 @@ impl Emitter<'_> {
     tagged: bool,
     surface: &mut Surface,
   ) {
-    self.emit_decorations(node, frame, None, TableDecorations::None, surface);
+    self.emit_decorations(
+      node,
+      &BoxPainter::new(&node.context, frame.layout),
+      frame,
+      None,
+      TableDecorations::None,
+      surface,
+    );
     if tagged {
       self.start_tagged_node(node, surface);
     }
@@ -1595,8 +1616,9 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         TextClip::of(scene.root, scene.results, chunk.node, &node.context)
           .and_then(|text_clip| {
             let table = TableDecorations::of(scene.root, scene.results, chunk.node)?;
+            let painter = BoxPainter::of(scene.results, chunk.node, &node.context)?;
 
-            emitter.emit_decorations(node, frame, text_clip.as_ref(), table, surface);
+            emitter.emit_decorations(node, &painter, frame, text_clip.as_ref(), table, surface);
             Ok(())
           })
           .map_err(PdfError::from)

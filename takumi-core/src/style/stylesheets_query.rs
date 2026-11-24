@@ -294,6 +294,15 @@ impl ComputedStyle {
       })
   }
 
+  /// Whether a `background-image` layer has anything to paint.
+  pub(crate) fn has_background_image(&self) -> bool {
+    self
+      .background_data
+      .background_image
+      .as_deref()
+      .is_some_and(|images| images.iter().any(BackgroundImage::paints))
+  }
+
   /// The local transform, in CSS Transforms 2 order around `transform-origin`.
   pub fn local_transform(&self, width: f32, height: f32, sizing: &SizingContext) -> Affine {
     let (origin_x, origin_y) = self
