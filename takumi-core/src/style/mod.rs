@@ -21,10 +21,8 @@ mod stylesheets;
 mod supports;
 pub(crate) mod tw;
 
+pub(crate) use animation::{ElementAnimations, find_keyframes};
 pub use animation::{KeyframeRule, KeyframesRule};
-pub(crate) use animation::{
-  animated_custom_properties, apply_stylesheet_animations, find_keyframes,
-};
 pub(crate) use calc::{
   parse_calc_number_expression, parse_integer_value, parse_number_value, parse_percentage_value,
 };
