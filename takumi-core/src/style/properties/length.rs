@@ -297,6 +297,11 @@ impl Length {
     self.authored_number().is_some_and(|value| value < 0.0)
   }
 
+  /// Whether the length is authored as zero. A `calc()` result counts as non-zero here.
+  pub(crate) fn is_zero(self) -> bool {
+    self.authored_number().is_some_and(|value| value == 0.0)
+  }
+
   /// The number the length is authored with, none for `auto` or a `calc()`.
   fn authored_number(self) -> Option<f32> {
     match self {

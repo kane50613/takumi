@@ -399,7 +399,6 @@ css/
 !css/CSS2/text/white-space-generated-content-before-001.xht
 !css/CSS2/text/white-space-mixed-001.xht
 !css/CSS2/text/white-space-mixed-002.xht
-!css/CSS2/text/white-space-nowrap-attribute-001.xht
 !css/CSS2/text/white-space-pre-001.xht
 !css/CSS2/text/white-space-pre-005.xht
 !css/CSS2/text/white-space-pre-006.xht

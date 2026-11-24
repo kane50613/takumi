@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>table_cell_size_attributes</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        padding: 12px;
+        font-family: Geist;
+        font-size: 14px;
+      }
+      table {
+        margin-bottom: 8px;
+        border: 1px solid rgb(34, 197, 94);
+      }
+      td,
+      th {
+        border: 1px solid rgb(59, 130, 246);
+        background-color: rgb(219, 234, 254);
+      }
+      .narrow {
+        width: 100px;
+      }
+      .author-width {
+        width: 60px;
+      }
+    </style>
+  </head>
+  <body style="width: 420px; height: 380px">
+    <div class="root">
+      <table>
+        <tr>
+          <td width="120">120</td>
+          <td>Auto</td>
+        </tr>
+      </table>
+      <table style="width: 100%">
+        <tr>
+          <td width="25%">25%</td>
+          <td>Auto</td>
+        </tr>
+      </table>
+      <table style="width: 100%">
+        <tr>
+          <td width="0">Zero</td>
+          <td width="">Empty</td>
+          <td width="abc">Invalid</td>
+        </tr>
+      </table>
+      <table>
+        <tr>
+          <th height="48">48</th>
+          <td width="80.5px">80.5px</td>
+        </tr>
+      </table>
+      <table class="narrow">
+        <tr>
+          <td nowrap>No wrap across this line</td>
+        </tr>
+      </table>
+      <table class="narrow">
+        <tr>
+          <td>Wraps across this line</td>
+        </tr>
+      </table>
+      <table>
+        <tr>
+          <td width="200" class="author-width">Author</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>
