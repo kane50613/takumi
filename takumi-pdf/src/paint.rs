@@ -361,7 +361,7 @@ pub(crate) fn opaque_runs(
   }
   runs.extend(start.map(|start| [start, after]));
 
-  if !repeating {
+  if !repeating || runs.is_empty() {
     return Some(clamp_runs(runs, axis_length));
   }
 
@@ -594,6 +594,14 @@ mod tests {
     assert_eq!(
       opaque_runs(&late, true, 45.0),
       Some(vec![[0.0, 10.0], [20.0, 30.0], [40.0, 46.0]])
+    );
+  }
+
+  #[test]
+  fn a_clear_repeating_gradient_has_no_runs_to_tile() {
+    assert_eq!(
+      opaque_runs(&[(0.0, CLEAR), (0.000_001, CLEAR)], true, 1000.0),
+      Some(Vec::new())
     );
   }
 
