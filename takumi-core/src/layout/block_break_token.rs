@@ -69,6 +69,18 @@ impl BlockBreakToken {
       .unwrap_or(LayoutUnit::ZERO)
   }
 
+  /// The boxes it resumes inside it, a block in an inline among them through the break token of
+  /// its line, as Blink's `InlineBreakToken::GetBlockBreakToken` carries it.
+  pub(crate) fn child_block_break_tokens(&self) -> impl Iterator<Item = &Self> {
+    self
+      .child_break_tokens
+      .iter()
+      .filter_map(|child| match child {
+        BreakToken::Block(child) => Some(&**child),
+        BreakToken::Inline(line) => line.block_break_token.as_deref(),
+      })
+  }
+
   /// Whether the break, or one inside a box it resumes, is forced.
   pub(crate) fn has_forced_break(&self) -> bool {
     self.is_forced_break

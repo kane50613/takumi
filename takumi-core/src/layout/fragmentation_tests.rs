@@ -2186,6 +2186,49 @@ fn a_resumed_absolute_box_keeps_its_pages_open_until_it_ends() {
   }
 }
 
+/// A block inside a span paints a background image, its continuation carried by the line's break
+/// token: in flow, or in an absolute box the page areas resume. It keeps its pages open until it
+/// ends, as a block among blocks does. One painting a colour leaves them alone.
+#[test]
+fn a_block_in_inline_keeps_its_pages_open_until_it_ends() {
+  let in_span = |background: &str| {
+    Node::container([block("painted", &format!("painted {background}"))]).with_class_name("inline")
+  };
+
+  for (background, finalized) in [("gradient", [0, 0, 3]), ("red", [1, 2, 3])] {
+    let tree = render(
+      root([Node::container([in_span(background)]).with_class_name("block")]),
+      BLOCK_IN_INLINE_BACKGROUND_CSS,
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "in flow, {background}"
+    );
+  }
+  for (background, finalized) in [("gradient", [0, 0, 3, 4, 5]), ("red", [1, 2, 3, 4, 5])] {
+    let tree = render(
+      root([
+        Node::container([in_span(background)]).with_class_name("block absolute"),
+        block("flow", "flow"),
+      ]),
+      BLOCK_IN_INLINE_BACKGROUND_CSS,
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "resumed, {background}"
+    );
+  }
+}
+
+const BLOCK_IN_INLINE_BACKGROUND_CSS: &str = ".inline { display: inline } \
+  .painted { height: 300px } .gradient { background: linear-gradient(red, blue) } \
+  .red { background: red } .absolute { position: absolute; top: 0; width: 100px } \
+  .flow { height: 500px }";
+
 /// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
 /// shapes the corners on every page. A square clip leaves them alone.
 #[test]

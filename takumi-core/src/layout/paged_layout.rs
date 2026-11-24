@@ -320,7 +320,9 @@ impl<'r> PagedLayout<'r> {
       self.pin_pending_boxes(token, &mut chain, &mut pinned);
     }
     if let Some(token) = self.page_areas.break_token() {
-      self.pin_resumed_out_of_flow(token, &mut chain, &mut pinned);
+      for child in token.child_block_break_tokens() {
+        self.pin_stitched_boxes(child, &mut chain, &mut pinned);
+      }
     }
     pinned
   }
@@ -346,7 +348,8 @@ impl<'r> PagedLayout<'r> {
 
   // A box a containing block holds back, or placed from the block's start in a later fragment,
   // keeps the block's first page open until it is laid out. A box clipping to rounded corners, or
-  // painting a background image, keeps its own first page open until it ends.
+  // painting a background image, keeps its own first page open until it ends, and so does a block
+  // in an inline, which its line's break token resumes.
   fn pin_pending_boxes(
     &self,
     token: &BlockBreakToken,
@@ -366,43 +369,43 @@ impl<'r> PagedLayout<'r> {
     }
 
     for child in &token.child_break_tokens {
-      let BreakToken::Block(child) = child else {
-        continue;
-      };
-
-      if child.held_static_position.is_some() {
-        *pinned = (*pinned).min(self.start_page(chain));
-      } else {
-        chain.push(child.node);
-        self.pin_pending_boxes(child, chain, pinned);
-        chain.pop();
+      match child {
+        BreakToken::Block(child) if child.held_static_position.is_some() => {
+          *pinned = (*pinned).min(self.start_page(chain));
+        }
+        BreakToken::Block(child) => {
+          chain.push(child.node);
+          self.pin_pending_boxes(child, chain, pinned);
+          chain.pop();
+        }
+        BreakToken::Inline(line) => {
+          if let Some(block) = line.block_break_token.as_deref() {
+            self.pin_stitched_boxes(block, chain, pinned);
+          }
+        }
       }
     }
   }
 
-  /// Keeps the first page of a box the page areas resume, or of a box inside it, open until the box
-  /// ends when its stitched box shapes its paint, as [`Self::pin_pending_boxes`] does in flow.
-  fn pin_resumed_out_of_flow(
+  /// Keeps the first page of the box `token` resumes, and of each box inside it, open until the box
+  /// ends when its stitched box shapes its paint.
+  fn pin_stitched_boxes(
     &self,
     token: &BlockBreakToken,
     chain: &mut Vec<NodeId>,
     pinned: &mut usize,
   ) {
-    for child in &token.child_break_tokens {
-      let BreakToken::Block(child) = child else {
-        continue;
-      };
-
-      if child.is_break_before {
-        continue;
-      }
-      chain.push(child.node);
-      if self.paints_by_stitched_box(child.node) {
-        *pinned = (*pinned).min(self.start_page(chain));
-      }
-      self.pin_resumed_out_of_flow(child, chain, pinned);
-      chain.pop();
+    if token.is_break_before {
+      return;
     }
+    chain.push(token.node);
+    if self.paints_by_stitched_box(token.node) {
+      *pinned = (*pinned).min(self.start_page(chain));
+    }
+    for child in token.child_block_break_tokens() {
+      self.pin_stitched_boxes(child, chain, pinned);
+    }
+    chain.pop();
   }
 
   /// Whether the height of `node`'s stitched box, unknown until its last fragment, shapes what it
