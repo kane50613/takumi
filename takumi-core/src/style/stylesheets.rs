@@ -936,32 +936,28 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
-        /// Resolves an element's style against its parent, with the declarations a cycle invalidated.
+        /// Resolves an element's style against its parent.
         pub(crate) fn inherit_element(
           self,
           parent: &ComputedStyle,
           lang: Option<Lang>,
           is_document_root: bool,
-        ) -> (ComputedStyle, InvalidDeclarations) {
-          let (mut style, invalid) = self.cascade(parent, is_document_root);
+        ) -> ComputedStyle {
+          let mut style = self.cascade(parent, is_document_root);
 
           if let Some(lang) = lang {
             style.lang = Some(lang);
           }
-          (style, invalid)
+          style
         }
 
         /// Resolves this style against a parent into a computed style.
         #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
-          self.cascade(parent, false).0
+          self.cascade(parent, false)
         }
 
-        fn cascade(
-          self,
-          parent: &ComputedStyle,
-          is_document_root: bool,
-        ) -> (ComputedStyle, InvalidDeclarations) {
+        fn cascade(self, parent: &ComputedStyle, is_document_root: bool) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
           let mut declared_custom_properties = Vec::new();
@@ -1040,7 +1036,7 @@ macro_rules! define_style {
             }
             declaration.apply_with_parent(&mut style, parent);
           }
-          (style, invalid)
+          style
         }
       }
 
@@ -2557,53 +2553,6 @@ impl ComputedStyle {
     for longhand in longhands.iter() {
       self.copy_longhand(longhand, source);
     }
-  }
-}
-
-impl Style {
-  /// The `animation` longhands its declarations set through `var()` of one of the custom
-  /// properties `names`, directly or through a custom property it declares.
-  pub(crate) fn animation_longhands_reading(&self, names: &[&str]) -> PropertyMask {
-    const ANIMATION: [LonghandId; 8] = [
-      LonghandId::AnimationName,
-      LonghandId::AnimationDuration,
-      LonghandId::AnimationDelay,
-      LonghandId::AnimationTimingFunction,
-      LonghandId::AnimationIterationCount,
-      LonghandId::AnimationDirection,
-      LonghandId::AnimationFillMode,
-      LonghandId::AnimationPlayState,
-    ];
-
-    let aliases: Vec<(String, String)> = self
-      .declarations
-      .declarations
-      .iter()
-      .filter_map(|declaration| match declaration {
-        StyleDeclaration::CustomProperty(name, value) => Some((name.clone(), value.clone())),
-        _ => None,
-      })
-      .collect();
-
-    self
-      .declarations
-      .declarations
-      .iter()
-      .filter_map(StyleDeclaration::deferred)
-      .filter(|deferred| {
-        names
-          .iter()
-          .any(|name| reads(&deferred.specified_value, name, &aliases))
-      })
-      .flat_map(|deferred| {
-        deferred
-          .property
-          .target_longhands()
-          .iter()
-          .collect::<Vec<_>>()
-      })
-      .filter(|longhand| ANIMATION.contains(longhand))
-      .collect()
   }
 }
 

@@ -41,106 +41,139 @@ pub struct KeyframesRule {
   pub media_queries: Vec<MediaQueryList>,
 }
 
-/// Applies a stylesheet's matching animations of `longhands` to a style at the given time.
-pub(crate) fn apply_stylesheet_animations(
-  mut base_style: ComputedStyle,
-  stylesheet: &StyleSheet,
-  time: u64,
-  sizing: &SizingContext,
-  current_color: Color,
-  longhands: &PropertyMask,
-) -> ComputedStyle {
-  let animations: Vec<ActiveAnimation> =
-    active_animations(&base_style, stylesheet, time, sizing.viewport)
-      .filter(|animation| animation.keyframes.animates(longhands))
-      .collect();
-
-  if animations.is_empty() {
-    return base_style;
-  }
-
-  let base_snapshot = base_style.clone();
-
-  for animation in animations {
-    let resolved_frames = resolve_keyframes(&animation.keyframes, &base_snapshot);
-    let Some(segment) =
-      sample_keyframe_segment(&resolved_frames, &base_snapshot, animation.sample.progress)
-    else {
-      continue;
-    };
-
-    let eased_progress = animation
-      .timing_function
-      .apply(segment.progress, animation.sample.before);
-    let mut animated_properties = segment.animated_properties;
-
-    animated_properties.intersect(longhands);
-    base_style.apply_interpolated_properties(
-      segment.from_style,
-      segment.to_style,
-      &animated_properties,
-      eased_progress,
-      sizing,
-      current_color,
-    );
-  }
-
-  base_style
+/// The animations an element runs at a render's time, decided from its style before they apply,
+/// as Blink's `CSSAnimations` decides them from the base style.
+pub(crate) struct ElementAnimations<'s> {
+  animations: Vec<ActiveAnimation<'s>>,
 }
 
-/// The custom properties the stylesheet's animations set on `base_style` at `time`, each after
-/// the earlier animations that set it: a registered one interpolated as its syntax types it, any
-/// other switching half way, as css-variables-1 animates one.
-/// <https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties>
-pub(crate) fn animated_custom_properties(
-  base_style: &ComputedStyle,
-  stylesheet: &StyleSheet,
-  time: u64,
-  sizing: &SizingContext,
-  current_color: Color,
-) -> Vec<(String, String)> {
-  let mut animated = Vec::new();
+impl<'s> ElementAnimations<'s> {
+  /// The animations `base_style` runs at `time`, or `None` when it runs none.
+  pub(crate) fn new(
+    base_style: &ComputedStyle,
+    stylesheet: &'s StyleSheet,
+    time: u64,
+    viewport: Viewport,
+  ) -> Option<Self> {
+    let animations: Vec<ActiveAnimation> =
+      active_animations(base_style, stylesheet, time, viewport).collect();
 
-  for animation in active_animations(base_style, stylesheet, time, sizing.viewport) {
-    for name in animation.keyframes.custom_property_names() {
-      let (from, to, progress) = animation.keyframes.custom_property_segment(
-        name,
-        base_style.custom_properties.get(name),
-        animation.sample.progress,
-      );
-      let resolve = |value: Option<&str>| {
-        value.map(|value| {
-          resolve_var_references(value, &base_style.custom_properties)
-            .unwrap_or_else(|| value.to_owned())
-        })
-      };
-      let (from, to) = (resolve(from), resolve(to));
-      let progress = animation
-        .timing_function
-        .apply(progress, animation.sample.before);
-      let interpolated = from.as_deref().zip(to.as_deref()).and_then(|(from, to)| {
-        base_style
-          .custom_properties
-          .registration(name)?
-          .syntax
-          .interpolate(from, to, progress, sizing, current_color)
-      });
-      // An endpoint no keyframe and no underlying value gives is the guaranteed-invalid value,
-      // which `initial` declares.
-      let value = interpolated
-        .or_else(|| discrete(&from, &to, progress))
-        .unwrap_or_else(|| "initial".to_owned());
-
-      animated.push((name.to_owned(), value));
-    }
+    (!animations.is_empty()).then_some(Self { animations })
   }
 
-  animated
+  /// The longhands a keyframe of an animation declares.
+  pub(crate) fn longhands(&self) -> PropertyMask {
+    let mut longhands = PropertyMask::new();
+
+    for animation in &self.animations {
+      longhands.union(&animation.longhands);
+    }
+    longhands
+  }
+
+  /// `style` with the animations of `longhands` applied, a keyframe that leaves a longhand out
+  /// taking its value in `style`.
+  pub(crate) fn apply(
+    &self,
+    mut style: ComputedStyle,
+    longhands: &PropertyMask,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> ComputedStyle {
+    let mut animations = self
+      .animations
+      .iter()
+      .filter(|animation| animation.longhands.intersects(longhands))
+      .peekable();
+
+    if animations.peek().is_none() {
+      return style;
+    }
+
+    let base_snapshot = style.clone();
+
+    for animation in animations {
+      let resolved_frames = resolve_keyframes(&animation.keyframes, &base_snapshot);
+      let Some(segment) =
+        sample_keyframe_segment(&resolved_frames, &base_snapshot, animation.sample.progress)
+      else {
+        continue;
+      };
+
+      let eased_progress = animation
+        .timing_function
+        .apply(segment.progress, animation.sample.before);
+      let mut animated_properties = segment.animated_properties;
+
+      animated_properties.intersect(longhands);
+      style.apply_interpolated_properties(
+        segment.from_style,
+        segment.to_style,
+        &animated_properties,
+        eased_progress,
+        sizing,
+        current_color,
+      );
+    }
+
+    style
+  }
+
+  /// The custom properties the animations set on `style`, each after the earlier animations that
+  /// set it: a registered one interpolated as its syntax types it, any other switching half way,
+  /// as css-variables-1 animates one.
+  /// <https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties>
+  pub(crate) fn custom_properties(
+    &self,
+    style: &ComputedStyle,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Vec<(String, String)> {
+    let mut animated = Vec::new();
+
+    for animation in &self.animations {
+      for name in animation.keyframes.custom_property_names() {
+        let (from, to, progress) = animation.keyframes.custom_property_segment(
+          name,
+          style.custom_properties.get(name),
+          animation.sample.progress,
+        );
+        let resolve = |value: Option<&str>| {
+          value.map(|value| {
+            resolve_var_references(value, &style.custom_properties)
+              .unwrap_or_else(|| value.to_owned())
+          })
+        };
+        let (from, to) = (resolve(from), resolve(to));
+        let progress = animation
+          .timing_function
+          .apply(progress, animation.sample.before);
+        let interpolated = from.as_deref().zip(to.as_deref()).and_then(|(from, to)| {
+          style
+            .custom_properties
+            .registration(name)?
+            .syntax
+            .interpolate(from, to, progress, sizing, current_color)
+        });
+        // An endpoint no keyframe and no underlying value gives is the guaranteed-invalid value,
+        // which `initial` declares.
+        let value = interpolated
+          .or_else(|| discrete(&from, &to, progress))
+          .unwrap_or_else(|| "initial".to_owned());
+
+        animated.push((name.to_owned(), value));
+      }
+    }
+
+    animated
+  }
 }
 
 /// An animation `animation-name` runs that is sampled at the render's time.
 struct ActiveAnimation<'s> {
   keyframes: Cow<'s, KeyframesRule>,
+  /// The longhands its keyframes declare.
+  longhands: PropertyMask,
   sample: AnimationSample,
   timing_function: AnimationTimingFunction,
 }
@@ -172,6 +205,7 @@ fn active_animations<'s>(
       )?;
 
       Some(ActiveAnimation {
+        longhands: keyframes.longhands(),
         keyframes,
         sample,
         timing_function: repeated_list_value(&animation.animation_timing_function, index),
@@ -269,13 +303,18 @@ impl KeyframesRule {
     (from, to, local)
   }
 
-  /// Whether a keyframe declares one of `longhands`.
-  fn animates(&self, longhands: &PropertyMask) -> bool {
-    self
+  /// The longhands its keyframes declare.
+  fn longhands(&self) -> PropertyMask {
+    let mut longhands = PropertyMask::new();
+
+    for declaration in self
       .keyframes
       .iter()
       .flat_map(|keyframe| keyframe.declarations.iter())
-      .any(|declaration| declaration.affected_longhands().intersects(longhands))
+    {
+      longhands.union(&declaration.affected_longhands());
+    }
+    longhands
   }
 
   /// Whether a keyframe declares a custom property.
@@ -787,16 +826,9 @@ mod tests {
     };
 
     let at = |time: u64| {
-      apply_stylesheet_animations(
-        style.clone(),
-        &stylesheet,
-        time,
-        &sizing(),
-        current_color(),
-        &PropertyMask::new().complement(),
-      )
-      .surround_data
-      .corner_top_left_shape
+      animate(style.clone(), &stylesheet, time)
+        .surround_data
+        .corner_top_left_shape
     };
 
     assert_eq!(at(0), Superellipse::SQUIRCLE);
@@ -828,16 +860,18 @@ mod tests {
       }),
       ..Default::default()
     };
-    let animated = apply_stylesheet_animations(
-      style,
-      &stylesheet,
-      0,
-      &sizing(),
-      current_color(),
-      &PropertyMask::new().complement(),
-    );
+    let animated = animate(style, &stylesheet, 0);
 
     assert_eq!(animated.svg_data.opacity.0, 0.5);
+  }
+
+  /// `style` with every animation it runs at `time` applied.
+  fn animate(style: ComputedStyle, stylesheet: &StyleSheet, time: u64) -> ComputedStyle {
+    let animations = ElementAnimations::new(&style, stylesheet, time, sizing().viewport)
+      .expect("an animation runs");
+    let longhands = animations.longhands();
+
+    animations.apply(style, &longhands, &sizing(), current_color())
   }
 
   fn sizing() -> SizingContext {
