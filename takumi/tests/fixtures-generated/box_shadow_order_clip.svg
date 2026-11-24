@@ -35,7 +35,7 @@
       <feGaussianBlur stdDeviation="8"/>
     </filter>
     <g filter="url(#bl5)">
-      <path d="M785 180h280.5v280.5h-280.5v-280.5Zm75.5 35.5h140c22.09 0 40 17.91 40 40v140c0 22.09-17.91 40-40 40h-140c-22.09 0-40-17.91-40-40v-140c0-22.09 17.91-40 40-40Z" fill="#0f172a" fill-opacity=".6" fill-rule="evenodd"/>
+      <path d="M768 163h314.5v314.5h-314.5v-314.5Zm92.5 52.5h140c22.09 0 40 17.91 40 40v140c0 22.09-17.91 40-40 40h-140c-22.09 0-40-17.91-40-40v-140c0-22.09 17.91-40 40-40Z" fill="#0f172a" fill-opacity=".6" fill-rule="evenodd"/>
     </g>
   </g>
 </svg>
