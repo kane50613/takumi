@@ -10,6 +10,7 @@
     "nitro",
     "astro",
     "cloudflare-workers",
+    "void",
     "bun-compile"
   ]
 }
