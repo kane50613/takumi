@@ -3422,31 +3422,23 @@ impl RenderContext {
       declarations
         .cascaded(Vec::new())
         .inherit_element(&inherited_parent, lang, is_document_root);
-    let (mut style, font_size_basis) = match ElementAnimations::new(
+    let mut style = match ElementAnimations::new(
       &base,
       self.stylesheet(),
       self.time_ms(),
       self.sizing.viewport,
     ) {
-      Some(animations) => {
-        let (style, sizing) = self.animated_style(
-          base,
-          &animations,
-          &important,
-          recascade,
-          &inherited_parent,
-          (lang, is_document_root),
-        );
-
-        (style, Some(sizing))
-      }
-      None => (base, None),
+      Some(animations) => self.animated_style(
+        base,
+        &animations,
+        &important,
+        recascade,
+        &inherited_parent,
+        (lang, is_document_root),
+      ),
+      None => base,
     };
-    let sizing = self.child_sizing(
-      &style,
-      font_size_basis.as_ref().unwrap_or(&self.sizing),
-      is_document_root,
-    );
+    let sizing = self.child_sizing(&style, &self.sizing, is_document_root);
     style.make_computed(&sizing);
     let current_color = style.inherited_data.color.resolve(self.current_color);
 
@@ -3458,11 +3450,11 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// Blink's `StyleCascade::Apply` with `animations` cascading as the animation origin, and the
-  /// sizing they sampled against. They cascade above the element's normal declarations and below
-  /// its important ones, which hide the animations of their longhands. The high-priority longhands
-  /// apply first, so the others interpolate in the colour scheme they give. An animated custom
-  /// property cascades through `declarations` again.
+  /// Blink's `StyleCascade::Apply` with `animations` cascading as the animation origin. They
+  /// cascade above the element's normal declarations and below its important ones, which hide the
+  /// animations of their longhands. The high-priority longhands apply first, against the parent,
+  /// so the others interpolate in the colour scheme, colour, and font those give. An animated
+  /// custom property cascades through `declarations` again.
   fn animated_style(
     &self,
     base: ComputedStyle,
@@ -3471,17 +3463,26 @@ impl RenderContext {
     declarations: Option<ElementDeclarations>,
     inherited_parent: &ComputedStyle,
     (lang, is_document_root): (Option<Lang>, bool),
-  ) -> (ComputedStyle, SizingContext) {
+  ) -> ComputedStyle {
     let mut animated = animations.longhands();
 
     animated.difference(important);
 
-    let mut high_priority = LonghandId::high_priority();
+    let [scheme, fonts] = LonghandId::high_priority().map(|mut group| {
+      group.intersect(&animated);
+      group
+    });
+    let mut style = animations.apply(base, &scheme, &self.sizing, self.current_color);
+    let parent_sizing = self
+      .sizing
+      .clone()
+      .with_color_scheme(self.used_color_scheme(&style));
 
-    high_priority.intersect(&animated);
+    style = animations.apply(style, &fonts, &parent_sizing, self.current_color);
 
-    let mut style = animations.apply(base, &high_priority, &self.sizing, self.current_color);
+    let mut high_priority = scheme;
 
+    high_priority.union(&fonts);
     if let Some(declarations) = declarations {
       let sizing = self.child_sizing(&style, &self.sizing, false);
       let custom_properties =
@@ -3504,10 +3505,7 @@ impl RenderContext {
     let current_color = self.child_current_color(&style, &sizing);
 
     animated.difference(&high_priority);
-    (
-      animations.apply(style, &animated, &sizing, current_color),
-      sizing,
-    )
+    animations.apply(style, &animated, &sizing, current_color)
   }
 
   /// The colour scheme a child with `style` uses.
