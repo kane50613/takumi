@@ -3,7 +3,7 @@ title: Void
 description: Return Open Graph images from Void routes written in Hono JSX, on Cloudflare or on the Node.js target.
 ---
 
-[Void](https://void.cloud) routes run on Hono. Takumi draws Hono JSX as the HTML that Hono's `c.html()` would send, so a route returns an `ImageResponse` with no adapter package. On Cloudflare, Takumi runs on its WebAssembly backend. On the Node.js target, it runs on its native addon.
+[Void](https://void.cloud) routes run on Hono, and Takumi renders Hono JSX as Hono does, so a route can return an `ImageResponse` with no adapter.
 
 <Steps>
   <Step>
@@ -17,7 +17,7 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
   <Step>
     ### Use Hono's JSX in routes
 
-    Skip this step if your app already sets `importSource` to `hono/jsx`. An app on React can keep React's JSX, which Takumi renders as well.
+    Skip this step if your app already uses `hono/jsx` or React.
 
     ```ts title="vite.config.ts"
     import { defineConfig } from "vite-plus";
@@ -32,8 +32,6 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
   </Step>
   <Step>
     ### Create the route
-
-    A handler can return a `Response`, so return the `ImageResponse` directly.
 
     ```tsx title="routes/og.tsx"
     import { ImageResponse } from "takumi-js/response";
@@ -60,8 +58,6 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
     });
     ```
 
-    Hono escapes `title` as it renders the JSX, so a request cannot inject markup through it.
-
   </Step>
   <Step>
     ### Request the image
@@ -73,7 +69,7 @@ description: Return Open Graph images from Void routes written in Hono JSX, on C
 
 ## Load data while rendering
 
-An async component can fetch or query what the image shows. Takumi waits for it, as `c.html()` does, so a `Suspense` boundary shows its children, not its fallback. Context and `ErrorBoundary` work as they do in Hono too:
+Takumi waits for async components, so a `Suspense` boundary draws its children, not its fallback:
 
 ```tsx title="routes/og/[slug].tsx"
 import { Suspense } from "hono/jsx/streaming";
@@ -104,11 +100,11 @@ export const GET = defineHandler((c) => {
 });
 ```
 
-Hono's `html` template from `hono/html` works too, with its values escaped and awaited.
+Context, `ErrorBoundary`, and the `html` template from `hono/html` work too.
 
 ## Draw text in other scripts
 
-The built-in Geist font covers Latin text. Characters no font covers draw as boxes, and Takumi prints a warning that names them. To draw them, load a font only when the image needs it with `loadFallbackFonts`. This route downloads the Japanese characters of its title from Google Fonts:
+The built-in Geist font covers Latin text. For other characters, `loadFallbackFonts` downloads only the ones the image needs:
 
 ```tsx title="routes/og.tsx"
 import { googleFonts } from "takumi-js/helpers";
@@ -127,14 +123,14 @@ export const GET = defineHandler((c) => {
 });
 ```
 
-Takumi keeps the files it downloads in a store that later renders share, so a later render that needs the same file skips the download. See [Fonts](/docs/fonts#load-fonts-for-missing-characters) for choosing families and handling fonts that fail to download.
+Later renders reuse the downloaded files. See [Fonts](/docs/fonts#load-fonts-for-missing-characters) for more.
 
 ## Deploy
 
-On Cloudflare, `void deploy` bundles Takumi's WebAssembly binary into the Worker, where it makes up most of the size. See [Cloudflare Workers](/docs/frameworks/cloudflare-workers#size-and-limits) for its size and the limits to check.
+On Cloudflare, Takumi's WebAssembly binary makes up most of the Worker. See [Cloudflare Workers](/docs/frameworks/cloudflare-workers#size-and-limits) for its size limits.
 
-On the [Node.js target](https://void.cloud/integrations/nodejs-bun-deno), keep `takumi-js` in your app's `dependencies`. The build then leaves `takumi-js` out of `dist/ssr`, and Node loads it from `node_modules` at runtime, with the native addon for the server's platform. Run `npm install` where the server runs, so it installs the addon for that platform rather than the one you built on.
+On the [Node.js target](https://void.cloud/integrations/nodejs-bun-deno), keep `takumi-js` in `dependencies` and run `npm install` on the server, so it gets the native addon for that platform.
 
 ## Next steps
 
-Style the image with [Styles](/docs/styles), load fonts with [Fonts](/docs/fonts), and see [`ImageResponse`](/docs/reference/image-response) for every option.
+See [Styles](/docs/styles), [Fonts](/docs/fonts), and [`ImageResponse`](/docs/reference/image-response).
