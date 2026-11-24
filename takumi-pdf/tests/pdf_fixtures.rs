@@ -7720,3 +7720,83 @@ fn a_repeated_svg_image_keeps_each_host_color() {
   assert_eq!(fills("0 0 1 rg"), 1);
   assert_eq!(fills("0 0 0 rg"), 1);
 }
+
+/// Noto Sans Arabic (SIL OFL 1.1) with an added `kern` lookup between `space` and each letter.
+fn arabic_space_kern_fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/noto-sans/noto-sans-arabic-space-kern.subset.ttf"),
+  )
+  .expect("read arabic font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load arabic font");
+  fonts
+}
+
+/// The `/ActualText` of every span in `pdf`, in order.
+fn actual_texts(pdf: &[u8]) -> Vec<String> {
+  inflated_text(pdf)
+    .split("/ActualText")
+    .skip(1)
+    .filter_map(|span| span.split('>').next().map(str::to_string))
+    .collect()
+}
+
+/// A right-to-left paragraph that wraps after a space the font kerns.
+fn wrapped_arabic_paragraph<'a>(fonts: &'a Fonts, style: &str) -> PdfOptions<'a> {
+  let html = format!(
+    r#"<html dir="rtl"><body style="font-family:Noto Sans Arabic;font-size:15px;width:130px"><p style="{style}">يلعب الأطفال في الحديقة بعد الظهر</p></body></html>"#
+  );
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse the doc"))
+    .viewport(Viewport::new((160, 120)))
+    .fonts(fonts)
+    .build()
+}
+
+#[test]
+fn a_wrapped_kerned_arabic_paragraph_renders_with_its_own_text() {
+  let fonts = arabic_space_kern_fonts();
+  let kerned = actual_texts(&run_pdf_fixture_with(
+    "wrapped-kerned-arabic",
+    &fonts,
+    |fonts| wrapped_arabic_paragraph(fonts, ""),
+  ));
+  let unkerned = actual_texts(&render_pinned(wrapped_arabic_paragraph(
+    &fonts,
+    "font-kerning:none",
+  )));
+
+  assert!(!kerned.is_empty(), "the Arabic text has no /ActualText");
+  assert_eq!(
+    kerned, unkerned,
+    "kerning changed the text the glyphs map to"
+  );
+}
+
+#[test]
+fn a_justified_wrapped_kerned_arabic_paragraph_keeps_its_text() {
+  let fonts = arabic_space_kern_fonts();
+  let start = actual_texts(&render_pinned(wrapped_arabic_paragraph(
+    &fonts,
+    "text-align:start",
+  )));
+
+  assert!(!start.is_empty(), "the Arabic text has no /ActualText");
+
+  for align in [
+    "text-align:justify",
+    "text-align:justify;text-align-last:justify",
+  ] {
+    let justified = actual_texts(&render_pinned(wrapped_arabic_paragraph(&fonts, align)));
+
+    assert_eq!(
+      justified, start,
+      "{align} changed the text the glyphs map to"
+    );
+  }
+}

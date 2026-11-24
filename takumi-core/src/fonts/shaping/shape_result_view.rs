@@ -205,6 +205,11 @@ impl<'a> PartSource<'a> {
       },
     }
   }
+
+  /// The characters `segment` takes from this source.
+  fn num_characters_in(&self, segment: &Segment<'_>) -> u32 {
+    segment.end_index.min(self.end_index) - segment.start_index.max(self.start_index)
+  }
 }
 
 /// Blink's `ShapeResultView`.
@@ -251,14 +256,24 @@ impl ShapeResultView {
       char_index_offset,
     };
 
-    if view.is_ltr() {
-      for (segment, source) in segments.iter().zip(&sources) {
-        view.populate_run_info_parts(source, segment);
-      }
-    } else {
-      for (segment, source) in segments.iter().zip(&sources).rev() {
-        view.populate_run_info_parts(source, segment);
-      }
+    let mut logical_end = 0;
+    let mut placed: SmallVec<[(&Segment<'_>, &PartSource<'_>, u32); 2]> = segments
+      .iter()
+      .zip(&sources)
+      .map(|(segment, source)| {
+        let logical_start = logical_end;
+
+        logical_end += source.num_characters_in(segment);
+        (segment, source, logical_start)
+      })
+      .collect();
+
+    if view.is_rtl() {
+      placed.reverse();
+    }
+
+    for (segment, source, logical_start) in placed {
+      view.populate_run_info_parts(source, segment, logical_start);
     }
 
     view
@@ -295,12 +310,18 @@ impl ShapeResultView {
     }])
   }
 
-  /// Blink's `PopulateRunInfoParts`.
-  fn populate_run_info_parts(&mut self, source: &PartSource<'_>, segment: &Segment<'_>) {
+  /// Blink's `PopulateRunInfoParts`, offset by the segment's logical start rather than the
+  /// characters populated so far, which in RTL belong to the logically later segments.
+  fn populate_run_info_parts(
+    &mut self,
+    source: &PartSource<'_>,
+    segment: &Segment<'_>,
+    logical_start: u32,
+  ) {
     let source_start = segment.start_index.max(source.start_index);
-    let index_diff = i64::from(self.start_index + self.num_characters) - i64::from(source_start);
+    let index_diff = i64::from(self.start_index + logical_start) - i64::from(source_start);
 
-    self.num_characters += segment.end_index.min(source.end_index) - source_start;
+    self.num_characters += source.num_characters_in(segment);
 
     let is_ltr = source.direction == TextDirection::Ltr;
 
@@ -769,6 +790,47 @@ mod tests {
 
     assert_eq!((last_word.start_index(), last_word.num_characters), (8, 5));
     assert_eq!((last_word.num_glyphs(), glyphs(&last_word).len()), (3, 3));
+  }
+
+  #[test]
+  fn rtl_composite_view_indexes_the_source_string() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, SCHEHERAZADE, "Scheherazade");
+
+    let font = font(&fonts, "Scheherazade");
+    let shape_rtl =
+      |text: &str| Rc::new(HarfBuzzShaper::new(text).shape_all(&font, TextDirection::Rtl));
+    let text = "\u{639}\u{631}\u{628}\u{649} \u{646}\u{635}";
+    let line_start = shape_rtl("\u{639}\u{631}\u{628}\u{649} ");
+    let result = shape_rtl(text);
+    let indexed = |view: &ShapeResultView| {
+      glyphs(view)
+        .into_iter()
+        .map(|(character_index, glyph, _)| (character_index, glyph))
+        .collect::<Vec<_>>()
+    };
+    let expected = indexed(&ShapeResultView::create_from_result(&result));
+    let view = ShapeResultView::create(&[segment(&line_start, 0, 9), segment(&result, 9, 13)]);
+    let rebuilt_result = view.create_shape_result();
+    let rebuilt = ShapeResultView::create_from_result(&Rc::new(rebuilt_result.clone()));
+    let last_word = ShapeResultView::create_from_view_range(&view, 9, 13);
+
+    assert_eq!(
+      indexed(&last_word),
+      indexed(&ShapeResultView::create_from_result_range(&result, 9, 13))
+    );
+
+    for offset in (1..=13).filter(|&offset| text.is_char_boundary(offset as usize)) {
+      assert_eq!(
+        view.previous_safe_to_break_offset(offset),
+        rebuilt_result.previous_safe_to_break_offset(offset),
+        "previous safe break before {offset}"
+      );
+    }
+
+    assert_eq!(indexed(&view), expected);
+    assert_eq!(indexed(&rebuilt), expected);
   }
 
   /// Blink's `PreviousSafeToBreak`: a view of Hebrew with points finds the safe offsets the

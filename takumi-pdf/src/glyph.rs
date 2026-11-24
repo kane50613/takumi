@@ -200,20 +200,30 @@ fn cluster_spans(shaped: &ShapedRun, run_text: &str) -> Option<Vec<Range<usize>>
   if shaped.cluster_ranges.len() != shaped.glyphs.len() {
     return None;
   }
-  let base = shaped.text_range.start;
 
-  Some(
-    shaped
-      .cluster_ranges
-      .iter()
-      .map(|range| {
-        let start = range.start.saturating_sub(base).min(run_text.len());
-        let end = range.end.saturating_sub(base).min(run_text.len());
+  run_cluster_spans(&shaped.cluster_ranges, shaped.text_range.start, run_text)
+}
 
-        if start <= end { start..end } else { 0..0 }
-      })
-      .collect(),
-  )
+/// `clusters` rebased onto `run_text`, or `None` when one falls inside a character.
+fn run_cluster_spans(
+  clusters: &[Range<usize>],
+  base: usize,
+  run_text: &str,
+) -> Option<Vec<Range<usize>>> {
+  let spans: Vec<Range<usize>> = clusters
+    .iter()
+    .map(|range| {
+      let start = range.start.saturating_sub(base).min(run_text.len());
+      let end = range.end.saturating_sub(base).min(run_text.len());
+
+      if start <= end { start..end } else { 0..0 }
+    })
+    .collect();
+
+  spans
+    .iter()
+    .all(|span| run_text.is_char_boundary(span.start) && run_text.is_char_boundary(span.end))
+    .then_some(spans)
 }
 
 /// Merges overlapping glyph ranges, so the writer emits them under one `/ActualText`.
@@ -287,6 +297,25 @@ mod tests {
 
     merge_overlapping_spans(&mut spans);
     assert_eq!(spans, vec![0..6, 0..6, 6..12, 6..12, 12..13]);
+  }
+
+  #[test]
+  fn clusters_inside_a_character_do_not_line_up() {
+    let run_text = "يحب الناس القهوة";
+    let skewed = [26..28, 24..26, 22..24, 21..22, 49..51];
+
+    assert_eq!(run_cluster_spans(&skewed, 21, run_text), None);
+  }
+
+  #[test]
+  fn clusters_on_character_boundaries_are_rebased() {
+    let run_text = "الو";
+    let clusters = [25..27, 23..25, 21..23];
+
+    assert_eq!(
+      run_cluster_spans(&clusters, 21, run_text),
+      Some(vec![4..6, 2..4, 0..2])
+    );
   }
 
   #[test]
