@@ -2556,6 +2556,21 @@ impl ComputedStyle {
 }
 
 impl Style {
+  /// The keyword its last `text-align` declaration sets.
+  pub(crate) fn declared_text_align(&self) -> Option<TextAlign> {
+    self
+      .declarations
+      .declarations
+      .iter()
+      .rev()
+      .find_map(|declaration| match declaration {
+        StyleDeclaration::TextAlign(text_align) => Some(Some(*text_align)),
+        StyleDeclaration::CssWideKeyword(LonghandId::TextAlign, _) => Some(None),
+        _ => None,
+      })
+      .flatten()
+  }
+
   /// The `animation` longhands its declarations set through `var()` of one of the custom
   /// properties `names`, directly or through a custom property it declares.
   pub(crate) fn animation_longhands_reading(&self, names: &[&str]) -> PropertyMask {

@@ -2421,7 +2421,6 @@ css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-027.html
 !css/css-tables/table-cell-inline-size-box-sizing-quirks.html
 !css/css-tables/tentative/paint/
 css/css-tables/tentative/paint/collapsed-border-large-cell.html
-!css/css-tables/th-text-align.html
 !css/css-tables/visibility-collapse-colspan-003.html
 !css/css-tables/visibility-collapse-rowspan-005.html
 !css/css-text-decor/

@@ -59,8 +59,9 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Direction, Display, Float, FontUnits, InvalidDeclarations, KeyframesRule, Lang, LineHeight,
     MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
-    animated_custom_properties, apply_stylesheet_animations, page_rule::PageContext,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextAlign, UnicodeBidi,
+    WhiteSpaceCollapse, animated_custom_properties, apply_stylesheet_animations,
+    page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -3207,6 +3208,15 @@ impl RenderContext {
 
     if let Some(preset) = node_layers.preset {
       style.append_block(Arc::unwrap_or_clone(preset).declarations);
+    }
+
+    // HTML's `th` rule centers only under a parent whose `text-align` is the initial value. Blink's
+    // `TextAlign::ApplyValue` resolves the rule's `-internal-center` to the parent's value otherwise.
+    // <https://html.spec.whatwg.org/multipage/rendering.html#tables-2>
+    let parent_text_align = self.style.inherited_data.text_align;
+
+    if node_layers.centered_table_header && parent_text_align != TextAlign::default() {
+      style.push(StyleDeclaration::text_align(parent_text_align), false);
     }
 
     if let Some(dir) = node_layers.dir {

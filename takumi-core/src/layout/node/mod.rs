@@ -20,8 +20,8 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{
-    Direction, IgnoredDeclaration, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule,
-    tw::TailwindCache,
+    Direction, IgnoredDeclaration, Lang, Style, StyleDeclaration, TailwindValues, TextAlign, ToCss,
+    TwRule, tw::TailwindCache,
   },
   viewport::Viewport,
 };
@@ -669,6 +669,10 @@ impl Node {
 
     self.push_image_size_preset(&mut preset);
 
+    let centered_table_header = self
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("th"))
+      && preset.as_deref().and_then(Style::declared_text_align) == Some(TextAlign::Center);
     let mut inline = self.metadata.style.take();
 
     if let Some(inline) = &mut inline {
@@ -676,6 +680,7 @@ impl Node {
     }
 
     NodeStyleLayers {
+      centered_table_header,
       preset,
       presentation: self.metadata.presentation.take(),
       inline,
@@ -794,6 +799,10 @@ impl Node {
 /// Style layers contributed by a node before cascade/inheritance assembly.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeStyleLayers {
+  /// Whether the element is a `th` whose preset centers it, as Blink's
+  /// `th { text-align: -internal-center }`. Approximate: a preset's `center` stands in for
+  /// `-internal-center`, so a custom preset that means `center` gets the parent's value too.
+  pub(crate) centered_table_header: bool,
   /// UA/default style preset for the element.
   pub(crate) preset: Option<Arc<Style>>,
   /// Presentation attributes, which author rules outrank.
@@ -807,7 +816,8 @@ pub(crate) struct NodeStyleLayers {
 impl NodeStyleLayers {
   /// Whether nothing but the preset styles the element beyond its matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
-    self.presentation.is_none()
+    !self.centered_table_header
+      && self.presentation.is_none()
       && self.inline.is_none()
       && self.dir.is_none()
       && self.lang.is_none()
