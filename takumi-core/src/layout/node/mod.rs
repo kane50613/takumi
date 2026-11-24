@@ -1,4 +1,5 @@
 mod container;
+mod html_dimension;
 mod image;
 mod input;
 
