@@ -415,12 +415,16 @@ impl<'c> BoxPainter<'c> {
     Self::of_fragment(context, StitchedFragment::unbroken(layout))
   }
 
-  /// Prepares the fragment `paint` paints, from `results`, for painting in `context`.
+  /// Prepares the fragment `paint` paints, from `results`, for painting in `context`. Only a
+  /// background image reads its place among the box's fragments.
   pub fn of(
     results: LayoutView<'_>,
     paint: &NodePaint,
     context: &'c RenderContext,
   ) -> Result<Self> {
+    if !context.style.has_background_image() {
+      return Ok(Self::new(context, paint.layout(results)?));
+    }
     Ok(Self::of_fragment(
       context,
       paint.stitched_fragment(results)?,
