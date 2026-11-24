@@ -399,8 +399,9 @@ fn select_axial_radial_function(
 }
 
 /// Puts `stops` in order, drops any stop between two at its offset, and moves the remaining
-/// coincident offsets apart, as Skia's `gradientStitchCode` does. A zero-width subdomain divides
-/// by zero when the stitching function's `Encode` maps into it, which some readers draw black.
+/// coincident offsets apart, as Skia's `gradientStitchCode` does, by at most half the gap to the
+/// stop beyond. A zero-width subdomain divides by zero when the stitching function's `Encode`
+/// maps into it, which some readers draw black.
 /// <https://github.com/google/skia/blob/main/src/pdf/SkPDFGradientShader.cpp>
 fn separate_coincident_stops(stops: &mut Vec<Stop>) {
   const NUDGE: f32 = 0.00001;
@@ -420,18 +421,25 @@ fn separate_coincident_stops(stops: &mut Vec<Stop>) {
     }
   }
 
-  let nudged = |offset: NormalizedF32, by: f32| {
-    NormalizedF32::new((offset.get() + by).clamp(0.0, 1.0)).unwrap_or(offset)
+  // At most half the gap toward `neighbour`, so the offsets keep their order.
+  let nudged = |offset: NormalizedF32, neighbour: NormalizedF32| {
+    let gap = neighbour.get() - offset.get();
+
+    NormalizedF32::new(offset.get() + NUDGE.min(gap.abs() / 2.0).copysign(gap)).unwrap_or(offset)
   };
   let last = stops.len() - 1;
 
   for index in 1..last {
     if stops[index - 1].offset == stops[index].offset {
-      stops[index].offset = nudged(stops[index].offset, NUDGE);
+      stops[index].offset = nudged(stops[index].offset, stops[index + 1].offset);
     }
   }
   if stops[last - 1].offset == stops[last].offset {
-    stops[last - 1].offset = nudged(stops[last - 1].offset, -NUDGE);
+    let neighbour = last
+      .checked_sub(2)
+      .map_or(NormalizedF32::ZERO, |index| stops[index].offset);
+
+    stops[last - 1].offset = nudged(stops[last - 1].offset, neighbour);
   }
 }
 
@@ -946,5 +954,17 @@ mod tests {
     assert_eq!(offsets(&[0.0, 0.5, 1.0, 1.0]), [0.0, 0.5, 1.0 - nudge, 1.0]);
     // A stop before the one ahead of it moves up to it.
     assert_eq!(offsets(&[0.0, 0.6, 0.4, 1.0]), [0.0, 0.6, 0.6 + nudge, 1.0]);
+  }
+
+  #[test]
+  fn a_nudge_stops_halfway_to_a_close_neighbour() {
+    assert_eq!(
+      offsets(&[0.0, 0.5, 0.5, 0.500005, 1.0]),
+      [0.0, 0.5, (0.5 + 0.500005) / 2.0, 0.500005, 1.0]
+    );
+    assert_eq!(
+      offsets(&[0.0, 0.999995, 1.0, 1.0]),
+      [0.0, 0.999995, (0.999995 + 1.0) / 2.0, 1.0]
+    );
   }
 }

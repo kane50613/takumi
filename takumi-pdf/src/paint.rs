@@ -230,7 +230,7 @@ pub(crate) fn positioned(resolved: &[ResolvedGradientStop]) -> Vec<(f32, [u8; 4]
 /// `stops` for a PDF shading, which interpolates colour apart from alpha where CSS interpolates
 /// premultiplied, as Skia's `SkPDFGradientShader` does with a PostScript function. Takumi keeps
 /// to stitched linear functions, which PDF/A exports allow, so a segment whose alpha changes
-/// gains stops along the premultiplied curve until it lands on the same 8-bit colours, and a
+/// gains stops along the premultiplied curve, as [`premultiplied_curve`] approximates it, and a
 /// transparent stop takes its neighbours' colours, the curve's limit there.
 fn premultiplied_stops(stops: &[(f32, [u8; 4])]) -> Vec<(f32, [u8; 4])> {
   let visible = |index: usize| stops[index].1[3] != 0;
@@ -266,9 +266,11 @@ fn premultiplied_stops(stops: &[(f32, [u8; 4])]) -> Vec<(f32, [u8; 4])> {
   premultiplied
 }
 
-/// Pushes the stops strictly between `from` and `to` that keep a linear shading within half an
-/// 8-bit level of their premultiplied interpolation, none when the alpha holds or either end is
-/// transparent, where the curve is the other end's colour.
+/// Pushes the stops strictly between `from` and `to` that bring a linear shading near their
+/// premultiplied interpolation, none when the alpha holds or either end is transparent, where the
+/// curve is the other end's colour. Approximate: each stretch is tested at its midpoint only,
+/// against half an 8-bit level, the subdivision stops after `MAX_DEPTH` halvings, and the stops
+/// round to bytes, so a steep alpha change near a nearly transparent end can stay further off.
 fn premultiplied_curve(from: (f32, [u8; 4]), to: (f32, [u8; 4]), out: &mut Vec<(f32, [u8; 4])>) {
   // Halvings of a segment before its last stretch stays linear.
   const MAX_DEPTH: u32 = 8;
@@ -373,11 +375,11 @@ pub(crate) fn opaque_runs(
     return None;
   }
 
-  let periods =
-    (first.0 / period).ceil() as i64..=((axis_length - first.0) / period).floor() as i64;
+  // From the first period whose end reaches the axis to the last whose start is still on it.
+  let shifts = (-last.0 / period).floor() as i64..=((axis_length - first.0) / period).ceil() as i64;
   let mut tiled = Vec::new();
 
-  for shift in (periods.start() - 1)..=(periods.end() + 1) {
+  for shift in shifts {
     for [start, end] in &runs {
       tiled.push([start + shift as f32 * period, end + shift as f32 * period]);
     }
@@ -596,6 +598,13 @@ mod tests {
 
     assert_eq!(
       opaque_runs(&stripes, true, 45.0),
+      Some(vec![[0.0, 10.0], [20.0, 30.0], [40.0, 46.0]])
+    );
+
+    let late = [(20.0, YELLOW), (30.0, YELLOW), (30.0, CLEAR), (40.0, CLEAR)];
+
+    assert_eq!(
+      opaque_runs(&late, true, 45.0),
       Some(vec![[0.0, 10.0], [20.0, 30.0], [40.0, 46.0]])
     );
   }
