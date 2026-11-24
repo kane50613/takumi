@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { describe, expect, test } from "bun:test";
 import { html } from "hono/html";
+import { createContext, useContext } from "hono/jsx";
 import { Suspense } from "hono/jsx/streaming";
 import { isNode } from "../../src";
 import { fromJsx } from "../../src/jsx";
@@ -25,6 +26,21 @@ describe("hono trees", () => {
       className: "card",
       children: [{ type: "text", text: "hi", style: { color: "red" } }],
     });
+  });
+
+  test("read the value a context provider gives", async () => {
+    const Theme = createContext("light");
+    const Label = () => <p>{useContext(Theme)}</p>;
+
+    const { node } = await fromJsx(
+      <div>
+        <Theme.Provider value="dark">
+          <Label />
+        </Theme.Provider>
+      </div>,
+    );
+
+    expect(node).toMatchObject({ children: [{ type: "text", text: "dark" }] });
   });
 
   test("draw a Suspense boundary's children, not its fallback", async () => {

@@ -1,6 +1,6 @@
-/** The markup Hono's `html` template and its components such as `Suspense` return. */
+/** A Hono JSX element, or the markup Hono's `html` template and components such as `Suspense` return. */
 export type EscapedHtml = {
-  toString(): string;
+  toString(): string | Promise<string>;
   isEscaped: true;
   callbacks?: EscapedHtmlCallback[];
 };
@@ -15,12 +15,16 @@ type EscapedHtmlCallback = (options: {
 const STRINGIFY = 1;
 
 export function isEscapedHtml(value: unknown): value is EscapedHtml {
-  return value instanceof String && (value as { isEscaped?: unknown }).isEscaped === true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { isEscaped?: unknown }).isEscaped === true
+  );
 }
 
 /**
- * The markup `html` stands for once its callbacks ran, as `c.html()` resolves it, so a `Suspense`
- * boundary holds its children rather than its fallback.
+ * The markup `c.html()` sends for `html`, rendered and resolved by Hono, so context, `Suspense`,
+ * and `ErrorBoundary` behave as Hono defines them.
  * <https://github.com/honojs/hono/blob/main/src/utils/html.ts>
  */
 export function resolveEscapedHtml(html: EscapedHtml): Promise<string> {
