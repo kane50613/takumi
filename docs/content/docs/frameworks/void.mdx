@@ -1,0 +1,136 @@
+---
+title: Void
+description: Return Open Graph images from Void routes written in Hono JSX, on Cloudflare or on the Node.js target.
+---
+
+[Void](https://void.cloud) routes run on Hono, and Takumi renders Hono JSX as Hono does, so a route can return an `ImageResponse` with no adapter.
+
+<Steps>
+  <Step>
+    ### Install Takumi and Hono
+
+    ```npm
+    npm i takumi-js hono
+    ```
+
+  </Step>
+  <Step>
+    ### Use Hono's JSX in routes
+
+    Skip this step if your app already uses `hono/jsx` or React.
+
+    ```ts title="vite.config.ts"
+    import { defineConfig } from "vite-plus";
+    import { voidPlugin } from "void";
+
+    export default defineConfig({
+      oxc: { jsx: { runtime: "automatic", importSource: "hono/jsx" } }, // [!code highlight]
+      plugins: [voidPlugin()],
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Create the route
+
+    ```tsx title="routes/og.tsx"
+    import { ImageResponse } from "takumi-js/response";
+    import { defineHandler } from "void";
+
+    export const GET = defineHandler((c) => {
+      const title = c.req.query("title") ?? "Hello from Void";
+
+      return new ImageResponse(
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            height: "100%",
+            background: "#4f46e5",
+          }}
+        >
+          <h1 style={{ fontSize: 72, color: "white" }}>{title}</h1>
+        </div>,
+        { width: 1200, height: 630 },
+      );
+    });
+    ```
+
+  </Step>
+  <Step>
+    ### Request the image
+
+    Run `npm run dev`, then open `/og?title=Hello`.
+
+  </Step>
+</Steps>
+
+## Load data while rendering
+
+Takumi waits for async components, so a `Suspense` boundary draws its children, not its fallback. With React's JSX, import `Suspense` from `react` instead:
+
+```tsx title="routes/og/[slug].tsx"
+import { Suspense } from "hono/jsx/streaming";
+import { ImageResponse } from "takumi-js/response";
+import { defineHandler } from "void";
+
+const Title = async ({ slug }: { slug: string }) => {
+  const post = await fetch(`https://api.example.com/posts/${slug}`).then((res) => res.json());
+
+  return <h1 style={{ fontSize: 72 }}>{post.title}</h1>;
+};
+
+export const GET = defineHandler((c) => {
+  const slug = c.req.param("slug");
+
+  if (!slug) {
+    return c.notFound();
+  }
+
+  return new ImageResponse(
+    <div style={{ display: "flex", width: "100%", height: "100%", padding: 64 }}>
+      <Suspense fallback={<h1>Loading</h1>}>
+        <Title slug={slug} />
+      </Suspense>
+    </div>,
+    { width: 1200, height: 630 },
+  );
+});
+```
+
+Context, `ErrorBoundary`, and the `html` template from `hono/html` work too.
+
+## Draw text in other scripts
+
+The built-in Geist font covers Latin text. For other characters, `loadFallbackFonts` downloads only the ones the image needs:
+
+```tsx title="routes/og.tsx"
+import { googleFonts } from "takumi-js/helpers";
+import { ImageResponse } from "takumi-js/response";
+import { defineHandler } from "void";
+
+export const GET = defineHandler((c) => {
+  const title = c.req.query("title") ?? "こんにちは、Void";
+
+  return new ImageResponse(<h1 style={{ fontSize: 72 }}>{title}</h1>, {
+    width: 1200,
+    height: 630,
+    loadFallbackFonts: (characters) =>
+      googleFonts({ families: ["Noto Sans JP"], text: characters.join("") }), // [!code highlight]
+  });
+});
+```
+
+Later renders reuse the downloaded files. See [Fonts](/docs/fonts#load-fonts-for-missing-characters) for more.
+
+## Deploy
+
+On Cloudflare, Takumi's WebAssembly binary makes up most of the Worker. See [Cloudflare Workers](/docs/frameworks/cloudflare-workers#size-and-limits) for its size limits.
+
+On the [Node.js target](https://void.cloud/integrations/nodejs-bun-deno), keep `takumi-js` in `dependencies` and run `npm install` on the server, so it gets the native addon for that platform.
+
+## Next steps
+
+See [Styles](/docs/styles), [Fonts](/docs/fonts), and [`ImageResponse`](/docs/reference/image-response).
