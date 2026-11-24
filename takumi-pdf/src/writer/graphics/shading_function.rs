@@ -393,7 +393,52 @@ fn select_axial_radial_function(
       )
     }
   } else {
+    separate_coincident_stops(&mut stops);
     serialize_stitching(&stops, chunk, sc, use_opacities)
+  }
+}
+
+/// Puts `stops` in order, drops any stop between two at its offset, and moves the remaining
+/// coincident offsets apart, as Skia's `gradientStitchCode` does, by at most half the gap to the
+/// stop beyond. A zero-width subdomain divides by zero when the stitching function's `Encode`
+/// maps into it, which some readers draw black.
+/// <https://github.com/google/skia/blob/main/src/pdf/SkPDFGradientShader.cpp>
+fn separate_coincident_stops(stops: &mut Vec<Stop>) {
+  const NUDGE: f32 = 0.00001;
+
+  let mut index = 1;
+
+  while index + 1 < stops.len() {
+    if stops[index - 1].offset > stops[index].offset {
+      stops[index].offset = stops[index - 1].offset;
+    }
+    if stops[index - 1].offset == stops[index].offset
+      && stops[index].offset == stops[index + 1].offset
+    {
+      stops.remove(index);
+    } else {
+      index += 1;
+    }
+  }
+
+  let nudged = |offset: NormalizedF32, neighbour: NormalizedF32| {
+    let gap = neighbour.get() - offset.get();
+
+    NormalizedF32::new(offset.get() + NUDGE.min(gap.abs() / 2.0).copysign(gap)).unwrap_or(offset)
+  };
+  let last = stops.len() - 1;
+
+  for index in 1..last {
+    if stops[index - 1].offset == stops[index].offset {
+      stops[index].offset = nudged(stops[index].offset, stops[index + 1].offset);
+    }
+  }
+  if stops[last - 1].offset == stops[last].offset {
+    let neighbour = last
+      .checked_sub(2)
+      .map_or(NormalizedF32::ZERO, |index| stops[index].offset);
+
+    stops[last - 1].offset = nudged(stops[last - 1].offset, neighbour);
   }
 }
 
@@ -872,4 +917,53 @@ fn serialize_exponential(
   exp.n(1.0);
   exp.finish();
   root_ref
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{NormalizedF32, Stop, separate_coincident_stops};
+  use crate::writer::graphics::color::rgb;
+
+  fn offsets(offsets: &[f32]) -> Vec<f32> {
+    let mut stops: Vec<Stop> = offsets
+      .iter()
+      .map(|&offset| Stop {
+        offset: NormalizedF32::new(offset).unwrap(),
+        color: rgb::Color::new(0, 0, 0).into(),
+        opacity: NormalizedF32::ONE,
+      })
+      .collect();
+
+    separate_coincident_stops(&mut stops);
+    stops.iter().map(|stop| stop.offset.get()).collect()
+  }
+
+  #[test]
+  fn coincident_stops_move_apart_as_skia_moves_them() {
+    let nudge = 0.00001;
+
+    assert_eq!(
+      offsets(&[0.0, 0.55, 0.55, 1.0]),
+      [0.0, 0.55, 0.55 + nudge, 1.0]
+    );
+    assert_eq!(
+      offsets(&[0.0, 0.5, 0.5, 0.5, 1.0]),
+      [0.0, 0.5, 0.5 + nudge, 1.0]
+    );
+    assert_eq!(offsets(&[0.0, 0.5, 1.0, 1.0]), [0.0, 0.5, 1.0 - nudge, 1.0]);
+    // A stop before the one ahead of it moves up to it.
+    assert_eq!(offsets(&[0.0, 0.6, 0.4, 1.0]), [0.0, 0.6, 0.6 + nudge, 1.0]);
+  }
+
+  #[test]
+  fn a_nudge_stops_halfway_to_a_close_neighbour() {
+    assert_eq!(
+      offsets(&[0.0, 0.5, 0.5, 0.500005, 1.0]),
+      [0.0, 0.5, (0.5 + 0.500005) / 2.0, 0.500005, 1.0]
+    );
+    assert_eq!(
+      offsets(&[0.0, 0.999995, 1.0, 1.0]),
+      [0.0, 0.999995, (0.999995 + 1.0) / 2.0, 1.0]
+    );
+  }
 }
