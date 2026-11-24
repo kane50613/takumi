@@ -3,8 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { html } from "hono/html";
 import { createContext, useContext } from "hono/jsx";
 import { Suspense } from "hono/jsx/streaming";
+import { createElement } from "react";
 import { isNode } from "../../src";
-import { fromJsx } from "../../src/jsx";
+import { fromJsx, type FromJsxOptions } from "../../src/jsx";
 
 const later = <T,>(value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), 1));
 
@@ -72,6 +73,24 @@ describe("hono trees", () => {
       { type: "text", text: "x<y" },
       { type: "text", text: "awaited" },
     ]);
+  });
+
+  test("parse an html template a React element holds", async () => {
+    const { node } = await fromJsx(createElement("div", null, html`<p>hi</p>`));
+
+    expect(node).toMatchObject({
+      type: "container",
+      children: [{ type: "text", tagName: "p", text: "hi" }],
+    });
+  });
+
+  test("apply the options to markup Hono renders", async () => {
+    const options: FromJsxOptions = { defaultStyles: false, tailwindClassesProperty: "tw" };
+
+    const { node } = await fromJsx(html`<h1 tw="p-4">hi</h1>`, options);
+    const { node: react } = await fromJsx(createElement("h1", { tw: "p-4" }, "hi"), options);
+
+    expect(node).toEqual(react);
   });
 
   test("keep the CSS of a style element in an html template", async () => {

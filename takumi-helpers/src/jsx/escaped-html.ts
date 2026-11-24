@@ -1,24 +1,13 @@
+import type { HtmlEscaped, HtmlEscapedCallbackPhase } from "hono/utils/html";
+
 /** A Hono JSX element, or the markup Hono's `html` template and components such as `Suspense` return. */
-export type EscapedHtml = {
-  toString(): string | Promise<string>;
-  isEscaped: true;
-  callbacks?: EscapedHtmlCallback[];
-};
+type EscapedHtml = HtmlEscaped & { toString(): string | Promise<string> };
 
-type EscapedHtmlCallback = (options: {
-  phase: number;
-  buffer: [string];
-  context: object;
-}) => unknown;
-
-/** Hono's `HtmlEscapedCallbackPhase.Stringify`, the phase `c.html()` resolves markup in. */
-const STRINGIFY = 1;
+const STRINGIFY: (typeof HtmlEscapedCallbackPhase)["Stringify"] = 1;
 
 export function isEscapedHtml(value: unknown): value is EscapedHtml {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { isEscaped?: unknown }).isEscaped === true
+    typeof value === "object" && value !== null && "isEscaped" in value && value.isEscaped === true
   );
 }
 
