@@ -3934,7 +3934,7 @@ fn hard_stop_gradients() {
       <div>A <span style="background: linear-gradient(transparent 55%, #f4ef3a 55%); font-weight: 800;">highlighted</span> word</div>
       <div>A <span style="background: linear-gradient(transparent 58%, #f4ef3a 58%, #f4ef3a 92%, transparent 92%);">marked</span> word</div>
       <div style="display: flex; column-gap: 16px;">
-        <div style="width: 120px; height: 60px; background-image: repeating-linear-gradient(45deg, #4357e0 0px, #4357e0 6px, transparent 6px, transparent 14px);"></div>
+        <div style="width: 120px; height: 60px; background-image: repeating-linear-gradient(90deg, #4357e0 0px, #4357e0 6px, transparent 6px, transparent 14px);"></div>
         <div style="width: 120px; height: 60px; background-image: linear-gradient(to right, #ff5a5f, transparent, #4357e0);"></div>
       </div>
     </div>"#;
