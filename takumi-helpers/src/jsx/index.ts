@@ -7,6 +7,8 @@ export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import type { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
+import { fromStaticMarkup } from "../html/markup";
+import { isEscapedHtml, resolveEscapedHtml } from "./escaped-html";
 import {
   isAsciiWhitespace,
   componentRenderer,
@@ -102,6 +104,8 @@ class NodeBuilder implements RenderEnv {
 
     // If element is a server component, wait for it to resolve first
     if (element instanceof Promise) return this.build(await element);
+
+    if (isEscapedHtml(element)) return fromStaticMarkup(await resolveEscapedHtml(element));
 
     // If element is an iterable, collect the children
     if (typeof element === "object" && Symbol.iterator in element) return this.iterable(element);

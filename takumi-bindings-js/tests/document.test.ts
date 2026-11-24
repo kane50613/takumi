@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
-import { isNode, resolveDocument } from "../src/document";
+import { isNode } from "@takumi-rs/helpers";
+import { resolveDocument } from "../src/document";
 import { lazy, sheetsOf } from "../src/wasm-renderer";
 
 describe("resolveDocument", () => {

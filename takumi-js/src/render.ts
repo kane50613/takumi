@@ -1,11 +1,17 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import { type CssInput, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
+import {
+  isNode,
+  type CssInput,
+  type FetchOptions,
+  type ImageFetchCache,
+  type Node,
+  type ReactElementLike,
+} from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { defaultRenderer, type Renderer } from "./backend/renderer";
 import type { ReactNode } from "react";
-import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
@@ -104,16 +110,8 @@ type PipelineOptions = Partial<SharedRenderExtras> &
 
 export type RenderInput = ReactNode | ReactElementLike | Node | string;
 
-function isTakumiNode(element: unknown): element is Node {
-  if (typeof element !== "object" || element === null || !("type" in element)) {
-    return false;
-  }
-
-  return element.type === "container" || element.type === "text" || element.type === "image";
-}
-
 async function transformElement(element: RenderInput, options?: PipelineOptions) {
-  if (isTakumiNode(element)) {
+  if (isNode(element)) {
     return {
       node: element,
       css: [],
