@@ -728,9 +728,9 @@ impl<'r> LayoutTree<'r> {
     }
 
     // Blink's `CalculateMinMaxSizesIgnoringChildren`, after a text control's default size: an
-    // inline-size-contained box takes no inline size from its content. Approximate: Blink sizes a
-    // contained grid by its explicit columns without its items, which this leaves out.
-    if style.contains_inline_size() {
+    // inline-size-contained box takes no inline size from its content. A grid sizes its explicit
+    // columns without its items in its own algorithm.
+    if style.contains_inline_size() && !matches!(algorithm, Algorithm::Grid) {
       return MinMaxSizesResult::new(
         MinMaxSizes::both(resolver.border_padding.inline_sum()),
         depends_on_block_constraints,
