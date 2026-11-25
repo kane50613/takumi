@@ -75,11 +75,11 @@ impl<'s> ElementAnimations<'s> {
   /// taking its value in `style`.
   pub(crate) fn apply(
     &self,
-    mut style: ComputedStyle,
+    style: &mut ComputedStyle,
     longhands: &PropertyMask,
     sizing: &SizingContext,
     current_color: Color,
-  ) -> ComputedStyle {
+  ) {
     let mut animations = self
       .animations
       .iter()
@@ -87,7 +87,7 @@ impl<'s> ElementAnimations<'s> {
       .peekable();
 
     if animations.peek().is_none() {
-      return style;
+      return;
     }
 
     let base_snapshot = style.clone();
@@ -115,8 +115,6 @@ impl<'s> ElementAnimations<'s> {
         current_color,
       );
     }
-
-    style
   }
 
   /// The custom properties the animations set on `style`, each after the earlier animations that
@@ -315,11 +313,6 @@ impl KeyframesRule {
       longhands.union(&declaration.affected_longhands());
     }
     longhands
-  }
-
-  /// Whether a keyframe declares a custom property.
-  pub(crate) fn animates_custom_properties(&self) -> bool {
-    self.custom_properties().next().is_some()
   }
 
   /// The name of each custom property declaration in its keyframes.
@@ -871,7 +864,10 @@ mod tests {
       .expect("an animation runs");
     let longhands = animations.longhands();
 
-    animations.apply(style, &longhands, &sizing(), current_color())
+    let mut style = style;
+
+    animations.apply(&mut style, &longhands, &sizing(), current_color());
+    style
   }
 
   fn sizing() -> SizingContext {
