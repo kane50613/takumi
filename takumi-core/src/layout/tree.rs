@@ -51,7 +51,7 @@ use crate::{
   },
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{
-    MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers,
+    MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers, QueryFont,
     match_stylesheets_in_containers, match_stylesheets_view,
   },
   painter::OwnContent,
@@ -2465,14 +2465,13 @@ impl RenderNode {
     }
 
     // `@container` rules read the sizes a layout gives their containers, as Blink lays a container
-    // out before it styles the boxes in it. A container's size can follow from an outer container's
-    // query, so the tree builds again with the sizes the last layout gave until they settle.
-    // Approximate: past `MAX_PASSES` the last sizes stand.
-    const MAX_PASSES: usize = 4;
+    // out before it styles the boxes in it. Size containment keeps a container's size from its
+    // contents, so it follows only from the queries of the containers around it: each build settles
+    // one more level of them, and the sizes settle within a build more than there are containers.
+    let mut containers: Option<QueryContainers> = None;
+    let mut pass = 0;
 
-    let mut containers = None;
-
-    for _ in 0..MAX_PASSES {
+    loop {
       let tree = Self::build_in_containers(
         parent_context,
         node.clone(),
@@ -2481,17 +2480,13 @@ impl RenderNode {
       );
       let sizes = tree.query_containers();
 
-      if containers.as_ref() == Some(&sizes) {
+      // A build past one per container settled nothing more; its tree stands.
+      if containers.as_ref() == Some(&sizes) || pass > sizes.len() {
         return tree;
       }
       containers = Some(sizes);
+      pass += 1;
     }
-    Self::build_in_containers(
-      parent_context,
-      node,
-      blockifies_children,
-      containers.as_ref(),
-    )
   }
 
   fn build_in_containers(
@@ -2545,7 +2540,7 @@ impl RenderNode {
 
     tree.compute_layout(available_space);
 
-    let found: Vec<(NodeId, usize, ContainerType, ContainerName)> = tree
+    let found: Vec<(NodeId, usize, ContainerType, ContainerName, QueryFont)> = tree
       .render_nodes
       .iter()
       .enumerate()
@@ -2561,6 +2556,7 @@ impl RenderNode {
             source_order,
             style.container_type,
             style.container_name.clone(),
+            QueryFont::of(&render_node.context.sizing),
           )
         })
       })
@@ -2569,7 +2565,7 @@ impl RenderNode {
 
     found
       .into_iter()
-      .filter_map(|(node, source_order, container_type, name)| {
+      .filter_map(|(node, source_order, container_type, name, font)| {
         let size = results.layout(node).ok()?.content_box_size();
 
         Some((
@@ -2578,6 +2574,7 @@ impl RenderNode {
             container_type,
             name,
             size,
+            font,
           },
         ))
       })

@@ -618,11 +618,15 @@ impl ContainerQuery {
   }
 
   /// Whether a container whose content box is `size` across, an axis it does not contain left
-  /// unknown, satisfies it. Approximate: `em` reads the viewport's font size, not the container's.
-  pub(crate) fn matches(&self, size: Size<Option<f32>>, viewport: Viewport) -> bool {
-    self
-      .condition
-      .matches(viewport, size, &SizingContext::for_media(viewport))
+  /// unknown, satisfies it, its relative lengths in the container's `sizing`, as Blink evaluates
+  /// them against the container's computed values.
+  pub(crate) fn matches(
+    &self,
+    size: Size<Option<f32>>,
+    viewport: Viewport,
+    sizing: &SizingContext,
+  ) -> bool {
+    self.condition.matches(viewport, size, sizing)
   }
 }
 

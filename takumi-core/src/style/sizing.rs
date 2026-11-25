@@ -53,7 +53,7 @@ pub struct SizingContext {
 }
 
 /// The pixel bases the `ch` and `ex` units read from the primary font.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct FontUnits {
   pub(crate) ch: f32,
   pub(crate) ex: f32,

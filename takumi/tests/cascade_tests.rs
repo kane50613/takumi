@@ -1317,3 +1317,44 @@ fn a_container_answers_at_the_size_an_outer_query_gives_it() {
   assert_eq!(inner.width, 250.0);
   assert_eq!(inner.children[0].width, 50.0);
 }
+
+/// A relative length in a query reads the container's own font, as Blink evaluates it against the
+/// container's computed values.
+#[test]
+fn a_container_query_reads_the_container_font() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 280px; font-size: 20px }
+       @container (min-width: 15em) { .target { width: 50px } }"
+    ),
+    280.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 310px; font-size: 20px }
+       @container (min-width: 15em) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+}
+
+/// Containers nested deep, each widened by the query of the one around it, settle all the way in.
+#[test]
+fn nested_containers_settle_at_any_depth() {
+  let html = (0..6).fold(r#"<p class="target">x</p>"#.to_owned(), |inner, _| {
+    format!(r#"<div class="c">{inner}</div>"#)
+  });
+  let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".c { container-type: inline-size; width: 100px }
+     body > .c, .c:only-child:not(.c .c) { width: 300px }
+     @container (min-width: 200px) { .c { width: 250px } .target { width: 50px } }",
+  );
+  let mut node = &measured.children[0];
+
+  while let Some(child) = node.children.first() {
+    node = child;
+  }
+  assert_eq!(node.width, 50.0);
+}

@@ -23,8 +23,8 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, LonghandId,
-    MediaQueryList, StyleDeclarationBlock, TwRule,
+    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, FontUnits,
+    LonghandId, MediaQueryList, SizingContext, StyleDeclarationBlock, TwRule,
     selector::{
       CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
     },
@@ -1248,13 +1248,52 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
   per_node
 }
 
-/// A query container as a layout left it: its `container-type`, its names, and the size of its
-/// content box.
+/// A query container as a layout left it: its `container-type`, its names, the size of its content
+/// box, and the font sizes its relative lengths resolve in.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct QueryContainer {
   pub(crate) container_type: ContainerType,
   pub(crate) name: ContainerName,
   pub(crate) size: Size<f32>,
+  /// What a relative length in a query reads: the container's own font and line height.
+  pub(crate) font: QueryFont,
+}
+
+/// A container's font metrics, which the relative lengths in a query read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct QueryFont {
+  pub(crate) font_size: f32,
+  pub(crate) root_font_size: Option<f32>,
+  pub(crate) line_height: f32,
+  pub(crate) root_line_height: Option<f32>,
+  pub(crate) units: FontUnits,
+}
+
+impl QueryFont {
+  /// The metrics of a box sized in `sizing`.
+  pub(crate) fn of(sizing: &SizingContext) -> Self {
+    Self {
+      font_size: sizing.font_size,
+      root_font_size: sizing.root_font_size,
+      line_height: sizing.line_height,
+      root_line_height: sizing.root_line_height,
+      units: FontUnits {
+        ch: sizing.ch,
+        ex: sizing.ex,
+      },
+    }
+  }
+
+  /// A query's sizing at `viewport` in these metrics.
+  fn sizing(self, viewport: Viewport) -> SizingContext {
+    SizingContext::for_media(viewport).with_font_metrics(
+      self.font_size,
+      self.root_font_size,
+      self.line_height,
+      self.root_line_height,
+      self.units,
+    )
+  }
 }
 
 /// The query containers of a tree, by their place in its pre-order.
@@ -1297,6 +1336,7 @@ fn container_query_holds(
           .then_some(container.size.height),
       },
       viewport,
+      &container.font.sizing(viewport),
     )
   })
 }
