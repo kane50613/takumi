@@ -6,6 +6,7 @@ use std::{
   sync::Arc,
 };
 
+use super::hash_trie::HashTrie;
 use crate::style::{
   CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, contains_var_references,
   selector::PropertyRule,
@@ -17,13 +18,14 @@ pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
 /// The custom properties an element resolves `var()` against, with the `@property` registrations
 /// that decide how each one inherits. As Blink's `StyleInheritedVariables` and
 /// `StyleNonInheritedVariables`, the values a child inherits sit apart from the ones that stop here,
-/// so a child shares the first and starts the second empty. A registered property without a value
+/// so a child shares the first and starts the second empty, each in a trie a change copies only a
+/// path of. A registered property without a value
 /// takes its initial value, as Blink's `StyleInitialData` gives it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CustomProperties {
-  inherited: Arc<HashMap<String, String>>,
+  inherited: HashTrie<String, String>,
   /// Registered properties that do not inherit, and the element state below.
-  non_inherited: Arc<HashMap<String, String>>,
+  non_inherited: HashTrie<String, String>,
   registrations: Arc<HashMap<String, PropertyRule>>,
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
@@ -57,7 +59,7 @@ impl CustomProperties {
     self.element_state.contains(name) || self.registration(name).is_some_and(|rule| !rule.inherits)
   }
 
-  fn values_of(&self, name: &str) -> &HashMap<String, String> {
+  fn values_of(&self, name: &str) -> &HashTrie<String, String> {
     if self.stops_here(name) {
       &self.non_inherited
     } else {
@@ -65,11 +67,11 @@ impl CustomProperties {
     }
   }
 
-  fn values_of_mut(&mut self, name: &str) -> &mut HashMap<String, String> {
+  fn values_of_mut(&mut self, name: &str) -> &mut HashTrie<String, String> {
     if self.stops_here(name) {
-      Arc::make_mut(&mut self.non_inherited)
+      &mut self.non_inherited
     } else {
-      Arc::make_mut(&mut self.inherited)
+      &mut self.inherited
     }
   }
 
@@ -196,7 +198,7 @@ impl CustomProperties {
       return;
     }
 
-    let inherited = Arc::make_mut(&mut self.inherited).remove(name);
+    let inherited = self.inherited.remove(name);
 
     Arc::make_mut(&mut self.element_state).insert(name.to_owned());
     if let Some(value) = inherited {
