@@ -131,8 +131,9 @@ impl CustomProperties {
     self.registrations = Arc::clone(registrations);
   }
 
-  /// A copy with each value a child inherits of a registered property computed against `sizing`,
-  /// if any changes: a `<length>` to px, an `<angle>` to deg, a `<color>` to its color, and so on.
+  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>` to
+  /// px, an `<angle>` to deg, a `<color>` to its color, and so on. A child takes the ones that do
+  /// not inherit through `inherit` alone, as Blink's `ApplyInherit` copies the computed value.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
   pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
     let mut computed: Option<Self> = None;
@@ -140,7 +141,7 @@ impl CustomProperties {
     for rule in self
       .registrations
       .values()
-      .filter(|rule| rule.inherits && rule.syntax != PropertySyntax::Universal)
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
     {
       let Some(value) = self.get(&rule.name) else {
         continue;

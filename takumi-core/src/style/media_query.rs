@@ -229,8 +229,11 @@ impl MediaFeature {
   }
 
   fn new(name: &str, comparison: MediaFeatureComparison, value: MediaFeatureValue) -> Option<Self> {
+    // A size feature takes a `<length>`, which neither `auto` nor a percentage is.
     let length = match value {
-      MediaFeatureValue::Length(length) => Some(length),
+      MediaFeatureValue::Length(length) if length != Length::Auto && !length.has_percentage() => {
+        Some(length)
+      }
       MediaFeatureValue::Number(number) => Some(Length::Px(number)),
       _ => None,
     };
@@ -585,22 +588,38 @@ fn viewport_size(viewport: Viewport) -> Size<Option<f32>> {
   }
 }
 
-/// An `@container` rule's query: the name of the container it asks, if it names one, and a size
-/// condition on that container. <https://drafts.csswg.org/css-contain-3/#container-rule>
+/// An `@container` rule's query: a comma-separated list of conditions, which holds when one does.
+/// <https://drafts.csswg.org/css-conditional-5/#container-rule>
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ContainerQuery {
-  pub(crate) name: Option<Box<str>>,
-  condition: MediaCondition,
-}
+pub(crate) struct ContainerQuery(Vec<ContainerCondition>);
 
 impl ContainerQuery {
   pub(crate) fn parse<'i>(
     input: &mut Parser<'i>,
   ) -> Result<Self, ParseError<StyleSheetParseError>> {
+    Ok(Self(
+      input.parse_comma_separated(ContainerCondition::parse)?,
+    ))
+  }
+
+  pub(crate) fn conditions(&self) -> &[ContainerCondition] {
+    &self.0
+  }
+}
+
+/// One condition of a container query: the name of the container it asks, if it names one, and a
+/// size condition on that container.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContainerCondition {
+  pub(crate) name: Option<Box<str>>,
+  condition: MediaCondition,
+}
+
+impl ContainerCondition {
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let name = input.try_parse(ContainerName::parse_name).ok();
     let condition = MediaCondition::parse(input)?;
 
-    input.expect_exhausted()?;
     Ok(Self { name, condition })
   }
 
@@ -619,14 +638,23 @@ impl ContainerQuery {
 
   /// Whether a container whose content box is `size` across, an axis it does not contain left
   /// unknown, satisfies it, its relative lengths in the container's `sizing`, as Blink evaluates
-  /// them against the container's computed values.
+  /// them against the container's computed values. A feature other than a size one is unknown to a
+  /// container query, which then does not hold. Approximate: a container unit reads the
+  /// containing block `sizing` gives, not the queried container's own query container.
   pub(crate) fn matches(
     &self,
     size: Size<Option<f32>>,
     viewport: Viewport,
     sizing: &SizingContext,
   ) -> bool {
-    self.condition.matches(viewport, size, sizing)
+    let unknown = self.condition.any_feature(&|feature| {
+      matches!(
+        feature,
+        MediaFeature::Resolution(..) | MediaFeature::PrefersColorScheme(..)
+      )
+    });
+
+    !unknown && self.condition.matches(viewport, size, sizing)
   }
 }
 

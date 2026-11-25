@@ -1262,7 +1262,10 @@ fn parse_at_rule_prelude<'i>(
 
   if name.eq_ignore_ascii_case("scope") {
     let selectors = |input: &mut Parser<'i>, relative| {
-      input.parse_nested_block(|input| SelectorList::parse(&TakumiSelectorParser, input, relative))
+      // Pseudo-elements are invalid in a scope's root and limit selectors.
+      input.parse_nested_block(|input| {
+        SelectorList::parse_disallow_pseudo(&TakumiSelectorParser, input, relative)
+      })
     };
     let start = input
       .try_parse(|input| {

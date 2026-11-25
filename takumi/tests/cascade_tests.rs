@@ -1128,19 +1128,48 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     .1,
     16.0
   );
-  // `revert-layer` reaches the layer below, and an important one the normal declarations.
+  // `revert-layer` reaches the layer below, whatever the importance: an important one skips the
+  // normal declarations of its own layer, as Blink's `ForLayerComparison` drops importance.
   assert_eq!(
     paragraph("@layer a { .box { width: 30px } } .box { width: 50px; width: revert-layer }").0,
     30.0
   );
   assert_eq!(
     paragraph(".box { width: 30px } p.box { width: revert-layer !important }").0,
+    1200.0
+  );
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { width: 30px } } .box { width: 50px } p.box { width: revert-layer !important }"
+    )
+    .0,
     30.0
   );
-  // `revert-rule` reaches another rule, past its own earlier declaration.
+  // `revert-rule` reaches another rule, past its own earlier declarations of either importance.
   assert_eq!(
     paragraph(".box { width: 30px } p.box { width: 70px; width: revert-rule }").0,
     30.0
+  );
+  assert_eq!(
+    paragraph(".box { width: 30px } p.box { width: 70px; width: revert-rule !important }").0,
+    30.0
+  );
+  // Leaving its own rule, an important `revert-rule` lets an animation of the property win.
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 30px } p.box { width: revert-rule !important; animation: w 1s }"
+    )
+    .0,
+    100.0
+  );
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 30px } p.box { width: 40px !important; animation: w 1s }"
+    )
+    .0,
+    40.0
   );
   // Without a weaker declaration, a revert keyword is `unset`.
   assert_eq!(paragraph(".box { width: revert-layer }").0, 1200.0);
@@ -1395,5 +1424,97 @@ fn container_and_scope_rules_nest_in_style_rules() {
   assert_eq!(
     card_widths(".outer { @scope (& > .card) { p { width: 30px } } }"),
     [1200.0, 30.0, 30.0]
+  );
+}
+
+/// `inherit` on a registered property that does not inherit takes the parent's computed value, as
+/// Blink's `ApplyInherit` copies it.
+#[test]
+fn inherit_takes_a_registered_property_computed() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("box")]).with_class_name("parent")]),
+    "@property --size { syntax: '<length>'; inherits: false; initial-value: 0px }
+     .parent { font-size: 10px; --size: 2em }
+     .box { font-size: 20px; --size: inherit; width: var(--size) }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 20.0);
+}
+
+/// A pseudo-element asks from its originating element up, a query list holds when one of its
+/// conditions does, and a feature other than a size one, or a percentage, holds of no container.
+#[test]
+fn container_queries_ask_as_blink_evaluates_them() {
+  let before = |css: &str| {
+    let node =
+      Node::from_html(r#"<div class="card"></div>"#, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].height
+  };
+
+  assert_eq!(
+    before(
+      ".card { container-type: inline-size; width: 300px }
+       @container (min-width: 200px) { .card::before { content: ''; display: block; height: 7px } }"
+    ),
+    7.0
+  );
+
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (min-width: 900px), (max-width: 400px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (resolution: 1dppx) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (inline-size > 50%) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}
+
+/// A nested `@scope` stops at the limit of the scope around it, a rule takes its highest
+/// specificity under any root, and pseudo-elements make a scope's selectors invalid.
+#[test]
+fn scopes_follow_their_enclosing_limits_and_specificity() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><div class="stop"><p class="target">x</p></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measure = |css: &str| {
+    let measured = measure_with_css(Node::container([node.clone()]), css);
+
+    measured.children[0].children[0].children[0].children[0].width
+  };
+
+  assert_eq!(
+    measure("@scope (.outer) to (.stop) { @scope (.inner) { p { width: 30px } } }"),
+    1200.0
+  );
+  assert_eq!(
+    measure("@scope (.outer) { @scope (.inner) { p { width: 30px } } }"),
+    30.0
+  );
+  // One rule matches `p` under the closer root and `.outer:scope p` under the farther one, and
+  // takes the higher specificity, which outranks `.target`.
+  assert_eq!(
+    measure(
+      "@scope (.outer, .inner) { .outer:scope p, p { width: 40px } } .target { width: 20px }"
+    ),
+    40.0
+  );
+  assert_eq!(
+    measure("@scope (.outer) to (.stop::before) { p { width: 30px } }"),
+    1200.0
   );
 }

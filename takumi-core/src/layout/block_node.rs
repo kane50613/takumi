@@ -666,16 +666,15 @@ impl<'r> LayoutTree<'r> {
       || style.max_size.height.has_percent_or_stretch()
       || (style.size.height.is_auto() && space.is_block_auto_behavior_stretch());
 
-    if !matches!(algorithm, Algorithm::Hidden) && style.contains_inline_size() {
-      // Blink's `CalculateMinMaxSizesIgnoringChildren`: the content gives no inline size.
-      return MinMaxSizesResult::new(
-        MinMaxSizes::both(resolver.border_padding.inline_sum()),
-        depends_on_block_constraints,
-      );
-    }
-
     match algorithm {
       Algorithm::Hidden => return MinMaxSizesResult::default(),
+      // Size containment treats a replaced element as having no natural size.
+      Algorithm::Replaced if style.contains_inline_size() => {
+        return MinMaxSizesResult::new(
+          MinMaxSizes::both(resolver.border_padding.inline_sum()),
+          depends_on_block_constraints,
+        );
+      }
       Algorithm::Replaced => {
         let mut replaced_space = space.clone();
 
@@ -725,6 +724,16 @@ impl<'r> LayoutTree<'r> {
           control.default_inline_size(&render_node.context) + resolver.border_padding.inline_sum(),
         ),
         false,
+      );
+    }
+
+    // Blink's `CalculateMinMaxSizesIgnoringChildren`, after a text control's default size: an
+    // inline-size-contained box takes no inline size from its content. Approximate: Blink sizes a
+    // contained grid by its explicit columns without its items, which this leaves out.
+    if style.contains_inline_size() {
+      return MinMaxSizesResult::new(
+        MinMaxSizes::both(resolver.border_padding.inline_sum()),
+        depends_on_block_constraints,
       );
     }
 

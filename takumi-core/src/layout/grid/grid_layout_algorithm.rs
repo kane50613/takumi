@@ -2680,7 +2680,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   }
 
   /// The intrinsic block size of rows `rows` long, which Blink's `ClampIntrinsicBlockSize` leaves
-  /// out of a block-size-contained box.
+  /// out of a block-size-contained box. Approximate: Blink keeps the explicit rows of a contained
+  /// grid, sized without its items, which this leaves out too.
   fn contained_intrinsic_block_size(&self, rows: LayoutUnit) -> LayoutUnit {
     let content = if self.style.contains_block_size() {
       LayoutUnit::ZERO
