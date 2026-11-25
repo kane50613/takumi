@@ -1827,7 +1827,7 @@ fn all_sets_every_longhand_but_direction_and_unicode_bidi() {
 
 #[test]
 fn all_takes_only_a_css_wide_keyword() {
-  for css in ["all: red", "all: unset red", "all: revert", "all: none"] {
+  for css in ["all: red", "all: unset red", "all: none"] {
     assert!(
       StyleDeclarationBlock::parse_loosy(css).is_empty(),
       "{css} parsed as valid"
