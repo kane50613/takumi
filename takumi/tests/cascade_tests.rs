@@ -1076,3 +1076,17 @@ fn each_longhand_takes_its_last_declaration() {
   assert_eq!(font("font: var(--f); font-size: 30px"), 30.0);
   assert_eq!(font("font-size: 30px; font: var(--f)"), 10.0);
 }
+
+/// A registered custom property in a cycle with `font-size` takes its `unset` value, as Blink's
+/// `ApplyUnset` gives it: the parent's when it inherits, not its initial value.
+#[test]
+fn a_registered_property_in_a_font_size_cycle_is_unset() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("box")]).with_class_name("parent")]),
+    "@property --x { syntax: '<length>'; inherits: true; initial-value: 5px }
+     .parent { --x: 7px }
+     .box { --x: 2em; font-size: var(--x); width: var(--x) }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 7.0);
+}
