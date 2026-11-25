@@ -639,8 +639,7 @@ impl ContainerCondition {
   /// Whether a container whose content box is `size` across, an axis it does not contain left
   /// unknown, satisfies it, its relative lengths in the container's `sizing`, as Blink evaluates
   /// them against the container's computed values. A feature other than a size one is unknown to a
-  /// container query, which then does not hold. Approximate: a container unit reads the
-  /// containing block `sizing` gives, not the queried container's own query container.
+  /// container query, which then does not hold.
   pub(crate) fn matches(
     &self,
     size: Size<Option<f32>>,

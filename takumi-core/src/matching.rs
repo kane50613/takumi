@@ -1273,6 +1273,22 @@ pub(crate) struct QueryContainer {
   pub(crate) font: QueryFont,
 }
 
+impl QueryContainer {
+  /// Its size on the axes its `container-type` contains, the others unknown.
+  fn contained_size(&self) -> Size<Option<f32>> {
+    Size {
+      width: self
+        .container_type
+        .contains_inline_size()
+        .then_some(self.size.width),
+      height: self
+        .container_type
+        .contains_block_size()
+        .then_some(self.size.height),
+    }
+  }
+}
+
 /// A container's font metrics, which the relative lengths in a query read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct QueryFont {
@@ -1328,31 +1344,31 @@ fn container_query_holds(
 
   query.conditions().iter().any(|condition| {
     let reads_block_axis = condition.reads_block_axis();
-    let container = successors(start, Element::parent_element).find_map(|ancestor| {
-      containers.get(&ancestor.index).filter(|container| {
-        (if reads_block_axis {
-          container.container_type.contains_block_size()
-        } else {
-          container.container_type.contains_inline_size()
-        }) && condition
-          .name
-          .as_deref()
-          .is_none_or(|name| container.name.has(name))
-      })
+    let found = successors(start, Element::parent_element).find_map(|ancestor| {
+      containers
+        .get(&ancestor.index)
+        .filter(|container| {
+          (if reads_block_axis {
+            container.container_type.contains_block_size()
+          } else {
+            container.container_type.contains_inline_size()
+          }) && condition
+            .name
+            .as_deref()
+            .is_none_or(|name| container.name.has(name))
+        })
+        .map(|container| (ancestor, container))
     });
 
-    container.is_some_and(|container| {
-      condition.matches(
-        Size {
-          width: Some(container.size.width),
-          height: container
-            .container_type
-            .contains_block_size()
-            .then_some(container.size.height),
-        },
-        viewport,
-        &container.font.sizing(viewport),
-      )
+    found.is_some_and(|(element, container)| {
+      let mut sizing = container.font.sizing(viewport);
+
+      // A container unit in the query reads the container's own query container, as Blink's
+      // `CSSContainerValues` starts from the container's parent.
+      sizing.container_size = successors(element.parent_element(), Element::parent_element)
+        .find_map(|ancestor| containers.get(&ancestor.index))
+        .map_or(Size::NONE, QueryContainer::contained_size);
+      condition.matches(container.contained_size(), viewport, &sizing)
     })
   })
 }

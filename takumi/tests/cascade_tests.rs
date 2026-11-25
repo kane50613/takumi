@@ -1518,3 +1518,22 @@ fn scopes_follow_their_enclosing_limits_and_specificity() {
     1200.0
   );
 }
+
+/// A container unit in a query reads the queried container's own query container, as Blink's
+/// `CSSContainerValues` starts from the container's parent.
+#[test]
+fn a_container_unit_in_a_query_reads_the_outer_container() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><p class="target">x</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inner { container: inner / inline-size; width: 300px }
+     @container inner (width > 50cqw) { .target { width: 50px } }",
+  );
+
+  assert_eq!(measured.children[0].children[0].children[0].width, 50.0);
+}
