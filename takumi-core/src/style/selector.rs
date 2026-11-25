@@ -706,6 +706,8 @@ impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
 struct RuleParser {
   current_layer: Option<LayerPath>,
   lossy: bool,
+  /// Inside `@scope`, where a selector without `:scope` or `&` is relative to the scope's root.
+  scoped: bool,
   /// False inside `@media`, `@layer` and `@supports` blocks, where `@import`
   /// is invalid and its preflight flag must not escape the gate.
   top_level: bool,
@@ -717,6 +719,7 @@ impl RuleParser {
     Self {
       current_layer,
       lossy: self.lossy,
+      scoped: self.scoped,
       top_level: false,
     }
   }
@@ -773,9 +776,35 @@ enum AtRulePrelude {
   },
   /// `@apply`, already expanded into the declarations its utilities stand for.
   Apply(Box<StyleDeclarationBlock>),
+  /// `@scope`, its root and limit selectors.
+  Scope(Scope),
   /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
   Unknown(Box<IgnoredDeclaration>),
+}
+
+/// The scope an `@scope` rule gives the style rules in it: the elements its `start` selectors
+/// match, or the tree's root without them, down to but not into the elements its `end` selectors
+/// match. <https://drafts.csswg.org/css-cascade-6/#scoped-styles>
+#[derive(Debug, Clone)]
+pub(crate) struct Scope {
+  pub(crate) start: Option<SelectorList<SelectorImpl>>,
+  pub(crate) end: Option<SelectorList<SelectorImpl>>,
+  /// The scope of an `@scope` rule this one is in, which its roots must be in.
+  pub(crate) parent: Option<Arc<Scope>>,
+}
+
+impl Scope {
+  /// This scope inside `outer`, at the end of its chain of enclosing scopes.
+  fn within(&self, outer: &Arc<Scope>) -> Arc<Scope> {
+    Arc::new(Self {
+      parent: Some(match &self.parent {
+        Some(parent) => parent.within(outer),
+        None => Arc::clone(outer),
+      }),
+      ..self.clone()
+    })
+  }
 }
 
 /// A style rule with its selectors and declaration blocks. Opaque: its
@@ -794,6 +823,8 @@ pub(crate) struct CssRule {
   pub(crate) layer: Option<LayerPath>,
   /// Resolved ordinal of the rule's layer.
   pub(crate) layer_order: Option<usize>,
+  /// The scope of the `@scope` rule it is in.
+  pub(crate) scope: Option<Arc<Scope>>,
 }
 
 fn parse_property_rule<'i>(
@@ -979,6 +1010,7 @@ impl NestingContext<'_> {
       media_queries: self.media_queries.to_vec(),
       layer: self.layer.cloned(),
       layer_order: None,
+      scope: None,
     }
   }
 
@@ -1124,6 +1156,10 @@ impl NestingContext<'_> {
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      // Approximate: `@scope` in a style rule, whose root is the rule's subject, is not read.
+      AtRulePrelude::Scope(_) => Err(ParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+      )),
       AtRulePrelude::Unknown(at_rule) => {
         skip_block(input);
         Ok(StyleSheetFragment::ignoring(*at_rule))
@@ -1175,6 +1211,32 @@ fn parse_at_rule_prelude<'i>(
 
   if name.eq_ignore_ascii_case("media") {
     return MediaQueryList::parse(input).map(AtRulePrelude::Media);
+  }
+
+  if name.eq_ignore_ascii_case("scope") {
+    let selectors = |input: &mut Parser<'i>, relative| {
+      input.parse_nested_block(|input| SelectorList::parse(&TakumiSelectorParser, input, relative))
+    };
+    let start = input
+      .try_parse(|input| {
+        input.expect_parenthesis_block()?;
+        selectors(input, ParseRelative::No)
+      })
+      .ok();
+    let end = input
+      .try_parse(|input| {
+        input.expect_ident_matching("to")?;
+        input.expect_parenthesis_block()?;
+        selectors(input, ParseRelative::ForScope)
+      })
+      .ok();
+
+    input.expect_exhausted()?;
+    return Ok(AtRulePrelude::Scope(Scope {
+      start,
+      end,
+      parent: None,
+    }));
   }
 
   if name.eq_ignore_ascii_case("supports") {
@@ -1325,7 +1387,13 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     &mut self,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
+    let relative = if self.scoped {
+      ParseRelative::ForScope
+    } else {
+      ParseRelative::No
+    };
+
+    SelectorList::parse(&TakumiSelectorParser, input, relative)
   }
 
   fn parse_block(
@@ -1399,6 +1467,22 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           page_rule.media_queries.push(media_query.clone());
         }
 
+        Ok(fragment)
+      }
+      AtRulePrelude::Scope(scope) => {
+        let scope = Arc::new(scope);
+        let mut fragment = Self {
+          scoped: true,
+          ..self.nested(self.current_layer.clone())
+        }
+        .parse_fragment(input)?;
+
+        for rule in &mut fragment.rules {
+          rule.scope = Some(match &rule.scope {
+            Some(inner) => inner.within(&scope),
+            None => Arc::clone(&scope),
+          });
+        }
         Ok(fragment)
       }
       AtRulePrelude::Supports(true) => self
@@ -1755,6 +1839,7 @@ impl StyleSheet {
     let mut rule_parser = RuleParser {
       current_layer: None,
       lossy,
+      scoped: false,
       top_level: true,
     };
 
