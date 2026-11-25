@@ -33,7 +33,7 @@ use crate::{
     tree::{BoxFragment, LayoutTree, NodeOrigin, push_tight},
   },
   layout_unit::LayoutUnit,
-  style::{Display, JustifyContent},
+  style::{ContainerType, Display, JustifyContent},
 };
 #[cfg(feature = "fragmentation")]
 use crate::{
@@ -871,6 +871,7 @@ impl<'r> LayoutTree<'r> {
       || style.is_out_of_flow()
       || style.is_scroll_container()
       || style.applies_layout_containment()
+      || style.container_type != ContainerType::Normal
       || self.render_node(node).context.style.line_clamp().is_some()
       // https://drafts.csswg.org/css-align/#distribution-block
       || style.align_content != JustifyContent::Normal
