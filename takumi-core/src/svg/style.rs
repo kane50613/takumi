@@ -43,6 +43,8 @@ pub(super) struct StyleResolver<'a> {
   in_place: RefCell<FxHashMap<usize, RenderContext>>,
   /// Set once a length of the document resolves against the host's font metrics.
   font_read: Rc<Cell<bool>>,
+  /// Set when a `color` resolves a colour function against its parent's colour.
+  current_color_read: Rc<Cell<bool>>,
 }
 
 impl<'a> StyleResolver<'a> {
@@ -50,6 +52,7 @@ impl<'a> StyleResolver<'a> {
   /// of an image measure.
   pub(super) fn new(document: &'a SvgDocument, host: SvgHost<'a>, viewport: Size<f32>) -> Self {
     let font_read = Rc::default();
+    let current_color_read: Rc<Cell<bool>> = Rc::default();
     let (root_context, matched, inline) = match host {
       SvgHost::Image {
         current_color,
@@ -72,7 +75,8 @@ impl<'a> StyleResolver<'a> {
             SizingContext::builder()
               .viewport(viewport)
               .build()
-              .noting_font_reads(Rc::clone(&font_read)),
+              .noting_font_reads(Rc::clone(&font_read))
+              .noting_current_color_reads(Rc::clone(&current_color_read)),
           )
           .current_color(current_color.unwrap_or_else(Color::black))
           .style(ComputedStyle::default())
@@ -97,7 +101,8 @@ impl<'a> StyleResolver<'a> {
             host
               .sizing
               .in_css_pixels()
-              .noting_font_reads(Rc::clone(&font_read)),
+              .noting_font_reads(Rc::clone(&font_read))
+              .noting_current_color_reads(Rc::clone(&current_color_read)),
           )
           .current_color(host.current_color)
           .style(Rc::clone(&host.style))
@@ -125,12 +130,19 @@ impl<'a> StyleResolver<'a> {
       inline,
       in_place: RefCell::default(),
       font_read,
+      current_color_read,
     }
   }
 
   /// Whether a length of the document resolved against the host's font metrics.
   pub(super) fn read_fonts(&self) -> bool {
     self.font_read.get()
+  }
+
+  /// Whether a `color` of the document resolved a colour function against its parent's colour,
+  /// which can be the host's.
+  pub(super) fn read_current_color(&self) -> bool {
+    self.current_color_read.get()
   }
 
   /// The context the root element inherits from.
