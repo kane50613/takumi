@@ -425,12 +425,16 @@ impl RuleDeclarations {
   }
 }
 
-/// What a nested rule inherits from the rules around it: the media queries and
-/// layer gating it, and whether invalid items are dropped.
+/// What a nested rule inherits from the rules around it: the media queries, layer, scope, and
+/// container queries gating it, and whether invalid items are dropped.
 #[derive(Clone, Copy)]
 struct NestingContext<'a> {
   media_queries: &'a [MediaQueryList],
   layer: Option<&'a LayerPath>,
+  /// The scope of an `@scope` rule nested in a style rule around it.
+  scope: Option<&'a Arc<Scope>>,
+  /// The queries of `@container` rules nested in style rules around it.
+  container_queries: &'a [Arc<ContainerQuery>],
   lossy: bool,
 }
 
@@ -731,6 +735,8 @@ impl RuleParser {
     NestingContext {
       media_queries: &[],
       layer: self.current_layer.as_ref(),
+      scope: None,
+      container_queries: &[],
       lossy: self.lossy,
     }
   }
@@ -1016,8 +1022,8 @@ impl NestingContext<'_> {
       media_queries: self.media_queries.to_vec(),
       layer: self.layer.cloned(),
       layer_order: None,
-      scope: None,
-      container_queries: Vec::new(),
+      scope: self.scope.cloned(),
+      container_queries: self.container_queries.to_vec(),
     }
   }
 
@@ -1163,10 +1169,40 @@ impl NestingContext<'_> {
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
-      // Approximate: `@scope` and `@container` in a style rule are not read.
-      AtRulePrelude::Scope(_) | AtRulePrelude::Container(_) => Err(ParseError::custom(
-        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
-      )),
+      AtRulePrelude::Container(query) => {
+        let mut container_queries = self.container_queries.to_vec();
+
+        container_queries.push(Arc::new(query));
+        NestingContext {
+          container_queries: &container_queries,
+          ..self
+        }
+        .parse_style_rule_block(parent_selectors.clone(), input)
+      }
+      // A nested `@scope` roots at the elements the rule around it matches, or at the ones its
+      // start selects with `&` for that rule, and its declarations apply to the root itself.
+      // <https://drafts.csswg.org/css-cascade-6/#nested-scope>
+      AtRulePrelude::Scope(scope) => {
+        let scope = Arc::new(Scope {
+          start: Some(match scope.start {
+            Some(start) => start.replace_parent_selector(parent_selectors),
+            None => parent_selectors.clone(),
+          }),
+          end: scope.end,
+          parent: self.scope.cloned(),
+        });
+        let root = SelectorList::parse(
+          &TakumiSelectorParser,
+          &mut Parser::new(":where(:scope)"),
+          ParseRelative::No,
+        )?;
+
+        NestingContext {
+          scope: Some(&scope),
+          ..self
+        }
+        .parse_style_rule_block(root, input)
+      }
       AtRulePrelude::Unknown(at_rule) => {
         skip_block(input);
         Ok(StyleSheetFragment::ignoring(*at_rule))
