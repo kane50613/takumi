@@ -1125,7 +1125,7 @@ macro_rules! define_style {
           }
 
           let declared_custom_properties =
-            declare_custom_properties(&mut style, parent, custom_properties);
+            declare_custom_properties(&mut style, parent, &custom_properties, &[]);
           // The `var()` values of `font-size` and `line-height`, which a registered custom property
           // reads through its font-relative units, a revert keyword's taken from what it rolls back
           // to.
@@ -1147,13 +1147,30 @@ macro_rules! define_style {
 
             declarations[target].0.deferred()
           });
-          let cycles = resolve_declared_custom_properties(
+          let font_values =
+            fonts.map(|deferred| deferred.map(|deferred| deferred.specified_value.as_str()));
+          let mut cycles = resolve_declared_custom_properties(
             &mut style,
             &declared_custom_properties,
             parent,
-            fonts.map(|deferred| deferred.map(|deferred| deferred.specified_value.as_str())),
+            font_values,
             is_document_root,
           );
+          // A revert keyword `var()` substitutes rolls the property back as one written out does,
+          // as Blink reads a CSS-wide keyword after substitution, so the element's custom
+          // properties resolve again with the values they roll back to.
+          let rolled_back = substituted_rollbacks(&style, &custom_properties);
+
+          if !rolled_back.is_empty() {
+            declare_custom_properties(&mut style, parent, &custom_properties, &rolled_back);
+            cycles = resolve_declared_custom_properties(
+              &mut style,
+              &declared_custom_properties,
+              parent,
+              font_values,
+              is_document_root,
+            );
+          }
 
           if cycles.contains(&true) {
             let invalid: SmallVec<[DeferredDeclaration; 2]> = fonts
@@ -2815,13 +2832,13 @@ impl ComputedStyle {
 }
 
 /// Declares each custom property its winning declaration among `declarations` in cascade order,
-/// a revert keyword rolling back to the weaker one it names, and returns their names.
-/// Approximate: a revert keyword that `var()` substitution yields stays as text, where Blink rolls
-/// the property back as for one written out.
+/// a revert keyword rolling back to the weaker one it names, or the value `rolled_back` gives it,
+/// and returns their names.
 fn declare_custom_properties(
   style: &mut ComputedStyle,
   parent: &ComputedStyle,
-  declarations: SmallVec<[(String, String, CascadeSource); 4]>,
+  declarations: &[(String, String, CascadeSource)],
+  rolled_back: &[(String, String)],
 ) -> Vec<String> {
   let mut declared: Vec<String> = Vec::new();
   let mut seen: Xxh3HashSet<&str> = Xxh3HashSet::default();
@@ -2832,17 +2849,10 @@ fn declare_custom_properties(
     }
     declared.push(name.clone());
 
-    let target = revert_target(
-      &declarations,
-      index,
-      |(.., source)| *source,
-      |(_, value, _)| CssWideKeyword::from_css_str(value).ok(),
-      |(other, ..)| other == name,
-    );
-    let value = target.map_or_else(
-      || "unset".to_owned(),
-      |target| declarations[target].1.clone(),
-    );
+    let value = match rolled_back.iter().find(|(rolled, _)| rolled == name) {
+      Some((_, value)) => value.clone(),
+      None => rollback_value(declarations, index, None),
+    };
 
     style
       .custom_properties
@@ -2850,6 +2860,75 @@ fn declare_custom_properties(
   }
   declared.reverse();
   declared
+}
+
+/// The value the custom property declaration at `index` among `declarations` cascades to: its
+/// own, or for a revert keyword, `keyword` when substitution gave one, the weaker declaration's it
+/// rolls back to, `unset` without one.
+fn rollback_value(
+  declarations: &[(String, String, CascadeSource)],
+  index: usize,
+  keyword: Option<CssWideKeyword>,
+) -> String {
+  let name = &declarations[index].0;
+  let keyword_of =
+    |(_, value, _): &(String, String, CascadeSource)| CssWideKeyword::from_css_str(value).ok();
+  let start = match keyword {
+    // Roll back once by hand, as the declaration holds `var()` rather than the keyword.
+    Some(keyword) => {
+      let from = declarations[index].2;
+      let Some(earlier) = (0..index).rev().find(|&earlier| {
+        declarations[earlier].0 == *name && from.reverts_to(keyword, declarations[earlier].2)
+      }) else {
+        return "unset".to_owned();
+      };
+
+      earlier
+    }
+    None => index,
+  };
+
+  revert_target(
+    declarations,
+    start,
+    |(.., source)| *source,
+    keyword_of,
+    |(other, ..)| other == name,
+  )
+  .map_or_else(
+    || "unset".to_owned(),
+    |target| declarations[target].1.clone(),
+  )
+}
+
+/// The custom properties whose winning declaration's `var()` substituted a revert keyword, each
+/// with the value it rolls back to.
+fn substituted_rollbacks(
+  style: &ComputedStyle,
+  declarations: &[(String, String, CascadeSource)],
+) -> Vec<(String, String)> {
+  let mut seen: Xxh3HashSet<&str> = Xxh3HashSet::default();
+  let mut rolled_back = Vec::new();
+
+  for (index, (name, value, _)) in declarations.iter().enumerate().rev() {
+    if !seen.insert(name) || !contains_var_references(value) {
+      continue;
+    }
+    let Some(keyword) = style
+      .custom_properties
+      .get(name)
+      .and_then(|resolved| CssWideKeyword::from_css_str(resolved).ok())
+      .filter(|keyword| keyword.reverts())
+    else {
+      continue;
+    };
+
+    rolled_back.push((
+      name.clone(),
+      rollback_value(declarations, index, Some(keyword)),
+    ));
+  }
+  rolled_back
 }
 
 /// The animation origin of a cascade, as Blink's `CascadeOrigin::kAnimation`: what an element's
