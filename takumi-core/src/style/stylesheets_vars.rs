@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 use cssparser::{Parser, Token, TokenSerializationType};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CssInput, CustomProperties};
+use crate::style::{ComputedStyle, CustomProperties};
 
 const MAX_VAR_DEPTH: u32 = 100;
 const MAX_VAR_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -453,16 +453,7 @@ pub(crate) fn apply_deferred_declaration(
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
 ) -> bool {
-  let Some(resolved_value) =
-    resolve_var_references(&deferred.specified_value, &style.custom_properties)
-  else {
-    return false;
-  };
-
-  let Ok(declarations) = deferred
-    .property
-    .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
-  else {
+  let Some(declarations) = deferred.substituted(&style.custom_properties) else {
     return false;
   };
 

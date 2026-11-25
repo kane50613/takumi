@@ -3,7 +3,7 @@ use std::{
   fmt,
   rc::Rc,
   str::FromStr,
-  sync::{Arc, OnceLock},
+  sync::{Arc, LazyLock, OnceLock},
 };
 
 use cssparser::{
@@ -116,7 +116,51 @@ impl StyleDeclaration {
   }
 }
 
+impl StyleDeclaration {
+  /// The declarations it stands for once `var()` substitutes into it: a pending substitution its
+  /// value, or `unset` on each longhand when it is invalid at computed-value time, and a utility
+  /// reference its value, its fallback, or nothing.
+  fn substituted(self, custom_properties: &CustomProperties) -> ParsedDeclarations {
+    match self {
+      Self::Deferred(deferred) => deferred.substituted(custom_properties).unwrap_or_else(|| {
+        deferred
+          .property
+          .target_longhands()
+          .iter()
+          .map(|longhand| Self::CssWideKeyword(longhand, CssWideKeyword::Unset))
+          .collect()
+      }),
+      Self::VarRef(var_ref) => {
+        if custom_properties.contains(var_ref.name.as_ref())
+          && let Some(declarations) = var_ref.deferred.substituted(custom_properties)
+        {
+          return declarations;
+        }
+        var_ref
+          .fallback
+          .map(|fallback| fallback.substituted(custom_properties))
+          .unwrap_or_default()
+      }
+      declaration => smallvec![declaration],
+    }
+  }
+}
+
 impl DeferredDeclaration {
+  /// The declarations its value parses to once `var()` substitutes into it, or `None` when it is
+  /// invalid at computed-value time.
+  pub(crate) fn substituted(
+    &self,
+    custom_properties: &CustomProperties,
+  ) -> Option<ParsedDeclarations> {
+    let resolved_value = resolve_var_references(&self.specified_value, custom_properties)?;
+
+    self
+      .property
+      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
+      .ok()
+  }
+
   /// Applies its substituted value, or `unset` when it is
   /// [invalid at computed-value time](https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time).
   fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
@@ -486,6 +530,23 @@ macro_rules! define_style {
             .into_iter()
             .filter(|property| !matches!(property, Self::Direction | Self::UnicodeBidi))
             .collect()
+        }
+
+        /// The physical longhand this one sets in a `direction: rtl` element when `rtl`, as Blink's
+        /// `ResolveSurrogate` maps a logical property: itself unless it is logical.
+        pub(crate) fn physical(self, rtl: bool) -> Self {
+          match self {
+            $(
+              Self::[<$transient:camel>] => {
+                if rtl {
+                  Self::[<$transient_rtl:camel>]
+                } else {
+                  Self::[<$transient_ltr:camel>]
+                }
+              }
+            )*
+            _ => self,
+          }
         }
 
         /// Blink's high-priority longhands by their `priority` in `css_properties.json5`, the
@@ -1038,33 +1099,7 @@ macro_rules! define_style {
               .collect();
           }
 
-          // Pre-resolve `direction` so logical-axis applies below see the
-          // final value even if `direction:` is declared later in the block.
-          for declaration in &declarations {
-            match declaration {
-              StyleDeclaration::Direction(d) => style.inherited_data_mut().direction = *d,
-              StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
-                style.inherited_data_mut().direction = match keyword {
-                  CssWideKeyword::Initial => Direction::default(),
-                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.inherited_data.direction,
-                };
-              }
-              StyleDeclaration::Deferred(deferred)
-                if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
-              {
-                deferred.apply_with_parent(&mut style, parent);
-              }
-              _ => {}
-            }
-          }
-
-          let parent_font_weight = parent.inherited_data.font_weight.value();
-          for mut declaration in declarations {
-            if let StyleDeclaration::FontWeight(weight) = &mut declaration {
-              *weight = weight.resolve_against(parent_font_weight);
-            }
-            declaration.apply_with_parent(&mut style, parent);
-          }
+          apply_winning_declarations(&mut style, parent, declarations);
           style
         }
       }
@@ -2582,6 +2617,75 @@ impl ComputedStyle {
     for longhand in longhands.iter() {
       self.copy_longhand(longhand, source);
     }
+  }
+}
+
+/// Applies each longhand's winning declaration, the last of `declarations` in cascade order, as
+/// Blink's `StyleCascade::Apply` does. `direction` applies first, since it decides the physical
+/// longhand a logical one sets, then the high-priority longhands, then `vertical-align` ahead of
+/// the `baseline-source` it overlaps, then the rest.
+fn apply_winning_declarations(
+  style: &mut ComputedStyle,
+  parent: &ComputedStyle,
+  declarations: ParsedDeclarations,
+) {
+  static HIGH_PRIORITY: LazyLock<[PropertyMask; 2]> = LazyLock::new(LonghandId::high_priority);
+
+  let mut declarations: SmallVec<[Option<StyleDeclaration>; 8]> = declarations
+    .into_iter()
+    .flat_map(|declaration| declaration.substituted(&style.custom_properties))
+    .map(Some)
+    .collect();
+  let longhand = |declaration: &Option<StyleDeclaration>| {
+    declaration.as_ref().map(StyleDeclaration::longhand_id)
+  };
+
+  if let Some(direction) = declarations
+    .iter()
+    .rposition(|declaration| longhand(declaration) == Some(LonghandId::Direction))
+    .and_then(|index| declarations[index].take())
+  {
+    direction.apply_with_parent(style, parent);
+  }
+
+  let rtl = style.inherited_data.direction == Direction::Rtl;
+  let phase = |longhand: LonghandId| match longhand {
+    longhand if HIGH_PRIORITY[0].contains(&longhand) => 0,
+    longhand if HIGH_PRIORITY[1].contains(&longhand) => 1,
+    LonghandId::VerticalAlign => 2,
+    _ => 3,
+  };
+  let mut seen: PropertyMask = [LonghandId::Direction].into_iter().collect();
+  let mut winners: SmallVec<[(u8, usize, LonghandId); 8]> = SmallVec::new();
+
+  for (index, declaration) in declarations.iter().enumerate().rev() {
+    if let Some(longhand) = longhand(declaration).map(|longhand| longhand.physical(rtl))
+      && seen.insert(longhand)
+    {
+      winners.push((phase(longhand), index, longhand));
+    }
+  }
+  winners.sort_unstable();
+
+  let vertical_align = winners
+    .iter()
+    .find(|(.., longhand)| *longhand == LonghandId::VerticalAlign)
+    .map(|&(_, index, _)| index);
+  let parent_font_weight = parent.inherited_data.font_weight.value();
+
+  for (_, index, longhand) in winners {
+    // `vertical-align` resets `baseline-source`, which keeps a value only from a later declaration.
+    if longhand == LonghandId::BaselineSource && vertical_align > Some(index) {
+      continue;
+    }
+    let Some(mut declaration) = declarations[index].take() else {
+      continue;
+    };
+
+    if let StyleDeclaration::FontWeight(weight) = &mut declaration {
+      *weight = weight.resolve_against(parent_font_weight);
+    }
+    declaration.apply_with_parent(style, parent);
   }
 }
 
