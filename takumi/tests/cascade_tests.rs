@@ -1358,3 +1358,29 @@ fn nested_containers_settle_at_any_depth() {
   }
   assert_eq!(node.width, 50.0);
 }
+
+/// `@container` and `@scope` nest in a style rule: the first gates the rule's declarations, and
+/// the second roots at the elements the rule matches, or the ones its start picks with `&`.
+#[test]
+fn container_and_scope_rules_nest_in_style_rules() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 300px }
+       .target { @container (min-width: 200px) { width: 50px } }"
+    ),
+    50.0
+  );
+  assert_eq!(
+    card_widths(".card { @scope { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths(".card { @scope to (.content) { p { width: 30px } } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+  assert_eq!(card_widths(".card { @scope { width: 100px } }")[0], 100.0);
+  assert_eq!(
+    card_widths(".outer { @scope (& > .card) { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+}
