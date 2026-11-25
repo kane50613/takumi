@@ -7,7 +7,7 @@ packages:
 
 `container-type`, `container-name`, and the `container` shorthand make a box a query container, and `@container` rules read its size, as in Chrome:
 
-- A `size` or `inline-size` container takes no size from its content on the axes it contains.
+- A `size` or `inline-size` container takes no size from its content on the axes it contains, and starts a new formatting context, so its children's margins stay inside it.
 - A query asks the nearest container that has its name and contains every axis it reads, and matches nothing without one.
 - Conditions take `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, and `orientation`, with range syntax, as a comma-separated list, and an `em` reads the container's font size.
 - `@container` also nests in a style rule.
