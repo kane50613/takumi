@@ -1553,3 +1553,19 @@ fn a_contained_grid_keeps_its_explicit_tracks() {
     0.0
   );
 }
+
+/// An `@scope` rule without a start roots at the parent of the `<style>` element holding it.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+#[test]
+fn a_scope_without_a_start_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    "<div class=\"card\"><style>@scope { p { width: 30px } :scope { width: 200px } }</style><p>a</p></div><p>b</p>",
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].width, 200.0);
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}

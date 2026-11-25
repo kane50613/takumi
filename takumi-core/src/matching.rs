@@ -1374,12 +1374,11 @@ fn container_query_holds(
 }
 
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
-/// it is: an inclusive ancestor its start selectors match, or the tree's root without them, with no
+/// it is: an inclusive ancestor its start selectors match, or without them the parent of the
+/// `<style>` element holding the rule, the tree's root for a sheet no element holds, with no
 /// element its end selectors match from `element` up to it. Inside another `@scope`, a root must
 /// be in that scope from an outer root `element` is in scope of too.
-/// <https://drafts.csswg.org/css-cascade-6/#scope-limits> Approximate: without start selectors the
-/// spec roots at the parent of the `<style>` element holding the rule, which a parsed document's
-/// one stylesheet no longer records, so the root is the tree's.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
 fn scope_roots(
   scope: &Scope,
   element: ArenaElement<'_>,
@@ -1419,7 +1418,12 @@ fn scope_roots(
       Some(start) => outer_roots
         .iter()
         .any(|&(outer, _)| matches(start, root, outer, ctx)),
-      None => root.parent_element().is_none() && !outer_roots.is_empty(),
+      None => {
+        (match scope.owner {
+          Some(owner) => root.style_node().node.metadata.style_owner == Some(owner),
+          None => root.parent_element().is_none(),
+        }) && !outer_roots.is_empty()
+      }
     };
     let limited = scope.end.as_ref().is_some_and(|end| {
       successors(Some(element), Element::parent_element)
