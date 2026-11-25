@@ -56,7 +56,10 @@ impl CustomProperties {
     let inherits = registration.is_none_or(|rule| rule.inherits);
     let inherited = match keyword {
       CssWideKeyword::Inherit => true,
-      CssWideKeyword::Unset => inherits,
+      CssWideKeyword::Unset
+      | CssWideKeyword::Revert
+      | CssWideKeyword::RevertLayer
+      | CssWideKeyword::RevertRule => inherits,
       CssWideKeyword::Initial => false,
     };
     let resolved = match parent {

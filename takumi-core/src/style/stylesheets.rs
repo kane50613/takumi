@@ -1022,19 +1022,14 @@ macro_rules! define_style {
           self.declarations.append(declarations);
         }
 
-        /// Merges a matched block declaration by declaration, each `important` when the block
-        /// is, and takes its element state.
-        pub(crate) fn merge_matched_block(
-          &mut self,
-          declarations: &StyleDeclarationBlock,
-          important: bool,
-        ) {
+        /// Merges a matched block declaration by declaration, and takes its element state.
+        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
           self
             .declarations
             .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
 
           for declaration in declarations.iter() {
-            self.push(declaration.clone(), important);
+            self.push(declaration.clone(), false);
           }
         }
 
@@ -1049,14 +1044,17 @@ macro_rules! define_style {
         }
 
         /// Resolves an element's style against its parent.
+        /// Resolves an element's style against its parent, each declaration cascading from its
+        /// place in `sources`, or from an author rule beyond it.
         pub(crate) fn inherit_element(
           self,
           parent: &ComputedStyle,
           lang: Option<Lang>,
           is_document_root: bool,
+          sources: &[CascadeSource],
           animations: Option<&dyn AnimationOrigin>,
         ) -> ComputedStyle {
-          let mut style = self.cascade(parent, is_document_root, animations);
+          let mut style = self.cascade(parent, is_document_root, sources, animations);
 
           if let Some(lang) = lang {
             style.lang = Some(lang);
@@ -1067,15 +1065,15 @@ macro_rules! define_style {
         /// Resolves this style against a parent into a computed style.
         #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
-          self.cascade(parent, false, None)
+          self.cascade(parent, false, &[], None)
         }
 
-        /// The longhands an important declaration sets.
-        pub(crate) fn important_longhands(&self) -> PropertyMask {
+        /// The longhands a declaration important in `sources` sets.
+        pub(crate) fn important_longhands(&self, sources: &[CascadeSource]) -> PropertyMask {
           let mut longhands = PropertyMask::new();
 
-          for (index, declaration) in self.declarations.declarations.iter().enumerate() {
-            if self.declarations.important.get(index) {
+          for (declaration, source) in self.declarations.iter().zip(sources) {
+            if source.origin.is_important() {
               longhands.union(&declaration.affected_longhands());
             }
           }
@@ -1096,44 +1094,47 @@ macro_rules! define_style {
           self,
           parent: &ComputedStyle,
           is_document_root: bool,
+          sources: &[CascadeSource],
           animations: Option<&dyn AnimationOrigin>,
         ) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
-          let mut declarations: SmallVec<[(StyleDeclaration, bool); 8]> = SmallVec::new();
-          let mut declared_custom_properties = Vec::new();
+          let mut declarations: SmallVec<[(StyleDeclaration, CascadeSource); 8]> = SmallVec::new();
+          let mut custom_properties: SmallVec<[(String, String, CascadeSource); 4]> = SmallVec::new();
 
           for name in &self.declarations.element_state {
             style.custom_properties.register_element_state(name);
           }
 
-          let important = self.declarations.important;
           let mut animated_custom_properties = animations
             .map_or(&[][..], AnimationOrigin::custom_properties)
             .iter();
-          let mut declare = |name: String, value: String| {
-            declared_custom_properties.push(name.clone());
-            style
-              .custom_properties
-              .declare(name, value, Some(&parent.custom_properties));
+          let animation = CascadeSource {
+            origin: CascadeOrigin::Animation,
+            layer: 0,
+            rule: usize::MAX,
           };
 
           for (index, declaration) in self.declarations.declarations.into_iter().enumerate() {
-            let is_important = important.get(index);
+            let source = sources.get(index).copied().unwrap_or(CascadeSource::AUTHOR);
 
-            if is_important {
+            if source.origin > CascadeOrigin::Animation {
               for (name, value) in animated_custom_properties.by_ref() {
-                declare(name.clone(), value.clone());
+                custom_properties.push((name.clone(), value.clone(), animation));
               }
             }
             match declaration {
-              StyleDeclaration::CustomProperty(name, value) => declare(name, value),
-              declaration => declarations.push((declaration, is_important)),
+              StyleDeclaration::CustomProperty(name, value) => {
+                custom_properties.push((name, value, source));
+              }
+              declaration => declarations.push((declaration, source)),
             }
           }
           for (name, value) in animated_custom_properties {
-            declare(name.clone(), value.clone());
+            custom_properties.push((name.clone(), value.clone(), animation));
           }
 
+          let declared_custom_properties =
+            declare_custom_properties(&mut style, parent, custom_properties);
           // The `var()` values of `font-size` and `line-height`, which a registered custom property
           // reads through its font-relative units.
           let fonts = [LonghandId::FontSize, LonghandId::LineHeight].map(|longhand| {
@@ -1159,14 +1160,14 @@ macro_rules! define_style {
 
             declarations = declarations
               .into_iter()
-.flat_map(|(declaration, is_important)| -> SmallVec<[(StyleDeclaration, bool); 8]> {
+              .flat_map(|(declaration, source)| -> SmallVec<[(StyleDeclaration, CascadeSource); 8]> {
                 if declaration.deferred().is_some_and(|deferred| invalid.contains(deferred)) {
                   unset(declaration.affected_longhands())
                     .into_iter()
-                    .map(|declaration| (declaration, is_important))
+                    .map(|declaration| (declaration, source))
                     .collect()
                 } else {
-                  smallvec![(declaration, is_important)]
+                  smallvec![(declaration, source)]
                 }
               })
               .collect();
@@ -1586,7 +1587,7 @@ macro_rules! define_style {
                 $(
                   LonghandId::[<$transient:camel>] => {
                     let value = match keyword {
-                      CssWideKeyword::Initial | CssWideKeyword::Unset => define_style!(@default $($transient_default)?),
+                      CssWideKeyword::Initial | CssWideKeyword::Unset | CssWideKeyword::Revert | CssWideKeyword::RevertLayer | CssWideKeyword::RevertRule => define_style!(@default $($transient_default)?),
                       CssWideKeyword::Inherit => {
                         if parent.inherited_data.direction == Direction::Rtl {
                           parent.$rtl_group.$transient_rtl.to_owned()
@@ -1607,7 +1608,7 @@ macro_rules! define_style {
                   let inherits = match keyword {
                     CssWideKeyword::Initial => false,
                     CssWideKeyword::Inherit => true,
-                    CssWideKeyword::Unset => LonghandId::INHERITED[property.index()],
+                    CssWideKeyword::Unset | CssWideKeyword::Revert | CssWideKeyword::RevertLayer | CssWideKeyword::RevertRule => LonghandId::INHERITED[property.index()],
                   };
 
                   if inherits {
@@ -1660,7 +1661,7 @@ macro_rules! define_style {
                 )*
                 _ => INITIAL_STYLE.with(|initial| style.copy_longhand(*property, initial)),
               },
-              CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
+              CssWideKeyword::Inherit | CssWideKeyword::Unset | CssWideKeyword::Revert | CssWideKeyword::RevertLayer | CssWideKeyword::RevertRule => {}
             },
             Self::CustomProperty(name, value) => {
               style
@@ -1714,6 +1715,9 @@ macro_rules! define_style {
                 CssWideKeyword::Initial => "initial",
                 CssWideKeyword::Inherit => "inherit",
                 CssWideKeyword::Unset => "unset",
+                CssWideKeyword::Revert => "revert",
+                CssWideKeyword::RevertLayer => "revert-layer",
+                CssWideKeyword::RevertRule => "revert-rule",
               };
               write!(dest, "{}: {};", id.css_name(), keyword_str)
             }
@@ -2580,6 +2584,91 @@ pub(crate) enum CssWideKeyword {
   Inherit,
   /// Apply CSS `unset` semantics to the targeted longhand.
   Unset,
+  /// Roll back to the user-agent origin, which the cascade resolves, else `unset`.
+  Revert,
+  /// Roll back to the layer below, which the cascade resolves, else `unset`.
+  RevertLayer,
+  /// Roll back to the rule below, which the cascade resolves, else `unset`.
+  RevertRule,
+}
+
+impl CssWideKeyword {
+  /// Whether the cascade rolls this back to a weaker declaration.
+  pub(crate) fn reverts(self) -> bool {
+    matches!(self, Self::Revert | Self::RevertLayer | Self::RevertRule)
+  }
+}
+
+/// A declaration's origin, ordered as Blink's `CascadeOrigin` with important ones inverted above.
+/// The user agent sets nothing important here, and there is no user origin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CascadeOrigin {
+  UserAgent,
+  PresentationalHint,
+  Author,
+  Animation,
+  AuthorImportant,
+}
+
+impl CascadeOrigin {
+  pub(crate) fn is_important(self) -> bool {
+    self == Self::AuthorImportant
+  }
+}
+
+/// Where a declaration cascades from, as much of Blink's `CascadePriority` as the revert keywords
+/// read: its origin, its layer there, and its rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CascadeSource {
+  pub(crate) origin: CascadeOrigin,
+  /// The layer in cascade order within the origin.
+  pub(crate) layer: usize,
+  /// The rule, the same for every declaration of one block.
+  pub(crate) rule: usize,
+}
+
+impl CascadeSource {
+  /// An author rule's declaration, where nothing says where it cascades from.
+  pub(crate) const AUTHOR: Self = Self {
+    origin: CascadeOrigin::Author,
+    layer: 0,
+    rule: 0,
+  };
+
+  /// Whether `keyword` declared here rolls back to `earlier`, a weaker declaration of the same
+  /// property, as Blink's `ResolveRevert`, `ResolveRevertLayer`, and `ResolveRevertRule` find it.
+  /// Without a user origin, `revert` reaches the user agent's.
+  fn reverts_to(self, keyword: CssWideKeyword, earlier: Self) -> bool {
+    match keyword {
+      CssWideKeyword::Revert => {
+        self.origin != CascadeOrigin::UserAgent && earlier.origin == CascadeOrigin::UserAgent
+      }
+      CssWideKeyword::RevertLayer => (earlier.origin, earlier.layer) < (self.origin, self.layer),
+      CssWideKeyword::RevertRule => earlier.rule != self.rule,
+      _ => false,
+    }
+  }
+}
+
+/// The index among `declarations` of what the one at `index` cascades to: itself, or for a revert
+/// keyword the weaker declaration it rolls back to, `None` when there is none and it acts as
+/// `unset`. `keyword` reads a declaration's revert keyword, and `same` whether it sets the same
+/// property.
+fn revert_target<T>(
+  declarations: &[T],
+  mut index: usize,
+  source: impl Fn(&T) -> CascadeSource,
+  keyword: impl Fn(&T) -> Option<CssWideKeyword>,
+  same: impl Fn(&T) -> bool,
+) -> Option<usize> {
+  while let Some(reverting) = keyword(&declarations[index]).filter(|keyword| keyword.reverts()) {
+    let from = source(&declarations[index]);
+
+    index = (0..index).rev().find(|&earlier| {
+      same(&declarations[earlier]) && from.reverts_to(reverting, source(&declarations[earlier]))
+    })?;
+  }
+  Some(index)
 }
 
 impl<'i> FromCss<'i> for CssWideKeyword {
@@ -2590,11 +2679,21 @@ impl<'i> FromCss<'i> for CssWideKeyword {
       "initial" => Ok(Self::Initial),
       "inherit" => Ok(Self::Inherit),
       "unset" => Ok(Self::Unset),
+      "revert" => Ok(Self::Revert),
+      "revert-layer" => Ok(Self::RevertLayer),
+      "revert-rule" => Ok(Self::RevertRule),
       _ => Err(unexpected_token!(&Token::Ident(ident))),
     }
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["initial", "inherit", "unset"];
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "initial",
+    "inherit",
+    "unset",
+    "revert",
+    "revert-layer",
+    "revert-rule",
+  ];
 }
 
 /// The set of properties marked `!important`.
@@ -2693,6 +2792,41 @@ impl ComputedStyle {
   }
 }
 
+/// Declares each custom property its winning declaration among `declarations` in cascade order,
+/// a revert keyword rolling back to the weaker one it names, and returns their names.
+fn declare_custom_properties(
+  style: &mut ComputedStyle,
+  parent: &ComputedStyle,
+  declarations: SmallVec<[(String, String, CascadeSource); 4]>,
+) -> Vec<String> {
+  let mut declared: Vec<String> = Vec::new();
+
+  for (index, (name, ..)) in declarations.iter().enumerate().rev() {
+    if declared.contains(name) {
+      continue;
+    }
+    declared.push(name.clone());
+
+    let target = revert_target(
+      &declarations,
+      index,
+      |(.., source)| *source,
+      |(_, value, _)| CssWideKeyword::from_css_str(value).ok(),
+      |(other, ..)| other == name,
+    );
+    let value = target.map_or_else(
+      || "unset".to_owned(),
+      |target| declarations[target].1.clone(),
+    );
+
+    style
+      .custom_properties
+      .declare(name.clone(), value, Some(&parent.custom_properties));
+  }
+  declared.reverse();
+  declared
+}
+
 /// The animation origin of a cascade, as Blink's `CascadeOrigin::kAnimation`: what an element's
 /// animations set, above its normal declarations and below its important ones.
 pub(crate) trait AnimationOrigin {
@@ -2716,32 +2850,65 @@ pub(crate) trait AnimationOrigin {
 fn apply_winning_declarations(
   style: &mut ComputedStyle,
   parent: &ComputedStyle,
-  declarations: SmallVec<[(StyleDeclaration, bool); 8]>,
+  declarations: SmallVec<[(StyleDeclaration, CascadeSource); 8]>,
   animations: Option<&dyn AnimationOrigin>,
 ) {
   static HIGH_PRIORITY: LazyLock<[PropertyMask; 2]> = LazyLock::new(LonghandId::high_priority);
 
-  let mut declarations: SmallVec<[Option<(StyleDeclaration, bool)>; 8]> = declarations
+  let mut declarations: SmallVec<[Option<(StyleDeclaration, CascadeSource)>; 8]> = declarations
     .into_iter()
-    .flat_map(|(declaration, is_important)| {
+    .flat_map(|(declaration, source)| {
       declaration
         .substituted(&style.custom_properties)
         .into_iter()
-        .map(move |declaration| Some((declaration, is_important)))
+        .map(move |declaration| Some((declaration, source)))
     })
     .collect();
-  let longhand = |declaration: &Option<(StyleDeclaration, bool)>| {
+  let longhand = |declaration: &Option<(StyleDeclaration, CascadeSource)>| {
     declaration
       .as_ref()
       .map(|(declaration, _)| declaration.longhand_id())
   };
+  // What the declaration at `index` for the physical `target` cascades to, or `unset` on it.
+  let resolve = |declarations: &mut SmallVec<[Option<(StyleDeclaration, CascadeSource)>; 8]>,
+                 index: usize,
+                 target: LonghandId,
+                 rtl: bool| {
+    let resolved = revert_target(
+      declarations,
+      index,
+      |declaration| {
+        declaration
+          .as_ref()
+          .map_or(CascadeSource::AUTHOR, |(_, source)| *source)
+      },
+      |declaration| match declaration {
+        Some((StyleDeclaration::CssWideKeyword(_, keyword), _)) => Some(*keyword),
+        _ => None,
+      },
+      |declaration| longhand(declaration).is_some_and(|longhand| longhand.physical(rtl) == target),
+    );
 
-  if let Some((direction, _)) = declarations
+    match resolved {
+      Some(resolved) => resolved,
+      None => {
+        if let Some((declaration, _)) = &mut declarations[index] {
+          *declaration = StyleDeclaration::CssWideKeyword(target, CssWideKeyword::Unset);
+        }
+        index
+      }
+    }
+  };
+
+  if let Some(index) = declarations
     .iter()
     .rposition(|declaration| longhand(declaration) == Some(LonghandId::Direction))
-    .and_then(|index| declarations[index].take())
   {
-    direction.apply_with_parent(style, parent);
+    let index = resolve(&mut declarations, index, LonghandId::Direction, false);
+
+    if let Some((direction, _)) = declarations[index].take() {
+      direction.apply_with_parent(style, parent);
+    }
   }
 
   let rtl = style.inherited_data.direction == Direction::Rtl;
@@ -2755,16 +2922,23 @@ fn apply_winning_declarations(
   let mut important = PropertyMask::new();
   let mut winners: SmallVec<[(usize, usize, LonghandId); 8]> = SmallVec::new();
 
-  for (index, declaration) in declarations.iter().enumerate().rev() {
-    if let Some((declaration, is_important)) = declaration
-      && let longhand = declaration.longhand_id().physical(rtl)
-      && seen.insert(longhand)
-    {
-      if *is_important {
-        important.insert(longhand);
-      }
-      winners.push((phase(longhand), index, longhand));
+  for index in (0..declarations.len()).rev() {
+    let Some((declaration, source)) = &declarations[index] else {
+      continue;
+    };
+    let longhand = declaration.longhand_id().physical(rtl);
+
+    if !seen.insert(longhand) {
+      continue;
     }
+    if source.origin.is_important() {
+      important.insert(longhand);
+    }
+    winners.push((
+      phase(longhand),
+      resolve(&mut declarations, index, longhand, rtl),
+      longhand,
+    ));
   }
   winners.sort_unstable();
 

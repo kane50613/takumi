@@ -1090,3 +1090,53 @@ fn a_registered_property_in_a_font_size_cycle_is_unset() {
 
   assert_eq!(measured.children[0].children[0].width, 7.0);
 }
+
+/// The width and top margin of `.box`, a parsed `<p>`, under `css`.
+fn paragraph(css: &str) -> (f32, f32) {
+  let node =
+    Node::from_html(r#"<p class="box">x</p>"#, FromHtmlOptions::default()).expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+
+  (
+    measured.children[0].width,
+    measured.children[0].transform[5],
+  )
+}
+
+/// `revert`, `revert-layer`, and `revert-rule` roll a property back to a weaker declaration, as
+/// Blink's `StyleCascade` resolves them, or to `unset` without one.
+#[test]
+fn revert_keywords_roll_back_to_a_weaker_declaration() {
+  // `revert` reaches the user agent's `margin-top: 1em`, past every author rule.
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { margin-top: 3px } } .box { margin-top: 5px } p.box { margin-top: revert }"
+    )
+    .1,
+    16.0
+  );
+  // `revert-layer` reaches the layer below, and an important one the normal declarations.
+  assert_eq!(
+    paragraph("@layer a { .box { width: 30px } } .box { width: 50px; width: revert-layer }").0,
+    30.0
+  );
+  assert_eq!(
+    paragraph(".box { width: 30px } p.box { width: revert-layer !important }").0,
+    30.0
+  );
+  // `revert-rule` reaches another rule, past its own earlier declaration.
+  assert_eq!(
+    paragraph(".box { width: 30px } p.box { width: 70px; width: revert-rule }").0,
+    30.0
+  );
+  // Without a weaker declaration, a revert keyword is `unset`.
+  assert_eq!(paragraph(".box { width: revert-layer }").0, 1200.0);
+  // A custom property rolls back too.
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { --w: 40px } } .box { --w: 90px; --w: revert-layer; width: var(--w) }"
+    )
+    .0,
+    40.0
+  );
+}

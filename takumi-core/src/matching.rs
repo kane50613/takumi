@@ -714,6 +714,9 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   layered_important_start: usize,
   /// The rule each block came from and whether it is the `!important` block, in cascade order.
   rules: SmallVec<[(RuleId, bool); 4]>,
+  /// Each block's layer in cascade order: named layers, then the `tw` layer, then unlayered rules,
+  /// reversed among important blocks.
+  layers: SmallVec<[usize; 4]>,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
@@ -746,6 +749,11 @@ impl<'a> MatchedDeclarationsView<'a> {
   /// The rules the blocks came from, which name the same blocks on every element of the render.
   pub(crate) fn rules(&self) -> &[(RuleId, bool)] {
     &self.rules
+  }
+
+  /// Each block's layer, normal blocks then important ones, in cascade order.
+  pub(crate) fn layers(&self) -> &[usize] {
+    &self.layers
   }
 
   /// Whether a matched declaration may copy a non-inherited value from the parent.
@@ -1284,6 +1292,7 @@ fn finalize_bucket<'a>(
   });
   for rule in rules.drain(..) {
     matched.rules.push((rule.id, rule.important));
+    matched.layers.push(rule.layer_order);
 
     if rule.important {
       if rule.layer_order == 0 {
