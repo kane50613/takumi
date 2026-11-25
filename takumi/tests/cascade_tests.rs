@@ -1545,3 +1545,24 @@ fn a_container_unit_in_a_query_reads_the_outer_container() {
 
   assert_eq!(measured.children[0].children[0].children[0].width, 50.0);
 }
+
+/// A size-contained grid keeps its explicit tracks, sized without its items, as Blink's
+/// `BuildGridSizingTreeIgnoringChildren` sizes them.
+#[test]
+fn a_contained_grid_keeps_its_explicit_tracks() {
+  assert_eq!(
+    text_box_size(
+      ".box { display: inline-grid; container-type: inline-size; grid-template-columns: 120px }"
+    )
+    .0,
+    120.0
+  );
+  assert_eq!(
+    text_box_size(".box { display: grid; container-type: size; grid-template-rows: 100px }").1,
+    100.0
+  );
+  assert_eq!(
+    text_box_size(".box { display: grid; container-type: size }").1,
+    0.0
+  );
+}

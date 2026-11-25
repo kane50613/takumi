@@ -1356,9 +1356,20 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       Some(&mut out_of_flow_children),
       None,
       false,
+      false,
     );
 
     (sizing_tree, out_of_flow_children, placement_data)
+  }
+
+  /// Blink's `BuildGridSizingTreeIgnoringChildren`: the explicit grid alone, which a size-contained
+  /// grid sizes its tracks from.
+  fn build_grid_sizing_tree_ignoring_children(&mut self) -> GridSizingTree {
+    let line_resolver = self.build_grid_line_resolver(None);
+    let mut sizing_tree = GridSizingTree::default();
+
+    self.build_grid_sizing_subtree(&mut sizing_tree, &line_resolver, None, None, false, true);
+    sizing_tree
   }
 
   /// Blink's `BuildGridSizingSubtree`: this grid's node, the subtrees of its subgrids after it, and the
@@ -1370,12 +1381,24 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     out_of_flow_children: Option<&mut Vec<NodeId>>,
     subgrid_data: Option<SubgriddedItemData>,
     mut must_invalidate_placement_cache: bool,
+    must_ignore_children: bool,
   ) -> Rc<GridPlacementData> {
-    let (mut grid_items, placement_data, has_nested_subgrid) = self.construct_grid_items(
-      line_resolver,
-      &mut must_invalidate_placement_cache,
-      out_of_flow_children,
-    );
+    let (mut grid_items, placement_data, has_nested_subgrid) = if must_ignore_children {
+      (
+        GridItems::default(),
+        Rc::new(
+          GridPlacement::new(&self.grid_style, line_resolver.clone())
+            .run_auto_placement_algorithm(&[]),
+        ),
+        false,
+      )
+    } else {
+      self.construct_grid_items(
+        line_resolver,
+        &mut must_invalidate_placement_cache,
+        out_of_flow_children,
+      )
+    };
     let subgrid_area = subgridded_area_in_parent(subgrid_data.map(|data| data.item(sizing_tree)));
     let has_standalone_columns = subgrid_area.columns.is_indefinite();
     let has_standalone_rows = subgrid_area.rows.is_indefinite();
@@ -1461,6 +1484,7 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
         None,
         Some(subgrid_data),
         must_invalidate_placement_cache,
+        false,
       );
       // Sizing the subgridded items moves the ranges, so the item finds its own again.
       sizing_tree.node_mut(index).grid_items[item_index].reset_placement_indices();
@@ -2664,8 +2688,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       grid_items.include_subgridded_items_mut(),
     );
 
-    let intrinsic_block_size = self
-      .contained_intrinsic_block_size(layout_data.rows.total_set_span_size().unwrap_or_default());
+    let intrinsic_block_size =
+      layout_data.rows.total_set_span_size().unwrap_or_default() + self.border_padding.block_sum();
 
     (
       GridLayoutState {
@@ -2679,17 +2703,26 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
     )
   }
 
-  /// The intrinsic block size of rows `rows` long, which Blink's `ClampIntrinsicBlockSize` leaves
-  /// out of a block-size-contained box. Approximate: Blink keeps the explicit rows of a contained
-  /// grid, sized without its items, which this leaves out too.
-  fn contained_intrinsic_block_size(&self, rows: LayoutUnit) -> LayoutUnit {
-    let content = if self.style.contains_block_size() {
-      LayoutUnit::ZERO
-    } else {
-      rows
-    };
+  /// Blink's `ComputeIntrinsicBlockSizeIgnoringChildren`: the block size a block-size-contained
+  /// grid's rows take without its items.
+  fn intrinsic_block_size_ignoring_children(&mut self) -> LayoutUnit {
+    let mut sizing_tree = self.build_grid_sizing_tree_ignoring_children();
 
-    content + self.border_padding.block_sum()
+    self.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForRows));
+    self.complete_track_sizing_algorithm_for_tree(
+      &mut sizing_tree,
+      ForRows,
+      SizingConstraint::Layout,
+      None,
+    );
+
+    sizing_tree
+      .node(0)
+      .layout_data
+      .rows
+      .total_set_span_size()
+      .unwrap_or_default()
+      + self.border_padding.block_sum()
   }
 
   /// Blink's `ComputeGridGeometry`: the sized grid, the out-of-flow children, and the intrinsic block
@@ -2716,14 +2749,17 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       Some(&mut needs_additional_pass),
     );
 
-    let intrinsic_block_size = self.contained_intrinsic_block_size(
+    let intrinsic_block_size = if self.style.contains_block_size() {
+      self.intrinsic_block_size_ignoring_children()
+    } else {
       sizing_tree
         .node(0)
         .layout_data
         .rows
         .total_set_span_size()
-        .unwrap_or_default(),
-    );
+        .unwrap_or_default()
+        + self.border_padding.block_sum()
+    };
     let applies_auto_min_size = self.style.aspect_ratio.is_some()
       && self.style.overflow.y.is_clip_or_visible()
       && self.style.min_size.height.is_auto();
@@ -3089,7 +3125,12 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       );
     }
 
-    let (mut sizing_tree, ..) = self.build_grid_sizing_tree();
+    // An inline-size-contained grid sizes its columns as if it had no items.
+    let mut sizing_tree = if self.style.contains_inline_size() {
+      self.build_grid_sizing_tree_ignoring_children()
+    } else {
+      self.build_grid_sizing_tree().0
+    };
     let mut depends_on_block_constraints = false;
     let mut compute_total_column_size = |this: &mut Self, sizing_constraint| {
       let mut needs_additional_pass = false;
