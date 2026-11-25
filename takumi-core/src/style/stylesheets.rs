@@ -533,6 +533,23 @@ macro_rules! define_style {
             .collect()
         }
 
+        /// The `animation` longhands, which an element's animations leave as its style without
+        /// them decided them.
+        pub(crate) fn animation() -> PropertyMask {
+          [
+            Self::AnimationName,
+            Self::AnimationDuration,
+            Self::AnimationDelay,
+            Self::AnimationTimingFunction,
+            Self::AnimationIterationCount,
+            Self::AnimationDirection,
+            Self::AnimationFillMode,
+            Self::AnimationPlayState,
+          ]
+          .into_iter()
+          .collect()
+        }
+
         /// The physical longhand this one sets in a `direction: rtl` element when `rtl`, as Blink's
         /// `ResolveSurrogate` maps a logical property: itself unless it is logical.
         pub(crate) fn physical(self, rtl: bool) -> Self {
@@ -1005,15 +1022,19 @@ macro_rules! define_style {
           self.declarations.append(declarations);
         }
 
-        /// Merges a matched block declaration by declaration, which the cascade
-        /// does to keep each one's own importance, and takes its element state.
-        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
+        /// Merges a matched block declaration by declaration, each `important` when the block
+        /// is, and takes its element state.
+        pub(crate) fn merge_matched_block(
+          &mut self,
+          declarations: &StyleDeclarationBlock,
+          important: bool,
+        ) {
           self
             .declarations
             .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
 
           for declaration in declarations.iter() {
-            self.push(declaration.clone(), false);
+            self.push(declaration.clone(), important);
           }
         }
 
@@ -1033,8 +1054,9 @@ macro_rules! define_style {
           parent: &ComputedStyle,
           lang: Option<Lang>,
           is_document_root: bool,
+          animations: Option<&dyn AnimationOrigin>,
         ) -> ComputedStyle {
-          let mut style = self.cascade(parent, is_document_root);
+          let mut style = self.cascade(parent, is_document_root, animations);
 
           if let Some(lang) = lang {
             style.lang = Some(lang);
@@ -1045,28 +1067,71 @@ macro_rules! define_style {
         /// Resolves this style against a parent into a computed style.
         #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
-          self.cascade(parent, false)
+          self.cascade(parent, false, None)
         }
 
-        fn cascade(self, parent: &ComputedStyle, is_document_root: bool) -> ComputedStyle {
+        /// The longhands an important declaration sets.
+        pub(crate) fn important_longhands(&self) -> PropertyMask {
+          let mut longhands = PropertyMask::new();
+
+          for (index, declaration) in self.declarations.declarations.iter().enumerate() {
+            if self.declarations.important.get(index) {
+              longhands.union(&declaration.affected_longhands());
+            }
+          }
+          longhands
+        }
+
+        /// Whether a declaration sets `animation-name`, which no element inherits.
+        pub(crate) fn may_animate(&self) -> bool {
+          self
+            .declarations
+            .iter()
+            .any(|declaration| declaration.affected_longhands().contains(&LonghandId::AnimationName))
+        }
+
+        /// Blink's `StyleCascade::Apply`, with `animations` cascading as the animation origin: above
+        /// the normal declarations and below the important ones.
+        fn cascade(
+          self,
+          parent: &ComputedStyle,
+          is_document_root: bool,
+          animations: Option<&dyn AnimationOrigin>,
+        ) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
-          let mut declarations = ParsedDeclarations::new();
+          let mut declarations: SmallVec<[(StyleDeclaration, bool); 8]> = SmallVec::new();
           let mut declared_custom_properties = Vec::new();
 
           for name in &self.declarations.element_state {
             style.custom_properties.register_element_state(name);
           }
 
-          for declaration in self.declarations.declarations {
-            match declaration {
-              StyleDeclaration::CustomProperty(name, value) => {
-                declared_custom_properties.push(name.clone());
-                style
-                  .custom_properties
-                  .declare(name, value, Some(&parent.custom_properties));
+          let important = self.declarations.important;
+          let mut animated_custom_properties = animations
+            .map_or(&[][..], AnimationOrigin::custom_properties)
+            .iter();
+          let mut declare = |name: String, value: String| {
+            declared_custom_properties.push(name.clone());
+            style
+              .custom_properties
+              .declare(name, value, Some(&parent.custom_properties));
+          };
+
+          for (index, declaration) in self.declarations.declarations.into_iter().enumerate() {
+            let is_important = important.get(index);
+
+            if is_important {
+              for (name, value) in animated_custom_properties.by_ref() {
+                declare(name.clone(), value.clone());
               }
-              declaration => declarations.push(declaration),
             }
+            match declaration {
+              StyleDeclaration::CustomProperty(name, value) => declare(name, value),
+              declaration => declarations.push((declaration, is_important)),
+            }
+          }
+          for (name, value) in animated_custom_properties {
+            declare(name.clone(), value.clone());
           }
 
           // The `var()` values of `font-size` and `line-height`, which a registered custom property
@@ -1074,8 +1139,8 @@ macro_rules! define_style {
           let fonts = [LonghandId::FontSize, LonghandId::LineHeight].map(|longhand| {
             declarations
               .iter()
-              .rfind(|declaration| declaration.affected_longhands().contains(&longhand))
-              .and_then(StyleDeclaration::deferred)
+              .rfind(|(declaration, _)| declaration.affected_longhands().contains(&longhand))
+              .and_then(|(declaration, _)| declaration.deferred())
           });
           let cycles = resolve_declared_custom_properties(
             &mut style,
@@ -1094,18 +1159,20 @@ macro_rules! define_style {
 
             declarations = declarations
               .into_iter()
-.flat_map(|declaration| {
+.flat_map(|(declaration, is_important)| -> SmallVec<[(StyleDeclaration, bool); 8]> {
                 if declaration.deferred().is_some_and(|deferred| invalid.contains(deferred)) {
                   unset(declaration.affected_longhands())
+                    .into_iter()
+                    .map(|declaration| (declaration, is_important))
+                    .collect()
                 } else {
-                  smallvec![declaration]
+                  smallvec![(declaration, is_important)]
                 }
               })
-
               .collect();
           }
 
-          apply_winning_declarations(&mut style, parent, declarations);
+          apply_winning_declarations(&mut style, parent, declarations, animations);
           style
         }
       }
@@ -2626,27 +2693,50 @@ impl ComputedStyle {
   }
 }
 
-/// Applies each longhand's winning declaration, the last of `declarations` in cascade order, as
-/// Blink's `StyleCascade::Apply` does. `direction` applies first, since it decides the physical
-/// longhand a logical one sets, then the high-priority longhands, then `vertical-align` ahead of
-/// the `baseline-source` it overlaps, then the rest.
+/// The animation origin of a cascade, as Blink's `CascadeOrigin::kAnimation`: what an element's
+/// animations set, above its normal declarations and below its important ones.
+pub(crate) trait AnimationOrigin {
+  /// The longhands the animations set.
+  fn longhands(&self) -> PropertyMask;
+
+  /// The custom properties the animations set.
+  fn custom_properties(&self) -> &[(String, String)];
+
+  /// Applies the animations of `longhands` to `style` in `phase` of
+  /// [`apply_winning_declarations`]: 0 and 1 the high-priority groups, 2 the rest.
+  fn apply(&self, style: &mut ComputedStyle, longhands: &PropertyMask, phase: usize);
+}
+
+/// Applies each longhand's winning declaration, the last of `declarations` in cascade order, or
+/// the animation of a longhand no important declaration sets, as Blink's `StyleCascade::Apply`
+/// does. `direction` applies first, since it decides the physical longhand a logical one sets, then
+/// the high-priority longhands, then `vertical-align` ahead of the `baseline-source` it overlaps,
+/// then the rest. Each phase applies its animations after its declarations, which they take as
+/// their underlying values.
 fn apply_winning_declarations(
   style: &mut ComputedStyle,
   parent: &ComputedStyle,
-  declarations: ParsedDeclarations,
+  declarations: SmallVec<[(StyleDeclaration, bool); 8]>,
+  animations: Option<&dyn AnimationOrigin>,
 ) {
   static HIGH_PRIORITY: LazyLock<[PropertyMask; 2]> = LazyLock::new(LonghandId::high_priority);
 
-  let mut declarations: SmallVec<[Option<StyleDeclaration>; 8]> = declarations
+  let mut declarations: SmallVec<[Option<(StyleDeclaration, bool)>; 8]> = declarations
     .into_iter()
-    .flat_map(|declaration| declaration.substituted(&style.custom_properties))
-    .map(Some)
+    .flat_map(|(declaration, is_important)| {
+      declaration
+        .substituted(&style.custom_properties)
+        .into_iter()
+        .map(move |declaration| Some((declaration, is_important)))
+    })
     .collect();
-  let longhand = |declaration: &Option<StyleDeclaration>| {
-    declaration.as_ref().map(StyleDeclaration::longhand_id)
+  let longhand = |declaration: &Option<(StyleDeclaration, bool)>| {
+    declaration
+      .as_ref()
+      .map(|(declaration, _)| declaration.longhand_id())
   };
 
-  if let Some(direction) = declarations
+  if let Some((direction, _)) = declarations
     .iter()
     .rposition(|declaration| longhand(declaration) == Some(LonghandId::Direction))
     .and_then(|index| declarations[index].take())
@@ -2662,12 +2752,17 @@ fn apply_winning_declarations(
     _ => 3,
   };
   let mut seen: PropertyMask = [LonghandId::Direction].into_iter().collect();
-  let mut winners: SmallVec<[(u8, usize, LonghandId); 8]> = SmallVec::new();
+  let mut important = PropertyMask::new();
+  let mut winners: SmallVec<[(usize, usize, LonghandId); 8]> = SmallVec::new();
 
   for (index, declaration) in declarations.iter().enumerate().rev() {
-    if let Some(longhand) = longhand(declaration).map(|longhand| longhand.physical(rtl))
+    if let Some((declaration, is_important)) = declaration
+      && let longhand = declaration.longhand_id().physical(rtl)
       && seen.insert(longhand)
     {
+      if *is_important {
+        important.insert(longhand);
+      }
       winners.push((phase(longhand), index, longhand));
     }
   }
@@ -2678,20 +2773,48 @@ fn apply_winning_declarations(
     .find(|(.., longhand)| *longhand == LonghandId::VerticalAlign)
     .map(|&(_, index, _)| index);
   let parent_font_weight = parent.inherited_data.font_weight.value();
+  let mut animated = animations.map_or_else(PropertyMask::new, AnimationOrigin::longhands);
 
-  for (_, index, longhand) in winners {
-    // `vertical-align` resets `baseline-source`, which keeps a value only from a later declaration.
-    if longhand == LonghandId::BaselineSource && vertical_align > Some(index) {
-      continue;
+  animated.difference(&important);
+
+  let mut winners = winners.into_iter().peekable();
+
+  for (animation_phase, group) in [Some(&HIGH_PRIORITY[0]), Some(&HIGH_PRIORITY[1]), None]
+    .into_iter()
+    .enumerate()
+  {
+    let last_phase = if group.is_some() { animation_phase } else { 3 };
+
+    while let Some((_, index, longhand)) = winners.next_if(|(phase, ..)| *phase <= last_phase) {
+      // `vertical-align` resets `baseline-source`, which keeps a value only from a later declaration.
+      if longhand == LonghandId::BaselineSource && vertical_align > Some(index) {
+        continue;
+      }
+      let Some((mut declaration, _)) = declarations[index].take() else {
+        continue;
+      };
+
+      if let StyleDeclaration::FontWeight(weight) = &mut declaration {
+        *weight = weight.resolve_against(parent_font_weight);
+      }
+      declaration.apply_with_parent(style, parent);
     }
-    let Some(mut declaration) = declarations[index].take() else {
+
+    let Some(animations) = animations else {
       continue;
     };
+    let mut longhands = animated;
 
-    if let StyleDeclaration::FontWeight(weight) = &mut declaration {
-      *weight = weight.resolve_against(parent_font_weight);
+    match group {
+      Some(group) => longhands.intersect(group),
+      None => {
+        longhands.difference(&HIGH_PRIORITY[0]);
+        longhands.difference(&HIGH_PRIORITY[1]);
+      }
     }
-    declaration.apply_with_parent(style, parent);
+    if !longhands.is_empty() {
+      animations.apply(style, &longhands, animation_phase);
+    }
   }
 }
 

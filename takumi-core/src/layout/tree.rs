@@ -56,8 +56,8 @@ use crate::{
   sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
-    Affine, BackgroundImage, BackgroundImages, Color, ColorInput, ComputedStyle, ContentItem,
-    ContentValue, Direction, Display, ElementAnimations, Float, FontUnits, KeyframesRule, Lang,
+    Affine, AnimationOrigin, BackgroundImage, BackgroundImages, Color, ColorInput, ComputedStyle,
+    ContentItem, ContentValue, Direction, Display, ElementAnimations, Float, FontUnits, Lang,
     LineHeight, LonghandId, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi,
     WhiteSpaceCollapse, page_rule::PageContext,
@@ -850,39 +850,6 @@ fn block_style(context: &RenderContext) -> Rc<LayoutStyle> {
   let index = usize::from(context.style.inherited_data.direction == Direction::Rtl);
 
   BLOCK_STYLES.with(|styles| Rc::clone(&styles[index]))
-}
-
-/// An element's declarations in cascade order, its important ones apart, so that the animation
-/// origin cascades between them.
-#[derive(Clone)]
-struct ElementDeclarations {
-  normal: NodeStyle,
-  important: NodeStyle,
-}
-
-impl ElementDeclarations {
-  /// The longhands an important declaration sets, which no animation reaches.
-  fn important_longhands(&self) -> PropertyMask {
-    let mut longhands = PropertyMask::new();
-
-    for declaration in self.important.declarations.iter() {
-      longhands.union(&declaration.affected_longhands());
-    }
-    longhands
-  }
-
-  /// The declarations in cascade order, `animated` custom properties cascading as the animation
-  /// origin.
-  fn cascaded(self, animated: Vec<(String, String)>) -> NodeStyle {
-    let mut style = animated
-      .into_iter()
-      .fold(self.normal, |style, (name, value)| {
-        style.with(StyleDeclaration::CustomProperty(name, value))
-      });
-
-    style.append_block(self.important.declarations);
-    style
-  }
 }
 
 fn registered_custom_property_parent_style<'a>(
@@ -3224,7 +3191,7 @@ impl RenderContext {
     &self,
     node_layers: NodeStyleLayers,
     matched_declarations: &MatchedDeclarationsView<'_>,
-  ) -> ElementDeclarations {
+  ) -> NodeStyle {
     let mut style = NodeStyle::default();
 
     // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
@@ -3247,11 +3214,11 @@ impl RenderContext {
     }
 
     for declarations in matched_declarations.layered_normal() {
-      style.merge_matched_block(declarations);
+      style.merge_matched_block(declarations, false);
     }
 
     for declarations in matched_declarations.unlayered_normal() {
-      style.merge_matched_block(declarations);
+      style.merge_matched_block(declarations, false);
     }
 
     // An element's own declarations outrank selector-based ones at the same
@@ -3265,25 +3232,20 @@ impl RenderContext {
       style.append_block(inline_normal);
     }
 
-    let mut important = NodeStyle::default();
-
     // Important declarations reverse layer order.
     for declarations in matched_declarations.unlayered_important() {
-      important.merge_matched_block(declarations);
+      style.merge_matched_block(declarations, true);
     }
 
     for declarations in matched_declarations.layered_important() {
-      important.merge_matched_block(declarations);
+      style.merge_matched_block(declarations, true);
     }
 
     if let Some(inline_important) = inline_important {
-      important.append_block(inline_important);
+      style.append_block(inline_important);
     }
 
-    ElementDeclarations {
-      normal: style,
-      important,
-    }
+    style
   }
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
@@ -3409,30 +3371,18 @@ impl RenderContext {
 
     let declarations = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
-    let important = declarations.important_longhands();
-    // An animated custom property cascades before `var()` substitutes it, so the element cascades
-    // again with it.
-    let recascade = self
-      .stylesheet()
-      .keyframes
-      .iter()
-      .any(KeyframesRule::animates_custom_properties)
-      .then(|| declarations.clone());
-    let base =
-      declarations
-        .cascaded(Vec::new())
-        .inherit_element(&inherited_parent, lang, is_document_root);
-    let mut style = match ElementAnimations::new(
+    let animating = declarations.may_animate().then(|| declarations.clone());
+    let base = declarations.inherit_element(&inherited_parent, lang, is_document_root, None);
+    let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
       self.time_ms(),
       self.sizing.viewport,
-    ) {
-      Some(animations) => self.animated_style(
+    )) {
+      Some((declarations, animations)) => self.animated_style(
+        declarations,
         base,
         &animations,
-        &important,
-        recascade,
         &inherited_parent,
         (lang, is_document_root),
       ),
@@ -3450,62 +3400,82 @@ impl RenderContext {
     (style, sizing, current_color)
   }
 
-  /// Blink's `StyleCascade::Apply` with `animations` cascading as the animation origin. They
-  /// cascade above the element's normal declarations and below its important ones, which hide the
-  /// animations of their longhands. The high-priority longhands apply first, against the parent,
-  /// so the others interpolate in the colour scheme, colour, and font those give. An animated
-  /// custom property cascades through `declarations` again.
+  /// The style `declarations` cascade to with `animations`, as Blink's `ApplyAnimatedStyle`
+  /// cascades an element again with its animations once `base`, its style without them, decided
+  /// them. The animation longhands keep their values in `base`, as Blink's `kNotAnimation` filter
+  /// keeps them.
   fn animated_style(
     &self,
+    declarations: NodeStyle,
     base: ComputedStyle,
     animations: &ElementAnimations<'_>,
-    important: &PropertyMask,
-    declarations: Option<ElementDeclarations>,
     inherited_parent: &ComputedStyle,
     (lang, is_document_root): (Option<Lang>, bool),
   ) -> ComputedStyle {
-    let mut animated = animations.longhands();
+    let mut longhands = animations.longhands();
 
-    animated.difference(important);
+    longhands.difference(&declarations.important_longhands());
 
-    let [scheme, fonts] = LonghandId::high_priority().map(|mut group| {
-      group.intersect(&animated);
-      group
-    });
-    let mut style = animations.apply(base, &scheme, &self.sizing, self.current_color);
-    let parent_sizing = self
-      .sizing
-      .clone()
-      .with_color_scheme(self.used_color_scheme(&style));
+    let origin = AnimatedStyle {
+      context: self,
+      animations,
+      longhands,
+      custom_properties: self.animated_custom_properties(&base, animations, &longhands),
+    };
+    let mut style =
+      declarations.inherit_element(inherited_parent, lang, is_document_root, Some(&origin));
 
-    style = animations.apply(style, &fonts, &parent_sizing, self.current_color);
+    style.copy_longhands(&LonghandId::animation(), &base);
+    style
+  }
 
-    let mut high_priority = scheme;
+  /// The custom properties `animations` set on `base`, sampled once its high-priority `longhands`
+  /// animate, so a keyframed `light-dark()` resolves in the animated colour scheme.
+  fn animated_custom_properties(
+    &self,
+    base: &ComputedStyle,
+    animations: &ElementAnimations<'_>,
+    longhands: &PropertyMask,
+  ) -> Vec<(String, String)> {
+    let mut style = base.clone();
 
-    high_priority.union(&fonts);
-    if let Some(declarations) = declarations {
-      let sizing = self.child_sizing(&style, &self.sizing, false);
-      let custom_properties =
-        animations.custom_properties(&style, &sizing, self.child_current_color(&style, &sizing));
-
-      if !custom_properties.is_empty() {
-        let mut recascaded = declarations.cascaded(custom_properties).inherit_element(
-          inherited_parent,
-          lang,
-          is_document_root,
-        );
-
-        // Cascading again leaves out the high-priority animations applied above.
-        recascaded.copy_longhands(&high_priority, &style);
-        style = recascaded;
-      }
+    for (phase, mut group) in LonghandId::high_priority().into_iter().enumerate() {
+      group.intersect(longhands);
+      self.apply_animations(animations, &mut style, &group, phase);
     }
 
     let sizing = self.child_sizing(&style, &self.sizing, false);
-    let current_color = self.child_current_color(&style, &sizing);
 
-    animated.difference(&high_priority);
-    animations.apply(style, &animated, &sizing, current_color)
+    animations.custom_properties(&style, &sizing, self.child_current_color(&style, &sizing))
+  }
+
+  /// Applies the animations of `longhands` to `style` in `phase` of the cascade: `color-scheme`
+  /// against the parent, `color` and the fonts against the parent in the scheme the element uses,
+  /// the rest against the element's own font and colour.
+  fn apply_animations(
+    &self,
+    animations: &ElementAnimations<'_>,
+    style: &mut ComputedStyle,
+    longhands: &PropertyMask,
+    phase: usize,
+  ) {
+    match phase {
+      0 => animations.apply(style, longhands, &self.sizing, self.current_color),
+      1 => {
+        let sizing = self
+          .sizing
+          .clone()
+          .with_color_scheme(self.used_color_scheme(style));
+
+        animations.apply(style, longhands, &sizing, self.current_color);
+      }
+      _ => {
+        let sizing = self.child_sizing(style, &self.sizing, false);
+        let current_color = self.child_current_color(style, &sizing);
+
+        animations.apply(style, longhands, &sizing, current_color);
+      }
+    }
   }
 
   /// The colour scheme a child with `style` uses.
@@ -3575,6 +3545,31 @@ impl RenderContext {
         FontUnits { ch, ex },
       )
       .with_color_scheme(self.used_color_scheme(style))
+  }
+}
+
+/// An element's animations as the animation origin of its cascade.
+struct AnimatedStyle<'a> {
+  context: &'a RenderContext,
+  animations: &'a ElementAnimations<'a>,
+  /// The longhands they set that no important declaration does.
+  longhands: PropertyMask,
+  custom_properties: Vec<(String, String)>,
+}
+
+impl AnimationOrigin for AnimatedStyle<'_> {
+  fn longhands(&self) -> PropertyMask {
+    self.longhands
+  }
+
+  fn custom_properties(&self) -> &[(String, String)] {
+    &self.custom_properties
+  }
+
+  fn apply(&self, style: &mut ComputedStyle, longhands: &PropertyMask, phase: usize) {
+    self
+      .context
+      .apply_animations(self.animations, style, longhands, phase);
   }
 }
 
