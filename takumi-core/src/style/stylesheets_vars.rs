@@ -189,13 +189,12 @@ const FONT_LONGHANDS: [(&str, &[&str], &[&str]); 2] = [
 /// property with font-relative units reads.
 #[derive(Clone, Copy)]
 struct FontDependencies<'a> {
-  properties: &'a CustomProperties,
   values: [Option<&'a str>; 2],
   is_document_root: bool,
 }
 
 struct Resolver<'a> {
-  specified: &'a HashMap<String, String>,
+  specified: &'a CustomProperties,
   resolved: HashMap<String, Resolution>,
   cycles: CycleResolver,
   budget: usize,
@@ -207,7 +206,7 @@ struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-  fn new(specified: &'a HashMap<String, String>) -> Self {
+  fn new(specified: &'a CustomProperties) -> Self {
     Self {
       specified,
       resolved: HashMap::new(),
@@ -226,8 +225,8 @@ impl<'a> Resolver<'a> {
       return;
     };
 
-    if fonts
-      .properties
+    if self
+      .specified
       .registration(name)
       .is_none_or(|rule| rule.syntax == PropertySyntax::Universal)
     {
@@ -479,10 +478,9 @@ pub(crate) fn resolve_declared_custom_properties(
     .map(|name| (name.clone(), properties.get(name).map(str::to_owned)))
     .collect();
   let (resolved, font_cycles, cycle_names) = {
-    let mut resolver = Resolver::new(properties.values());
+    let mut resolver = Resolver::new(properties);
 
     resolver.fonts = Some(FontDependencies {
-      properties,
       values: fonts,
       is_document_root,
     });
@@ -515,7 +513,7 @@ pub(crate) fn resolve_declared_custom_properties(
       })
       .collect();
     let resolved: Vec<Option<String>> = {
-      let mut resolver = Resolver::new(properties.values());
+      let mut resolver = Resolver::new(properties);
 
       others
         .iter()
@@ -615,7 +613,7 @@ pub(crate) fn resolve_var_references(
   specified_value: &str,
   custom_properties: &CustomProperties,
 ) -> Option<String> {
-  let mut resolver = Resolver::new(custom_properties.values());
+  let mut resolver = Resolver::new(custom_properties);
   resolver.resolve_value(specified_value, 0)
 }
 

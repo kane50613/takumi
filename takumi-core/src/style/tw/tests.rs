@@ -1831,10 +1831,9 @@ fn test_a_registered_gradient_name_starts_from_its_initial_value() {
     media_queries: Vec::new(),
   };
 
-  parent.custom_properties.register_in_scope(
-    &Arc::new(HashMap::from([(rule.name.clone(), rule)])),
-    &CustomProperties::default(),
-  );
+  parent
+    .custom_properties
+    .register_in_scope(&Arc::new(HashMap::from([(rule.name.clone(), rule)])));
   parent
     .custom_properties
     .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
