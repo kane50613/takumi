@@ -451,8 +451,8 @@ fn charge(budget: &mut usize, bytes: usize) -> Result<(), ()> {
 /// Resolves `var()` in the custom properties an element declares, `declared`, as Blink applies
 /// them: the values it inherits resolved already. Returns which of `font-size` and `line-height`,
 /// whose `var()` values `fonts` holds, a cycle through a registered property's font-relative units
-/// reaches. A registered property in a cycle takes its initial value, and the others read it
-/// there.
+/// reaches. A registered property in a cycle takes its `unset` value, as Blink's `ApplyUnset` gives
+/// it, and the others read it there.
 pub(crate) fn resolve_declared_custom_properties(
   style: &mut ComputedStyle,
   declared: &[String],
@@ -502,17 +502,6 @@ pub(crate) fn resolve_declared_custom_properties(
       .is_some_and(|rule| rule.syntax != PropertySyntax::Universal)
   });
 
-  for name in &cycle_names {
-    if let Some(rule) = properties
-      .registration(name)
-      .filter(|rule| rule.syntax != PropertySyntax::Universal)
-    {
-      match rule.initial_value.clone() {
-        Some(value) => properties.set(name.clone(), value),
-        None => properties.remove(name),
-      }
-    }
-  }
   properties.enforce_syntax(declared, &parent.custom_properties);
   if registered_in_cycle {
     let others: Vec<String> = specified
