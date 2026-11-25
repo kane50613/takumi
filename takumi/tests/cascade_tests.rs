@@ -1033,3 +1033,46 @@ fn animations_read_the_font_and_colour_the_high_priority_longhands_give() {
     [0, 0, 255, 255]
   );
 }
+
+/// Where `.box`, a 10px block under `css`, starts from its parent's left edge.
+fn box_left(css: &str) -> f32 {
+  measure_with_css(
+    Node::container([block("box")]),
+    &format!(".box {{ width: 10px; height: 10px }} {css}"),
+  )
+  .children[0]
+    .transform[4]
+}
+
+/// Each longhand takes its last declaration in cascade order, as Blink's `StyleCascade` picks it.
+/// A logical property counts as the physical one it sets in the element's own `direction`, decided
+/// first wherever it is declared, and a shorthand with `var()` as each longhand it sets.
+#[test]
+fn each_longhand_takes_its_last_declaration() {
+  assert_eq!(
+    box_left(".box { margin-left: 10px; margin-inline-start: 20px }"),
+    20.0
+  );
+  assert_eq!(
+    box_left(".box { margin-inline-start: 20px; margin-left: 10px }"),
+    10.0
+  );
+  assert_eq!(
+    box_left(".box { margin-left: 7px; margin-inline-end: 20px; direction: rtl }"),
+    20.0
+  );
+  assert_eq!(
+    box_left(".box { margin-inline-end: 20px; margin-left: 7px; direction: rtl }"),
+    7.0
+  );
+
+  let font = |declarations: &str| {
+    box_size(&format!(
+      ".box {{ --f: 10px serif; height: 1em; {declarations} }}"
+    ))
+    .1
+  };
+
+  assert_eq!(font("font: var(--f); font-size: 30px"), 30.0);
+  assert_eq!(font("font-size: 30px; font: var(--f)"), 10.0);
+}
