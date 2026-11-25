@@ -329,10 +329,7 @@ impl AppliedTextDecorations {
     let own = AppliedTextDecoration {
       line,
       style: style.misc_data.text_decoration_style,
-      color: style
-        .misc3_data
-        .text_decoration_color
-        .resolve(current_color),
+      color: decoration_color(style, sizing, current_color),
       thickness: style.resolved_text_decoration_thickness(sizing),
       underline_offset: style
         .misc_inherited1_data
@@ -355,6 +352,39 @@ impl AppliedTextDecorations {
   pub fn is_empty(&self) -> bool {
     self.0.is_none()
   }
+}
+
+/// Blink's `ComputedStyle::DecorationColorIncludingFallback`: a `currentColor` decoration takes the
+/// text's stroke colour when it strokes with one that is neither `currentColor` nor transparent,
+/// and its fill colour otherwise.
+fn decoration_color(style: &ComputedStyle, sizing: &SizingContext, current_color: Color) -> Color {
+  let decoration = &style.misc3_data.text_decoration_color;
+
+  if !matches!(decoration, ColorInput::CurrentColor) {
+    return decoration.resolve(current_color);
+  }
+
+  let text = &style.misc_inherited1_data;
+  let strokes = text
+    .webkit_text_stroke_width
+    .unwrap_or_default()
+    .to_px(sizing, sizing.font_size)
+    > 0.0;
+
+  if strokes
+    && let Some(stroke) = text
+      .webkit_text_stroke_color
+      .as_ref()
+      .filter(|stroke| !matches!(stroke, ColorInput::CurrentColor))
+      .map(|stroke| stroke.resolve(current_color))
+      .filter(|stroke| stroke.0[3] != 0)
+  {
+    return stroke;
+  }
+  text
+    .webkit_text_fill_color
+    .as_ref()
+    .map_or(current_color, |fill| fill.resolve(current_color))
 }
 
 impl FromIterator<AppliedTextDecoration> for AppliedTextDecorations {
@@ -621,7 +651,52 @@ impl<'i> FromCss<'i> for TextDecoration {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::properties::Color;
+  use crate::{
+    style::{Style, StyleDeclarationBlock, properties::Color},
+    viewport::Viewport,
+  };
+
+  /// A `currentColor` decoration takes the stroke colour of stroked text, else its fill colour, as
+  /// Blink's `DecorationColorIncludingFallback` falls back, and `thin` strokes 1px wide.
+  #[test]
+  fn a_current_color_decoration_falls_back_to_the_stroke_then_the_fill() {
+    let (blue, red, green) = (
+      Color([0, 0, 255, 255]),
+      Color([255, 0, 0, 255]),
+      Color([0, 128, 0, 255]),
+    );
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, 100)))
+      .font_size(16.0)
+      .line_height(0.0)
+      .ch(8.0)
+      .ex(8.0)
+      .build();
+    let color = |css: &str| {
+      let style = Style::from(StyleDeclarationBlock::parse_loosy(&format!(
+        "-webkit-text-fill-color: rgb(255,0,0); {css}"
+      )))
+      .inherit(&ComputedStyle::default());
+
+      decoration_color(&style, &sizing, Color([0, 0, 0, 255]))
+    };
+
+    assert_eq!(
+      color("-webkit-text-stroke-width: thin; -webkit-text-stroke-color: rgb(0,0,255)"),
+      blue
+    );
+    assert_eq!(color("-webkit-text-stroke-color: rgb(0,0,255)"), red);
+    assert_eq!(
+      color("-webkit-text-stroke-width: thin; -webkit-text-stroke-color: transparent"),
+      red
+    );
+    assert_eq!(
+      color(
+        "-webkit-text-stroke-width: thin; -webkit-text-stroke-color: rgb(0,0,255); text-decoration-color: green"
+      ),
+      green
+    );
+  }
 
   /// `text-decoration-inset` takes `auto` or one or two lengths, a lone length for both ends.
   #[test]

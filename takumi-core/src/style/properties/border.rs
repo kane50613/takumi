@@ -26,6 +26,17 @@ impl_css_enum!(
   "thick" => LineWidthKeyword::Thick,
 );
 
+/// A `<line-width>` kept as the length it computes to, as Blink's `ConsumeLineWidth` reads
+/// `-webkit-text-stroke-width`.
+pub(crate) fn parse_line_width_length<'i>(
+  input: &mut Parser<'i>,
+) -> ParseResult<'i, Option<Length>> {
+  if let Ok(keyword) = input.try_parse(LineWidthKeyword::from_css) {
+    return Ok(Some(keyword.into()));
+  }
+  Option::<Length>::from_css(input)
+}
+
 impl From<LineWidthKeyword> for Length {
   fn from(keyword: LineWidthKeyword) -> Self {
     Length::Px(match keyword {

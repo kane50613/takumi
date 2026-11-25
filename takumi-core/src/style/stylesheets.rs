@@ -1854,7 +1854,9 @@ define_style! {
       text_underline_offset: TextUnderlineOffset where inherit = true,
       webkit_text_fill_color: Option<ColorInput> where inherit = true,
       webkit_text_stroke_color: Option<ColorInput> where inherit = true,
-      webkit_text_stroke_width: Option<Length> where inherit = true,
+      webkit_text_stroke_width: Option<Length>
+        where inherit = true
+        where parse = parse_line_width_length,
       widows: MinLines where inherit = true,
     }
     /// Blink's `svginherited` field group.
