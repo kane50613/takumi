@@ -3465,8 +3465,11 @@ impl RenderContext {
         .tag_name()
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
     let layers = node.take_style_layers();
-    let key = (layers.is_preset_only() && !is_document_root)
-      .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+    // A context noting reads of the parent's colour resolves every style itself, so that a shared
+    // style cannot skip the note.
+    let key =
+      (layers.is_preset_only() && !is_document_root && self.sizing.current_color_read.is_none())
+        .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
     let cache = self.matched_styles();
 
     if let Some(key) = &key
@@ -3540,6 +3543,7 @@ impl RenderContext {
     // Blink's `Color::ApplyValue`: `currentColor` in a colour function of `color` is the parent's
     // colour, so the function resolves when `color` computes.
     if style.inherited_data.color.is_unresolved_color_function() {
+      self.sizing.note_current_color_read();
       style.inherited_data_mut().color = ColorInput::Value(current_color);
     }
     (style, sizing, current_color)
