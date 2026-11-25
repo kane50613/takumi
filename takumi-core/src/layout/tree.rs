@@ -52,7 +52,7 @@ use crate::{
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{
     MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers, QueryFont,
-    match_stylesheets_in_containers, match_stylesheets_view,
+    RuleId, match_stylesheets_in_containers, match_stylesheets_view,
   },
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
@@ -2533,7 +2533,8 @@ impl RenderNode {
     tree
   }
 
-  /// The query containers among its boxes, sized by laying it out in its viewport.
+  /// The query containers among its boxes, sized by laying it out in its viewport. Approximate: a
+  /// caller that lays the tree out in other constraints later does not match it again in them.
   fn query_containers(&self) -> QueryContainers {
     let mut tree = LayoutTree::from_render_node(self);
     let available_space = tree.initial_containing_block(self.context.sizing.viewport.into());
@@ -3285,12 +3286,7 @@ impl RenderContext {
   ) -> (NodeStyle, CascadeSources) {
     let mut style = NodeStyle::default();
     let mut sources = CascadeSources::new();
-    // Each block is a rule of its own.
-    let mut source = |style: &NodeStyle, origin: CascadeOrigin, layer: usize| {
-      let rule = sources
-        .last()
-        .map_or(0, |source: &CascadeSource| source.rule + 1);
-
+    let mut source = |style: &NodeStyle, origin: CascadeOrigin, layer: usize, rule: usize| {
       sources.resize(
         style.declarations.declarations.len(),
         CascadeSource {
@@ -3300,28 +3296,43 @@ impl RenderContext {
         },
       );
     };
+    // A matched rule keeps one identity across its normal and important blocks, after the
+    // identities of the blocks that are no stylesheet's rule.
+    const STYLE_ATTRIBUTE: usize = 4;
+    let mut matched_rules: SmallVec<[RuleId; 8]> = SmallVec::new();
+    let mut rule_ids = matched_declarations.rules().iter().map(|&(id, _)| {
+      let position = matched_rules
+        .iter()
+        .position(|&seen| seen == id)
+        .unwrap_or_else(|| {
+          matched_rules.push(id);
+          matched_rules.len() - 1
+        });
+
+      STYLE_ATTRIBUTE + 1 + position
+    });
 
     // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
     // <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
     if node_layers.dir.is_some() {
       style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 0);
     }
 
     if let Some(preset) = node_layers.preset {
       style.append_block(Arc::unwrap_or_clone(preset).declarations);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 1);
     }
 
     if let Some(dir) = node_layers.dir {
       style.push(StyleDeclaration::direction(dir), false);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 2);
     }
 
     // Blink's `StyleResolver::MatchPresentationalHints`.
     if let Some(presentation) = node_layers.presentation {
       style.append_block(presentation.declarations);
-      source(&style, CascadeOrigin::PresentationalHint, 0);
+      source(&style, CascadeOrigin::PresentationalHint, 0, 3);
     }
 
     let mut layers = matched_declarations.layers().iter().copied();
@@ -3336,6 +3347,7 @@ impl RenderContext {
         &style,
         CascadeOrigin::Author,
         layers.next().unwrap_or_default(),
+        rule_ids.next().unwrap_or_default(),
       );
     }
 
@@ -3348,7 +3360,7 @@ impl RenderContext {
 
     if let Some(inline_normal) = inline_normal {
       style.append_block(inline_normal);
-      source(&style, CascadeOrigin::Author, usize::MAX);
+      source(&style, CascadeOrigin::Author, usize::MAX, STYLE_ATTRIBUTE);
     }
 
     // Important declarations reverse layer order.
@@ -3362,12 +3374,18 @@ impl RenderContext {
         &style,
         CascadeOrigin::AuthorImportant,
         layers.next().unwrap_or_default(),
+        rule_ids.next().unwrap_or_default(),
       );
     }
 
     if let Some(inline_important) = inline_important {
       style.append_block(inline_important);
-      source(&style, CascadeOrigin::AuthorImportant, usize::MAX);
+      source(
+        &style,
+        CascadeOrigin::AuthorImportant,
+        usize::MAX,
+        STYLE_ATTRIBUTE,
+      );
     }
 
     (style, sources)
@@ -3540,15 +3558,18 @@ impl RenderContext {
     inherited_parent: &ComputedStyle,
     (lang, is_document_root): (Option<Lang>, bool),
   ) -> ComputedStyle {
-    let mut longhands = animations.longhands();
+    // The cascade decides which animated longhands an important declaration hides; the preview
+    // that samples the custom properties leaves out the ones any does.
+    let longhands = animations.longhands();
+    let mut previewed = longhands;
 
-    longhands.difference(&declarations.important_longhands(sources));
+    previewed.difference(&declarations.important_longhands(sources));
 
     let origin = AnimatedStyle {
       context: self,
       animations,
       longhands,
-      custom_properties: self.animated_custom_properties(&base, animations, &longhands),
+      custom_properties: self.animated_custom_properties(&base, animations, &previewed),
     };
     let mut style = declarations.inherit_element(
       inherited_parent,
@@ -3563,7 +3584,9 @@ impl RenderContext {
   }
 
   /// The custom properties `animations` set on `base`, sampled once its high-priority `longhands`
-  /// animate, so a keyframed `light-dark()` resolves in the animated colour scheme.
+  /// animate, so a keyframed `light-dark()` resolves in the animated colour scheme. Approximate: a
+  /// registered `em` samples in that font size, which the cascade with the animated properties can
+  /// still change.
   fn animated_custom_properties(
     &self,
     base: &ComputedStyle,
@@ -3685,7 +3708,7 @@ impl RenderContext {
 struct AnimatedStyle<'a> {
   context: &'a RenderContext,
   animations: &'a ElementAnimations<'a>,
-  /// The longhands they set that no important declaration does.
+  /// The longhands they set.
   longhands: PropertyMask,
   custom_properties: Vec<(String, String)>,
 }

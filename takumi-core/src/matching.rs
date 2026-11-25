@@ -718,8 +718,8 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   layered_important_start: usize,
   /// The rule each block came from and whether it is the `!important` block, in cascade order.
   rules: SmallVec<[(RuleId, bool); 4]>,
-  /// Each block's layer in cascade order: named layers, then the `tw` layer, then unlayered rules,
-  /// reversed among important blocks.
+  /// Each block's layer in declaration order: named layers, then the `tw` layer, then unlayered
+  /// rules, for important blocks as for normal ones.
   layers: SmallVec<[usize; 4]>,
 }
 
@@ -1136,11 +1136,18 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
         let rule = &placement.sheet.rules()[position];
         let source_order = placement.rule_offset + position;
         let ancestor_hashes = &rule_index.ancestor_hashes[position];
-        if !rule
-          .container_queries
-          .iter()
-          .all(|query| container_query_holds(query, element, containers, viewport))
-        {
+        // A container query asks the element's ancestors, and a pseudo-element's its originating
+        // element and up, as Blink's `ContainerQueryEvaluator` starts from each.
+        let holds = |start: Option<ArenaElement<'_>>| {
+          rule
+            .container_queries
+            .iter()
+            .all(|query| container_query_holds(query, start, containers, viewport))
+        };
+        let element_holds = holds(element.parent_element());
+        let pseudo_holds = rule.container_queries.is_empty() || holds(Some(element));
+
+        if !element_holds && !pseudo_holds {
           continue;
         }
 
@@ -1149,18 +1156,26 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
           None => SmallVec::from_slice(&[(None, u32::MAX)]),
         };
 
-        // The closest root a selector matches under decides the rule's proximity.
+        // The highest specificity a selector matches with under any root, the closest root's
+        // proximity among equals, as each root's match is a declaration of its own in Blink.
+        let mut best: [Option<(u32, u32)>; 3] = [None; 3];
+
         for (root, proximity) in roots {
           element_ctx.scope_element = root;
           pseudo_ctx.scope_element = root;
-
-          let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
           for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
             let Some(target) = selector_target(selector) else {
               continue;
             };
             if is_replaced && target != SelectorTarget::Element {
+              continue;
+            }
+            if !(if target == SelectorTarget::Element {
+              element_holds
+            } else {
+              pseudo_holds
+            }) {
               continue;
             }
 
@@ -1181,32 +1196,31 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
               element,
               ctx,
             ) {
-              let specificity = selector.specificity();
-              let slot = &mut best_specificities[target as usize];
+              let slot = &mut best[target as usize];
+              let matched = (selector.specificity(), proximity);
 
-              *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+              // Higher specificity first, then the closer root.
+              if slot.is_none_or(|(specificity, closest)| {
+                (matched.0, u32::MAX - matched.1) > (specificity, u32::MAX - closest)
+              }) {
+                *slot = Some(matched);
+              }
             }
           }
-
-          if best_specificities.iter().all(Option::is_none) {
-            continue;
-          }
-          for (best_specificity, bucket) in
-            best_specificities.into_iter().zip(node_rules.iter_mut())
-          {
-            record_matches(
-              rule,
-              source_order,
-              placement.layer_offset,
-              layers,
-              best_specificity.map(|specificity| (specificity, proximity)),
-              bucket,
-            );
-          }
-          break;
         }
         element_ctx.scope_element = None;
         pseudo_ctx.scope_element = None;
+
+        for (best, bucket) in best.into_iter().zip(node_rules.iter_mut()) {
+          record_matches(
+            rule,
+            source_order,
+            placement.layer_offset,
+            layers,
+            best,
+            bucket,
+          );
+        }
       }
     }
 
@@ -1299,52 +1313,57 @@ impl QueryFont {
 /// The query containers of a tree, by their place in its pre-order.
 pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
 
-/// Whether `query` holds of `element`'s query container: its nearest ancestor that `query` names,
-/// if it names one, and whose `container-type` contains each axis `query` reads.
-/// <https://drafts.csswg.org/css-contain-3/#container-rule>
+/// Whether a condition of `query` holds of its query container: the nearest of `start` and its
+/// ancestors that the condition names, if it names one, and whose `container-type` contains each
+/// axis it reads. <https://drafts.csswg.org/css-conditional-5/#container-rule>
 fn container_query_holds(
   query: &ContainerQuery,
-  element: ArenaElement<'_>,
+  start: Option<ArenaElement<'_>>,
   containers: Option<&QueryContainers>,
   viewport: Viewport,
 ) -> bool {
   let Some(containers) = containers else {
     return false;
   };
-  let reads_block_axis = query.reads_block_axis();
-  let container =
-    successors(element.parent_element(), Element::parent_element).find_map(|ancestor| {
+
+  query.conditions().iter().any(|condition| {
+    let reads_block_axis = condition.reads_block_axis();
+    let container = successors(start, Element::parent_element).find_map(|ancestor| {
       containers.get(&ancestor.index).filter(|container| {
         (if reads_block_axis {
           container.container_type.contains_block_size()
         } else {
           container.container_type.contains_inline_size()
-        }) && query
+        }) && condition
           .name
           .as_deref()
           .is_none_or(|name| container.name.has(name))
       })
     });
 
-  container.is_some_and(|container| {
-    query.matches(
-      Size {
-        width: Some(container.size.width),
-        height: container
-          .container_type
-          .contains_block_size()
-          .then_some(container.size.height),
-      },
-      viewport,
-      &container.font.sizing(viewport),
-    )
+    container.is_some_and(|container| {
+      condition.matches(
+        Size {
+          width: Some(container.size.width),
+          height: container
+            .container_type
+            .contains_block_size()
+            .then_some(container.size.height),
+        },
+        viewport,
+        &container.font.sizing(viewport),
+      )
+    })
   })
 }
 
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
 /// it is: an inclusive ancestor its start selectors match, or the tree's root without them, with no
-/// element its end selectors match from `element` up to it.
-/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+/// element its end selectors match from `element` up to it. Inside another `@scope`, a root must
+/// be in that scope from an outer root `element` is in scope of too.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits> Approximate: without start selectors the
+/// spec roots at the parent of the `<style>` element holding the rule, which a parsed document's
+/// one stylesheet no longer records, so the root is the tree's.
 fn scope_roots(
   scope: &Scope,
   element: ArenaElement<'_>,
@@ -1362,10 +1381,22 @@ fn scope_roots(
     })
   };
   let mut roots = SmallVec::new();
+  let element_outer_roots = scope
+    .parent
+    .as_ref()
+    .map(|parent| scope_roots(parent, element, ctx));
 
   for (proximity, root) in successors(Some(element), Element::parent_element).enumerate() {
-    let outer_roots = match &scope.parent {
-      Some(parent) => scope_roots(parent, root, ctx),
+    let outer_roots: SmallVec<[(Option<OpaqueElement>, u32); 2]> = match &scope.parent {
+      Some(parent) => scope_roots(parent, root, ctx)
+        .into_iter()
+        .filter(|(outer, _)| {
+          element_outer_roots
+            .iter()
+            .flatten()
+            .any(|(element_outer, _)| element_outer == outer)
+        })
+        .collect(),
       None => SmallVec::from_slice(&[(None, 0)]),
     };
     let is_root = match &scope.start {
@@ -1483,7 +1514,14 @@ fn finalize_bucket<'a>(
   });
   for rule in rules.drain(..) {
     matched.rules.push((rule.id, rule.important));
-    matched.layers.push(rule.layer_order);
+    // `layer_order` reverses important blocks, which a layer comparison reads unreversed.
+    matched
+      .layers
+      .push(match (rule.important, rule.layer_order) {
+        (true, 0) => layers,
+        (true, layer_order) => layers - layer_order,
+        (false, layer_order) => layer_order,
+      });
 
     if rule.important {
       if rule.layer_order == 0 {

@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use cssparser::{Parser, Token};
+use cssparser::{Parser, Token, serialize_identifier};
 
 use crate::style::{
   Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
@@ -105,7 +105,13 @@ impl ToCss for ContainerName {
     if self.0.is_empty() {
       return dest.write_str("none");
     }
-    dest.write_str(&self.0.join(" "))
+    for (index, name) in self.0.iter().enumerate() {
+      if index > 0 {
+        dest.write_str(" ")?;
+      }
+      serialize_identifier(name, dest)?;
+    }
+    Ok(())
   }
 }
 
@@ -163,6 +169,12 @@ mod tests {
       Container::default()
     );
     assert!(ContainerName::from_css_str("and").is_err());
+    assert_eq!(
+      ContainerName::from_css_str(r"foo\ bar")
+        .unwrap()
+        .to_css_string(),
+      r"foo\ bar"
+    );
     assert!(ContainerName::from_css_str("").is_err());
   }
 }

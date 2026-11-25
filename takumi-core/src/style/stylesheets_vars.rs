@@ -494,7 +494,7 @@ pub(crate) fn resolve_declared_custom_properties(
     (resolved, resolver.font_cycles, resolver.cycle_names)
   };
 
-  set_resolved(properties, declared, resolved);
+  set_resolved(properties, declared, resolved, &cycle_names);
 
   let registered_in_cycle = cycle_names.iter().any(|name| {
     properties
@@ -523,22 +523,31 @@ pub(crate) fn resolve_declared_custom_properties(
         .collect()
     };
 
-    set_resolved(properties, &others, resolved);
+    set_resolved(properties, &others, resolved, &[]);
     properties.enforce_syntax(&others, &parent.custom_properties);
   }
   font_cycles
 }
 
-/// Sets each of `names` to its `resolved` value, removing one that has none.
+/// Sets each of `names` to its `resolved` value, removing one that has none: one that reads
+/// `var()` or is among `cycle_names`. A value without `var()` reads nothing, so one too deep to
+/// walk stays as specified.
 fn set_resolved(
   properties: &mut CustomProperties,
   names: &[String],
   resolved: Vec<Option<String>>,
+  cycle_names: &[String],
 ) {
   for (name, value) in names.iter().zip(resolved) {
     match value {
       Some(value) => properties.set(name.clone(), value),
-      None => properties.remove(name),
+      None
+        if cycle_names.contains(name)
+          || properties.get(name).is_some_and(contains_var_references) =>
+      {
+        properties.remove(name);
+      }
+      None => {}
     }
   }
 }

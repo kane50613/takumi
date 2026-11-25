@@ -249,10 +249,12 @@ impl LayoutStyle {
     self.container_type.contains_block_size() && self.size_containment_applies()
   }
 
-  /// Whether size containment applies to the box, which it does not to a non-atomic inline or an
-  /// internal table box. <https://drafts.csswg.org/css-contain-2/#containment-size>
+  /// Whether size containment applies to the box: not to a non-atomic inline, a box whose inner
+  /// display is a table, or an internal table box other than a caption.
+  /// <https://drafts.csswg.org/css-contain-2/#containment-size>
   fn size_containment_applies(&self) -> bool {
-    !self.display.is_inline()
+    !(self.display.is_inline() && !self.is_replaced)
+      && !self.display.is_table()
       && (!self.display.is_table_part() || self.display == Display::TableCaption)
   }
 
