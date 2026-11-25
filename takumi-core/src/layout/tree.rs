@@ -3569,44 +3569,75 @@ impl RenderContext {
 
     previewed.difference(&declarations.important_longhands(sources));
 
-    let origin = AnimatedStyle {
-      context: self,
-      animations,
-      longhands,
-      custom_properties: self.animated_custom_properties(&base, animations, &previewed),
+    let preview = self.previewed_style(&base, animations, &previewed);
+    let cascade = |declarations: NodeStyle, custom_properties| {
+      let origin = AnimatedStyle {
+        context: self,
+        animations,
+        longhands,
+        custom_properties,
+      };
+
+      declarations.inherit_element(
+        inherited_parent,
+        lang,
+        is_document_root,
+        sources,
+        Some(&origin),
+      )
     };
-    let mut style = declarations.inherit_element(
-      inherited_parent,
-      lang,
-      is_document_root,
-      sources,
-      Some(&origin),
-    );
+    let sampled = self.sampled_custom_properties(&preview, animations);
+    let mut style = if sampled.is_empty() {
+      cascade(declarations, sampled)
+    } else {
+      let style = cascade(declarations.clone(), sampled.clone());
+
+      // A registered `em` reads the font size the cascade ends with, which a `font-size` reading
+      // an animated custom property through `var()` still changes, as Blink applies the custom
+      // properties an element's other longhands read after its fonts.
+      if style.inherited_data.font_size == preview.inherited_data.font_size {
+        style
+      } else {
+        let resampled = self.sampled_custom_properties(&style, animations);
+
+        if resampled == sampled {
+          style
+        } else {
+          cascade(declarations, resampled)
+        }
+      }
+    };
 
     style.copy_longhands(&LonghandId::animation(), &base);
     style
   }
 
-  /// The custom properties `animations` set on `base`, sampled once its high-priority `longhands`
-  /// animate, so a keyframed `light-dark()` resolves in the animated colour scheme. Approximate: a
-  /// registered `em` samples in that font size, which the cascade with the animated properties can
-  /// still change.
-  fn animated_custom_properties(
+  /// `base` once its high-priority `longhands` animate, so a keyframed `light-dark()` resolves in
+  /// the animated colour scheme.
+  fn previewed_style(
     &self,
     base: &ComputedStyle,
     animations: &ElementAnimations<'_>,
     longhands: &PropertyMask,
-  ) -> Vec<(String, String)> {
+  ) -> ComputedStyle {
     let mut style = base.clone();
 
     for (phase, mut group) in LonghandId::high_priority().into_iter().enumerate() {
       group.intersect(longhands);
       self.apply_animations(animations, &mut style, &group, phase);
     }
+    style
+  }
 
-    let sizing = self.child_sizing(&style, &self.sizing, false);
+  /// The custom properties `animations` set, sampled against the font and colour of `style`.
+  fn sampled_custom_properties(
+    &self,
+    style: &ComputedStyle,
+    animations: &ElementAnimations<'_>,
+  ) -> Vec<(String, String)> {
+    let sizing = self.child_sizing(style, &self.sizing, false);
 
-    animations.custom_properties(&style, &sizing, self.child_current_color(&style, &sizing))
+    animations.custom_properties(style, &sizing, self.child_current_color(style, &sizing))
   }
 
   /// Applies the animations of `longhands` to `style` in `phase` of the cascade: `color-scheme`

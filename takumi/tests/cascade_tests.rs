@@ -996,6 +996,21 @@ fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
   assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
 }
 
+/// A keyframed registered `em` reads the font size the cascade ends with, after a `font-size` reads
+/// another keyframed custom property through `var()`.
+#[test]
+fn animated_registered_em_reads_the_cascaded_font_size() {
+  assert_eq!(
+    box_size(
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @keyframes k { from, to { --size: 20px; --w: 5em } }
+       .box { font-size: var(--size, 16px); width: var(--w); animation: k 1s paused }"
+    )
+    .0,
+    100.0
+  );
+}
+
 /// The width and height `.box` measures to under `css`.
 fn box_size(css: &str) -> (f32, f32) {
   let measured = measure_with_css(Node::container([block("box")]), css);
