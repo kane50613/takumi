@@ -1,6 +1,7 @@
 ---
 packages:
   takumi-core: minor
+  takumi: minor
 ---
 
 # `color-mix()` and relative colours can read `currentColor`, and system colours render
@@ -16,7 +17,7 @@ A relative colour whose origin is `light-dark()` now takes the origin in the ele
 
 #### Migration
 
-`ColorInput` is no longer `Copy`, since `color-mix()` and relative colours keep their arguments. Clone a value you move twice.
+`ColorInput` is no longer `Copy`, since `color-mix()` and relative colours keep their arguments, and neither are `Border`, `BoxShadow`, `TextShadow`, and `TextStroke`, which hold one. Clone a value you move twice.
 
 ```diff
 - let fill = color;
