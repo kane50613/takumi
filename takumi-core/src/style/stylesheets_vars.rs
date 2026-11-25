@@ -448,7 +448,9 @@ fn charge(budget: &mut usize, bytes: usize) -> Result<(), ()> {
 }
 
 /// Resolves `var()` in the custom properties an element declares, `declared`, as Blink applies
-/// them: the values it inherits resolved already. Returns which of `font-size` and `line-height`,
+/// them: the values it inherits resolved already. Blink's `ApplyMatchResult` applies every one it
+/// declares, and resolves one sooner only when a property applied first reads it, so resolving them
+/// all first gives its values; the cycles that order finds are the font ones walked below. Returns which of `font-size` and `line-height`,
 /// whose `var()` values `fonts` holds, a cycle through a registered property's font-relative units
 /// reaches. A registered property in a cycle takes its `unset` value, as Blink's `ApplyUnset` gives
 /// it, and the others read it there.
