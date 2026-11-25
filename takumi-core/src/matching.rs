@@ -9,7 +9,7 @@ use selectors::{
   attr::{CaseSensitivity, NamespaceConstraint},
   bloom::BloomFilter,
   matching::*,
-  parser::{AncestorHashes, Combinator, Component, Selector},
+  parser::{AncestorHashes, Combinator, Component, Selector, SelectorList},
 };
 use smallvec::SmallVec;
 
@@ -23,7 +23,9 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
-    selector::{CssRule, FormState, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
+    selector::{
+      CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
+    },
     tw::TailwindCache,
   },
   viewport::Viewport,
@@ -798,6 +800,8 @@ struct MatchedRule<'a> {
   important: bool,
   layer_order: usize,
   specificity: u32,
+  /// How many generations up its `@scope` root is, `u32::MAX` without one.
+  proximity: u32,
   /// A stylesheet rule's position, or a `tw` rule's place in Tailwind's sort of this render's
   /// utilities.
   source_order: usize,
@@ -1118,51 +1122,69 @@ pub(crate) fn match_stylesheets_view<'a>(
         let rule = &placement.sheet.rules()[position];
         let source_order = placement.rule_offset + position;
         let ancestor_hashes = &rule_index.ancestor_hashes[position];
-        let mut best_specificities: [Option<u32>; 3] = [None; 3];
+        let roots = match &rule.scope {
+          Some(scope) => scope_roots(scope, element, &mut element_ctx),
+          None => SmallVec::from_slice(&[(None, u32::MAX)]),
+        };
 
-        for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
-          let Some(target) = selector_target(selector) else {
-            continue;
-          };
-          if is_replaced && target != SelectorTarget::Element {
-            continue;
+        // The closest root a selector matches under decides the rule's proximity.
+        for (root, proximity) in roots {
+          element_ctx.scope_element = root;
+          pseudo_ctx.scope_element = root;
+
+          let mut best_specificities: [Option<u32>; 3] = [None; 3];
+
+          for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
+            let Some(target) = selector_target(selector) else {
+              continue;
+            };
+            if is_replaced && target != SelectorTarget::Element {
+              continue;
+            }
+
+            if early_reject_by_local_name(selector, 0, element) {
+              continue;
+            }
+
+            let ctx = if target == SelectorTarget::Element {
+              &mut element_ctx
+            } else {
+              &mut pseudo_ctx
+            };
+
+            if matches_selector(
+              selector,
+              0,
+              Some(&ancestor_hashes[selector_index]),
+              element,
+              ctx,
+            ) {
+              let specificity = selector.specificity();
+              let slot = &mut best_specificities[target as usize];
+
+              *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+            }
           }
 
-          if early_reject_by_local_name(selector, 0, element) {
+          if best_specificities.iter().all(Option::is_none) {
             continue;
           }
-
-          let ctx = if target == SelectorTarget::Element {
-            &mut element_ctx
-          } else {
-            &mut pseudo_ctx
-          };
-
-          if matches_selector(
-            selector,
-            0,
-            Some(&ancestor_hashes[selector_index]),
-            element,
-            ctx,
-          ) {
-            let specificity = selector.specificity();
-            let slot = &mut best_specificities[target as usize];
-
-            *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
+          for (best_specificity, bucket) in
+            best_specificities.into_iter().zip(node_rules.iter_mut())
+          {
+            record_matches(
+              rule,
+              source_order,
+              placement.layer_offset,
+              layers,
+              best_specificity.map(|specificity| (specificity, proximity)),
+              bucket,
+            );
           }
+          break;
         }
-
-        for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut())
-        {
-          record_matches(
-            rule,
-            source_order,
-            placement.layer_offset,
-            layers,
-            best_specificity,
-            bucket,
-          );
-        }
+        element_ctx.scope_element = None;
+        pseudo_ctx.scope_element = None;
       }
     }
 
@@ -1204,6 +1226,52 @@ pub(crate) fn match_stylesheets_view<'a>(
   per_node
 }
 
+/// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
+/// it is: an inclusive ancestor its start selectors match, or the tree's root without them, with no
+/// element its end selectors match from `element` up to it.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+fn scope_roots(
+  scope: &Scope,
+  element: ArenaElement<'_>,
+  ctx: &mut MatchingContext<'_, SelectorImpl>,
+) -> SmallVec<[(Option<OpaqueElement>, u32); 2]> {
+  let matches = |selectors: &SelectorList<SelectorImpl>,
+                 element: ArenaElement<'_>,
+                 root: Option<OpaqueElement>,
+                 ctx: &mut MatchingContext<'_, SelectorImpl>| {
+    ctx.nest_for_scope(root, |ctx| {
+      selectors
+        .slice()
+        .iter()
+        .any(|selector| matches_selector(selector, 0, None, element, ctx))
+    })
+  };
+  let mut roots = SmallVec::new();
+
+  for (proximity, root) in successors(Some(element), Element::parent_element).enumerate() {
+    let outer_roots = match &scope.parent {
+      Some(parent) => scope_roots(parent, root, ctx),
+      None => SmallVec::from_slice(&[(None, 0)]),
+    };
+    let is_root = match &scope.start {
+      Some(start) => outer_roots
+        .iter()
+        .any(|&(outer, _)| matches(start, root, outer, ctx)),
+      None => root.parent_element().is_none() && !outer_roots.is_empty(),
+    };
+    let limited = scope.end.as_ref().is_some_and(|end| {
+      successors(Some(element), Element::parent_element)
+        .take_while(|limit| limit.opaque() != root.opaque())
+        .any(|limit| matches(end, limit, Some(root.opaque()), ctx))
+    });
+
+    if is_root && !limited {
+      roots.push((Some(root.opaque()), proximity as u32));
+    }
+  }
+  roots
+}
+
 fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> {
   match selector.pseudo_element() {
     None => Some(SelectorTarget::Element),
@@ -1213,16 +1281,17 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
   }
 }
 
-/// Records `rule`'s blocks in `bucket` at `best_specificity` when one of its selectors matched.
+/// Records `rule`'s blocks in `bucket` at the specificity and scope proximity it matched with,
+/// when one of its selectors matched.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
   layer_offset: usize,
   layers: usize,
-  best_specificity: Option<u32>,
+  best_specificity: Option<(u32, u32)>,
   bucket: &mut Vec<MatchedRule<'a>>,
 ) {
-  let Some(specificity) = best_specificity else {
+  let Some((specificity, proximity)) = best_specificity else {
     return;
   };
   let layer = rule.layer_order.map(|layer| layer_offset + layer);
@@ -1232,6 +1301,7 @@ fn record_matches<'a>(
       important: false,
       layer_order: layer_order(layer, false, layers),
       specificity,
+      proximity,
       source_order,
       id: RuleId::Sheet(source_order),
       declarations: MatchedBlock::Sheet(&rule.normal_declarations),
@@ -1242,6 +1312,7 @@ fn record_matches<'a>(
       important: true,
       layer_order: layer_order(layer, true, layers),
       specificity,
+      proximity,
       source_order,
       id: RuleId::Sheet(source_order),
       declarations: MatchedBlock::Sheet(&rule.important_declarations),
@@ -1271,6 +1342,7 @@ fn record_tw_match<'a>(
     important: tw_rule.important,
     layer_order: layer_order(Some(layers - 1), tw_rule.important, layers),
     specificity: tw_rule.specificity,
+    proximity: u32::MAX,
     source_order,
     id: RuleId::Tw(tw_rule.id),
     declarations: MatchedBlock::Tw(Arc::clone(tw_rule)),
@@ -1282,12 +1354,16 @@ fn finalize_bucket<'a>(
   layers: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
+  // Blink's `ElementRuleCollector::CompareRules`: a closer scope root wins after specificity.
   sort_by_key(rules, |rule| {
     (
       rule.important,
       rule.layer_order,
       rule.specificity,
-      rule.source_order,
+      (
+        u16::MAX - u16::try_from(rule.proximity).unwrap_or(u16::MAX),
+        rule.source_order,
+      ),
     )
   });
   for rule in rules.drain(..) {

@@ -1153,3 +1153,54 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     40.0
   );
 }
+
+/// The widths of `.card`, its `.a` paragraph, and the `.b` paragraph in its `.content` box, in
+/// `<section class="outer"><div class="card">…</div></section>` under `css`.
+fn card_widths(css: &str) -> [f32; 3] {
+  let node = Node::from_html(
+    r#"<section class="outer"><div class="card"><p class="a">x</p><div class="content"><p class="b">y</p></div></div></section>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+  let card = &measured.children[0].children[0];
+
+  [
+    card.width,
+    card.children[0].width,
+    card.children[1].children[0].width,
+  ]
+}
+
+/// `@scope` limits its rules to the elements under a root and above a limit, and a rule from a
+/// closer root wins after specificity, as Blink's `ElementRuleCollector` sorts them.
+#[test]
+fn scope_rules_apply_between_their_root_and_limit() {
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 30px } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.card) to (.content) { p { width: 30px } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+  // `:scope` is the root, which a selector without it never matches.
+  assert_eq!(
+    card_widths("@scope (.card) { :scope { width: 100px } .card { width: 50px } }")[0],
+    100.0
+  );
+  // A closer root wins over a later rule, and any root over an unscoped rule.
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } @scope (.outer) { p { width: 10px } }")[1],
+    20.0
+  );
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } p { width: 50px }")[1],
+    20.0
+  );
+  // Specificity still comes first.
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } p.a { width: 50px }")[1],
+    50.0
+  );
+}
