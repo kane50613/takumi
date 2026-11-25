@@ -19,10 +19,12 @@ use crate::{
     InputType, has_attribute, is_disableable_form_control, is_element, is_mutable_text_control,
     is_placeholder_shown, required_state,
   },
+  geometry::Size,
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
+    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, LonghandId,
+    MediaQueryList, StyleDeclarationBlock, TwRule,
     selector::{
       CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
     },
@@ -1030,6 +1032,18 @@ pub(crate) fn match_stylesheets_view<'a>(
   viewport: Viewport,
   tailwind: &TailwindCache,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
+  match_stylesheets_in_containers(root, stylesheets, viewport, tailwind, None)
+}
+
+/// [`match_stylesheets_view`] with the query containers `@container` rules read, by their place in
+/// `root`, without which no container query holds.
+pub(crate) fn match_stylesheets_in_containers<'a>(
+  root: &Node,
+  stylesheets: &[&'a StyleSheet],
+  viewport: Viewport,
+  tailwind: &TailwindCache,
+  containers: Option<&QueryContainers>,
+) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
   let (mut rule_offset, mut layer_offset) = (0, 0);
 
@@ -1122,6 +1136,14 @@ pub(crate) fn match_stylesheets_view<'a>(
         let rule = &placement.sheet.rules()[position];
         let source_order = placement.rule_offset + position;
         let ancestor_hashes = &rule_index.ancestor_hashes[position];
+        if !rule
+          .container_queries
+          .iter()
+          .all(|query| container_query_holds(query, element, containers, viewport))
+        {
+          continue;
+        }
+
         let roots = match &rule.scope {
           Some(scope) => scope_roots(scope, element, &mut element_ctx),
           None => SmallVec::from_slice(&[(None, u32::MAX)]),
@@ -1224,6 +1246,59 @@ pub(crate) fn match_stylesheets_view<'a>(
   }
 
   per_node
+}
+
+/// A query container as a layout left it: its `container-type`, its names, and the size of its
+/// content box.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct QueryContainer {
+  pub(crate) container_type: ContainerType,
+  pub(crate) name: ContainerName,
+  pub(crate) size: Size<f32>,
+}
+
+/// The query containers of a tree, by their place in its pre-order.
+pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
+
+/// Whether `query` holds of `element`'s query container: its nearest ancestor that `query` names,
+/// if it names one, and whose `container-type` contains each axis `query` reads.
+/// <https://drafts.csswg.org/css-contain-3/#container-rule>
+fn container_query_holds(
+  query: &ContainerQuery,
+  element: ArenaElement<'_>,
+  containers: Option<&QueryContainers>,
+  viewport: Viewport,
+) -> bool {
+  let Some(containers) = containers else {
+    return false;
+  };
+  let reads_block_axis = query.reads_block_axis();
+  let container =
+    successors(element.parent_element(), Element::parent_element).find_map(|ancestor| {
+      containers.get(&ancestor.index).filter(|container| {
+        (if reads_block_axis {
+          container.container_type.contains_block_size()
+        } else {
+          container.container_type.contains_inline_size()
+        }) && query
+          .name
+          .as_deref()
+          .is_none_or(|name| container.name.has(name))
+      })
+    });
+
+  container.is_some_and(|container| {
+    query.matches(
+      Size {
+        width: Some(container.size.width),
+        height: container
+          .container_type
+          .contains_block_size()
+          .then_some(container.size.height),
+      },
+      viewport,
+    )
+  })
 }
 
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up

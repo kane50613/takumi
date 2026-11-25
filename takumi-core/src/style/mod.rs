@@ -37,6 +37,7 @@ pub(crate) use custom_properties::Registrations;
 pub use ignored::{DeclarationOrigin, IgnoredDeclaration, IgnoredReason};
 pub(crate) use matched_style_cache::{MatchedStyleCache, MatchedStyleKey};
 pub(crate) use math::lerp;
+pub(crate) use media_query::ContainerQuery;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 pub(crate) use raw_declaration::{RawDeclaration, RawDeclarationParser};

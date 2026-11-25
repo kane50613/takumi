@@ -15,7 +15,7 @@ use crate::{
     node::Node,
   },
   style::{
-    ComputedStyle, Contain, CounterChange, Display,
+    ComputedStyle, CounterChange, Display,
     page_rule::{PAGE_COUNTER, PAGES_COUNTER},
   },
 };
@@ -646,5 +646,5 @@ fn has_counter(counter_directives: &[(Arc<str>, CounterDirectives)], counter_nam
 }
 
 pub(super) fn contains_style(style: &ComputedStyle) -> bool {
-  style.misc_data.contain.contains(Contain::STYLE)
+  style.contains_style()
 }

@@ -2664,8 +2664,8 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       grid_items.include_subgridded_items_mut(),
     );
 
-    let intrinsic_block_size =
-      layout_data.rows.total_set_span_size().unwrap_or_default() + self.border_padding.block_sum();
+    let intrinsic_block_size = self
+      .contained_intrinsic_block_size(layout_data.rows.total_set_span_size().unwrap_or_default());
 
     (
       GridLayoutState {
@@ -2677,6 +2677,18 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       out_of_flow_children,
       intrinsic_block_size,
     )
+  }
+
+  /// The intrinsic block size of rows `rows` long, which Blink's `ClampIntrinsicBlockSize` leaves
+  /// out of a block-size-contained box.
+  fn contained_intrinsic_block_size(&self, rows: LayoutUnit) -> LayoutUnit {
+    let content = if self.style.contains_block_size() {
+      LayoutUnit::ZERO
+    } else {
+      rows
+    };
+
+    content + self.border_padding.block_sum()
   }
 
   /// Blink's `ComputeGridGeometry`: the sized grid, the out-of-flow children, and the intrinsic block
@@ -2703,13 +2715,14 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       Some(&mut needs_additional_pass),
     );
 
-    let intrinsic_block_size = sizing_tree
-      .node(0)
-      .layout_data
-      .rows
-      .total_set_span_size()
-      .unwrap_or_default()
-      + self.border_padding.block_sum();
+    let intrinsic_block_size = self.contained_intrinsic_block_size(
+      sizing_tree
+        .node(0)
+        .layout_data
+        .rows
+        .total_set_span_size()
+        .unwrap_or_default(),
+    );
     let applies_auto_min_size = self.style.aspect_ratio.is_some()
       && self.style.overflow.y.is_clip_or_visible()
       && self.style.min_size.height.is_auto();

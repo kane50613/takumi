@@ -13,9 +13,9 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    AlignItems, BaselineSource, BoxSizing, ComputedStyle, Contain, Direction, Display, FlexBasis,
-    FlexDirection, FlexWrap, Gap, JustifyContent, Length, MathExpr, MaxSize, Overflow, Position,
-    Size as SizeValue, SizingContext,
+    AlignItems, BaselineSource, BoxSizing, ComputedStyle, Contain, ContainerType, Direction,
+    Display, FlexBasis, FlexDirection, FlexWrap, Gap, JustifyContent, Length, MathExpr, MaxSize,
+    Overflow, Position, Size as SizeValue, SizingContext,
   },
 };
 
@@ -142,6 +142,7 @@ pub(crate) struct LayoutStyle {
   pub(crate) clear: Clear,
   pub(crate) direction: Direction,
   pub(crate) contain: Contain,
+  pub(crate) container_type: ContainerType,
   /// `Normal` stands for `auto`.
   pub(crate) justify_self: AlignItems,
   /// `Normal` stands for `auto`.
@@ -207,6 +208,7 @@ impl Default for LayoutStyle {
       clear: Clear::None,
       direction: Direction::Ltr,
       contain: Contain::NONE,
+      container_type: ContainerType::Normal,
       justify_self: AlignItems::Normal,
       align_self: AlignItems::Normal,
       is_replaced: false,
@@ -236,6 +238,24 @@ impl Default for LayoutStyle {
 
 impl LayoutStyle {
   /// `style`'s box model, resolved against `sizing`.
+  /// Blink's `ShouldApplyInlineSizeContainment`: a `container-type` contains the inline size of
+  /// a box that is neither a non-atomic inline nor an internal table box.
+  pub(crate) fn contains_inline_size(&self) -> bool {
+    self.container_type.contains_inline_size() && self.size_containment_applies()
+  }
+
+  /// Blink's `ShouldApplyBlockSizeContainment`.
+  pub(crate) fn contains_block_size(&self) -> bool {
+    self.container_type.contains_block_size() && self.size_containment_applies()
+  }
+
+  /// Whether size containment applies to the box, which it does not to a non-atomic inline or an
+  /// internal table box. <https://drafts.csswg.org/css-contain-2/#containment-size>
+  fn size_containment_applies(&self) -> bool {
+    !self.display.is_inline()
+      && (!self.display.is_table_part() || self.display == Display::TableCaption)
+  }
+
   pub(crate) fn from_computed(
     style: &ComputedStyle,
     sizing: &SizingContext,
@@ -301,6 +321,7 @@ impl LayoutStyle {
       clear: style.base_data.clear.resolve(direction),
       direction,
       contain: style.misc_data.contain,
+      container_type: style.misc_data.container_type,
       justify_self: style.misc_data.justify_self,
       align_self: style.misc_data.align_self,
       is_replaced,

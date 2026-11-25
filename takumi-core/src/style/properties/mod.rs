@@ -17,6 +17,7 @@ mod color;
 mod color_scheme;
 pub(crate) mod conic_gradient;
 mod contain;
+mod container;
 mod content;
 mod corner_shape;
 mod counter;
@@ -98,6 +99,7 @@ pub use color::*;
 pub use color_scheme::*;
 pub use conic_gradient::ConicGradient;
 pub use contain::*;
+pub use container::*;
 pub use content::*;
 pub use corner_shape::*;
 pub use counter::*;
@@ -185,6 +187,7 @@ pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
     "unset",
     "revert",
     "revert-layer",
+    "revert-rule",
     "default",
   ]
   .iter()

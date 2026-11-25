@@ -1297,6 +1297,11 @@ impl<'t, 'r> FlexLayoutAlgorithm<'t, 'r> {
       }
     }
 
+    // Blink's `ClampIntrinsicBlockSize`: a block-size-contained box takes none from its lines.
+    if self.style.contains_block_size() {
+      total_intrinsic_block_size = self.border_padding.block_sum();
+    }
+
     (flex_lines, out_of_flow, total_intrinsic_block_size)
   }
 

@@ -13,6 +13,7 @@ use selectors::parser::{
   SelectorImpl as SelectorImplTrait, SelectorList,
 };
 
+use crate::style::ContainerQuery;
 #[cfg(feature = "font-face")]
 use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
@@ -778,6 +779,8 @@ enum AtRulePrelude {
   Apply(Box<StyleDeclarationBlock>),
   /// `@scope`, its root and limit selectors.
   Scope(Scope),
+  /// `@container`, its query.
+  Container(ContainerQuery),
   /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
   Unknown(Box<IgnoredDeclaration>),
@@ -825,6 +828,8 @@ pub(crate) struct CssRule {
   pub(crate) layer_order: Option<usize>,
   /// The scope of the `@scope` rule it is in.
   pub(crate) scope: Option<Arc<Scope>>,
+  /// The queries of the `@container` rules it is in, which must all hold.
+  pub(crate) container_queries: Vec<Arc<ContainerQuery>>,
 }
 
 fn parse_property_rule<'i>(
@@ -1011,6 +1016,7 @@ impl NestingContext<'_> {
       layer: self.layer.cloned(),
       layer_order: None,
       scope: None,
+      container_queries: Vec::new(),
     }
   }
 
@@ -1156,8 +1162,8 @@ impl NestingContext<'_> {
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
-      // Approximate: `@scope` in a style rule, whose root is the rule's subject, is not read.
-      AtRulePrelude::Scope(_) => Err(ParseError::custom(
+      // Approximate: `@scope` and `@container` in a style rule are not read.
+      AtRulePrelude::Scope(_) | AtRulePrelude::Container(_) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
       AtRulePrelude::Unknown(at_rule) => {
@@ -1211,6 +1217,10 @@ fn parse_at_rule_prelude<'i>(
 
   if name.eq_ignore_ascii_case("media") {
     return MediaQueryList::parse(input).map(AtRulePrelude::Media);
+  }
+
+  if name.eq_ignore_ascii_case("container") {
+    return ContainerQuery::parse(input).map(AtRulePrelude::Container);
   }
 
   if name.eq_ignore_ascii_case("scope") {
@@ -1469,6 +1479,17 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 
         Ok(fragment)
       }
+      AtRulePrelude::Container(query) => {
+        let query = Arc::new(query);
+        let mut fragment = self
+          .nested(self.current_layer.clone())
+          .parse_fragment(input)?;
+
+        for rule in &mut fragment.rules {
+          rule.container_queries.push(Arc::clone(&query));
+        }
+        Ok(fragment)
+      }
       AtRulePrelude::Scope(scope) => {
         let scope = Arc::new(scope);
         let mut fragment = Self {
@@ -1678,6 +1699,14 @@ impl StyleSheet {
   /// Style rules in source order.
   pub(crate) fn rules(&self) -> &[CssRule] {
     &self.rules
+  }
+
+  /// Whether a rule is in an `@container` rule.
+  pub(crate) fn has_container_queries(&self) -> bool {
+    self
+      .rules
+      .iter()
+      .any(|rule| !rule.container_queries.is_empty())
   }
 
   /// Collects unique resource URLs referenced by the declarations of its rules, keyframes, and

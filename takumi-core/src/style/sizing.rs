@@ -141,6 +141,23 @@ impl SizingContext {
     }
   }
 
+  /// The sizing a media or container query resolves its lengths in: the viewport's font.
+  pub(crate) fn for_media(viewport: Viewport) -> Self {
+    Self {
+      viewport,
+      container_size: Size::NONE,
+      container_read: Default::default(),
+      font_read: None,
+      font_size: viewport.font_size,
+      root_font_size: None,
+      line_height: viewport.font_size,
+      root_line_height: Some(viewport.font_size),
+      ch: viewport.font_size / 2.0,
+      ex: viewport.font_size / 2.0,
+      color_scheme: viewport.color_scheme,
+    }
+  }
+
   /// A copy whose `light-dark()` colours resolve in `color_scheme`.
   pub(crate) fn with_color_scheme(self, color_scheme: ColorScheme) -> Self {
     Self {
