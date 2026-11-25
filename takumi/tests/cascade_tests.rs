@@ -1597,3 +1597,15 @@ fn a_scope_without_a_start_roots_at_its_style_element_parent() {
   assert_eq!(measured.children[0].children[0].width, 30.0);
   assert_ne!(measured.children[1].width, 30.0);
 }
+
+/// A size query container establishes an independent formatting context, so a child's margin does
+/// not collapse through it. <https://drafts.csswg.org/css-contain-3/#container-type>
+#[test]
+fn a_query_container_keeps_its_children_margins() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("child")]).with_class_name("outer")]),
+    ".outer { display: block; container-type: inline-size } .child { height: 20px; margin-bottom: 4px }",
+  );
+
+  assert_eq!(measured.children[0].height, 24.0);
+}
