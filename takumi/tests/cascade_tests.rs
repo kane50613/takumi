@@ -1181,6 +1181,14 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     .0,
     40.0
   );
+  // So does one whose `var()` substitutes the keyword.
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { --w: 40px } } .box { --w: var(--missing, revert-layer); width: var(--w) }"
+    )
+    .0,
+    40.0
+  );
 }
 
 /// The widths of `.card`, its `.a` paragraph, and the `.b` paragraph in its `.content` box, in
