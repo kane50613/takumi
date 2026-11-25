@@ -666,6 +666,14 @@ impl<'r> LayoutTree<'r> {
       || style.max_size.height.has_percent_or_stretch()
       || (style.size.height.is_auto() && space.is_block_auto_behavior_stretch());
 
+    if !matches!(algorithm, Algorithm::Hidden) && style.contains_inline_size() {
+      // Blink's `CalculateMinMaxSizesIgnoringChildren`: the content gives no inline size.
+      return MinMaxSizesResult::new(
+        MinMaxSizes::both(resolver.border_padding.inline_sum()),
+        depends_on_block_constraints,
+      );
+    }
+
     match algorithm {
       Algorithm::Hidden => return MinMaxSizesResult::default(),
       Algorithm::Replaced => {

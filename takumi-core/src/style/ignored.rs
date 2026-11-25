@@ -125,7 +125,7 @@ impl IgnoredDeclaration {
 }
 
 impl fmt::Display for IgnoredDeclaration {
-  /// The declaration as CSS writes it, such as `filter: blurry(4px)` or `@container (width > 0)`.
+  /// The declaration as CSS writes it, such as `filter: blurry(4px)` or `@counter-style thumbs`.
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self.reason {
       IgnoredReason::UnknownAtRule if self.value.is_empty() => f.write_str(&self.property),

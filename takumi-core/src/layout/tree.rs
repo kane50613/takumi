@@ -50,17 +50,21 @@ use crate::{
     text_control::{TextControl, TextControlBox},
   },
   layout_unit::{BoxStrut, LayoutUnit},
-  matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  matching::{
+    MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers,
+    match_stylesheets_in_containers, match_stylesheets_view,
+  },
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
   sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
-    Color, ColorInput, ComputedStyle, ContentItem, ContentValue, Direction, Display,
-    ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId, MatchedStyleKey, Position,
-    PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, page_rule::PageContext,
+    Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
+    Direction, Display, ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId,
+    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
+    page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -2456,11 +2460,52 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
-    let matched_styles = match_stylesheets_view(
+    if !parent_context.stylesheet().has_container_queries() {
+      return Self::build_in_containers(parent_context, node, blockifies_children, None);
+    }
+
+    // `@container` rules read the sizes a layout gives their containers, as Blink lays a container
+    // out before it styles the boxes in it. A container's size can follow from an outer container's
+    // query, so the tree builds again with the sizes the last layout gave until they settle.
+    // Approximate: past `MAX_PASSES` the last sizes stand.
+    const MAX_PASSES: usize = 4;
+
+    let mut containers = None;
+
+    for _ in 0..MAX_PASSES {
+      let tree = Self::build_in_containers(
+        parent_context,
+        node.clone(),
+        blockifies_children,
+        containers.as_ref(),
+      );
+      let sizes = tree.query_containers();
+
+      if containers.as_ref() == Some(&sizes) {
+        return tree;
+      }
+      containers = Some(sizes);
+    }
+    Self::build_in_containers(
+      parent_context,
+      node,
+      blockifies_children,
+      containers.as_ref(),
+    )
+  }
+
+  fn build_in_containers(
+    parent_context: &RenderContext,
+    node: Node,
+    blockifies_children: bool,
+    containers: Option<&QueryContainers>,
+  ) -> Self {
+    let matched_styles = match_stylesheets_in_containers(
       &node,
       &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
       parent_context.cache().tailwind(),
+      containers,
     );
     let mut list_item_counts = ListItemCounts::default();
 
@@ -2491,6 +2536,52 @@ impl RenderNode {
       }
     }
     tree
+  }
+
+  /// The query containers among its boxes, sized by laying it out in its viewport.
+  fn query_containers(&self) -> QueryContainers {
+    let mut tree = LayoutTree::from_render_node(self);
+    let available_space = tree.initial_containing_block(self.context.sizing.viewport.into());
+
+    tree.compute_layout(available_space);
+
+    let found: Vec<(NodeId, usize, ContainerType, ContainerName)> = tree
+      .render_nodes
+      .iter()
+      .enumerate()
+      .filter_map(|(index, render_node)| {
+        let NodeOrigin::Authored { source_order } = render_node.origin else {
+          return None;
+        };
+        let style = &render_node.context.style.misc_data;
+
+        (style.container_type != ContainerType::Normal).then(|| {
+          (
+            NodeId::new(index),
+            source_order,
+            style.container_type,
+            style.container_name.clone(),
+          )
+        })
+      })
+      .collect();
+    let results = tree.into_results();
+
+    found
+      .into_iter()
+      .filter_map(|(node, source_order, container_type, name)| {
+        let size = results.layout(node).ok()?.content_box_size();
+
+        Some((
+          source_order,
+          QueryContainer {
+            container_type,
+            name,
+            size,
+          },
+        ))
+      })
+      .collect()
   }
 
   /// The root blockified and establishing a formatting context, per

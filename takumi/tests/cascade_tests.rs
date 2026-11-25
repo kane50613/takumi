@@ -1204,3 +1204,129 @@ fn scope_rules_apply_between_their_root_and_limit() {
     50.0
   );
 }
+
+/// The size of `.box`, a parsed `<div>` holding text, under `css`.
+fn text_box_size(css: &str) -> (f32, f32) {
+  let node = Node::from_html(
+    r#"<div class="box">hello world</div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+
+  (measured.children[0].width, measured.children[0].height)
+}
+
+/// `container-type` contains a box's size, as Blink's `ShouldApplyInlineSizeContainment` and
+/// `ShouldApplyBlockSizeContainment` have it, so the content gives it none.
+#[test]
+fn container_type_contains_the_size_its_content_would_give() {
+  let (width, height) = text_box_size(".box { display: inline-block }");
+
+  assert!(width > 0.0 && height > 0.0);
+  assert_eq!(
+    text_box_size(".box { display: inline-block; container-type: inline-size; padding: 2px }").0,
+    4.0
+  );
+  assert_eq!(text_box_size(".box { container-type: size }").1, 0.0);
+  assert_eq!(
+    text_box_size(".box { container-type: inline-size }").1,
+    height
+  );
+}
+
+/// The width of `.target` in a `.card` container under `css`.
+fn target_in_card(css: &str) -> f32 {
+  let node = Node::from_html(
+    r#"<div class="card"><p class="target">x</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+
+  measured.children[0].children[0].width
+}
+
+/// `@container` rules read the size of the nearest container that `container-type` lets answer
+/// them and that has the name they ask for, as Blink evaluates container queries.
+#[test]
+fn container_queries_read_the_nearest_matching_container() {
+  let rule = "@container (min-width: 200px) { .target { width: 50px } }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      ".card {{ container-type: inline-size; width: 300px }} {rule}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      ".card {{ container-type: inline-size; width: 100px }} {rule}"
+    )),
+    100.0
+  );
+  // Without a container, the query does not hold.
+  assert_eq!(
+    target_in_card(&format!(".card {{ width: 300px }} {rule}")),
+    300.0
+  );
+  // A name picks the container.
+  assert_eq!(
+    target_in_card(
+      ".card { container: card / inline-size; width: 300px }
+       @container card (min-width: 200px) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container: card / inline-size; width: 300px }
+       @container other (min-width: 200px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+  // The block axis needs `container-type: size`.
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 300px; height: 300px }
+       @container (min-height: 10px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: size; width: 300px; height: 300px }
+       @container (min-height: 10px) and (inline-size > 200px) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+  // A media query cannot read `inline-size`.
+  assert_eq!(
+    target_in_card(
+      ".card { width: 300px } @media (min-inline-size: 1px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+}
+
+/// A container whose size an outer container's query sets answers the queries inside it at that
+/// size, as Blink sizes it before styling what is inside.
+#[test]
+fn a_container_answers_at_the_size_an_outer_query_gives_it() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><p class="target">x</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inner { container-type: inline-size; width: 100px }
+     @container (min-width: 300px) { .inner { width: 250px } }
+     @container (min-width: 200px) { .target { width: 50px } }",
+  );
+  let inner = &measured.children[0].children[0];
+
+  assert_eq!(inner.width, 250.0);
+  assert_eq!(inner.children[0].width, 50.0);
+}

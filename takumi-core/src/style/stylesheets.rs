@@ -1862,6 +1862,8 @@ define_style! {
       break_after: BreakBetween,
       break_inside: BreakInside,
       contain: Contain,
+      container_type: ContainerType,
+      container_name: ContainerName,
       isolation: Isolation,
       mix_blend_mode: BlendMode,
     }
@@ -2195,6 +2197,10 @@ define_style! {
     },
     gap: SpacePair<Gap> => [RowGap, ColumnGap] |value, target| {
       push_axis_declarations!(target, value, row_gap, column_gap);
+    },
+    container: Container => [ContainerName, ContainerType] |value, target| {
+      target.push(StyleDeclaration::container_name(value.name));
+      target.push(StyleDeclaration::container_type(value.container_type));
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
       target.push(StyleDeclaration::flex_direction(value.direction));

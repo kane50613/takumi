@@ -5,7 +5,7 @@ use cssparser::*;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
-  style::{FromCss, Length, SizingContext},
+  style::{ContainerName, FromCss, Length, SizingContext},
   viewport::{ColorScheme, MediaTarget, Viewport},
 };
 
@@ -48,6 +48,10 @@ enum MediaOrientation {
 enum MediaFeature {
   Width(MediaFeatureComparison, Length),
   Height(MediaFeatureComparison, Length),
+  /// `inline-size`, which only a container query reads.
+  InlineSize(MediaFeatureComparison, Length),
+  /// `block-size`, which only a container query reads.
+  BlockSize(MediaFeatureComparison, Length),
   Resolution(MediaFeatureComparison, f32),
   AspectRatio(MediaFeatureComparison, MediaRatio),
   Orientation(MediaOrientation),
@@ -234,6 +238,8 @@ impl MediaFeature {
     match_ignore_ascii_case! { name,
       "width" => Some(Self::Width(comparison, length?)),
       "height" => Some(Self::Height(comparison, length?)),
+      "inline-size" => Some(Self::InlineSize(comparison, length?)),
+      "block-size" => Some(Self::BlockSize(comparison, length?)),
       "resolution" => match value {
         MediaFeatureValue::Resolution(dppx) => Some(Self::Resolution(comparison, dppx)),
         _ => None,
@@ -348,41 +354,37 @@ impl MediaFeature {
     ))
   }
 
-  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
+  /// Whether it holds of a query target `size` across, the viewport's or a container's.
+  fn matches(&self, viewport: Viewport, size: Size<Option<f32>>, sizing: &SizingContext) -> bool {
+    let length = |comparison: &MediaFeatureComparison, value: &Length, axis: Option<f32>| {
+      axis.is_some_and(|axis| {
+        comparison.matches(axis, value.to_px(sizing, axis), LAYOUT_UNIT_EPSILON)
+      })
+    };
+
     match self {
-      Self::Width(comparison, value) => viewport.size.width.is_some_and(|width| {
-        comparison.matches(
-          width as f32,
-          value.to_px(sizing, width as f32),
-          LAYOUT_UNIT_EPSILON,
-        )
-      }),
-      Self::Height(comparison, value) => viewport.size.height.is_some_and(|height| {
-        comparison.matches(
-          height as f32,
-          value.to_px(sizing, height as f32),
-          LAYOUT_UNIT_EPSILON,
-        )
-      }),
+      Self::Width(comparison, value) | Self::InlineSize(comparison, value) => {
+        length(comparison, value, size.width)
+      }
+      Self::Height(comparison, value) | Self::BlockSize(comparison, value) => {
+        length(comparison, value, size.height)
+      }
       Self::Resolution(comparison, dppx) => {
         comparison.matches(viewport.effective_dpr(), *dppx, 0.0)
       }
-      Self::AspectRatio(comparison, ratio) => viewport
-        .size
-        .width
-        .zip(viewport.size.height)
-        .is_some_and(|(width, height)| {
+      Self::AspectRatio(comparison, ratio) => {
+        size.width.zip(size.height).is_some_and(|(width, height)| {
           comparison.matches(
-            width as f32 * ratio.denominator,
-            height as f32 * ratio.numerator,
+            width * ratio.denominator,
+            height * ratio.numerator,
             LAYOUT_UNIT_EPSILON,
           )
-        }),
+        })
+      }
       Self::Orientation(orientation) => {
-        viewport
-          .size
+        size
           .width
-          .zip(viewport.size.height)
+          .zip(size.height)
           .is_some_and(|(width, height)| match orientation {
             MediaOrientation::Portrait => height >= width,
             MediaOrientation::Landscape => width > height,
@@ -482,16 +484,27 @@ impl MediaCondition {
     })
   }
 
-  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
+  fn matches(&self, viewport: Viewport, size: Size<Option<f32>>, sizing: &SizingContext) -> bool {
     match self {
-      Self::Feature(feature) => feature.matches(viewport, sizing),
-      Self::Not(condition) => !condition.matches(viewport, sizing),
+      Self::Feature(feature) => feature.matches(viewport, size, sizing),
+      Self::Not(condition) => !condition.matches(viewport, size, sizing),
       Self::And(conditions) => conditions
         .iter()
-        .all(|condition| condition.matches(viewport, sizing)),
+        .all(|condition| condition.matches(viewport, size, sizing)),
       Self::Or(conditions) => conditions
         .iter()
-        .any(|condition| condition.matches(viewport, sizing)),
+        .any(|condition| condition.matches(viewport, size, sizing)),
+    }
+  }
+
+  /// Whether a feature in it satisfies `test`.
+  fn any_feature(&self, test: &impl Fn(&MediaFeature) -> bool) -> bool {
+    match self {
+      Self::Feature(feature) => test(feature),
+      Self::Not(condition) => condition.any_feature(test),
+      Self::And(conditions) | Self::Or(conditions) => conditions
+        .iter()
+        .any(|condition| condition.any_feature(test)),
     }
   }
 }
@@ -558,9 +571,58 @@ impl MediaQuery {
       && self
         .condition
         .as_ref()
-        .is_none_or(|condition| condition.matches(viewport, sizing));
+        .is_none_or(|condition| condition.matches(viewport, viewport_size(viewport), sizing));
 
     is_match != self.negated
+  }
+}
+
+/// The viewport's size, a media query's target.
+fn viewport_size(viewport: Viewport) -> Size<Option<f32>> {
+  Size {
+    width: viewport.size.width.map(|width| width as f32),
+    height: viewport.size.height.map(|height| height as f32),
+  }
+}
+
+/// An `@container` rule's query: the name of the container it asks, if it names one, and a size
+/// condition on that container. <https://drafts.csswg.org/css-contain-3/#container-rule>
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContainerQuery {
+  pub(crate) name: Option<Box<str>>,
+  condition: MediaCondition,
+}
+
+impl ContainerQuery {
+  pub(crate) fn parse<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<Self, ParseError<StyleSheetParseError>> {
+    let name = input.try_parse(ContainerName::parse_name).ok();
+    let condition = MediaCondition::parse(input)?;
+
+    input.expect_exhausted()?;
+    Ok(Self { name, condition })
+  }
+
+  /// Whether it reads the block axis, which only a `container-type: size` container answers.
+  pub(crate) fn reads_block_axis(&self) -> bool {
+    self.condition.any_feature(&|feature| {
+      matches!(
+        feature,
+        MediaFeature::Height(..)
+          | MediaFeature::BlockSize(..)
+          | MediaFeature::AspectRatio(..)
+          | MediaFeature::Orientation(..)
+      )
+    })
+  }
+
+  /// Whether a container whose content box is `size` across, an axis it does not contain left
+  /// unknown, satisfies it. Approximate: `em` reads the viewport's font size, not the container's.
+  pub(crate) fn matches(&self, size: Size<Option<f32>>, viewport: Viewport) -> bool {
+    self
+      .condition
+      .matches(viewport, size, &SizingContext::for_media(viewport))
   }
 }
 
@@ -570,10 +632,22 @@ impl MediaQueryList {
   ) -> Result<Self, ParseError<StyleSheetParseError>> {
     Ok(Self {
       queries: input.parse_comma_separated(|input| {
+        // `inline-size` and `block-size` are container features, which make a media query
+        // unknown, as Blink's `MediaQueryExp` rejects them.
         let query = input
           .try_parse(MediaQuery::parse)
           .ok()
-          .filter(|_| input.is_exhausted())
+          .filter(|query| {
+            input.is_exhausted()
+              && !query.condition.as_ref().is_some_and(|condition| {
+                condition.any_feature(&|feature| {
+                  matches!(
+                    feature,
+                    MediaFeature::InlineSize(..) | MediaFeature::BlockSize(..)
+                  )
+                })
+              })
+          })
           .unwrap_or_else(MediaQuery::not_all);
 
         Self::skip_malformed_query(input)?;
@@ -610,19 +684,7 @@ impl MediaQueryList {
       return true;
     }
 
-    let sizing = SizingContext {
-      viewport,
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: viewport.font_size,
-      root_font_size: None,
-      line_height: viewport.font_size,
-      root_line_height: Some(viewport.font_size),
-      ch: viewport.font_size / 2.0,
-      ex: viewport.font_size / 2.0,
-      color_scheme: viewport.color_scheme,
-    };
+    let sizing = SizingContext::for_media(viewport);
 
     self
       .queries

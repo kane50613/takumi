@@ -1085,9 +1085,14 @@ impl<'t, 'r> BlockLayoutAlgorithm<'t, 'r> {
       .is_some_and(|tag| tag.eq_ignore_ascii_case("button"))
   }
 
-  /// Blink's `ClampIntrinsicBlockSize` for a text control, whose content block size its attributes
-  /// give, one line of its inner editor for a text field.
+  /// Blink's `ClampIntrinsicBlockSize`: none from the content of a block-size-contained box, and
+  /// for a text control the content block size its attributes give, one line of its inner editor
+  /// for a text field.
   fn default_intrinsic_block_size(&self) -> Option<LayoutUnit> {
+    if self.style.contains_block_size() {
+      return Some(self.border_padding.block_start + self.border_padding.block_end);
+    }
+
     let render_node = self.tree.render_node(self.node);
 
     let Some(TextControlBox::Host(control)) = render_node.text_control else {

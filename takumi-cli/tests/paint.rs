@@ -127,13 +127,13 @@ fn the_outline_names_each_node_where_it_lands_and_what_fills_it() {
 
 #[test]
 fn the_outline_lists_the_css_the_parser_dropped() {
-  let html = r#"<style>@container (width > 400px) { p { color: red } } p { writing-mode: vertical-rl }</style><p style="filter: blurry(4px)">x</p>"#;
+  let html = r#"<style>@counter-style thumbs { system: cyclic; symbols: '+' } p { writing-mode: vertical-rl }</style><p style="filter: blurry(4px)">x</p>"#;
   let outline = paint_html("ignored", html, &[]);
   let json = paint_html("ignored-json", html, &["--format", "json"]);
 
   assert!(
     outline.ends_with(
-      "ignored\n  @container (width > 400px) unknown-at-rule style-sheet\n  writing-mode: vertical-rl unknown-property style-sheet\n  filter: blurry(4px) invalid-value style-attribute\n"
+      "ignored\n  @counter-style thumbs unknown-at-rule style-sheet\n  writing-mode: vertical-rl unknown-property style-sheet\n  filter: blurry(4px) invalid-value style-attribute\n"
     ),
     "{outline}"
   );
