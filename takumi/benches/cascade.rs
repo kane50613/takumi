@@ -100,6 +100,40 @@ fn bench_cascade(c: &mut Criterion) {
     })
   });
 
+  // A design system's tokens on the root, which every element inherits and sets one of.
+  let tokens: String = (0..100)
+    .map(|index| format!("--token-{index}: {index}px;"))
+    .collect();
+  let variables = StyleSheet::parse(&format!(":root, .root {{ {tokens} }}")).expect("valid");
+  let node = Node::container(
+    (0..400)
+      .map(|node| {
+        Node::container([]).with_tw(
+          format!("[--own:{node}px] w-[var(--token-{})] h-1", node % 100)
+            .parse()
+            .expect("valid classes"),
+        )
+      })
+      .collect::<Vec<_>>(),
+  )
+  .with_class_name("root");
+
+  group.bench_function(BenchmarkId::from_parameter("400x_variables"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(variables.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
   // The reset most stylesheets open with, which matches every element's `::before` and `::after`.
   let reset = StyleSheet::parse(
     "*, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }",
