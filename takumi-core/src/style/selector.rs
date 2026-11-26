@@ -77,6 +77,86 @@ pub(crate) type LayerPath = Vec<LayerName>;
 /// naming a deeper layer is invalid, where Blink has no limit.
 const MAX_LAYER_DEPTH: usize = 64;
 
+/// An `@layer` statement or block, or a rule's layer, with the media queries it sits under.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LayerDeclaration {
+  path: LayerPath,
+  media_queries: Vec<MediaQueryList>,
+}
+
+impl LayerDeclaration {
+  fn unconditional(path: LayerPath) -> Self {
+    Self {
+      path,
+      media_queries: Vec::new(),
+    }
+  }
+}
+
+/// The order of every stylesheet's layers in one layer tree across the stylesheets of a render, a
+/// declaration under a failing media query left out, as Blink's `CascadeLayerMap` merges the layers
+/// of an origin's sheets and `RuleSet::AddChildRules` skips a failing `@media`.
+pub(crate) struct CascadeLayerMap {
+  /// Each sheet's layers by the order they take in it alone with every media query holding.
+  orders: Vec<Vec<usize>>,
+  count: usize,
+}
+
+impl CascadeLayerMap {
+  pub(crate) fn new(stylesheets: &[&StyleSheet], viewport: Viewport) -> Self {
+    let mut tree = LayerTree::default();
+    let layers: Vec<Vec<Option<usize>>> = stylesheets
+      .iter()
+      .map(|sheet| {
+        let mut layers = vec![None; sheet.layer_count];
+
+        // Each order is below `layer_count`, which counts every layer of the sheet's tree.
+        for (order, declaration) in sheet.layer_declarations.iter() {
+          if declaration
+            .media_queries
+            .iter()
+            .all(|media| media.matches(viewport))
+            && let Some(layer) = layers.get_mut(*order)
+          {
+            layer.get_or_insert_with(|| tree.insert(&declaration.path));
+          }
+        }
+        layers
+      })
+      .collect();
+    let tree_orders = tree.orders();
+
+    Self {
+      orders: layers
+        .into_iter()
+        .map(|layers| {
+          layers
+            .into_iter()
+            .map(|layer| layer.map_or(0, |layer| tree_orders[layer]))
+            .collect()
+        })
+        .collect(),
+      count: tree_orders[0],
+    }
+  }
+
+  /// The order of the layer that takes `order` in the stylesheet at `sheet` alone, the first for a
+  /// layer no declaration under a matching media query names, as no rule of it applies.
+  pub(crate) fn order(&self, sheet: usize, order: usize) -> usize {
+    self
+      .orders
+      .get(sheet)
+      .and_then(|orders| orders.get(order))
+      .copied()
+      .unwrap_or(0)
+  }
+
+  /// The number of layers, the order the implicit outer layer takes.
+  pub(crate) fn count(&self) -> usize {
+    self.count
+  }
+}
+
 /// The cascade layer tree, each layer's direct sublayers in the order they first appear, as Blink's
 /// `CascadeLayer` holds them. Layer 0 is the implicit outer layer.
 struct LayerTree {
@@ -433,7 +513,7 @@ struct StyleSheetFragment {
   #[cfg(feature = "font-face")]
   font_faces: Vec<FontFaceRule>,
   page_rules: Vec<PageRule>,
-  declared_layers: Vec<LayerPath>,
+  declared_layers: Vec<LayerDeclaration>,
   preflight: bool,
   /// The declarations and at-rules parsing dropped.
   ignored: Vec<IgnoredDeclaration>,
@@ -842,10 +922,13 @@ impl RuleParser {
   fn declared_layers(
     &self,
     layer_names: &[LayerPath],
-  ) -> Result<Vec<LayerPath>, ParseError<StyleSheetParseError>> {
+  ) -> Result<Vec<LayerDeclaration>, ParseError<StyleSheetParseError>> {
     layer_names
       .iter()
-      .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
+      .map(|layer_name| {
+        extend_layer_name(self.current_layer.as_ref(), layer_name)
+          .map(LayerDeclaration::unconditional)
+      })
       .collect()
   }
 
@@ -1289,7 +1372,13 @@ impl NestingContext<'_> {
         }
         .parse_group_rule_block(parent_selectors, input)?;
 
-        fragment.declared_layers.insert(0, nested_layer);
+        fragment.declared_layers.insert(
+          0,
+          LayerDeclaration {
+            path: nested_layer,
+            media_queries: self.media_queries.to_vec(),
+          },
+        );
         Ok(fragment)
       }
       AtRulePrelude::Media(media_query) => {
@@ -1650,7 +1739,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Layer(layer_names) => {
         ensure_single_layer_name(&layer_names)?;
         let declared_layers = self.declared_layers(&layer_names)?;
-        let Some(nested_layer) = declared_layers.first().cloned() else {
+        let Some(nested_layer) = declared_layers.first().map(|layer| layer.path.clone()) else {
           return Ok(StyleSheetFragment {
             declared_layers,
             ..StyleSheetFragment::default()
@@ -1675,6 +1764,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 
         for rule in &mut fragment.rules {
           rule.media_queries.push(media_query.clone());
+        }
+        for layer in &mut fragment.declared_layers {
+          layer.media_queries.push(media_query.clone());
         }
         for keyframes in &mut fragment.keyframes {
           keyframes.media_queries.push(media_query.clone());
@@ -1898,8 +1990,11 @@ pub struct StyleSheet {
   pub(crate) font_faces: Vec<FontFaceRule>,
   /// `@page` rules, in source order.
   pub(crate) page_rules: Vec<PageRule>,
-  /// Number of distinct cascade layers.
+  /// Number of cascade layers, those a dotted name implies included.
   pub(crate) layer_count: usize,
+  /// Each layer declaration in source order, by the order its layer takes with every media query
+  /// holding.
+  layer_declarations: Arc<[(usize, LayerDeclaration)]>,
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
   /// gate `tw` variants before the cascade runs and so resolve at parse time.
   pub(crate) breakpoints: BreakpointOverrides,
@@ -2074,7 +2169,7 @@ impl StyleSheet {
   ) -> PageDescriptors {
     PageRule::cascade(
       &self.page_rules,
-      self.layer_count,
+      &CascadeLayerMap::new(&[self], viewport),
       viewport,
       kind,
       name,
@@ -2093,7 +2188,7 @@ impl StyleSheet {
   ) -> PageStyles {
     PageRule::styles(
       &self.page_rules,
-      self.layer_count,
+      &CascadeLayerMap::new(&[self], viewport),
       viewport,
       kind,
       name,
@@ -2214,28 +2309,66 @@ impl StyleSheet {
       let mut preflight_rules = PREFLIGHT_RULES.to_vec();
       declared_layers.splice(
         0..0,
-        preflight_rules.iter().filter_map(|rule| rule.layer.clone()),
+        preflight_rules
+          .iter()
+          .filter_map(|rule| rule.layer.clone().map(LayerDeclaration::unconditional)),
       );
       preflight_rules.append(&mut rules);
       rules = preflight_rules;
     }
 
     let mut layers = LayerTree::default();
-    let mut layer_ids = HashMap::<&LayerPath, usize>::new();
-    let used_layers = rules.iter().filter_map(|rule| rule.layer.as_ref());
+    let mut layer_ids = HashMap::<LayerPath, usize>::new();
+    let mut declarations: Vec<(usize, LayerDeclaration)> = Vec::new();
+    let used_layers = rules
+      .iter()
+      .filter_map(|rule| Some((rule.layer.as_ref()?, &rule.media_queries)));
     #[cfg(feature = "font-face")]
-    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.as_ref()));
-    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.as_ref()));
+    let used_layers = used_layers.chain(
+      font_faces
+        .iter()
+        .filter_map(|rule| Some((rule.layer.as_ref()?, &rule.media_queries))),
+    );
+    let used_layers = used_layers.chain(
+      page_rules
+        .iter()
+        .filter_map(|rule| Some((rule.layer.as_ref()?, &rule.media_queries))),
+    );
 
-    for layer_name in declared_layers.iter().chain(used_layers) {
+    for declaration in declared_layers {
+      let layer = *layer_ids
+        .entry(declaration.path.clone())
+        .or_insert_with(|| layers.insert(&declaration.path));
+
+      if declarations
+        .last()
+        .is_none_or(|(_, last)| *last != declaration)
+      {
+        declarations.push((layer, declaration));
+      }
+    }
+    for (layer_name, media_queries) in used_layers {
       if !layer_ids.contains_key(layer_name) {
-        layer_ids.insert(layer_name, layers.insert(layer_name));
+        let layer = layers.insert(layer_name);
+
+        layer_ids.insert(layer_name.clone(), layer);
+        declarations.push((
+          layer,
+          LayerDeclaration {
+            path: layer_name.clone(),
+            media_queries: media_queries.clone(),
+          },
+        ));
       }
     }
     let orders = layers.orders();
     let layer_order: HashMap<LayerPath, usize> = layer_ids
       .into_iter()
-      .map(|(layer_name, layer)| (layer_name.clone(), orders[layer]))
+      .map(|(layer_name, layer)| (layer_name, orders[layer]))
+      .collect();
+    let layer_declarations = declarations
+      .into_iter()
+      .map(|(layer, declaration)| (orders[layer], declaration))
       .collect();
 
     for rule in &mut rules {
@@ -2274,7 +2407,8 @@ impl StyleSheet {
       #[cfg(feature = "font-face")]
       font_faces,
       page_rules,
-      layer_count: layer_order.len(),
+      layer_count: orders[0],
+      layer_declarations,
       ignored: IgnoredDeclaration::unique(&ignored).into(),
     })
   }
@@ -2739,6 +2873,80 @@ mod tests {
         expected,
         "{query}"
       );
+    }
+  }
+
+  #[test]
+  fn device_features_answer_as_a_static_render() {
+    let screen = Viewport::new((800, 600));
+    let print = screen.with_media_target(MediaTarget::Print);
+
+    for (query, matches_screen, matches_print) in [
+      ("(pointer: none)", true, true),
+      ("(pointer: fine)", false, false),
+      ("(pointer)", false, false),
+      ("(any-pointer: none)", true, true),
+      ("(hover: none)", true, true),
+      ("(hover)", false, false),
+      ("(any-hover: hover)", false, false),
+      ("(prefers-reduced-transparency: no-preference)", true, true),
+      ("(prefers-reduced-transparency)", false, false),
+      ("(prefers-reduced-data: no-preference)", false, false),
+      ("(scripting: enabled)", true, true),
+      ("(scripting)", true, true),
+      ("(update: fast)", true, false),
+      ("(update: none)", false, true),
+      ("(update)", true, false),
+      ("(color)", true, true),
+      ("(min-color: 8)", true, true),
+      ("(color > 8)", false, false),
+      ("(color-index: 0)", true, true),
+      ("(color-index)", false, false),
+      ("(monochrome)", false, false),
+      ("(max-monochrome: 0)", true, true),
+      ("(color-gamut: srgb)", true, true),
+      ("(color-gamut: p3)", false, false),
+      ("(color-gamut)", true, true),
+      ("(dynamic-range: standard)", true, true),
+      ("(dynamic-range: high)", false, false),
+      ("(video-dynamic-range: standard)", false, false),
+      ("(display-mode: browser)", true, true),
+      ("(display-mode: standalone)", false, false),
+      ("(grid: 0)", true, true),
+      ("(grid)", false, false),
+      ("(grid: 2)", false, false),
+      ("(overflow-block: scroll)", true, false),
+      ("(overflow-block: paged)", false, true),
+      ("(overflow-block)", true, true),
+      ("(overflow-inline: scroll)", true, false),
+      ("(overflow-inline: none)", false, true),
+      ("(overflow-inline)", true, false),
+      ("(device-width: 800px)", true, true),
+      ("(min-device-height: 601px)", false, false),
+      ("(device-aspect-ratio: 4/3)", true, true),
+      ("(device-width)", true, true),
+      ("(color: calc(8))", true, true),
+      ("(color: calc(8.5))", false, false),
+      ("(grid = 0)", false, false),
+      ("(0 = grid)", false, false),
+      ("(device-width: 800)", false, false),
+      ("(width: 800)", false, false),
+      ("(max-device-width: 0)", false, false),
+      ("(min-width: 0)", true, true),
+      ("(device-aspect-ratio: calc(4) / 3)", true, true),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .a {{ width: 1px; }} }}"));
+      let matches = |viewport: Viewport| {
+        sheet.rules.first().is_some_and(|rule| {
+          rule
+            .media_queries
+            .first()
+            .is_some_and(|media| media.matches(viewport))
+        })
+      };
+
+      assert_eq!(matches(screen), matches_screen, "{query} on screen");
+      assert_eq!(matches(print), matches_print, "{query} on print");
     }
   }
 

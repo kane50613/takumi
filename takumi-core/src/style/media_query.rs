@@ -5,7 +5,7 @@ use cssparser::*;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
-  style::{ContainerName, FromCss, Length, SizingContext},
+  style::{ContainerName, FromCss, Length, SizingContext, parse_number_value},
   viewport::{ColorScheme, MediaTarget, Viewport},
 };
 
@@ -44,48 +44,158 @@ enum MediaOrientation {
   Landscape,
 }
 
-/// A media feature about the user's settings, which no render sets.
+/// A media feature that takes one of a set of keywords.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MediaPreference {
+enum DiscreteFeature {
   ReducedMotion,
+  ReducedTransparency,
   Contrast,
   ForcedColors,
   InvertedColors,
+  Pointer,
+  AnyPointer,
+  Hover,
+  AnyHover,
+  Scripting,
+  Update,
+  ColorGamut,
+  DynamicRange,
+  DisplayMode,
+  OverflowBlock,
+  OverflowInline,
 }
 
-impl MediaPreference {
-  const NAMES: [(&'static str, Self); 4] = [
+impl DiscreteFeature {
+  const NAMES: [(&'static str, Self); 16] = [
     ("prefers-reduced-motion", Self::ReducedMotion),
+    ("prefers-reduced-transparency", Self::ReducedTransparency),
     ("prefers-contrast", Self::Contrast),
     ("forced-colors", Self::ForcedColors),
     ("inverted-colors", Self::InvertedColors),
+    ("pointer", Self::Pointer),
+    ("any-pointer", Self::AnyPointer),
+    ("hover", Self::Hover),
+    ("any-hover", Self::AnyHover),
+    ("scripting", Self::Scripting),
+    ("update", Self::Update),
+    ("color-gamut", Self::ColorGamut),
+    ("dynamic-range", Self::DynamicRange),
+    ("display-mode", Self::DisplayMode),
+    ("overflow-block", Self::OverflowBlock),
+    ("overflow-inline", Self::OverflowInline),
   ];
 
   fn from_name(name: &str) -> Option<Self> {
     Self::NAMES
       .iter()
-      .find(|(preference_name, _)| preference_name.eq_ignore_ascii_case(name))
-      .map(|&(_, preference)| preference)
+      .find(|(feature_name, _)| feature_name.eq_ignore_ascii_case(name))
+      .map(|&(_, feature)| feature)
   }
 
-  /// The values it takes, the first being what a default render has.
-  /// <https://drafts.csswg.org/mediaqueries-5/#mf-user-preferences>
+  /// The keywords it takes, as Blink's `FeatureWithValidIdent` accepts them.
   fn values(self) -> &'static [&'static str] {
     match self {
-      Self::ReducedMotion => &["no-preference", "reduce"],
+      Self::ReducedMotion | Self::ReducedTransparency => &["no-preference", "reduce"],
       Self::Contrast => &["no-preference", "more", "less", "custom"],
       Self::ForcedColors => &["none", "active"],
       Self::InvertedColors => &["none", "inverted"],
+      Self::Pointer | Self::AnyPointer => &["none", "coarse", "fine"],
+      Self::Hover | Self::AnyHover => &["none", "hover"],
+      Self::Scripting => &["none", "initial-only", "enabled"],
+      Self::Update => &["none", "slow", "fast"],
+      Self::ColorGamut => &["srgb", "p3", "rec2020"],
+      Self::DynamicRange => &["standard", "high"],
+      Self::DisplayMode => &[
+        "fullscreen",
+        "standalone",
+        "minimal-ui",
+        "browser",
+        "window-controls-overlay",
+        "tabbed",
+        "picture-in-picture",
+        "unframed",
+      ],
+      Self::OverflowBlock => &["none", "scroll", "paged"],
+      Self::OverflowInline => &["none", "scroll"],
     }
   }
 
-  /// The value `value` names, in the form `values` lists it.
+  /// The keyword `value` names, in the form `values` lists it.
   fn value(self, value: &str) -> Option<&'static str> {
     self
       .values()
       .iter()
       .copied()
       .find(|known| known.eq_ignore_ascii_case(value))
+  }
+
+  /// The keyword a render on `target` has: a screen with no user preference set, no input device,
+  /// and an 8-bit sRGB, standard-range display in a browser tab, or Chrome's printed page, whose
+  /// `update`, `overflow-block`, and `overflow-inline` Blink answers from the print media type.
+  /// Scripting is enabled, as takumi hides `<noscript>` as Blink does with script on.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/media_query_evaluator.cc>
+  fn current(self, target: MediaTarget) -> &'static str {
+    let print = target == MediaTarget::Print;
+
+    match self {
+      Self::ReducedMotion | Self::ReducedTransparency | Self::Contrast => "no-preference",
+      Self::ForcedColors
+      | Self::InvertedColors
+      | Self::Pointer
+      | Self::AnyPointer
+      | Self::Hover
+      | Self::AnyHover => "none",
+      Self::Scripting => "enabled",
+      Self::Update if print => "none",
+      Self::Update => "fast",
+      Self::ColorGamut => "srgb",
+      Self::DynamicRange => "standard",
+      Self::DisplayMode => "browser",
+      Self::OverflowBlock if print => "paged",
+      Self::OverflowInline if print => "none",
+      Self::OverflowBlock | Self::OverflowInline => "scroll",
+    }
+  }
+
+  /// Whether a render on `target` has `value`, or for none, the boolean context, which holds unless
+  /// the render has `none` or `no-preference`.
+  fn matches(self, value: Option<&str>, target: MediaTarget) -> bool {
+    let current = self.current(target);
+
+    value.map_or(!matches!(current, "none" | "no-preference"), |value| {
+      value == current
+    })
+  }
+}
+
+/// A media feature that takes an `<integer>`, its min- and max- forms included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntegerFeature {
+  Color,
+  ColorIndex,
+  Monochrome,
+  /// `grid`, which takes only 0 or 1 and has no min- and max- forms.
+  Grid,
+}
+
+impl IntegerFeature {
+  fn from_name(name: &str) -> Option<Self> {
+    match_ignore_ascii_case! { name,
+      "color" => Some(Self::Color),
+      "color-index" => Some(Self::ColorIndex),
+      "monochrome" => Some(Self::Monochrome),
+      "grid" => Some(Self::Grid),
+      _ => None,
+    }
+  }
+
+  /// The value a render has, an 8-bit colour bitmap display with no colour lookup table, as
+  /// `DiscreteFeature::current` describes.
+  fn current(self) -> f32 {
+    match self {
+      Self::Color => 8.0,
+      Self::ColorIndex | Self::Monochrome | Self::Grid => 0.0,
+    }
   }
 }
 
@@ -102,8 +212,12 @@ enum MediaFeature {
   Orientation(MediaOrientation),
   /// The scheme to match, or none for the boolean context, which every scheme matches.
   PrefersColorScheme(Option<ColorScheme>),
-  /// A user preference, which a render answers with its default, or the boolean context for none.
-  Preference(MediaPreference, Option<&'static str>),
+  /// The keyword to match, or none for the boolean context.
+  Discrete(DiscreteFeature, Option<&'static str>),
+  Integer(IntegerFeature, MediaFeatureComparison, f32),
+  /// A `device-` feature, which asks of the viewport what the feature it wraps asks of the query
+  /// target, as a render's screen is its viewport.
+  Device(Box<MediaFeature>),
   /// A `<general-enclosed>`: a feature or condition this parser does not know, which never holds.
   Unknown,
 }
@@ -234,9 +348,9 @@ impl MediaFeatureValue {
       return Ok(Self::Resolution(resolution));
     }
 
-    if let Ok(number) = input.try_parse(Parser::expect_number) {
+    if let Ok(number) = input.try_parse(parse_number_value) {
       if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-        let divisor = input.expect_number()?;
+        let divisor = parse_number_value(input).map_err(ParseError::into)?;
 
         if divisor <= 0.0 {
           return Err(CssParseError::unexpected_token());
@@ -263,8 +377,8 @@ impl MediaFeature {
   fn boolean(name: &str) -> Option<Self> {
     let comparison = MediaFeatureComparison::GreaterThan;
 
-    if let Some(preference) = MediaPreference::from_name(name) {
-      return Some(Self::Preference(preference, None));
+    if let Some(feature) = DiscreteFeature::from_name(name) {
+      return Some(Self::Discrete(feature, None));
     }
 
     match_ignore_ascii_case! { name,
@@ -277,19 +391,54 @@ impl MediaFeature {
           denominator: 1.0,
         },
       )),
-      _ => Self::new(name, comparison, MediaFeatureValue::Number(0.0)),
+      "grid" => Some(Self::Integer(IntegerFeature::Grid, MediaFeatureComparison::Equal, 1.0)),
+      _ => match Self::device_size_name(name) {
+        Some(name) => Self::boolean(name).map(|feature| Self::Device(Box::new(feature))),
+        None => Self::new(name, comparison, MediaFeatureValue::Number(0.0)),
+      },
     }
   }
 
+  /// The size feature a `device-` feature name wraps.
+  fn device_size_name(name: &str) -> Option<&str> {
+    let (prefix, size) = name.split_at_checked("device-".len())?;
+
+    (prefix.eq_ignore_ascii_case("device-")
+      && ["width", "height", "aspect-ratio"]
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(size)))
+    .then_some(size)
+  }
+
   fn new(name: &str, comparison: MediaFeatureComparison, value: MediaFeatureValue) -> Option<Self> {
-    // A size feature takes a `<length>`, which neither `auto` nor a percentage is.
+    // A size feature takes a `<length>`, which neither `auto` nor a percentage is, or a unitless
+    // zero, as Blink's `FeatureWithValidLength` has it.
     let length = match value {
       MediaFeatureValue::Length(length) if length != Length::Auto && !length.has_percentage() => {
         Some(length)
       }
-      MediaFeatureValue::Number(number) => Some(Length::Px(number)),
+      MediaFeatureValue::Number(0.0) => Some(Length::Px(0.0)),
       _ => None,
     };
+
+    if let Some(feature) = IntegerFeature::from_name(name) {
+      let MediaFeatureValue::Number(number) = value else {
+        return None;
+      };
+
+      if number.fract() != 0.0
+        || (feature == IntegerFeature::Grid
+          && (comparison != MediaFeatureComparison::Equal || !(0.0..=1.0).contains(&number)))
+      {
+        return None;
+      }
+
+      return Some(Self::Integer(feature, comparison, number));
+    }
+
+    if let Some(size) = Self::device_size_name(name) {
+      return Self::new(size, comparison, value).map(|feature| Self::Device(Box::new(feature)));
+    }
 
     match_ignore_ascii_case! { name,
       "width" => Some(Self::Width(comparison, length?)),
@@ -346,12 +495,12 @@ impl MediaFeature {
       };
     }
 
-    if let Some(preference) = MediaPreference::from_name(&feature_name) {
+    if let Some(feature) = DiscreteFeature::from_name(&feature_name) {
       let value = input.expect_ident_cloned()?;
 
-      return preference
+      return feature
         .value(&value)
-        .map(|value| Self::Preference(preference, Some(value)))
+        .map(|value| Self::Discrete(feature, Some(value)))
         .ok_or_else(|| CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken));
     }
 
@@ -381,13 +530,28 @@ impl MediaFeature {
     Self::from_value(name, comparison, value)
   }
 
+  /// A feature name the range context takes, which Blink's `IsRangeTypeFeature` keeps `grid` out of.
+  fn expect_range_name<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<CowRcStr<'i>, ParseError<StyleSheetParseError>> {
+    let name = input.expect_ident_cloned()?;
+
+    if name.eq_ignore_ascii_case("grid") {
+      return Err(CssParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedMediaFeature,
+      ));
+    }
+
+    Ok(name)
+  }
+
   /// The range context of Media Queries Level 4, such as `(width >= 40em)` and
   /// `(400px < height <= 700px)`.
   /// <https://drafts.csswg.org/mediaqueries-4/#mq-range-context>
   fn parse_range<'i>(
     input: &mut Parser<'i>,
   ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<StyleSheetParseError>> {
-    if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
+    if let Ok(name) = input.try_parse(Self::expect_range_name) {
       let comparison = MediaFeatureComparison::parse(input)?;
       let value = MediaFeatureValue::parse(input)?;
 
@@ -396,7 +560,7 @@ impl MediaFeature {
 
     let lower_value = MediaFeatureValue::parse(input)?;
     let lower = MediaFeatureComparison::parse(input)?.flipped();
-    let name = input.expect_ident_cloned()?;
+    let name = Self::expect_range_name(input)?;
     let lower_feature = Self::from_value(&name, lower, lower_value)?;
 
     if input.is_exhausted() {
@@ -458,11 +622,11 @@ impl MediaFeature {
       Self::PrefersColorScheme(scheme) => {
         scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
       }
-      Self::Preference(preference, value) => {
-        let default = preference.values()[0];
-
-        value.is_some_and(|value| value == default)
+      Self::Discrete(feature, value) => feature.matches(*value, viewport.media_target),
+      Self::Integer(feature, comparison, value) => {
+        comparison.matches(feature.current(), *value, 0.0)
       }
+      Self::Device(feature) => feature.matches(viewport, viewport_size(viewport), sizing),
       Self::Unknown => false,
     }
   }
@@ -755,7 +919,9 @@ impl ContainerCondition {
           feature,
           MediaFeature::Resolution(..)
             | MediaFeature::PrefersColorScheme(..)
-            | MediaFeature::Preference(..)
+            | MediaFeature::Discrete(..)
+            | MediaFeature::Integer(..)
+            | MediaFeature::Device(..)
             | MediaFeature::Unknown
         )
       });

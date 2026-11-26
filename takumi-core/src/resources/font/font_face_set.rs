@@ -20,6 +20,7 @@ use crate::{
   style::{
     StyleSheet,
     font_face_rule::{FontFaceRule, FontFaceSrc},
+    selector::CascadeLayerMap,
   },
   viewport::Viewport,
 };
@@ -145,7 +146,13 @@ impl FontsSnapshot {
       return self;
     }
 
-    sort_by_key(&mut rules, |rule| rule.layer_order.unwrap_or(usize::MAX));
+    let layers = CascadeLayerMap::new(&[stylesheet], viewport);
+
+    sort_by_key(&mut rules, |rule| {
+      rule
+        .layer_order
+        .map_or(usize::MAX, |layer| layers.order(0, layer))
+    });
 
     let base = &self.0.registry;
     let sources: Vec<RuleSource> = rules
