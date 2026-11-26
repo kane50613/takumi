@@ -1758,6 +1758,25 @@ fn a_contained_grid_keeps_its_explicit_tracks() {
   );
 }
 
+/// A size-contained subgrid takes its block size without its items, as Blink's
+/// `ComputeGridGeometry` reads the contained size in a subgrid too.
+#[test]
+fn a_contained_subgrid_sizes_its_block_without_its_items() {
+  let node = Node::from_html(
+    r#"<div class="grid"><div class="sub"><div class="child"></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".grid { display: grid; grid-template-columns: 200px; align-items: start }
+     .sub { container-type: size; display: grid; grid-template-columns: subgrid; padding: 5px; border: 2px solid }
+     .child { height: 80px }",
+  );
+
+  assert_eq!(measured.children[0].children[0].height, 14.0);
+}
+
 /// An `@scope` rule without a start roots at the parent of the `<style>` element holding it.
 /// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
 #[test]
