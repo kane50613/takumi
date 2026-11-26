@@ -3,7 +3,9 @@ use std::{
   sync::Arc,
 };
 
-use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb, parse_color};
+use color::{
+  AlphaColor, ColorSpaceTag, DynamicColor, Flags, HueDirection, Rgba8, Srgb, parse_color,
+};
 use cssparser::{
   Parser, Token,
   color::{parse_hash_color, parse_named_color},
@@ -1345,7 +1347,11 @@ impl RelativeColorValue {
     });
     let components = [c0 / scale, c1 / scale, c2 / scale, alpha.clamp(0.0, 1.0)];
 
-    Color::from_dynamic(origin.map(|_, _, _, _| components))
+    Color::from_dynamic(DynamicColor {
+      cs,
+      flags: Flags::default(),
+      components,
+    })
   }
 }
 
@@ -1793,6 +1799,22 @@ mod tests {
     assert_eq!(
       computed("color-mix(in srgb, red, blue)"),
       Some(ColorInput::Value(Color([128, 0, 128, 255])))
+    );
+  }
+
+  #[test]
+  fn relative_colour_keeps_literal_channels_over_a_powerless_origin_hue() {
+    assert_eq!(
+      computed("hsl(from white 120 50 50)"),
+      computed("hsl(120 50 50)")
+    );
+    assert_eq!(
+      computed("hsl(from white 120 50 50)"),
+      Some(ColorInput::Value(Color([64, 191, 64, 255])))
+    );
+    assert_eq!(
+      computed("hsl(from white h 50 50)"),
+      computed("hsl(0 50 50)")
     );
   }
 
