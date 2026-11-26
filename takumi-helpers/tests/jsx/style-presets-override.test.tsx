@@ -49,7 +49,6 @@ describe("fromJsx - stylePresets overriding", () => {
         width: undefined,
         height: undefined,
         attributes: {
-          src: "https://example.com/image.jpg",
           alt: "Test",
         },
         tagName: "img",
