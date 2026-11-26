@@ -1416,10 +1416,13 @@ fn container_query_holds(
 
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
 /// it is: an inclusive ancestor its start selectors match, or without them the parent of the
-/// `<style>` element holding the rule, the tree's root for a sheet no element holds, with no
-/// element its end selectors match from `element` up to and including it. Inside another `@scope`, a root must
-/// be in that scope from an outer root `element` is in scope of too.
+/// `<style>` or `<link>` element holding the rule, the tree's root for a sheet no element holds,
+/// with no element its end selectors match from `element` up to and including it. Inside another
+/// `@scope`, a root must be in that scope from an outer root `element` is in scope of too.
 /// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+///
+/// Approximate: a sheet no element holds, such as one a caller passes in, roots at the tree's
+/// root, where Blink's `ImplicitScopeTrigger` roots nothing for a sheet without an owner node.
 fn scope_roots(
   scope: &Scope,
   element: ArenaElement<'_>,

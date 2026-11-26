@@ -2177,3 +2177,19 @@ fn declarations_in_a_scope_body_apply_to_its_root() {
     100.0
   );
 }
+
+/// An `@scope` without a start in a linked style sheet roots at the parent of its `<link>`, as
+/// Blink's `ImplicitScopeTrigger` reads the sheet's owner node.
+#[test]
+fn a_linked_scope_without_a_start_roots_at_its_link_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><link rel="stylesheet" href="a.css"><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let css = parsed.css_with_links(|_| Some("@scope { p { width: 30px } }".to_owned()));
+  let measured = measure_with_css(parsed.node, &css.concat());
+
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}
