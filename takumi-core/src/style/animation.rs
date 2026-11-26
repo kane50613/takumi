@@ -72,7 +72,7 @@ impl<'s> ElementAnimations<'s> {
   }
 
   /// `style` with the animations of `longhands` applied, a keyframe that leaves a longhand out
-  /// taking its value in `style`.
+  /// taking its value from `style` with the earlier animations applied.
   pub(crate) fn apply(
     &self,
     style: &mut ComputedStyle,
@@ -90,10 +90,9 @@ impl<'s> ElementAnimations<'s> {
       return;
     }
 
-    let base_snapshot = style.clone();
-
     for animation in animations {
-      let keyframes = ResolvedKeyframes::new(&animation.keyframes, &base_snapshot);
+      let underlying = style.clone();
+      let keyframes = ResolvedKeyframes::new(&animation.keyframes, &underlying);
       let mut animated = animation.longhands;
 
       animated.intersect(longhands);
@@ -104,8 +103,8 @@ impl<'s> ElementAnimations<'s> {
           .apply(interval.progress, animation.sample.before);
 
         style.apply_interpolated_properties(
-          keyframes.style(interval.from, &base_snapshot),
-          keyframes.style(interval.to, &base_snapshot),
+          keyframes.style(interval.from, &underlying),
+          keyframes.style(interval.to, &underlying),
           &interval.longhands,
           eased_progress,
           sizing,
@@ -125,15 +124,20 @@ impl<'s> ElementAnimations<'s> {
     sizing: &SizingContext,
     current_color: Color,
   ) -> Vec<(String, String)> {
-    let mut animated = Vec::new();
+    let mut animated: Vec<(String, String)> = Vec::new();
 
     for animation in &self.animations {
       for name in animation.keyframes.custom_property_names() {
-        let (from, to, progress, timing_function) = animation.keyframes.custom_property_segment(
-          name,
-          style.custom_properties.get(name),
-          animation.sample.progress,
-        );
+        let underlying = animated
+          .iter()
+          .rev()
+          .find(|(animated_name, _)| animated_name == name)
+          .map(|(_, value)| value.as_str())
+          .or_else(|| style.custom_properties.get(name));
+        let (from, to, progress, timing_function) =
+          animation
+            .keyframes
+            .custom_property_segment(name, underlying, animation.sample.progress);
         let resolve = |value: Option<&str>| {
           value.map(|value| {
             resolve_var_references(value, &style.custom_properties)
@@ -974,6 +978,52 @@ mod tests {
 
     assert_eq!(animated.svg_data.opacity.0, 0.5);
     assert_eq!(animated.misc3_data.rotate, Some(Angle::new(0.0)));
+  }
+
+  /// A keyframe offset an animation leaves out takes the value the animations before it in the
+  /// stack give, as Blink composites a neutral keyframe onto the underlying value.
+  /// <https://drafts.csswg.org/web-animations-1/#the-effect-value-of-a-keyframe-animation-effect>
+  #[test]
+  fn a_missing_endpoint_takes_the_earlier_animations_value() {
+    let stylesheet = StyleSheet::parse(
+      "@keyframes a { from, to { opacity: 0.2 } } @keyframes b { to { opacity: 0.6 } }",
+    )
+    .unwrap();
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("a, b").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1s").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        animation_fill_mode: AnimationFillModes::from_css_str("both").unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let at = |time| animate(style.clone(), &stylesheet, time).svg_data.opacity.0;
+
+    assert_eq!(at(0), 0.2);
+    assert!((at(500) - 0.4).abs() < 1e-6);
+  }
+
+  #[test]
+  fn a_missing_custom_property_endpoint_takes_the_earlier_animations_value() {
+    let stylesheet =
+      StyleSheet::parse("@keyframes a { from, to { --x: red } } @keyframes b { to { --x: blue } }")
+        .unwrap();
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("a, b").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1s").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let animations = ElementAnimations::new(&style, &stylesheet, 250, sizing().viewport)
+      .expect("an animation runs");
+    let animated = animations.custom_properties(&style, &sizing(), current_color());
+
+    assert_eq!(animated.last(), Some(&("--x".to_owned(), "red".to_owned())));
   }
 
   /// `style` with every animation it runs at `time` applied.
