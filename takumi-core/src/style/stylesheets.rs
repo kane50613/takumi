@@ -628,7 +628,7 @@ macro_rules! define_style {
           input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           let state = input.state();
-          let keyword = input.try_parse(CssWideKeyword::from_css).ok();
+          let keyword = input.try_parse(CssWideKeyword::parse_whole_value).ok();
 
           if let Some(keyword) = keyword {
             return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
@@ -766,14 +766,14 @@ macro_rules! define_style {
             Self::Shorthand(property) => {
               let state = input.state();
 
-              if let Ok(keyword) = input.try_parse(CssWideKeyword::from_css) {
+              if let Ok(keyword) = input.try_parse(CssWideKeyword::parse_whole_value) {
                 return Ok(self.expand_keyword(keyword));
               }
 
               input.reset(&state);
               property.parse_declarations(input)
             }
-            Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(input)?)),
+            Self::All => Ok(self.expand_keyword(CssWideKeyword::parse_whole_value(input)?)),
             Self::Longhand(property) => property.parse_declarations(input),
           }
         }
