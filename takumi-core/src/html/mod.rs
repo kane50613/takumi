@@ -921,8 +921,13 @@ impl NodeBuilder<'_> {
         "class" => node = node.with_class_name(value),
         "id" => node = node.with_id(value),
         "lang" => {
-          if let Ok(lang) = Lang::parse(value) {
+          let (lang, keeps_text) = Lang::from_attribute(value);
+
+          if let Some(lang) = lang {
             node = node.with_lang(lang);
+          }
+          if keeps_text {
+            attributes.insert(self.names.get(name), value.into());
           }
         }
         // Only the lowercase spellings move into the field, so `attr(dir)` reads any other back.

@@ -292,6 +292,14 @@ impl Lang {
   pub fn as_str(&self) -> &str {
     str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or_default()
   }
+
+  /// The language a `lang` attribute of `text` gives, and whether its element keeps `text` as an
+  /// attribute, which it does unless the language spells `text` as written.
+  pub(crate) fn from_attribute(text: &str) -> (Option<Self>, bool) {
+    let lang = Self::parse(text).ok();
+
+    (lang, lang.is_none_or(|lang| lang.as_str() != text))
+  }
 }
 
 #[derive(Clone, Copy)]
