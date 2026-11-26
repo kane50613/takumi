@@ -13,6 +13,8 @@ packages:
 ```tsx
 <select defaultValue="b">
   <option value="a">A</option>
-  <option value="b">B</option> {/* now shows as the selected option */}
+  <option value="b">B</option>
 </select>
+// Before: neither option has `selected`, so `option:checked` matches A
+// After: B has `selected`, so `option:checked` matches B
 ```
