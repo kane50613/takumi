@@ -110,13 +110,15 @@ impl CascadeLayerMap {
       .map(|sheet| {
         let mut layers = vec![None; sheet.layer_count];
 
+        // Each order is below `layer_count`, which counts every layer of the sheet's tree.
         for (order, declaration) in sheet.layer_declarations.iter() {
           if declaration
             .media_queries
             .iter()
             .all(|media| media.matches(viewport))
+            && let Some(layer) = layers.get_mut(*order)
           {
-            layers[*order].get_or_insert_with(|| tree.insert(&declaration.path));
+            layer.get_or_insert_with(|| tree.insert(&declaration.path));
           }
         }
         layers
@@ -138,9 +140,15 @@ impl CascadeLayerMap {
     }
   }
 
-  /// The order of the layer that takes `order` in the stylesheet at `sheet` alone.
+  /// The order of the layer that takes `order` in the stylesheet at `sheet` alone, the first for a
+  /// layer no declaration under a matching media query names, as no rule of it applies.
   pub(crate) fn order(&self, sheet: usize, order: usize) -> usize {
-    self.orders[sheet][order]
+    self
+      .orders
+      .get(sheet)
+      .and_then(|orders| orders.get(order))
+      .copied()
+      .unwrap_or(0)
   }
 
   /// The number of layers, the order the implicit outer layer takes.
@@ -1982,7 +1990,7 @@ pub struct StyleSheet {
   pub(crate) font_faces: Vec<FontFaceRule>,
   /// `@page` rules, in source order.
   pub(crate) page_rules: Vec<PageRule>,
-  /// Number of distinct cascade layers.
+  /// Number of cascade layers, those a dotted name implies included.
   pub(crate) layer_count: usize,
   /// Each layer declaration in source order, by the order its layer takes with every media query
   /// holding.
@@ -2399,7 +2407,7 @@ impl StyleSheet {
       #[cfg(feature = "font-face")]
       font_faces,
       page_rules,
-      layer_count: layer_order.len(),
+      layer_count: orders[0],
       layer_declarations,
       ignored: IgnoredDeclaration::unique(&ignored).into(),
     })

@@ -1342,6 +1342,53 @@ mod matching_tests {
   }
 
   #[test]
+  fn implicit_parent_layers_keep_orders_in_bounds() {
+    let root = container_with_class("card");
+    let width = |sheets: &[&str], viewport: Viewport| {
+      let sheets: Vec<StyleSheet> = sheets.iter().map(|css| parse_stylesheet(css)).collect();
+      let sheets: Vec<&StyleSheet> = sheets.iter().collect();
+      let matched = match_stylesheets_view(&root, &sheets, viewport, Cache::default().tailwind());
+
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width
+    };
+    let print = Viewport::default().with_media_target(MediaTarget::Print);
+
+    assert_eq!(
+      width(
+        &[
+          "@layer a.b, c; @layer c { .card { width: 10px; } } @layer a.b { .card { width: 20px; } }"
+        ],
+        Viewport::default()
+      ),
+      Length::Px(10.0).into()
+    );
+    assert_eq!(
+      width(
+        &[
+          "@layer x.y.z.w { .card { width: 30px; } } @layer v, x.y; @layer x.y { .card { width: 20px; } }",
+          "@layer v { .card { width: 10px; } }",
+        ],
+        Viewport::default()
+      ),
+      Length::Px(10.0).into()
+    );
+    for (viewport, expected) in [(Viewport::default(), 20.0), (print, 10.0)] {
+      assert_eq!(
+        width(
+          &[
+            "@media print { @layer p.q.r, s; } @layer s.t { .card { width: 10px; } }",
+            "@layer p.q { .card { width: 20px; } }",
+          ],
+          viewport
+        ),
+        Length::Px(expected).into()
+      );
+    }
+  }
+
+  #[test]
   fn root_selector_list_with_host_keeps_matching_root() {
     let root = Node::default();
     let stylesheet = parse_stylesheet(
