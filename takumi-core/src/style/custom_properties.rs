@@ -20,12 +20,13 @@ pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
 /// `StyleNonInheritedVariables`, the values a child inherits sit apart from the ones that stop here,
 /// so a child shares the first and starts the second empty, each in a trie a change copies only a
 /// path of. A registered property without a value
-/// takes its initial value, as Blink's `StyleInitialData` gives it.
+/// takes its initial value, as Blink's `StyleInitialData` gives it, unless it holds `None`, the
+/// guaranteed-invalid value.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CustomProperties {
-  inherited: HashTrie<String, String>,
+  inherited: HashTrie<String, Option<String>>,
   /// Registered properties that do not inherit, and the element state below.
-  non_inherited: HashTrie<String, String>,
+  non_inherited: HashTrie<String, Option<String>>,
   registrations: Arc<HashMap<String, PropertyRule>>,
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
@@ -35,14 +36,15 @@ pub struct CustomProperties {
 impl CustomProperties {
   /// The specified value of `name`, before `var()` substitution.
   pub fn get(&self, name: &str) -> Option<&str> {
-    self
-      .own(name)
-      .or_else(|| self.registration(name)?.initial_value.as_deref())
+    match self.values_of(name).get(name) {
+      Some(value) => value.as_deref(),
+      None => self.registration(name)?.initial_value.as_deref(),
+    }
   }
 
   /// The value this element holds for `name`, not a registered initial value.
   fn own(&self, name: &str) -> Option<&str> {
-    self.values_of(name).get(name).map(String::as_str)
+    self.values_of(name).get(name)?.as_deref()
   }
 
   /// Whether `name` has a specified value.
@@ -51,7 +53,7 @@ impl CustomProperties {
   }
 
   pub(crate) fn set(&mut self, name: String, value: String) {
-    self.values_of_mut(&name).insert(name, value);
+    self.values_of_mut(&name).insert(name, Some(value));
   }
 
   /// Whether `name`'s value stops at this element instead of reaching its children.
@@ -59,7 +61,7 @@ impl CustomProperties {
     self.element_state.contains(name) || self.registration(name).is_some_and(|rule| !rule.inherits)
   }
 
-  fn values_of(&self, name: &str) -> &HashTrie<String, String> {
+  fn values_of(&self, name: &str) -> &HashTrie<String, Option<String>> {
     if self.stops_here(name) {
       &self.non_inherited
     } else {
@@ -67,7 +69,7 @@ impl CustomProperties {
     }
   }
 
-  fn values_of_mut(&mut self, name: &str) -> &mut HashTrie<String, String> {
+  fn values_of_mut(&mut self, name: &str) -> &mut HashTrie<String, Option<String>> {
     if self.stops_here(name) {
       &mut self.non_inherited
     } else {
@@ -114,8 +116,12 @@ impl CustomProperties {
     }
   }
 
+  /// Leaves `name` guaranteed-invalid, a registered one without even its initial value, as Blink's
+  /// `SetVariableData` stores none.
   pub(crate) fn remove(&mut self, name: &str) {
-    if self.own(name).is_some() {
+    if self.registration(name).is_some() {
+      self.values_of_mut(name).insert(name.to_owned(), None);
+    } else if self.own(name).is_some() {
       self.values_of_mut(name).remove(name);
     }
   }
@@ -171,8 +177,9 @@ impl CustomProperties {
 
   /// Computes each of the `declared` names its registered syntax takes, as far as the element
   /// needs no sizing to, and makes each it does not take invalid at computed-value time: `unset`,
-  /// so the parent's value when it inherits and the initial value otherwise. A value `var()` has
-  /// yet to substitute into waits.
+  /// so the parent's value when it inherits and the initial value otherwise, or guaranteed-invalid
+  /// for the universal syntax, as Blink's `SupportsGuaranteedInvalid`. A value `var()` has yet to
+  /// substitute into waits.
   /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
   pub(crate) fn enforce_syntax(&mut self, declared: &[String], parent: &Self) {
     let registrations = Arc::clone(&self.registrations);
@@ -192,6 +199,10 @@ impl CustomProperties {
       }
       if let Some(computed) = value.and_then(|value| rule.syntax.compute(value, None)) {
         self.set(name.clone(), computed);
+        continue;
+      }
+      if rule.syntax == PropertySyntax::Universal {
+        self.remove(name);
         continue;
       }
 
@@ -217,7 +228,7 @@ impl CustomProperties {
 
     Arc::make_mut(&mut self.element_state).insert(name.to_owned());
     if let Some(value) = inherited {
-      self.set(name.to_owned(), value);
+      self.values_of_mut(name).insert(name.to_owned(), value);
     }
   }
 

@@ -2173,6 +2173,44 @@ fn an_inherited_container_unit_resolves_where_it_is_declared() {
   );
 }
 
+/// A registered property of universal syntax left without a value is guaranteed-invalid, so
+/// neither its parent's nor its initial value shows, as Blink's `CustomProperty::ApplyValue` stores
+/// none for it.
+#[test]
+fn a_universal_registered_property_without_a_value_is_guaranteed_invalid() {
+  let width = |css: &str| {
+    let node = Node::from_html(
+      r#"<div class="p"><div class="c"><div class="d"></div></div></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parses");
+    let measured = measure_with_css(
+      Node::container([node]),
+      &format!(".c, .d {{ width: var(--x, 30px); height: 1px }} {css}"),
+    );
+    let c = &measured.children[0].children[0];
+
+    (c.width, c.children[0].width)
+  };
+
+  assert_eq!(
+    width("@property --x { syntax: '*'; inherits: true } .p { --x: 10px } .c { --x: initial }"),
+    (30.0, 30.0)
+  );
+  assert_eq!(
+    width(
+      "@property --x { syntax: '*'; inherits: true; initial-value: 10px } .c { --x: var(--missing) }"
+    ),
+    (30.0, 30.0)
+  );
+  assert_eq!(
+    width(
+      "@property --x { syntax: '*'; inherits: true; initial-value: 10px } .c { --x: var(--y); --y: var(--x) }"
+    ),
+    (30.0, 30.0)
+  );
+}
+
 /// A keyframe that mixes a container unit with another unit reads the container, so the tree
 /// builds again against it, as Blink interpolates the two computed lengths.
 #[test]
