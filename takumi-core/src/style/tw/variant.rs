@@ -96,7 +96,7 @@ impl Breakpoint {
       return (viewport_width as f32) < breakpoint_width;
     }
 
-    viewport_width >= breakpoint_width as u32
+    viewport_width as f32 >= breakpoint_width
   }
 
   /// Where the breakpoint sorts among others: `max-*` first, then the rest, each by its built-in
@@ -616,7 +616,7 @@ fn split_top_level(token: &str, separator: u8) -> Option<(&str, &str)> {
 #[cfg(test)]
 mod tests {
   use super::{Breakpoint, Variant, Variants, condition, pseudo_class, split_variant};
-  use crate::style::selector::PseudoElement;
+  use crate::{style::selector::PseudoElement, viewport::Viewport};
 
   #[test]
   fn structural_variants_compile_to_pseudo_classes() {
@@ -753,6 +753,19 @@ mod tests {
       assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
     }
     assert_eq!(order("min-md"), order("md"));
+  }
+
+  #[test]
+  fn min_and_max_never_both_match() {
+    let viewport = Viewport::new((600, 400));
+    let matches = |token: &str| {
+      Breakpoint::parse(token)
+        .unwrap()
+        .matches(viewport, &Default::default())
+    };
+
+    assert!(!matches("min-[600.5px]"));
+    assert!(matches("max-[600.5px]"));
   }
 
   #[test]
