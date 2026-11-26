@@ -147,7 +147,7 @@ pub(crate) struct ContainerVariant {
 /// Where a breakpoint or container variant sorts: `max-*` first, then the rest, each by its width
 /// as Tailwind's `compareBreakpoints` compares them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct WidthOrder {
+pub(crate) struct WidthOrder {
   at_least: bool,
   width: Box<str>,
 }
@@ -312,7 +312,10 @@ pub(crate) enum Variant {
   },
   /// A media query variant under `not-`, `not-dark:` or `not-print:`, which Tailwind's `not`
   /// compiles to `@media not …`, or to the query itself when a run of `not-` cancels out.
-  NotMedia { query: String, order: NotOrder },
+  NotMedia {
+    query: String,
+    order: NotOrder,
+  },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
