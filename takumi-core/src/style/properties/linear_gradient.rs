@@ -885,24 +885,17 @@ mod tests {
 
   use super::*;
   use crate::{
-    geometry::Size,
     style::{FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };
   fn sizing() -> SizingContext {
-    SizingContext {
-      viewport: Viewport::new((200, 100)),
-      container_size: Size::NONE,
-      container_read: Default::default(),
-      font_read: None,
-      font_size: 16.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      ch: 16.0 / 2.0,
-      ex: 16.0 / 2.0,
-      color_scheme: Default::default(),
-    }
+    SizingContext::builder()
+      .viewport(Viewport::new((200, 100)))
+      .font_size(16.0)
+      .line_height(0.0)
+      .ch(16.0 / 2.0)
+      .ex(16.0 / 2.0)
+      .build()
   }
 
   #[test]
