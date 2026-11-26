@@ -196,7 +196,9 @@ pub enum ColorInput {
   /// Inherit from the `color` value.
   #[default]
   CurrentColor,
-  /// A color value.
+  /// A color value. Approximate: a leaf colour is clipped to 8-bit sRGB when parsed, so
+  /// `color-mix()` and relative colours read it there, where Blink keeps it as a float colour in
+  /// its own space.
   Value(Color),
   /// A system colour keyword, computing to its colour in the used color scheme.
   System(SystemColor),
@@ -1132,7 +1134,8 @@ impl ToCss for ColorMixValue {
   }
 }
 
-/// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
+/// Reference: https://www.w3.org/TR/css-color-5/#relative-colors. Approximate: `color(from …)` is
+/// unsupported, since its channels are unscaled and name a space after the origin.
 fn relative_target_cs(name: &str) -> Option<ColorSpaceTag> {
   Some(match_ignore_ascii_case! { name,
     "rgb" | "rgba" => ColorSpaceTag::Srgb,
