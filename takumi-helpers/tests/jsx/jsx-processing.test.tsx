@@ -981,6 +981,9 @@ describe("select", () => {
         <option>A</option>
         <option selected>{"B"}</option>
       </select>,
+      <select defaultValue="B">
+        <option>{new Set(["B"])}</option>
+      </select>,
       <select multiple defaultValue={["a", "c"]}>
         <optgroup label="g">
           <option value="a">A</option>

@@ -395,11 +395,15 @@ function optionText(children: unknown): string {
     return "";
   }
 
-  if (Array.isArray(children)) {
-    return children.map(optionText).join("");
+  if (isIterable(children)) {
+    return Array.from(children, optionText).join("");
   }
 
   return String(children);
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return typeof value === "object" && value !== null && Symbol.iterator in value;
 }
 
 /** The text an element folds into itself, its children as one string unless that is only white space. */
