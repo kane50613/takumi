@@ -2404,6 +2404,7 @@ fn test_not_breakpoints_match_an_unknown_viewport_width() {
   assert!(active("not-sm:w-4"));
   assert!(active("not-max-sm:w-4"));
   assert!(!active("not-not-sm:w-4"));
+  assert!(!active("not-missing:w-4"));
 }
 
 #[test]
@@ -2414,6 +2415,8 @@ fn test_not_variants_sort_in_the_not_group() {
   assert!(order("not-max-lg:w-4") < order("not-max-md:w-4"));
   assert!(order("not-not-dark:w-4") < order("md:w-4"));
   assert!(order("not-not-md:w-4") < order("sm:w-4"));
+  assert!(order("not-sm:w-4") < order("not-dark:w-4"));
+  assert!(order("not-motion-safe:w-4") < order("not-sm:w-4"));
 }
 
 #[test]

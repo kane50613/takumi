@@ -97,11 +97,11 @@ impl Breakpoint {
 
   /// Check if the breakpoint matches the viewport width.
   pub fn matches(&self, viewport: Viewport, overrides: &BreakpointOverrides) -> bool {
-    let Some(viewport_width) = viewport.size.width else {
-      return self.negated;
-    };
     let Some(width) = overrides.get(&*self.token).copied().or(self.width) else {
       return false;
+    };
+    let Some(viewport_width) = viewport.size.width else {
+      return self.negated;
     };
 
     let breakpoint_width = match width {
@@ -312,7 +312,7 @@ pub(crate) enum Variant {
   },
   /// A media query variant under `not-`, `not-dark:` or `not-print:`, which Tailwind's `not`
   /// compiles to `@media not …`, or to the query itself when a run of `not-` cancels out.
-  NotMedia(String),
+  NotMedia { query: String, order: NotOrder },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
@@ -417,17 +417,37 @@ impl Variant {
       Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.under_not(negated))),
       Self::Late {
         condition: LateCondition::Media(query),
-        ..
-      }
-      | Self::Preference { query, .. } => Some(Self::NotMedia(if negated {
-        format!("not {query}")
-      } else {
-        query.to_owned()
-      })),
+        rank,
+      } => Some(Self::NotMedia {
+        query: negate_query(query, negated),
+        order: NotOrder::Late(rank),
+      }),
+      Self::Preference { query, rank } => Some(Self::NotMedia {
+        query: negate_query(query, negated),
+        order: NotOrder::Preference(rank),
+      }),
       _ if negated => None,
       variant => Some(variant),
     }
   }
+}
+
+/// `query`, under `not` when `negated`.
+fn negate_query(query: &str, negated: bool) -> String {
+  if negated {
+    return format!("not {query}");
+  }
+
+  query.to_owned()
+}
+
+/// Where a media query or breakpoint variant under `not-` sorts in Tailwind's `not` group: by
+/// the inner variant, a preference first, then a breakpoint, then a late variant.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum NotOrder {
+  Preference(u8),
+  Breakpoint(BreakpointOrder),
+  Late(u8),
 }
 
 /// Where a structural variant sorts. Approximate: values of one variant keep their order.
@@ -458,6 +478,8 @@ pub(super) struct Variants {
   pub(super) container: Vec<ContainerVariant>,
   /// The media queries the late and preference variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
+  /// The sort keys of the media query variants under `not-`.
+  not_media: Vec<NotOrder>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
   /// The compounds of the arbitrary variants.
@@ -509,10 +531,11 @@ impl Variants {
           .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?);
         self.preference |= 1 << rank;
       }
-      Variant::NotMedia(query) => {
+      Variant::NotMedia { query, order } => {
         self
           .media
           .push(MediaQueryList::parse(&mut Parser::new(&query)).ok()?);
+        self.not_media.push(order);
         self.ranks |= 1 << NOT_RANK;
       }
       Variant::Structural { pseudo_class, rank } => {
@@ -551,7 +574,7 @@ impl Variants {
 
   /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
   /// query, a breakpoint, the preference variants, the structural variant bits, then the
-  /// breakpoints under `not-`.
+  /// media query and breakpoint variants under `not-`.
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
       arbitrary: descending(self.arbitrary.iter().cloned()),
@@ -571,12 +594,13 @@ impl Variants {
       ),
       preference: self.preference,
       ranks: self.ranks,
-      not_breakpoint: descending(
+      not: descending(
         self
           .breakpoint
           .iter()
           .filter(|breakpoint| breakpoint.in_not)
-          .map(Breakpoint::order),
+          .map(|breakpoint| NotOrder::Breakpoint(breakpoint.order()))
+          .chain(self.not_media.iter().cloned()),
       ),
     }
   }
@@ -603,8 +627,9 @@ pub(crate) struct VariantOrder {
   breakpoint: Vec<BreakpointOrder>,
   preference: u8,
   ranks: u32,
-  /// The breakpoints under `not-`, which Tailwind orders within its `not` group, the lowest bits.
-  not_breakpoint: Vec<BreakpointOrder>,
+  /// The media query and breakpoint variants under `not-`, which Tailwind orders within its
+  /// `not` group, the lowest bits.
+  not: Vec<NotOrder>,
 }
 
 /// The variant under a run of `not-` prefixes, and whether the run negates it: Tailwind's `not`
