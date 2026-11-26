@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>rounded_border_bleed</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .box {
+        display: flex;
+        box-sizing: border-box;
+        width: 160px;
+        height: 160px;
+        border: 8px solid #000;
+        border-radius: 24px;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body style="width: 760px; height: 280px">
+    <div
+      style="
+        display: flex;
+        gap: 48px;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        background: #add3ff;
+      "
+    >
+      <div class="box" style="box-shadow: 8px 8px 0 0 #000"></div>
+      <div class="box" style="background-clip: padding-box; box-shadow: 8px 8px 0 0 #000"></div>
+      <div style="display: flex; padding: 24px; background: #000"><div class="box"></div></div>
+    </div>
+  </body>
+</html>

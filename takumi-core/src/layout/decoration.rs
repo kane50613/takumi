@@ -38,6 +38,30 @@ pub struct ContourOrigin {
 }
 
 impl ClipBox {
+  /// The border box of `size` inset by `insets`, its used radii shrunk by them.
+  pub fn inset_border_box(border: BorderProperties, size: Size<f32>, insets: Rect<f32>) -> Self {
+    let mut inner = border;
+    inner.radius = border.scaled_corner_radii(size);
+    inner.expand_by(insets.map(|inset| -inset));
+
+    Self {
+      border: inner,
+      size: Size {
+        width: (size.width - insets.left - insets.right).max(0.0),
+        height: (size.height - insets.top - insets.bottom).max(0.0),
+      },
+      offset: Point {
+        x: insets.left,
+        y: insets.top,
+      },
+      origin: Some(ContourOrigin {
+        border,
+        size,
+        offset: Point::ZERO,
+      }),
+    }
+  }
+
   /// The padding box: the border box inset by the border widths, with inner
   /// radii.
   pub fn padding_box(border: BorderProperties, layout: Layout) -> Self {
