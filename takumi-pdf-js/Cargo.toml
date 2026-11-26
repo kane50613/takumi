@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 js-sys.workspace = true
 serde-wasm-bindgen.workspace = true
-serde_bytes.workspace = true
 wasm-bindgen.workspace = true
 
 [dependencies.serde]
@@ -19,15 +18,12 @@ features = ["rc"]
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
-features = ["wasm"]
+features = ["wasm", "pdf"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
 features = ["woff2", "png"]
-
-[dependencies.takumi-pdf]
-path = "../takumi-pdf"
 
 [lints]
 workspace = true

@@ -34,6 +34,8 @@ pub mod heap;
 pub mod input;
 #[cfg(feature = "raster")]
 pub mod options;
+#[cfg(feature = "pdf")]
+pub mod pdf;
 pub mod registrations;
 pub mod renderer;
 #[cfg(feature = "wasm")]

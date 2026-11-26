@@ -10,38 +10,15 @@
   clippy::unimplemented
 )]
 
-mod date;
-mod metadata;
-mod options;
-
-use std::{collections::HashMap, fmt::Display, iter::once, sync::Arc};
+use std::fmt::Display;
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, NeedsOutput, append_css,
-  input::{ListedFonts, decode_images, retain_svg},
-  parse_lang,
-  registrations::Retention,
-  renderer::RendererOptions,
-  source::read_source,
-  source_cache::SourceCache,
-  stylesheet,
-  warning::WarningLog,
+  FontStore, NeedsOutput, pdf::PdfRenderOptions, registrations::Retention,
+  renderer::RendererOptions, source::read_source, source_cache::SourceCache, warning::WarningLog,
 };
-use takumi_core::{
-  Fonts,
-  layout::{needs::RenderNeeds, node::Node},
-  resources::{cache::Cache, image::ImageSource},
-  style::{FontFamily, Lang, StyleSheet},
-  viewport::Viewport,
-};
-use takumi_pdf::{
-  Attachment, Band, MeasureOptions, PageOptions, PageRange, PageRules, PdfMetadata, PdfOptions,
-  PdfStandard, Tagging, UncoveredText,
-};
+use takumi_core::{layout::node::Node, resources::cache::Cache};
 use wasm_bindgen::prelude::*;
-
-use crate::options::{BandInput, PdfRenderOptions, page_background, resolve_geometry};
 
 /// The heap, grown a part of the memory at a time.
 #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
@@ -104,40 +81,6 @@ struct MeasuredSizeOutput {
   height: f32,
 }
 
-/// The layout inputs [`PdfRenderer::render`] and [`PdfRenderer::measure`] share.
-struct Layout {
-  viewport: Option<Viewport>,
-  page: Option<PageOptions>,
-  images: HashMap<Arc<str>, ImageSource>,
-  lang: Option<Lang>,
-}
-
-/// What every tree of a document lays out with as [`PdfRenderer::measure`] lays it out.
-struct MeasureInputs {
-  layout: Layout,
-  fonts: Arc<Fonts>,
-  stylesheet: Arc<StyleSheet>,
-  cache: Cache,
-  font_families: Option<FontFamily>,
-}
-
-impl MeasureInputs {
-  /// The options measuring `node` takes.
-  fn options(&self, node: Node) -> MeasureOptions<'_> {
-    MeasureOptions {
-      viewport: self.layout.viewport,
-      fonts: &self.fonts,
-      node,
-      stylesheet: self.stylesheet.clone(),
-      images: self.layout.images.clone(),
-      cache: self.cache.clone(),
-      page: self.layout.page,
-      font_families: self.font_families.clone(),
-      lang: self.layout.lang,
-    }
-  }
-}
-
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
 /// Every method takes `&self` and the fonts are copy-on-write, mirroring the
@@ -162,51 +105,13 @@ impl PdfRenderer {
       .map(|options| from_value(options).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let (node, mut document_css) = read_source(node.into(), &self.sources)?;
+    let (node, document_css) = read_source(node.into(), &self.sources)?;
 
-    for band in options.bands_mut() {
-      if let BandInput::Html(html) = band {
-        let (parsed, css) = read_source(JsValue::from_str(html), &self.bands)?;
-
-        document_css.extend(css);
-        *band = BandInput::Node(Box::new(parsed));
-      }
-    }
-
-    options.css = append_css(options.css.take(), document_css);
+    options.resolve_bands(document_css, |html| {
+      read_source(JsValue::from_str(html), &self.bands)
+    })?;
 
     Ok((node, options))
-  }
-
-  fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
-    let images = decode_images(&self.cache, options.images.as_deref().unwrap_or_default())
-      .map_err(map_error)?;
-    let (viewport, page) = resolve_geometry(options)?;
-    let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
-
-    Ok(Layout {
-      viewport,
-      page,
-      images,
-      lang,
-    })
-  }
-
-  /// What the document's trees lay out with as `measure` lays them out.
-  fn measure_inputs(
-    &self,
-    options: &mut PdfRenderOptions,
-    listed: Option<&ListedFonts>,
-  ) -> Result<MeasureInputs, js_sys::Error> {
-    Ok(MeasureInputs {
-      layout: self.layout(options)?,
-      fonts: self
-        .fonts
-        .for_needs(&mut options.font_families, listed, &options.font_scope),
-      stylesheet: stylesheet(&self.cache, options.css.take(), Vec::new()).map_err(map_error)?,
-      cache: self.cache.clone(),
-      font_families: options.font_families.take().map(FontFamily::from_names),
-    })
   }
 }
 
@@ -342,48 +247,9 @@ impl PdfRenderer {
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
     let (node, options) = self.read_document(node, options.map(Into::into))?;
-    let Layout {
-      viewport,
-      page,
-      images,
-      lang,
-    } = self.layout(&options)?;
     let fonts = self.fonts.for_render(&options.font_scope);
 
-    takumi_pdf::render(PdfOptions {
-      viewport,
-      fonts: &fonts,
-      node,
-      stylesheet: stylesheet(&self.cache, options.css, Vec::new()).map_err(map_error)?,
-      images,
-      cache: self.cache.clone(),
-      page,
-      page_ranges: options
-        .page_ranges
-        .map(|ranges| ranges.into_iter().map(PageRange::from).collect()),
-      background_color: page_background(options.background_color.as_deref())?,
-      header: options.header.map(Band::from).and_then(Band::node),
-      footer: options.footer.map(Band::from).and_then(Band::node),
-      pages: options.pages.map(PageRules::from).unwrap_or_default(),
-      font_families: options.font_families.map(FontFamily::from_names),
-      lang,
-      metadata: options.metadata.map(PdfMetadata::try_from).transpose()?,
-      producer: None,
-      outline: options.outline.unwrap_or(false),
-      standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
-      tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
-      attachments: options
-        .attachments
-        .unwrap_or_default()
-        .into_iter()
-        .map(Attachment::try_from)
-        .collect::<Result<_, _>>()?,
-      uncovered_text: options
-        .uncovered_text
-        .map(UncoveredText::from)
-        .unwrap_or_default(),
-    })
-    .map_err(map_error)
+    options.render(node, &fonts, &self.cache).map_err(map_error)
   }
 
   /// Lays out a node tree without rendering and returns its size in CSS px.
@@ -396,8 +262,12 @@ impl PdfRenderer {
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
     let (node, mut options) = self.read_document(node, options.map(Into::into))?;
-    let inputs = self.measure_inputs(&mut options, None)?;
-    let measured = takumi_pdf::measure(inputs.options(node)).map_err(map_error)?;
+    let fonts = self
+      .fonts
+      .for_needs(&mut options.font_families, None, &options.font_scope);
+    let measured = options
+      .measure(node, fonts, &self.cache)
+      .map_err(map_error)?;
 
     Ok(
       to_value(&MeasuredSizeOutput {
@@ -418,19 +288,12 @@ impl PdfRenderer {
   ) -> Result<RenderNeedsType, js_sys::Error> {
     let listed = self.fonts.listed(fonts.map(Into::into))?;
     let (node, mut options) = self.read_document(node, options.map(Into::into))?;
-
-    retain_svg(&mut options.images);
-
-    let inputs = self.measure_inputs(&mut options, listed.as_ref())?;
-    let bands = options
-      .bands_mut()
-      .filter_map(|band| band.node().cloned())
-      .collect::<Vec<_>>();
-    let needs = once(node)
-      .chain(bands)
-      .map(|tree| takumi_pdf::needs(inputs.options(tree)))
-      .collect::<Result<RenderNeeds, _>>()
-      .map_err(map_error)?;
+    let fonts = self.fonts.for_needs(
+      &mut options.font_families,
+      listed.as_ref(),
+      &options.font_scope,
+    );
+    let needs = options.needs(node, fonts, &self.cache).map_err(map_error)?;
 
     Ok(
       to_value(&NeedsOutput::new(needs, listed.as_ref()))

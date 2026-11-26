@@ -1850,6 +1850,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "takumi-core",
+ "takumi-pdf",
  "takumi-raster",
  "takumi-svg",
  "wasm-bindgen",
@@ -1983,10 +1984,8 @@ dependencies = [
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
- "serde_bytes",
  "takumi-bindings-common",
  "takumi-core",
- "takumi-pdf",
  "wasm-bindgen",
 ]
 
