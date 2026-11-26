@@ -298,7 +298,7 @@ impl CountersAttachmentContext {
     }
 
     // The element itself is not in its style containment scope.
-    if contains_style(style) {
+    if style.contains_style() {
       self.enter_style_containment_scope();
     }
   }
@@ -321,7 +321,7 @@ impl CountersAttachmentContext {
 
   /// Leaves the box [`Self::enter_object`] entered last, after its descendants.
   pub(super) fn leave_object(&mut self, style: &ComputedStyle, list_item: ListItemCounter) {
-    if contains_style(style) {
+    if style.contains_style() {
       self.leave_style_containment_scope();
     }
 
@@ -643,8 +643,4 @@ fn has_counter(counter_directives: &[(Arc<str>, CounterDirectives)], counter_nam
   counter_directives
     .iter()
     .any(|(name, _)| &**name == counter_name)
-}
-
-pub(super) fn contains_style(style: &ComputedStyle) -> bool {
-  style.contains_style()
 }

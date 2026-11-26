@@ -7,7 +7,7 @@ use crate::{
   form_control::{has_attribute, is_element},
   geometry::{Point, Size},
   layout::{
-    counters::{CounterDirectives, LIST_ITEM, contains_style, saturate},
+    counters::{CounterDirectives, LIST_ITEM, saturate},
     layout_style::LayoutLength,
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
@@ -382,7 +382,7 @@ pub(super) fn is_list_owner(node: &Node, style: &ComputedStyle) -> bool {
   ["ol", "ul", "menu"]
     .into_iter()
     .any(|tag| is_element(node, tag))
-    || contains_style(style)
+    || style.contains_style()
 }
 
 /// Whether the tree holds an `ol` with `reversed` and no `start`, which numbers its items from
