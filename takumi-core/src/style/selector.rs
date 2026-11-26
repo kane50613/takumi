@@ -3,7 +3,10 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  sync::{Arc, LazyLock},
+  sync::{
+    Arc, LazyLock,
+    atomic::{AtomicUsize, Ordering},
+  },
 };
 
 use cssparser::*;
@@ -54,8 +57,18 @@ pub struct PropertyRule {
 pub(crate) enum LayerName {
   /// An explicitly named layer.
   Named(String),
-  /// An anonymous layer.
-  Anonymous,
+  /// An anonymous layer, which no other `@layer` names, as Blink's anonymous `CascadeLayer`s are
+  /// all distinct.
+  Anonymous(usize),
+}
+
+impl LayerName {
+  /// A new anonymous layer.
+  fn anonymous() -> Self {
+    static NEXT_ANONYMOUS: AtomicUsize = AtomicUsize::new(0);
+
+    Self::Anonymous(NEXT_ANONYMOUS.fetch_add(1, Ordering::Relaxed))
+  }
 }
 
 pub(crate) type LayerPath = Vec<LayerName>;
@@ -1292,7 +1305,7 @@ fn parse_at_rule_prelude<'i>(
 ) -> Result<AtRulePrelude, ParseError<StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
     if input.is_exhausted() {
-      return Ok(AtRulePrelude::Layer(vec![vec![LayerName::Anonymous]]));
+      return Ok(AtRulePrelude::Layer(vec![vec![LayerName::anonymous()]]));
     }
     return Ok(AtRulePrelude::Layer(
       input.parse_comma_separated(parse_layer_name)?,
@@ -3479,14 +3492,36 @@ mod tests {
       sheet.rules[0].layer.as_ref(),
       Some(&vec![LayerName::Named("theme".to_owned())])
     );
-    assert_eq!(
-      sheet.rules[1].layer.as_ref(),
-      Some(&vec![
-        LayerName::Named("theme".to_owned()),
-        LayerName::Anonymous,
-      ])
-    );
+    assert!(matches!(
+      sheet.rules[1].layer.as_deref(),
+      Some([LayerName::Named(theme), LayerName::Anonymous(_)]) if theme == "theme"
+    ));
     assert_ne!(sheet.rules[0].layer_order, sheet.rules[1].layer_order);
+  }
+
+  /// The layer order of each rule in `sheet`, in source order.
+  fn rule_layer_orders(sheet: &StyleSheet) -> Vec<Option<usize>> {
+    sheet.rules.iter().map(|rule| rule.layer_order).collect()
+  }
+
+  /// Each anonymous `@layer` block is a layer of its own, in each sheet of a list too, as Blink's
+  /// `CascadeLayer::FindDirectSubLayer` finds no anonymous layer.
+  #[test]
+  fn each_anonymous_layer_is_its_own_layer() {
+    let sheet = parse_stylesheet("@layer { .a { width: 1px } } @layer { .b { width: 2px } }");
+    let [first, second] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(first < second);
+
+    let sheet = StyleSheet::parse_list(["@layer { .a { width: 1px } }", "@layer { .b { width: 2px } }"])
+      .expect("parses");
+    let [first, second] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(first < second);
   }
 
   /// An invalid layer name drops its block; it does not fall back to an
