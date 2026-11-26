@@ -12,7 +12,9 @@ packages:
 `checked:`, `indeterminate:`, `placeholder-shown:`, `optional:`, `required:`, `read-only:`, `enabled:`, `disabled:`, `aria-*:`, `aria-[…]:`, `data-*:`, and `data-[…]:` now apply, as do their `not-` forms. `not-` also negates breakpoints and media variants, so `not-md:`, `not-dark:`, `not-print:`, and `not-motion-safe:` apply where the variant does not.
 
 ```html
-<div tw="shadow-lg ring-2 ring-sky-500 ring-offset-2 bg-linear-to-tr from-indigo-600 to-fuchsia-500"></div>
+<div
+  tw="shadow-lg ring-2 ring-sky-500 ring-offset-2 bg-linear-to-tr from-indigo-600 to-fuchsia-500"
+></div>
 <!-- Before: the ring classes were dropped, and the gradient ran at 45° -->
 <!-- After: the ring draws around the shadow, and the gradient runs toward the top right corner -->
 ```
