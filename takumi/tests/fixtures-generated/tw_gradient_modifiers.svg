@@ -1,60 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#f1f5f9"/>
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM120 28h256c8.28 0 15 6.72 15 15v128c0 8.28-6.72 15-15 15h-256c-8.28 0-15-6.72-15-15v-128c0-8.28 6.72-15 15-15Z" clip-rule="evenodd"/>
+    <path d="M184 131h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <filter id="bl1" filterUnits="userSpaceOnUse" x="-15" y="-15" width="1230" height="660">
-      <feGaussianBlur stdDeviation="5"/>
-    </filter>
-    <g filter="url(#bl1)">
-      <path d="M120 41h256c5.52 0 10 4.48 10 10v128c0 5.52-4.48 10-10 10h-256c-5.52 0-10-4.48-10-10v-128c0-5.52 4.48-10 10-10Z" fill="#000" fill-opacity=".102"/>
-    </g>
-    <filter id="bl2" filterUnits="userSpaceOnUse" x="-38" y="-38" width="1276" height="706">
-      <feGaussianBlur stdDeviation="12.5"/>
-    </filter>
-    <g filter="url(#bl2)">
-      <path d="M120 52h256c6.08 0 11 4.92 11 11v128c0 6.08-4.92 11-11 11h-256c-6.08 0-11-4.92-11-11v-128c0-6.08 4.92-11 11-11Z" fill="#000" fill-opacity=".102"/>
-    </g>
-    <path d="M120 19h256c13.25 0 24 10.75 24 24v128c0 13.25-10.75 24-24 24h-256c-13.25 0-24-10.75-24-24v-128c0-13.25 10.75-24 24-24Z" fill="#00a6f4"/>
-    <path d="M120 23h256c11.05 0 20 8.95 20 20v128c0 11.05-8.95 20-20 20h-256c-11.05 0-20-8.95-20-20v-128c0-11.05 8.95-20 20-20Z" fill="#ffd230"/>
-  </g>
-  <path d="M120 27h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z" fill="#fff"/>
-  <clipPath id="cp3">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM472 28h256c8.28 0 15 6.72 15 15v128c0 8.28-6.72 15-15 15h-256c-8.28 0-15-6.72-15-15v-128c0-8.28 6.72-15 15-15Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-    <filter id="bl4" filterUnits="userSpaceOnUse" x="-9" y="-9" width="1218" height="648">
-      <feGaussianBlur stdDeviation="3"/>
-    </filter>
-    <g filter="url(#bl4)">
-      <path d="M472 35h256c6.63 0 12 5.37 12 12v128c0 6.63-5.37 12-12 12h-256c-6.63 0-12-5.37-12-12v-128c0-6.63 5.37-12 12-12Z" fill="#ffa1ad"/>
-    </g>
-    <filter id="bl5" filterUnits="userSpaceOnUse" x="-23" y="-23" width="1246" height="676">
-      <feGaussianBlur stdDeviation="7.5"/>
-    </filter>
-    <g filter="url(#bl5)">
-      <path d="M472 40h256c7.18 0 13 5.82 13 13v128c0 7.18-5.82 13-13 13h-256c-7.18 0-13-5.82-13-13v-128c0-7.18 5.82-13 13-13Z" fill="#ffa1ad"/>
-    </g>
-  </g>
-  <path d="M472 27h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z" fill="#fff"/>
-  <clipPath id="cp6">
-    <path d="M472 27h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
-  </clipPath>
-  <g clip-path="url(#cp6)">
-    <path d="M455 26h290v162h-290v-162Zm17 9h256c4.42 0 8 3.58 8 8v128c0 4.42-3.58 8-8 8h-256c-4.42 0-8-3.58-8-8v-128c0-4.42 3.58-8 8-8Z" fill="#ff2056" fill-rule="evenodd"/>
-    <filter id="bl7" filterUnits="userSpaceOnUse" x="-6" y="-6" width="1212" height="642">
-      <feGaussianBlur stdDeviation="2"/>
-    </filter>
-    <g filter="url(#bl7)">
-      <path d="M444 15h312v186h-312v-186Zm28 14h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z" fill="#000" fill-opacity=".051" fill-rule="evenodd"/>
-    </g>
-  </g>
-  <clipPath id="cp8">
-    <path d="M184 235h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
-  </clipPath>
-  <g clip-path="url(#cp8)">
-    <linearGradient id="lg9" gradientUnits="userSpaceOnUse" x1="312.828" y1="452.931" x2="423.172" y2="177.069">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="312.828" y1="348.931" x2="423.172" y2="73.069">
       <stop offset="0" stop-color="#4f39f6"/>
       <stop offset=".016" stop-color="#5239f6"/>
       <stop offset=".032" stop-color="#543af6"/>
@@ -120,13 +70,13 @@
       <stop offset=".984" stop-color="#df2bfb"/>
       <stop offset="1" stop-color="#e12afb"/>
     </linearGradient>
-    <rect x="168" y="235" width="400" height="160" fill="url(#lg9)"/>
+    <rect x="168" y="131" width="400" height="160" fill="url(#lg1)"/>
   </g>
-  <clipPath id="cp10">
-    <path d="M648 235h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
+  <clipPath id="cp2">
+    <path d="M648 131h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
   </clipPath>
-  <g clip-path="url(#cp10)">
-    <linearGradient id="lg11" gradientUnits="userSpaceOnUse" x1="887.172" y1="177.069" x2="776.828" y2="452.931">
+  <g clip-path="url(#cp2)">
+    <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="887.172" y1="73.069" x2="776.828" y2="348.931">
       <stop offset="0" stop-color="#fb2c36"/>
       <stop offset=".016" stop-color="#fb333c"/>
       <stop offset=".032" stop-color="#fb3943"/>
@@ -192,13 +142,13 @@
       <stop offset=".984" stop-color="#3283ff"/>
       <stop offset="1" stop-color="#2b7fff"/>
     </linearGradient>
-    <rect x="632" y="235" width="400" height="160" fill="url(#lg11)"/>
+    <rect x="632" y="131" width="400" height="160" fill="url(#lg3)"/>
   </g>
-  <clipPath id="cp12">
-    <path d="M472 443h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
+  <clipPath id="cp4">
+    <path d="M472 339h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
   </clipPath>
-  <g clip-path="url(#cp12)">
-    <radialGradient id="rg13" gradientUnits="userSpaceOnUse" cx="528" cy="483" r="305.47" gradientTransform="matrix(1 0 0 .556 0 214.667)">
+  <g clip-path="url(#cp4)">
+    <radialGradient id="rg5" gradientUnits="userSpaceOnUse" cx="528" cy="379" r="305.47" gradientTransform="matrix(1 0 0 .556 0 168.444)">
       <stop offset="0" stop-color="#ffdf20"/>
       <stop offset=".016" stop-color="#ffdd1f"/>
       <stop offset=".032" stop-color="#ffda1f"/>
@@ -264,34 +214,6 @@
       <stop offset=".984" stop-color="#f54b01"/>
       <stop offset="1" stop-color="#f54900"/>
     </radialGradient>
-    <rect x="456" y="443" width="288" height="160" fill="url(#rg13)"/>
-  </g>
-  <filter id="ft14" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-    <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="dsb"/>
-    <feOffset in="dsb" dx="0" dy="1" result="dso"/>
-    <feFlood flood-color="#000" flood-opacity=".102" result="dsc"/>
-    <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
-    <feMerge result="f0">
-      <feMergeNode in="dss"/>
-      <feMergeNode in="SourceGraphic"/>
-    </feMerge>
-    <feGaussianBlur in="SourceAlpha" stdDeviation="1" result="dsb"/>
-    <feOffset in="dsb" dx="0" dy="1" result="dso"/>
-    <feFlood flood-color="#000" flood-opacity=".059" result="dsc"/>
-    <feComposite in="dsc" in2="dso" operator="in" result="dss"/>
-    <feMerge result="f1">
-      <feMergeNode in="dss"/>
-      <feMergeNode in="f0"/>
-    </feMerge>
-  </filter>
-  <g filter="url(#ft14)">
-    <rect x="808" y="27" width="288" height="160" fill="#000" fill-opacity="0"/>
-    <path d="M824 27h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z" fill="#fff"/>
-    <clipPath id="cp15">
-      <path d="M824 27h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
-    </clipPath>
-    <g clip-path="url(#cp15)">
-      <path d="M807 26h290v162h-290v-162Zm17 3h256c7.73 0 14 6.27 14 14v128c0 7.73-6.27 14-14 14h-256c-7.73 0-14-6.27-14-14v-128c0-7.73 6.27-14 14-14Z" fill="#096" fill-rule="evenodd"/>
-    </g>
+    <rect x="456" y="339" width="288" height="160" fill="url(#rg5)"/>
   </g>
 </svg>
