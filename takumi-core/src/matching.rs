@@ -1178,23 +1178,18 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
             if is_replaced && target != SelectorTarget::Element {
               continue;
             }
-            if !(if target == SelectorTarget::Element {
-              element_holds
+            let (holds, ctx) = if target == SelectorTarget::Element {
+              (element_holds, &mut element_ctx)
             } else {
-              pseudo_holds
-            }) {
+              (pseudo_holds, &mut pseudo_ctx)
+            };
+
+            if !holds {
               continue;
             }
-
             if early_reject_by_local_name(selector, 0, element) {
               continue;
             }
-
-            let ctx = if target == SelectorTarget::Element {
-              &mut element_ctx
-            } else {
-              &mut pseudo_ctx
-            };
 
             if matches_selector(
               selector,
