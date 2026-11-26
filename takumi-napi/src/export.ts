@@ -34,6 +34,7 @@ import type {
   DocumentInput,
   FontLoader,
   JsonSource,
+  PdfBindingOptions,
   PdfPreparedRenderOptions,
   PdfPrepareOptions,
   PdfRenderOptions,
@@ -170,7 +171,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.readPdf(source, options, readSource),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.renderPdf(native, opts, signal),
+      (native, opts, signal) =>
+        this.inner.renderPdf(native, opts satisfies PdfBindingOptions, signal),
     );
   }
 
@@ -180,9 +182,11 @@ export class Renderer {
     options: PdfPrepareOptions | PdfRenderOptions,
     collect: typeof prepareSource,
   ): Promise<PreparedPdf> {
-    return collectPdf(this.fonts, source, options, collect, (native, layout, request, signal) =>
-      this.inner.pdfNeeds(native, ...needsArgs(layout, request), signal),
-    );
+    return collectPdf(this.fonts, source, options, collect, (native, layout, request, signal) => {
+      const [needsOptions, fonts] = needsArgs(layout, request);
+
+      return this.inner.pdfNeeds(native, needsOptions satisfies PdfBindingOptions, fonts, signal);
+    });
   }
 
   /** `source` read under `options` without fetching, for {@link render} and its siblings. */
