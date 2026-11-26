@@ -237,7 +237,6 @@ impl Default for LayoutStyle {
 }
 
 impl LayoutStyle {
-  /// `style`'s box model, resolved against `sizing`.
   /// Blink's `ShouldApplyInlineSizeContainment`: a `container-type` contains the inline size of
   /// a box that is neither a non-atomic inline nor an internal table box.
   pub(crate) fn contains_inline_size(&self) -> bool {
@@ -267,6 +266,7 @@ impl LayoutStyle {
       && (!self.display.is_table_part() || self.display == Display::TableCaption)
   }
 
+  /// `style`'s box model, resolved against `sizing`.
   pub(crate) fn from_computed(
     style: &ComputedStyle,
     sizing: &SizingContext,
