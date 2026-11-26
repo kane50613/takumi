@@ -1363,11 +1363,21 @@ fn container_query_holds(
     found.is_some_and(|(element, container)| {
       let mut sizing = container.font.sizing(viewport);
 
-      // A container unit in the query reads the container's own query container, as Blink's
-      // `CSSContainerValues` starts from the container's parent.
-      sizing.container_size = successors(element.parent_element(), Element::parent_element)
-        .find_map(|ancestor| containers.get(&ancestor.index))
-        .map_or(Size::NONE, QueryContainer::contained_size);
+      // A container unit in the query reads the container's own query containers, as Blink's
+      // `CSSContainerValues` starts from the container's parent and `FindSizeForContainerAxis`
+      // looks for each axis on its own.
+      let outer_size = |axis: fn(Size<Option<f32>>) -> Option<f32>| {
+        successors(element.parent_element(), Element::parent_element).find_map(|ancestor| {
+          containers
+            .get(&ancestor.index)
+            .and_then(|outer| axis(outer.contained_size()))
+        })
+      };
+
+      sizing.container_size = Size {
+        width: outer_size(|size| size.width),
+        height: outer_size(|size| size.height),
+      };
       condition.matches(container.contained_size(), viewport, &sizing)
     })
   })

@@ -1689,6 +1689,29 @@ fn a_container_unit_in_a_query_reads_the_outer_container() {
   assert_eq!(measured.children[0].children[0].children[0].width, 50.0);
 }
 
+/// A container unit in a query reads each axis from the nearest container around the queried one
+/// that contains it, as Blink's `FindSizeForContainerAxis` looks for each axis on its own.
+#[test]
+fn a_container_unit_in_a_query_reads_each_axis_on_its_own() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="middle"><div class="inner"><p class="target">x</p></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: size; width: 400px; height: 400px }
+     .middle { container-type: inline-size }
+     .inner { container: inner / inline-size; width: 300px }
+     @container inner (width > 50cqh) { .target { width: 50px } }",
+  );
+
+  assert_eq!(
+    measured.children[0].children[0].children[0].children[0].width,
+    50.0
+  );
+}
+
 /// Containers settle within as many builds as the most containers any build found, as one build
 /// can find fewer containers than an earlier one while the sizes still settle.
 #[test]
