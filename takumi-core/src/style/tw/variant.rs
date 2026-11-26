@@ -266,7 +266,8 @@ const PREFERENCES: [(&str, &str); 4] = [
 ];
 
 /// The states of an element no static render is in, whose `not-` variants always apply.
-const UNREACHED_STATES: [&str; 7] = [
+const UNREACHED_STATES: [&str; 8] = [
+  "autofill",
   "focus-within",
   "hover",
   "focus",
@@ -305,20 +306,37 @@ pub(crate) enum Variant {
 const BEFORE_RANK: u8 = 1;
 const AFTER_RANK: u8 = 2;
 
-/// The structural variants in the order Tailwind registers them, from `STRUCTURAL_RANK` on.
-const REGISTERED: [&str; 9] = [
-  "first",
-  "last",
-  "only",
-  "odd",
-  "even",
-  "first-of-type",
-  "last-of-type",
-  "only-of-type",
-  "empty",
+/// The structural and form state variants in the order Tailwind registers them, from
+/// `STRUCTURAL_RANK` on, each with the pseudo-class it compiles to. Approximate: `default`,
+/// `valid`, `invalid`, and the other states takumi's selectors never match are left out.
+const REGISTERED: [(&str, &str); 17] = [
+  ("first", ":first-child"),
+  ("last", ":last-child"),
+  ("only", ":only-child"),
+  ("odd", ":nth-child(odd)"),
+  ("even", ":nth-child(even)"),
+  ("first-of-type", ":first-of-type"),
+  ("last-of-type", ":last-of-type"),
+  ("only-of-type", ":only-of-type"),
+  ("checked", ":checked"),
+  ("indeterminate", ":indeterminate"),
+  ("placeholder-shown", ":placeholder-shown"),
+  ("optional", ":optional"),
+  ("required", ":required"),
+  ("read-only", ":read-only"),
+  ("empty", ":empty"),
+  ("enabled", ":enabled"),
+  ("disabled", ":disabled"),
 ];
 const STRUCTURAL_RANK: u8 = 3;
-const FUNCTIONAL: [&str; 4] = ["nth-", "nth-last-", "nth-of-type-", "nth-last-of-type-"];
+const FUNCTIONAL: [&str; 6] = [
+  "aria-",
+  "data-",
+  "nth-",
+  "nth-last-",
+  "nth-of-type-",
+  "nth-last-of-type-",
+];
 
 impl Variant {
   /// The variant `token` names, or `None` for one takumi does not support.
@@ -368,7 +386,7 @@ fn structural_rank(token: &str) -> u8 {
     return 0;
   }
 
-  if let Some(index) = REGISTERED.iter().position(|name| *name == token) {
+  if let Some(index) = REGISTERED.iter().position(|(name, _)| *name == token) {
     return STRUCTURAL_RANK + index as u8;
   }
 
@@ -512,23 +530,11 @@ pub(crate) struct VariantOrder {
   ranks: u32,
 }
 
-/// The pseudo-class a structural variant compiles to, or `None` for any other variant.
+/// The selector a structural, form state, or attribute variant compiles to, or `None` for any
+/// other variant.
 fn pseudo_class(variant: &str) -> Option<String> {
-  let fixed = match variant {
-    "first" => ":first-child",
-    "last" => ":last-child",
-    "only" => ":only-child",
-    "odd" => ":nth-child(odd)",
-    "even" => ":nth-child(even)",
-    "first-of-type" => ":first-of-type",
-    "last-of-type" => ":last-of-type",
-    "only-of-type" => ":only-of-type",
-    "empty" => ":empty",
-    _ => "",
-  };
-
-  if !fixed.is_empty() {
-    return Some(fixed.to_owned());
+  if let Some((_, pseudo_class)) = REGISTERED.iter().find(|(name, _)| *name == variant) {
+    return Some((*pseudo_class).to_owned());
   }
 
   if let Some(negated) = variant.strip_prefix("not-") {
@@ -541,6 +547,14 @@ fn pseudo_class(variant: &str) -> Option<String> {
 
   if let Some(compound) = arbitrary_compound(variant) {
     return Some(compound);
+  }
+
+  if let Some(value) = variant.strip_prefix("aria-") {
+    return attribute_selector("aria", value, "=\"true\"");
+  }
+
+  if let Some(value) = variant.strip_prefix("data-") {
+    return attribute_selector("data", value, "");
   }
 
   for (prefix, function) in [
@@ -568,6 +582,42 @@ fn pseudo_class(variant: &str) -> Option<String> {
   }
 
   None
+}
+
+/// The attribute selector Tailwind's `aria-*` and `data-*` variants write: `[aria-checked="true"]`
+/// for a name, which `named_value` follows, and `[data-state="open"]` for `data-[state=open]`.
+fn attribute_selector(prefix: &str, value: &str, named_value: &str) -> Option<String> {
+  match value
+    .strip_prefix('[')
+    .and_then(|rest| rest.strip_suffix(']'))
+  {
+    Some(bracketed) => Some(format!(
+      "[{prefix}-{}]",
+      quote_attribute_value(&arbitrary(bracketed))
+    )),
+    None => is_ident(value).then(|| format!("[{prefix}-{value}{named_value}]")),
+  }
+}
+
+/// Tailwind's `quoteAttributeValue`: an attribute's unquoted value quoted, keeping a trailing `i`
+/// or `s` flag outside the quotes.
+fn quote_attribute_value(input: &str) -> String {
+  let Some((attribute, value)) = input.split_once('=') else {
+    return input.to_owned();
+  };
+  let value = value.trim();
+
+  if value.starts_with(['\'', '"']) {
+    return input.to_owned();
+  }
+
+  if let [.., b' ', flag @ (b'i' | b'I' | b's' | b'S')] = value.as_bytes() {
+    let unflagged = &value[..value.len() - 2];
+
+    return format!("{attribute}=\"{unflagged}\" {}", *flag as char);
+  }
+
+  format!("{attribute}=\"{value}\"")
 }
 
 /// The compound an arbitrary variant such as `[&:nth-child(3)]` or `[&.active]` adds to the
@@ -679,7 +729,28 @@ mod tests {
       ("not-first", Some(":not(:first-child)")),
       ("not-hover", Some(":not(:hover)")),
       ("not-focus-within", Some(":not(:focus-within)")),
-      ("not-enabled", None),
+      ("not-enabled", Some(":not(:enabled)")),
+      ("disabled", Some(":disabled")),
+      ("checked", Some(":checked")),
+      ("indeterminate", Some(":indeterminate")),
+      ("placeholder-shown", Some(":placeholder-shown")),
+      ("read-only", Some(":read-only")),
+      ("required", Some(":required")),
+      ("not-optional", Some(":not(:optional)")),
+      ("not-autofill", Some(":not(:autofill)")),
+      ("autofill", None),
+      ("valid", None),
+      ("default", None),
+      ("read-write", None),
+      ("aria-checked", Some("[aria-checked=\"true\"]")),
+      ("aria-[sort=ascending]", Some("[aria-sort=\"ascending\"]")),
+      ("not-aria-busy", Some(":not([aria-busy=\"true\"])")),
+      ("data-active", Some("[data-active]")),
+      ("data-[state=open]", Some("[data-state=\"open\"]")),
+      ("data-[state='open']", Some("[data-state='open']")),
+      ("data-[lang=EN_i]", Some("[data-lang=\"EN\" i]")),
+      ("data-[size]", Some("[data-size]")),
+      ("data-a.b", None),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
       ("[&.active]", Some(".active")),
       ("[&[data-x]]", Some("[data-x]")),
@@ -749,7 +820,14 @@ mod tests {
       "after",
       "first",
       "odd",
+      "only-of-type",
+      "checked",
+      "read-only",
       "empty",
+      "enabled",
+      "disabled",
+      "aria-checked",
+      "data-active",
       "nth-3",
       "nth-last-of-type-2",
       "motion-safe",
