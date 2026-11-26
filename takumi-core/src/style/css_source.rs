@@ -56,7 +56,7 @@ impl<'de> Deserialize<'de> for Declarations {
           // `undefined` / `null` is how a JS caller writes "no declaration".
           if !matches!(value, CssInput::Unexpected(CssUnexpected::Unit)) {
             let value = match value {
-              CssInput::Number(number) => PropertyId::from_camel_case(&name).number_css(number),
+              CssInput::Number(number) => Declaration::property(&name).number_css(number),
               value => value.into_string(),
             };
 
@@ -364,7 +364,7 @@ impl Declarations {
 
 impl Declaration {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    let property = PropertyId::from_camel_case(&self.name);
+    let property = Self::property(&self.name);
 
     if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
       property
@@ -377,6 +377,15 @@ impl Declaration {
 
     let _ = write!(css, "{}:{};", self.css_name(), self.value);
     Ok(())
+  }
+
+  /// The property `name` names, in camelCase or, as `css_name` keeps it, in kebab-case.
+  fn property(name: &str) -> PropertyId {
+    if name.contains('-') {
+      return PropertyId::from_kebab_case(name);
+    }
+
+    PropertyId::from_camel_case(name)
   }
 
   /// The CSS spelling of a property name written in camelCase.
@@ -427,6 +436,14 @@ mod tests {
         "style": { "margin": "1px", "marginTop": "2px", "--brand": "#5b21b6", "width": 55 },
       })),
       Ok(".card{--brand:#5b21b6;margin:1px;margin-top:2px;width:55px;}".into())
+    );
+  }
+
+  #[test]
+  fn a_number_takes_px_under_a_kebab_case_name() {
+    assert_eq!(
+      css(json!({ "selector": ".a", "style": { "margin-top": 2, "flex-grow": 1, "--gap": 3 } })),
+      Ok(".a{--gap:3;flex-grow:1;margin-top:2px;}".into())
     );
   }
 
