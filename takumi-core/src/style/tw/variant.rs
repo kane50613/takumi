@@ -109,7 +109,7 @@ impl Breakpoint {
       .map(|width| width.to_css_string().into())
       .unwrap_or_default();
 
-    (WidthOrder { at_least, width }, Arc::clone(&self.token))
+    (WidthOrder::new(at_least, width), Arc::clone(&self.token))
   }
 }
 
@@ -131,6 +131,12 @@ pub(crate) struct ContainerVariant {
 struct WidthOrder {
   at_least: bool,
   width: Box<str>,
+}
+
+impl WidthOrder {
+  fn new(at_least: bool, width: Box<str>) -> Self {
+    Self { at_least, width }
+  }
 }
 
 impl Ord for WidthOrder {
@@ -211,10 +217,7 @@ impl ContainerVariant {
 
     Some(Self {
       query,
-      order: WidthOrder {
-        at_least,
-        width: width.into(),
-      },
+      order: WidthOrder::new(at_least, width.into()),
     })
   }
 }
@@ -470,34 +473,28 @@ impl Variants {
   /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
   /// query, a breakpoint, the preference variants, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
-    let mut arbitrary = self.arbitrary.clone();
-
-    arbitrary.sort_unstable_by(|left, right| right.cmp(left));
-
     VariantOrder {
-      arbitrary,
+      arbitrary: descending(self.arbitrary.iter().cloned()),
       late: self.late,
-      container: {
-        let mut orders: Vec<WidthOrder> = self
+      container: descending(
+        self
           .container
           .iter()
-          .map(|container| container.order.clone())
-          .collect();
-
-        orders.sort_unstable_by(|left, right| right.cmp(left));
-        orders
-      },
-      breakpoint: {
-        let mut orders: Vec<BreakpointOrder> =
-          self.breakpoint.iter().map(Breakpoint::order).collect();
-
-        orders.sort_unstable_by(|left, right| right.cmp(left));
-        orders
-      },
+          .map(|container| container.order.clone()),
+      ),
+      breakpoint: descending(self.breakpoint.iter().map(Breakpoint::order)),
       preference: self.preference,
       ranks: self.ranks,
     }
   }
+}
+
+/// `orders`, the greatest first.
+fn descending<T: Ord>(orders: impl Iterator<Item = T>) -> Vec<T> {
+  let mut orders: Vec<T> = orders.collect();
+
+  orders.sort_unstable_by(|left, right| right.cmp(left));
+  orders
 }
 
 /// Tailwind's variant order for one utility.
