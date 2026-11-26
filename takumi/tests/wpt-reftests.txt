@@ -2741,7 +2741,6 @@ css/css-text/word-space-transform/word-space-transform-029.html
 css/css-text/writing-system/writing-system-font-001.html
 !css/css-transforms/3d-rendering-context-and-inline.html
 !css/css-transforms/3dtransform-and-filter-no-perspective-001.html
-!css/css-transforms/animation/rotate-explicit-and-implicit-keyframes.html
 !css/css-transforms/animation/transform-additive-animation.html
 !css/css-transforms/animation/transform-box-will-change-transform-layer.html
 !css/css-transforms/animation/transform-box.html

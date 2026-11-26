@@ -352,12 +352,12 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
   match name {
     "spin" => Some(KeyframesRule {
       name: "spin".to_string(),
-      keyframes: vec![
-        keyframe(0.25, [StyleDeclaration::rotate(Some(Angle::new(90.0)))]),
-        keyframe(0.5, [StyleDeclaration::rotate(Some(Angle::new(180.0)))]),
-        keyframe(0.75, [StyleDeclaration::rotate(Some(Angle::new(270.0)))]),
-        keyframe(1.0, [StyleDeclaration::rotate(Some(Angle::new(359.999)))]),
-      ],
+      keyframes: vec![keyframe(
+        1.0,
+        [StyleDeclaration::transform(Some(
+          [Transform::Rotate(Angle::new(360.0))].into(),
+        ))],
+      )],
       media_queries: Vec::new(),
     }),
     "ping" => Some(KeyframesRule {
@@ -947,6 +947,49 @@ mod tests {
 
     assert_eq!(animated.svg_data.opacity.0, 0.25);
     assert_eq!(animated.misc3_data.rotate, Some(Angle::new(45.0)));
+  }
+
+  /// Blink's `RotateTransformOperation::Blend` and `CSSAngleInterpolationType` blend the specified
+  /// degrees, so a keyframe past a turn spins rather than standing still.
+  #[test]
+  fn a_rotation_interpolates_its_specified_degrees() {
+    let (style, stylesheet) = linear_animation(
+      "from { rotate: 0deg; transform: rotate(0deg); filter: hue-rotate(0deg) } to { rotate: 720deg; transform: rotate(360deg); filter: hue-rotate(720deg) }",
+    );
+    let animated = animate(style, &stylesheet, 250);
+
+    assert_eq!(animated.misc3_data.rotate, Some(Angle::new(180.0)));
+    assert_eq!(
+      animated.svg_data.transform,
+      Some([Transform::Rotate(Angle::new(90.0))].into())
+    );
+    assert_eq!(
+      animated.misc1_data.filter,
+      vec![Filter::HueRotate(Angle::new(180.0))]
+    );
+  }
+
+  /// Tailwind's theme.css `@keyframes spin { to { transform: rotate(360deg) } }`.
+  #[test]
+  fn tailwind_spin_turns_once_a_second() {
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("spin").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let at = |time| {
+      animate(style.clone(), &StyleSheet::default(), time)
+        .svg_data
+        .transform
+        .clone()
+    };
+
+    assert_eq!(at(250), Some([Transform::Rotate(Angle::new(90.0))].into()));
+    assert_eq!(at(500), Some([Transform::Rotate(Angle::new(180.0))].into()));
   }
 
   /// A keyframe's `animation-timing-function` eases the interval it starts.

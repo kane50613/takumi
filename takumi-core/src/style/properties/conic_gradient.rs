@@ -202,7 +202,11 @@ impl ConicGradientTile {
     let (width, height) = (size.width.ceil() as u32, size.height.ceil() as u32);
     let (cx, cy) = gradient.resolve_center(size.width, size.height, sizing);
 
-    let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
+    let start_rad = gradient
+      .from_angle
+      .normalized()
+      .to_radians()
+      .rem_euclid(TAU);
     let start_turns = start_rad / TAU;
 
     let resolved_stops = gradient.resolve_stops(sizing, current_color);
