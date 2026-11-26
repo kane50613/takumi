@@ -320,7 +320,7 @@ pub(crate) struct TwDropShadow {
   /// The shadow the preset falls back to.
   pub shadow: TextShadow,
   /// Preset backing `var(--drop-shadow-<token>, shadow)`; `None` for
-  /// arbitrary values and `drop-shadow-none`, empty for bare `drop-shadow`.
+  /// arbitrary values and `drop-shadow-none`.
   pub token: Option<&'static str>,
 }
 

@@ -984,7 +984,14 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
     }
   })]),
   "drop-shadow" => Utility::functional(&[value!(TwDropShadow, drop_shadow)])
-    .bare(|builder| drop_shadow(dsp("", ts(1.0, 2.0, 26)), builder)),
+    .bare(|builder| {
+      let layers = DROP_SHADOW
+        .iter()
+        .map(|layer| Filter::DropShadow(layer.clone()).to_css_string())
+        .collect::<Vec<_>>();
+
+      builder.push_filter(false, "drop-shadow", &layers.join(" "));
+    }),
   "drop-shadow-xs" => Utility::fixed(|builder| drop_shadow(dsp("xs", ts(1.0, 1.0, 13)), builder)),
   "drop-shadow-sm" => Utility::fixed(|builder| drop_shadow(dsp("sm", ts(1.0, 2.0, 38)), builder)),
   "drop-shadow-md" => Utility::fixed(|builder| drop_shadow(dsp("md", ts(3.0, 3.0, 31)), builder)),
@@ -1283,14 +1290,9 @@ fn animation_shorthand_css(animations: &Animations) -> String {
     .join(", ")
 }
 
-/// `drop-shadow(var(--drop-shadow-md, …))` for a preset; the bare `drop-shadow`
-/// utility reads `--drop-shadow` itself.
+/// `drop-shadow(var(--drop-shadow-md, …))` for a preset.
 fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
   match drop_shadow.token {
-    Some("") => format!(
-      "drop-shadow(var(--drop-shadow, {}))",
-      drop_shadow.shadow.to_css_string()
-    ),
     Some(token) => format!(
       "drop-shadow(var(--drop-shadow-{token}, {}))",
       drop_shadow.shadow.to_css_string()
@@ -1384,6 +1386,9 @@ const SHADOW_XL: [BoxShadow; 2] = [
   bs(false, 20.0, 25.0, -5.0, 26),
   bs(false, 8.0, 10.0, -6.0, 26),
 ];
+
+/// `theme.css`'s deprecated `--drop-shadow`, which Tailwind inlines into the bare utility.
+const DROP_SHADOW: [TextShadow; 2] = [ts(1.0, 2.0, 26), ts(1.0, 1.0, 15)];
 
 const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(2.0, 2.0, 19)];
 const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];

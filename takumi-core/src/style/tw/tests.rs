@@ -2333,3 +2333,26 @@ fn test_corner_gradient_keeps_its_keyword_for_the_box() {
     })
   );
 }
+
+#[test]
+fn test_bare_drop_shadow_draws_both_theme_layers() {
+  use crate::style::properties::{Filter, TextShadow};
+
+  let values = TailwindValues::from_str("drop-shadow").unwrap();
+  let computed =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+  let layer = |blur: f32, alpha: u8| {
+    Filter::DropShadow(TextShadow {
+      offset_x: Length::Px(0.0),
+      offset_y: Length::Px(1.0),
+      blur_radius: Length::Px(blur),
+      color: ColorInput::Value(Color([0, 0, 0, alpha])),
+    })
+  };
+
+  assert_eq!(
+    computed.misc1_data.filter,
+    vec![layer(2.0, 26), layer(1.0, 15)]
+  );
+}
