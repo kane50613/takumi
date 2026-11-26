@@ -878,6 +878,16 @@ describe("fromJsx", () => {
     expect((await fromJsx(select)).node).not.toHaveProperty("attributes");
   });
 
+  test("writes an array form value as React DOM's server renderer does", async () => {
+    const input = <input defaultValue={["a", "b"]} />;
+    const textarea = <textarea defaultValue={["a", "b"]} />;
+
+    expect(renderToStaticMarkup(input)).toBe('<input value="a,b"/>');
+    expect(renderToStaticMarkup(textarea)).toBe("<textarea>a,b</textarea>");
+    expect((await fromJsx(input)).node).toMatchObject({ attributes: { value: "a,b" } });
+    expect((await fromJsx(textarea)).node).toMatchObject({ type: "text", text: "a,b" });
+  });
+
   test("writes a number id and lang as text", async () => {
     const { node } = await fromJsx({
       type: "div",

@@ -233,11 +233,15 @@ export function textareaValue(props: {
   value?: unknown;
   defaultValue?: unknown;
 }): string | undefined {
-  return textValue(props.value ?? props.defaultValue);
+  return formValueText(props.value ?? props.defaultValue);
 }
 
 /** The text React DOM writes for a prop `name` of `value`, `undefined` when it writes none. */
 function attributeText(name: string, value: unknown): string | undefined {
+  if (name === "value") {
+    return formValueText(value);
+  }
+
   if (typeof value !== "boolean") {
     return textValue(value);
   }
@@ -247,6 +251,11 @@ function attributeText(name: string, value: unknown): string | undefined {
   }
 
   return value ? "" : undefined;
+}
+
+/** The text of a form control's value, which React DOM coerces from an array as `String` does. */
+function formValueText(value: unknown): string | undefined {
+  return Array.isArray(value) ? String(value) : textValue(value);
 }
 
 /** The text of a string, number, or bigint prop. */
