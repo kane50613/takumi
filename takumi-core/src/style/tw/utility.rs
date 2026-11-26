@@ -129,6 +129,8 @@ impl Utility {
         ValueMatch::Emitted => {}
       }
 
+      builder.theme_keyframes = builtin.theme_keyframes;
+
       let declarations = builtin.finish().declarations;
 
       // A value composing through custom properties has no single longhand to defer, so it
@@ -1006,6 +1008,8 @@ fn animation(animation: TwAnimation, builder: &mut TailwindDeclarationBuilder) {
     builder.push_all(StyleDeclaration::expand_animation(animations));
     return;
   };
+
+  builder.theme_keyframes = tailwind_theme_keyframes(&token);
 
   let fallback = animation_shorthand_css(&animations);
   let specified_value = if fallback.is_empty() {

@@ -2411,6 +2411,8 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
+    parent_context.note_theme_keyframes(&node);
+
     let mut tree =
       Self::build_in_containers(parent_context, node.clone(), blockifies_children, None);
 
@@ -3566,6 +3568,7 @@ impl RenderContext {
     let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
+      &self.theme_keyframes(),
       self.time_ms(),
       self.sizing.viewport,
     )) {
@@ -3914,7 +3917,7 @@ mod tests {
     resources::font::Fonts,
     style::{
       ComputedStyle, Direction, Display, Float, Length, PageName, PropertyRule, PropertySyntax,
-      SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TailwindValues,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -3924,6 +3927,45 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  /// Tailwind emits its theme `@keyframes` once a `tw` utility in the document reads them, so a
+  /// stylesheet's `animation: pulse` runs only beside an `animate-pulse`.
+  #[test]
+  fn theme_keyframes_run_only_once_a_tw_utility_reads_them() {
+    let opacities = |with_tw: bool| {
+      let context = RenderContext::builder()
+        .fonts(Fonts::default().snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::default())
+            .build(),
+        )
+        .stylesheet(Arc::new(parse_stylesheet(
+          ".plain { animation: pulse 2s linear }",
+        )))
+        .time_ms(1000)
+        .build();
+      let mut children = vec![Node::container([]).with_class_name("plain")];
+
+      if with_tw {
+        children
+          .push(Node::container([]).with_tw(TailwindValues::from_str("animate-pulse").unwrap()));
+      }
+
+      let tree = RenderNode::from_node(&context, Node::container(children));
+
+      tree
+        .children
+        .as_deref()
+        .expect("block children")
+        .iter()
+        .map(|child| child.context.style.svg_data.opacity.0)
+        .collect::<Vec<_>>()
+    };
+
+    assert_eq!(opacities(false), [1.0]);
+    assert_eq!(opacities(true), [0.5, 0.5]);
   }
 
   /// A style every row repeats stays shared while the rows' other styles come and go.

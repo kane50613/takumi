@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::sync::LazyLock;
 
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
@@ -48,15 +48,17 @@ pub(crate) struct ElementAnimations<'s> {
 }
 
 impl<'s> ElementAnimations<'s> {
-  /// The animations `base_style` runs at `time`, or `None` when it runs none.
+  /// The animations `base_style` runs at `time` from the keyframes of `stylesheet`, then of
+  /// `theme_keyframes`, or `None` when it runs none.
   pub(crate) fn new(
     base_style: &ComputedStyle,
     stylesheet: &'s StyleSheet,
+    theme_keyframes: &[&'static KeyframesRule],
     time: u64,
     viewport: Viewport,
   ) -> Option<Self> {
     let animations: Vec<ActiveAnimation> =
-      active_animations(base_style, stylesheet, time, viewport).collect();
+      active_animations(base_style, stylesheet, theme_keyframes, time, viewport).collect();
 
     (!animations.is_empty()).then_some(Self { animations })
   }
@@ -171,7 +173,7 @@ impl<'s> ElementAnimations<'s> {
 
 /// An animation `animation-name` runs that is sampled at the render's time.
 struct ActiveAnimation<'s> {
-  keyframes: Cow<'s, KeyframesRule>,
+  keyframes: &'s KeyframesRule,
   /// The longhands its keyframes declare.
   longhands: PropertyMask,
   sample: AnimationSample,
@@ -182,6 +184,7 @@ struct ActiveAnimation<'s> {
 fn active_animations<'s>(
   base_style: &ComputedStyle,
   stylesheet: &'s StyleSheet,
+  theme_keyframes: &[&'static KeyframesRule],
   time: u64,
   viewport: Viewport,
 ) -> impl Iterator<Item = ActiveAnimation<'s>> {
@@ -192,7 +195,7 @@ fn active_animations<'s>(
     .iter()
     .enumerate()
     .filter_map(move |(index, name)| {
-      let keyframes = find_keyframes(stylesheet, name.as_ref()?, viewport)?;
+      let keyframes = find_keyframes(stylesheet, theme_keyframes, name.as_ref()?, viewport)?;
       let AnimationDuration(duration) = repeated_list_value(&animation.animation_duration, index);
       let delay: AnimationTime = repeated_list_value(&animation.animation_delay, index);
       // Blink pauses a paused CSS animation as it creates it, holding its current time at 0.
@@ -219,11 +222,14 @@ fn active_animations<'s>(
     })
 }
 
+/// The last `@keyframes` named `name` in `stylesheet` whose media queries match, else the one
+/// in `theme_keyframes`.
 pub(crate) fn find_keyframes<'a>(
   stylesheet: &'a StyleSheet,
+  theme_keyframes: &[&'static KeyframesRule],
   name: &str,
   viewport: Viewport,
-) -> Option<Cow<'a, KeyframesRule>> {
+) -> Option<&'a KeyframesRule> {
   stylesheet
     .keyframes
     .iter()
@@ -235,8 +241,12 @@ pub(crate) fn find_keyframes<'a>(
           .iter()
           .all(|media_query| media_query.matches(viewport))
     })
-    .map(Cow::Borrowed)
-    .or_else(|| tailwind_animation_keyframes(name).map(Cow::Owned))
+    .or_else(|| {
+      theme_keyframes
+        .iter()
+        .find(|rule| rule.name == name)
+        .copied()
+    })
 }
 
 impl KeyframeRule {
@@ -352,87 +362,65 @@ impl KeyframesRule {
   }
 }
 
-fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
-  match name {
-    "spin" => Some(KeyframesRule {
-      name: "spin".to_string(),
-      keyframes: vec![
-        keyframe(0.25, [StyleDeclaration::rotate(Some(Angle::new(90.0)))]),
-        keyframe(0.5, [StyleDeclaration::rotate(Some(Angle::new(180.0)))]),
-        keyframe(0.75, [StyleDeclaration::rotate(Some(Angle::new(270.0)))]),
-        keyframe(1.0, [StyleDeclaration::rotate(Some(Angle::new(359.999)))]),
-      ],
-      media_queries: Vec::new(),
-    }),
-    "ping" => Some(KeyframesRule {
-      name: "ping".to_string(),
-      keyframes: vec![
-        keyframe(
-          0.75,
-          [
-            StyleDeclaration::scale(Some(SpacePair::from_single(PercentageNumber(2.0)))),
-            StyleDeclaration::opacity(PercentageNumber(0.0)),
-          ],
-        ),
-        keyframe(
-          1.0,
-          [
-            StyleDeclaration::scale(Some(SpacePair::from_single(PercentageNumber(2.0)))),
-            StyleDeclaration::opacity(PercentageNumber(0.0)),
-          ],
-        ),
-      ],
-      media_queries: Vec::new(),
-    }),
-    "pulse" => Some(KeyframesRule {
-      name: "pulse".to_string(),
-      keyframes: vec![keyframe(
-        0.5,
-        [StyleDeclaration::opacity(PercentageNumber(0.5))],
-      )],
-      media_queries: Vec::new(),
-    }),
-    "bounce" => Some(KeyframesRule {
-      name: "bounce".to_string(),
-      keyframes: vec![
-        keyframe(
-          0.0,
-          [StyleDeclaration::translate(SpacePair::from_pair(
-            Length::Px(0.0),
-            Length::Percentage(-25.0),
-          ))],
-        ),
-        keyframe(
-          0.5,
-          [StyleDeclaration::translate(SpacePair::from_pair(
-            Length::Px(0.0),
-            Length::Percentage(0.0),
-          ))],
-        ),
-        keyframe(
-          1.0,
-          [StyleDeclaration::translate(SpacePair::from_pair(
-            Length::Px(0.0),
-            Length::Percentage(-25.0),
-          ))],
-        ),
-      ],
-      media_queries: Vec::new(),
-    }),
-    _ => None,
+/// Tailwind's theme `@keyframes`, which it emits once a utility reads their `--animate-*` variable.
+/// <https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/theme.css>
+///
+/// Approximate: Tailwind's `spin` is one `to { transform: rotate(360deg) }`. An [`Angle`] keeps
+/// its value in [0, 360) and interpolates the shorter way round, so `spin` turns through quarter
+/// keyframes instead, which match Tailwind only under the `linear` easing `animate-spin` uses.
+const TAILWIND_THEME_KEYFRAMES: &str = r"
+@keyframes spin {
+  25% {
+    transform: rotate(90deg);
+  }
+
+  50% {
+    transform: rotate(180deg);
+  }
+
+  75% {
+    transform: rotate(270deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
 
-fn keyframe<const N: usize>(offset: f32, declarations: [StyleDeclaration; N]) -> KeyframeRule {
-  let mut block = StyleDeclarationBlock::default();
-  for declaration in declarations {
-    block.push(declaration, false);
+@keyframes ping {
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
   }
 
-  KeyframeRule {
-    offsets: vec![offset],
-    declarations: block,
+  50% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
   }
+}
+";
+
+/// The theme `@keyframes` Tailwind emits for the `animate-<token>` utility.
+pub(crate) fn tailwind_theme_keyframes(token: &str) -> Option<&'static KeyframesRule> {
+  static KEYFRAMES: LazyLock<Vec<KeyframesRule>> =
+    LazyLock::new(|| StyleSheet::parse_loosy(TAILWIND_THEME_KEYFRAMES).keyframes);
+
+  KEYFRAMES.iter().find(|rule| rule.name == token)
 }
 
 /// One sampled point on an animation's timeline.
@@ -817,7 +805,7 @@ mod tests {
   use crate::{
     style::{
       SizingContext,
-      animation::{find_keyframes, sample_animation_progress, tailwind_animation_keyframes},
+      animation::{find_keyframes, sample_animation_progress, tailwind_theme_keyframes},
       *,
     },
     viewport::Viewport,
@@ -1019,7 +1007,7 @@ mod tests {
       }),
       ..Default::default()
     };
-    let animations = ElementAnimations::new(&style, &stylesheet, 250, sizing().viewport)
+    let animations = ElementAnimations::new(&style, &stylesheet, &[], 250, sizing().viewport)
       .expect("an animation runs");
     let animated = animations.custom_properties(&style, &sizing(), current_color());
 
@@ -1028,7 +1016,7 @@ mod tests {
 
   /// `style` with every animation it runs at `time` applied.
   fn animate(style: ComputedStyle, stylesheet: &StyleSheet, time: u64) -> ComputedStyle {
-    let animations = ElementAnimations::new(&style, stylesheet, time, sizing().viewport)
+    let animations = ElementAnimations::new(&style, stylesheet, &[], time, sizing().viewport)
       .expect("an animation runs");
     let longhands = animations.longhands();
 
@@ -1597,17 +1585,85 @@ mod tests {
     let stylesheet = StyleSheet::parse("@keyframes Fade { from { opacity: 0 } }").unwrap();
     let viewport = sizing().viewport;
 
-    assert!(find_keyframes(&stylesheet, "Fade", viewport).is_some());
-    assert!(find_keyframes(&stylesheet, "fade", viewport).is_none());
-    assert!(find_keyframes(&stylesheet, "Spin", viewport).is_none());
+    assert!(find_keyframes(&stylesheet, &[], "Fade", viewport).is_some());
+    assert!(find_keyframes(&stylesheet, &[], "fade", viewport).is_none());
   }
 
+  /// Tailwind emits its theme `@keyframes` only for a utility that reads them, so a stylesheet's
+  /// `animation: spin` without them runs nothing.
   #[test]
-  fn tailwind_animation_presets_include_built_in_keyframes() {
-    assert!(tailwind_animation_keyframes("spin").is_some());
-    assert!(tailwind_animation_keyframes("ping").is_some());
-    assert!(tailwind_animation_keyframes("pulse").is_some());
-    assert!(tailwind_animation_keyframes("bounce").is_some());
+  fn theme_keyframes_apply_only_once_a_utility_reads_them() {
+    let stylesheet = StyleSheet::default();
+    let viewport = sizing().viewport;
+    let spin = tailwind_theme_keyframes("spin").expect("Tailwind's theme has spin");
+
+    assert!(find_keyframes(&stylesheet, &[], "spin", viewport).is_none());
+    assert_eq!(
+      find_keyframes(&stylesheet, &[spin], "spin", viewport),
+      Some(spin)
+    );
+    assert!(tailwind_theme_keyframes("wiggle").is_none());
+  }
+
+  /// Tailwind's `spin` turns `transform` a full circle from its underlying value.
+  #[test]
+  fn theme_spin_turns_the_transform_a_full_circle() {
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("spin").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1s").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+    let stylesheet = StyleSheet::default();
+    let spin = tailwind_theme_keyframes("spin").unwrap();
+    let at = |time| {
+      let animations =
+        ElementAnimations::new(&style, &stylesheet, &[spin], time, sizing().viewport)
+          .expect("spin runs");
+      let mut animated = style.clone();
+
+      animations.apply(
+        &mut animated,
+        &animations.longhands(),
+        &sizing(),
+        current_color(),
+      );
+      assert_eq!(animated.misc3_data.rotate, None);
+      animated.svg_data.transform.clone()
+    };
+    let rotated = |degrees| Some(Transforms::from([Transform::Rotate(Angle::new(degrees))]));
+
+    assert_eq!(at(125), rotated(45.0));
+    assert_eq!(at(625), rotated(225.0));
+    assert_eq!(at(875), rotated(315.0));
+  }
+
+  /// Tailwind's `bounce` eases each half with the timing function its keyframes declare.
+  #[test]
+  fn theme_bounce_eases_each_half_as_its_keyframes_declare() {
+    let bounce = tailwind_theme_keyframes("bounce").unwrap();
+    let timing_functions: Vec<_> = bounce
+      .keyframes
+      .iter()
+      .map(|keyframe| (keyframe.offsets.clone(), keyframe.timing_function()))
+      .collect();
+
+    assert_eq!(
+      timing_functions,
+      [
+        (
+          vec![0.0, 1.0],
+          Some(AnimationTimingFunction::CubicBezier(0.8, 0.0, 1.0, 1.0))
+        ),
+        (
+          vec![0.5],
+          Some(AnimationTimingFunction::CubicBezier(0.0, 0.0, 0.2, 1.0))
+        ),
+      ]
+    );
   }
 
   #[test]

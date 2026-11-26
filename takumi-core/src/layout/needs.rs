@@ -260,7 +260,12 @@ impl NeedsCollector {
   /// Adds the images the box's `@keyframes` switch to.
   fn add_keyframes(&mut self, context: &RenderContext) {
     for name in context.style.misc1_data.animation_name.iter().flatten() {
-      let Some(rule) = find_keyframes(context.stylesheet(), name, context.sizing.viewport) else {
+      let Some(rule) = find_keyframes(
+        context.stylesheet(),
+        &context.theme_keyframes(),
+        name,
+        context.sizing.viewport,
+      ) else {
         continue;
       };
 

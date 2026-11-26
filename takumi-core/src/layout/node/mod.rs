@@ -5,7 +5,7 @@ mod input;
 
 pub(crate) use directionality::DirectionStyle;
 
-use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, mem::take, ptr, sync::Arc};
 
 use serde::Deserialize;
 use thin_vec::ThinVec;
@@ -25,8 +25,8 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{
-    Direction, IgnoredDeclaration, Lang, Style, StyleDeclaration, TailwindValues, ToCss, TwRule,
-    tw::TailwindCache,
+    Direction, IgnoredDeclaration, KeyframesRule, Lang, Style, StyleDeclaration, TailwindValues,
+    ToCss, TwRule, tw::TailwindCache,
   },
   viewport::Viewport,
 };
@@ -915,6 +915,23 @@ impl Node {
           .iter()
           .any(|child| child.has_tw_container_queries(cache))
       })
+  }
+
+  /// Adds the theme `@keyframes` the subtree's `tw` utilities read to `keyframes`, each once.
+  pub(crate) fn collect_tw_theme_keyframes(
+    &self,
+    cache: &TailwindCache,
+    keyframes: &mut Vec<&'static KeyframesRule>,
+  ) {
+    for rule in self.tw_rules(cache).filter_map(|rule| rule.theme_keyframes) {
+      if !keyframes.iter().any(|known| ptr::eq(*known, rule)) {
+        keyframes.push(rule);
+      }
+    }
+
+    for child in self.children().into_iter().flatten() {
+      child.collect_tw_theme_keyframes(cache, keyframes);
+    }
   }
 }
 
