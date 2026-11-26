@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>tailwind_container_direction</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 640px; height: 400px">
+    <div tw="flex flex-col gap-4 p-4 font-sans text-base">
+      <div tw="@container w-[300px]">
+        <div tw="flex flex-col @md:flex-row gap-2 p-2 bg-sky-100 @max-md:bg-amber-100">
+          <div tw="w-16 h-10 bg-sky-500"></div>
+          <div tw="flex-1">Narrow container</div>
+        </div>
+      </div>
+      <div tw="@container w-[600px]">
+        <div tw="flex flex-col @md:flex-row gap-2 p-2 bg-sky-100 @max-md:bg-amber-100">
+          <div tw="w-16 h-10 bg-sky-500"></div>
+          <div tw="flex-1">Wide container</div>
+        </div>
+      </div>
+      <div dir="rtl" tw="flex gap-2 p-2 bg-gray-100">
+        <div tw="w-16 h-10 bg-gray-400 rtl:bg-rose-500"></div>
+        <div tw="w-16 h-10 bg-gray-400 ltr:bg-emerald-500"></div>
+        <div dir="ltr" tw="w-16 h-10 bg-gray-400 rtl:bg-rose-500"></div>
+      </div>
+    </div>
+  </body>
+</html>
