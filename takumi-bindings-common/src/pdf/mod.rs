@@ -444,8 +444,7 @@ impl MeasureInputs {
 }
 
 impl PdfRenderOptions {
-  /// Parses every HTML band with `parse`, then appends the `<style>` CSS of the document and its
-  /// bands to `css`.
+  /// Parses every HTML band with `parse` and appends the document's and bands' `<style>` CSS to `css`.
   pub fn resolve_bands<E>(
     &mut self,
     mut document_css: Vec<String>,
