@@ -12,6 +12,7 @@ CSS text now reads lengths the way Chrome does.
 - A negative `line-height` is invalid, also inside the `font` shorthand.
 - A `font-size` calculation that comes out negative is `0px`.
 - A unitless number other than `0` is no longer a length in px. `font-size: 12` and `text-indent: 5` are dropped. SVG attributes and the properties Chrome parses like them, such as `stroke-width`, `r`, and `stroke-dasharray`, still take one.
+- A gradient stop takes no unitless number other than `0`. Nor does a `blur()` radius, even in an SVG `filter` attribute. A `polygon()` vertex needs both coordinates.
 - `calc(10% + 2em)` computes its `em` part to px on the element that declares it, so children inherit `calc(10% + 32px)`. A percentage or calculated `line-height` computes to px against the element's own font size.
 - `lh` resolves against the element's own font size and line height, not its parent's.
 
@@ -29,7 +30,7 @@ Numbers in a JSX style object still work. A number becomes px unless the propert
 
 #### Migration
 
-Write a unit after a length in CSS text, since a declaration with a unitless length other than `0` is now dropped.
+Write a unit after a length in CSS text, such as in `font-size` or `text-indent`, since a unitless length other than `0` now drops the declaration. SVG attributes and the SVG properties listed above still take a bare number.
 
 ```diff
 - font-size: 12;
