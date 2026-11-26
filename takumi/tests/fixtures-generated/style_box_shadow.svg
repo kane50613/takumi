@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#00f"/>
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM0 0h100v100h-100v-100Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM1 1h98v98h-98v-98Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <filter id="bl1" filterUnits="userSpaceOnUse" x="-15" y="-15" width="1230" height="660">

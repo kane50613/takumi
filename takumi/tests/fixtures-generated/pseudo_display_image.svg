@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#f3f4f6"/>
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 17h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <filter id="bl1" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -43,7 +43,7 @@
     <use href="#g13" x="103.33" y="101.5"/>
   </g>
   <clipPath id="cp2">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 17h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp2)">
     <filter id="bl3" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -84,7 +84,7 @@
     <use href="#g13" x="424.96" y="101.5"/>
   </g>
   <clipPath id="cp4">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 17h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp4)">
     <filter id="bl5" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -129,7 +129,7 @@
     <use href="#g13" x="680.63" y="101.5"/>
   </g>
   <clipPath id="cp6">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 17h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp6)">
     <filter id="bl7" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -174,7 +174,7 @@
     <use href="#g13" x="991.27" y="101.5"/>
   </g>
   <clipPath id="cp8">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 165h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp8)">
     <filter id="bl9" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -204,7 +204,7 @@
     <use href="#g9" x="153.4" y="185"/>
     <use href="#g37" x="160" y="185"/>
   </g>
-  <path d="M47 228c10.49 0 19 6.72 19 15s-8.51 15-19 15-19-6.72-19-15 8.51-15 19-15Z" fill="#fee2e2"/>
+  <path d="M47 229c9.94 0 18 6.27 18 14s-8.06 14-18 14-18-6.27-18-14 8.06-14 18-14Z" fill="#fee2e2"/>
   <path d="M47 228c10.49 0 19 6.72 19 15s-8.51 15-19 15-19-6.72-19-15 8.51-15 19-15Zm0 2c9.39 0 17 5.82 17 13s-7.61 13-17 13-17-5.82-17-13 7.61-13 17-13Z" fill="#dc2626" fill-rule="evenodd"/>
   <use href="#g40" x="38" y="251" fill="#7f1d1d"/>
   <g fill="#111827">
@@ -216,7 +216,7 @@
   </g>
   <use href="#g44" x="106.3" y="251" fill="#7c3aed"/>
   <clipPath id="cp10">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 165h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp10)">
     <filter id="bl11" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -317,7 +317,7 @@
     <rect x="320" y="213" width="240" height="60" fill="url(#lg13)"/>
   </g>
   <clipPath id="cp14">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 165h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp14)">
     <filter id="bl15" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -418,7 +418,7 @@
     <rect x="612" y="213" width="240" height="60" fill="url(#rg17)"/>
   </g>
   <clipPath id="cp18">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 165h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp18)">
     <filter id="bl19" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -636,7 +636,7 @@
     </g>
   </g>
   <clipPath id="cp22">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 312h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 313h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp22)">
     <filter id="bl23" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -678,7 +678,7 @@
     <rect x="28" y="361" width="240" height="60" fill="url(#lg25)"/>
   </g>
   <clipPath id="cp26">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 312h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 313h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp26)">
     <filter id="bl27" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -703,7 +703,7 @@
   </g>
   <use href="#i0" transform="matrix(.438 0 0 .438 320 363)"/>
   <clipPath id="cp28">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 312h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 313h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp28)">
     <filter id="bl29" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">
@@ -869,7 +869,7 @@
   </linearGradient>
   <rect x="612" y="421" width="240" height="60" fill="url(#lg31)"/>
   <clipPath id="cp32">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 312h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 313h266c3.87 0 7 3.13 7 7v122c0 3.87-3.13 7-7 7h-266c-3.87 0-7-3.13-7-7v-122c0-3.87 3.13-7 7-7Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp32)">
     <filter id="bl33" filterUnits="userSpaceOnUse" x="-3" y="-3" width="1206" height="636">

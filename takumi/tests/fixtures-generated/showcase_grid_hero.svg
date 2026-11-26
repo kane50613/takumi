@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#030409"/>
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM348 194h504v243h-504v-243Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM349 195h502v241h-502v-241Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
