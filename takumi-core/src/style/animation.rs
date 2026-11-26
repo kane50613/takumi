@@ -487,8 +487,10 @@ fn sample_animation_progress(
             let fraction = count.fract();
             if fraction > f32::EPSILON {
               apply_direction(fraction, direction, completed_iterations)
+            } else if completed_iterations == 0 {
+              start_progress(direction)
             } else {
-              end_progress(direction, count.max(1.0) as usize - 1)
+              end_progress(direction, completed_iterations - 1)
             }
           }
         };
@@ -1439,6 +1441,25 @@ mod tests {
     );
 
     assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
+  }
+
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-simple-iteration-progress>
+  #[test]
+  fn a_zero_iteration_animation_fills_forwards_with_its_start() {
+    let sample = |direction| {
+      sample_animation_progress(
+        500.0,
+        1000.0,
+        0.0,
+        AnimationIterationCount::Number(0.0),
+        direction,
+        AnimationFillMode::Forwards,
+      )
+      .map(|sample| sample.progress)
+    };
+
+    assert_eq!(sample(AnimationDirection::Normal), Some(0.0));
+    assert_eq!(sample(AnimationDirection::Reverse), Some(1.0));
   }
 
   #[test]
