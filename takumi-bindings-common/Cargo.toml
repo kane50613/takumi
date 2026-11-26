@@ -12,7 +12,6 @@ log.workspace = true
 
 [dependencies.serde_json]
 workspace = true
-features = ["float_roundtrip"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"
