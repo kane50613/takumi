@@ -26,3 +26,12 @@ Numbers in a JSX style object still work. A number becomes px unless the propert
   height: 1lh;
 }
 ```
+
+#### Migration
+
+Write a unit after a length in CSS text, since a declaration with a unitless length other than `0` is now dropped.
+
+```diff
+- font-size: 12;
++ font-size: 12px;
+```
