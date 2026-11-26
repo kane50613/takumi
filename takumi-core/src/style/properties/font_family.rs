@@ -6,9 +6,7 @@ use std::{
   },
 };
 
-use cssparser::{
-  CowRcStr, ParseError as CssParseError, Parser, match_ignore_ascii_case, serialize_string,
-};
+use cssparser::{ParseError as CssParseError, Parser, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   FromCss, MakeComputed, ParseResult, ToCss, is_reserved_custom_ident, tw::Namespace,
@@ -142,11 +140,17 @@ impl<'i> FromCss<'i> for FontFamilyToken {
       return Ok(Self::Owned(name));
     }
 
-    let mut family_name = custom_ident(input)?.to_string();
+    let first = input.expect_ident_cloned()?;
+    let mut family_name = first.to_string();
 
-    while let Ok(ident) = input.try_parse(custom_ident) {
+    while let Ok(ident) = input.try_parse(|input| input.expect_ident_cloned()) {
       family_name.push(' ');
       family_name.push_str(&ident);
+    }
+
+    // Blink's `ConcatenateFamilyName`: only a lone CSS-wide keyword or `default` names no family.
+    if family_name.len() == first.len() && is_reserved_custom_ident(&first) {
+      return Err(CssParseError::unexpected_token());
     }
 
     if let Some(generic) = GenericFamilyType::parse(&family_name) {
@@ -157,17 +161,6 @@ impl<'i> FromCss<'i> for FontFamilyToken {
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<family-name>", "<generic-name>"];
-}
-
-/// One `<custom-ident>` of an unquoted family name.
-fn custom_ident<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CowRcStr<'i>> {
-  let ident = input.expect_ident_cloned()?;
-
-  if is_reserved_custom_ident(&ident) {
-    return Err(CssParseError::unexpected_token());
-  }
-
-  Ok(ident)
 }
 
 impl<'i> FromCss<'i> for FontFamily {
