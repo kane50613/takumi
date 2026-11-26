@@ -8,7 +8,7 @@ use crate::{
   layout_unit::LayoutUnit,
   style::{
     AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseResult, SizingContext, ToCss,
-    calc::{CalcTerms, CalcUnit},
+    calc::{CalcFormula, CalcTerms, CalcUnit},
     is_math_function, parse_length,
     tw::Namespace,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
@@ -612,6 +612,7 @@ impl MakeComputed for Length {
       return;
     }
 
+    // Blink's `CSSMathFunctionValue::ToCalcValue` resolves every unit but the percentage, so the boxes that inherit `calc(10% + 2em)` inherit `calc(10% + 40px)`.
     if let Self::Calc(formula) = *self {
       let linear = formula.resolve(sizing);
 
@@ -622,6 +623,12 @@ impl MakeComputed for Length {
 
       if is_near_zero(linear.px) {
         *self = Self::Percentage(linear.percent * 100.0);
+        return;
+      }
+
+      if let Some(terms) = CalcFormula::linear(sizing.to_css(linear.px), linear.percent).compress()
+      {
+        *self = Self::Calc(terms);
       }
     }
   }
@@ -679,7 +686,7 @@ mod tests {
   use std::assert_matches;
 
   use super::*;
-  use crate::{geometry::Size, style::calc::CalcFormula, viewport::Viewport};
+  use crate::{geometry::Size, viewport::Viewport};
 
   fn sizing() -> SizingContext {
     SizingContext::builder()
@@ -848,6 +855,25 @@ mod tests {
         .compress()
         .unwrap()
       )
+    );
+  }
+
+  #[test]
+  fn make_computed_resolves_the_font_relative_terms_of_a_mixed_formula() {
+    let mut value = Length::Calc(
+      CalcFormula {
+        percent: 0.1,
+        em: 2.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
+
+    value.make_computed(&sizing());
+    assert_eq!(
+      value,
+      Length::Calc(CalcFormula::linear(10.0, 0.1).compress().unwrap())
     );
   }
 
