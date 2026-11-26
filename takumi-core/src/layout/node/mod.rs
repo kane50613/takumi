@@ -1,6 +1,9 @@
 mod container;
+mod directionality;
 mod image;
 mod input;
+
+pub(crate) use directionality::DirectionStyle;
 
 use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
@@ -58,8 +61,9 @@ impl Names {
 }
 
 /// The attributes a node holds in its own fields rather than in `attributes`, which builders leave
-/// out of `attributes` and [`Node::attribute`] reads back. Approximate: `style` and `dir=auto` keep
-/// no attribute text, so selectors on them do not match.
+/// out of `attributes` and [`Node::attribute`] reads back. `dir` holds only `ltr` and `rtl`, so any
+/// other value stays in `attributes`. Approximate: `style` keeps no attribute text, so `[style]`
+/// does not match.
 const LIFTED_ATTRIBUTES: [&str; 5] = ["id", "class", "lang", "dir", "src"];
 
 /// Shared metadata stored by every renderable node.
@@ -523,13 +527,6 @@ impl Node {
     self
   }
 
-  /// Sets the presentation attributes' style and returns the updated node.
-  #[cfg(feature = "html")]
-  pub(crate) fn with_presentation(mut self, presentation: Style) -> Self {
-    self.metadata.presentation = Some(Box::new(presentation));
-    self
-  }
-
   /// Sets the inline style and returns the updated node.
   pub fn with_style(mut self, style: Style) -> Self {
     self.metadata.style = Some(Box::new(style));
@@ -689,7 +686,7 @@ impl Node {
       preset,
       presentation: self.metadata.presentation.take(),
       inline,
-      dir: self.metadata.dir,
+      direction: self.direction_style(),
       lang: self.metadata.lang,
     }
   }
@@ -818,7 +815,7 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) presentation: Option<Box<Style>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
-  pub(crate) dir: Option<Direction>,
+  pub(crate) direction: DirectionStyle,
   pub(crate) lang: Option<Lang>,
 }
 
@@ -827,7 +824,7 @@ impl NodeStyleLayers {
   pub(crate) fn is_preset_only(&self) -> bool {
     self.presentation.is_none()
       && self.inline.is_none()
-      && self.dir.is_none()
+      && self.direction.is_empty()
       && self.lang.is_none()
   }
 }

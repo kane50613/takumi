@@ -1823,6 +1823,7 @@ fn attributes_held_in_fields_match_attribute_selectors() {
   );
   for (attribute, selector) in [
     (r#"dir="rtl""#, r#"[dir="rtl"]"#),
+    (r#"dir="auto""#, r#"[dir="auto"]"#),
     (r#"lang="en-US""#, r#"[lang|="en"]"#),
     (r#"class="a b""#, "[class~=b]"),
     (r#"id="x""#, "[id]"),
@@ -1854,4 +1855,67 @@ fn generated_content_reads_attributes_held_in_fields() {
       "attr({attribute})"
     );
   }
+}
+
+/// `dir` maps to `direction` as a presentational hint, from the attribute or, under `auto`, the
+/// first strong character of the text, as Blink's `HTMLElement` does.
+#[test]
+fn dir_sets_direction_from_the_attribute_or_the_text() {
+  let first_child_x = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].children[0].transform[4]
+  };
+  let flex = "div { display: flex; width: 100px } i { width: 10px; height: 10px }";
+
+  assert_eq!(first_child_x(r#"<div dir="rtl"><i></i></div>"#, flex), 90.0);
+  assert_eq!(
+    first_child_x(
+      r#"<div dir="auto"><i></i><span dir="ltr">abc</span>مرحبا</div>"#,
+      flex
+    ),
+    90.0
+  );
+  assert_eq!(
+    first_child_x(r#"<div dir="auto"><i></i>abc</div>"#, flex),
+    0.0
+  );
+  assert_eq!(first_child_x(r#"<div dir="AUTO"><i></i></div>"#, flex), 0.0);
+  // A presentational hint is an author declaration, so `revert` rolls it back too.
+  assert_eq!(
+    first_child_x(
+      r#"<div dir="rtl"><i></i></div>"#,
+      &format!("{flex} div {{ direction: revert }}")
+    ),
+    0.0
+  );
+}
+
+#[test]
+fn dir_pseudo_class_reads_auto_directionality() {
+  let measure = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css)
+  };
+
+  assert_eq!(
+    measure(
+      r#"<div dir="auto">مرحبا</div>"#,
+      "div:dir(rtl) { width: 30px }"
+    )
+    .children[0]
+      .width,
+    30.0
+  );
+  assert_eq!(
+    measure(
+      r#"<p dir="rtl"><bdi>abc</bdi></p>"#,
+      "bdi:dir(ltr) { display: inline-block; width: 30px }"
+    )
+    .children[0]
+      .children[0]
+      .width,
+    30.0
+  );
 }

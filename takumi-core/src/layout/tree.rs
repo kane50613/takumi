@@ -3317,9 +3317,11 @@ impl RenderContext {
       STYLE_ATTRIBUTE + 1 + position
     });
 
-    // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
+    let direction = node_layers.direction;
+
+    // html.css's bidi rules, around the preset so `bdo`'s override wins.
     // <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
-    if node_layers.dir.is_some() {
+    if direction.isolate {
       style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
       source(&style, CascadeOrigin::UserAgent, 0, 0);
     }
@@ -3329,16 +3331,28 @@ impl RenderContext {
       source(&style, CascadeOrigin::UserAgent, 0, 1);
     }
 
-    if let Some(dir) = node_layers.dir {
-      style.push(StyleDeclaration::direction(dir), false);
+    if direction.plaintext {
+      style.push(
+        StyleDeclaration::unicode_bidi(UnicodeBidi::Plaintext),
+        false,
+      );
       source(&style, CascadeOrigin::UserAgent, 0, 2);
     }
 
-    // Blink's `StyleResolver::MatchPresentationalHints`.
+    // Blink's `StyleResolver::MatchPresentationalHints`, `dir` among them.
+    if direction.auto_isolate {
+      style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
+    }
+
     if let Some(presentation) = node_layers.presentation {
       style.append_block(presentation.declarations);
-      source(&style, CascadeOrigin::PresentationalHint, 0, 3);
     }
+
+    if let Some(dir) = direction.direction {
+      style.push(StyleDeclaration::direction(dir), false);
+    }
+
+    source(&style, CascadeOrigin::PresentationalHint, 0, 3);
 
     let mut layers = matched_declarations.layers().iter().copied();
 
