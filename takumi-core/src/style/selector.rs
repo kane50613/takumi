@@ -671,12 +671,10 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
     input: &mut Parser<'i>,
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let declarations = StyleDeclarationBlock::parse(&name, input, DeclarationOrigin::StyleSheet)
-      .map_err(ParseError::into)?;
-    // !important flag is ignored in keyframe declartion.
-    // Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@keyframes#!important_in_a_keyframe
-    input.try_parse(parse_important).ok();
-    Ok(declarations)
+    // A keyframe declaration takes no `!important`, so one that has it is left unread and invalid.
+    // <https://drafts.csswg.org/css-animations-1/#keyframes>
+    StyleDeclarationBlock::parse(&name, input, DeclarationOrigin::StyleSheet)
+      .map_err(ParseError::into)
   }
 }
 
@@ -2572,6 +2570,21 @@ mod tests {
     assert_eq!(sheet.keyframes.len(), 1);
     assert_eq!(sheet.keyframes[0].keyframes.len(), 1);
     assert_eq!(sheet.keyframes[0].keyframes[0].declarations.len(), 1);
+  }
+
+  /// <https://drafts.csswg.org/css-animations-1/#keyframes>
+  #[test]
+  fn a_keyframe_drops_an_important_declaration() {
+    let sheet = parse_stylesheet_loosy(
+      "@keyframes fade { to { opacity: 0 !important; --x: 1 !important; width: 10px; } }",
+    );
+    let declarations = &sheet.keyframes[0].keyframes[0].declarations;
+
+    assert_eq!(declarations.len(), 1);
+    assert!(matches!(
+      declarations.iter().next(),
+      Some(StyleDeclaration::Width(_))
+    ));
   }
 
   #[test]
