@@ -364,24 +364,8 @@ impl KeyframesRule {
 
 /// Tailwind's theme `@keyframes`, which it emits once a utility's `animation` names them.
 /// <https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/theme.css>
-///
-/// Approximate: Tailwind's `spin` is one `to { transform: rotate(360deg) }`. An [`Angle`] keeps
-/// its value in [0, 360) and interpolates the shorter way round, so `spin` turns through quarter
-/// keyframes instead, which match Tailwind only under the `linear` easing `animate-spin` uses.
 const TAILWIND_THEME_KEYFRAMES: &str = r"
 @keyframes spin {
-  25% {
-    transform: rotate(90deg);
-  }
-
-  50% {
-    transform: rotate(180deg);
-  }
-
-  75% {
-    transform: rotate(270deg);
-  }
-
   to {
     transform: rotate(360deg);
   }
@@ -940,6 +924,26 @@ mod tests {
 
     assert_eq!(animated.svg_data.opacity.0, 0.25);
     assert_eq!(animated.misc3_data.rotate, Some(Angle::new(45.0)));
+  }
+
+  /// Blink's `RotateTransformOperation::Blend` and `CSSAngleInterpolationType` blend the specified
+  /// degrees, so a keyframe past a turn spins rather than standing still.
+  #[test]
+  fn a_rotation_interpolates_its_specified_degrees() {
+    let (style, stylesheet) = linear_animation(
+      "from { rotate: 0deg; transform: rotate(0deg); filter: hue-rotate(0deg) } to { rotate: 720deg; transform: rotate(360deg); filter: hue-rotate(720deg) }",
+    );
+    let animated = animate(style, &stylesheet, 250);
+
+    assert_eq!(animated.misc3_data.rotate, Some(Angle::new(180.0)));
+    assert_eq!(
+      animated.svg_data.transform,
+      Some([Transform::Rotate(Angle::new(90.0))].into())
+    );
+    assert_eq!(
+      animated.misc1_data.filter,
+      vec![Filter::HueRotate(Angle::new(180.0))]
+    );
   }
 
   /// A keyframe's `animation-timing-function` eases the interval it starts.

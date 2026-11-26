@@ -336,9 +336,9 @@ impl OffsetRotate {
   /// Resolves the final rotation, in radians, given the path tangent direction.
   pub fn resolve(self, tangent_radians: f32) -> f32 {
     match self {
-      Self::Auto(angle) => tangent_radians + angle.to_radians(),
-      Self::Reverse(angle) => tangent_radians + PI + angle.to_radians(),
-      Self::Fixed(angle) => angle.to_radians(),
+      Self::Auto(angle) => tangent_radians + angle.normalized().to_radians(),
+      Self::Reverse(angle) => tangent_radians + PI + angle.normalized().to_radians(),
+      Self::Fixed(angle) => angle.normalized().to_radians(),
     }
   }
 }
@@ -662,7 +662,7 @@ fn ray_length(start: Point<f32>, ray: &RayShape, size: Size<f32>) -> f32 {
       if start.x < 0.0 || start.x > size.width || start.y < 0.0 || start.y > size.height {
         return 0.0;
       }
-      let theta = ray.angle.to_radians();
+      let theta = ray.angle.normalized().to_radians();
       let (mut sin_t, mut cos_t) = (theta.sin(), theta.cos());
       let vertical = if cos_t >= 0.0 {
         start.y
@@ -702,7 +702,7 @@ fn sample_ray(
   let length = ray_length(start, ray, border_box);
   let traveled = distance.to_px(sizing, length);
   // 0deg points up; the direction (and tangent) is the angle minus a quarter turn.
-  let direction = ray.angle.to_radians() - FRAC_PI_2;
+  let direction = ray.angle.normalized().to_radians() - FRAC_PI_2;
 
   (
     Point {

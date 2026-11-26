@@ -21,7 +21,7 @@ The `animation` shorthand now reads values the way Chrome does.
 
 When animations stack on one property, a keyframe an animation leaves out takes the value from the animations before it.
 
-The keyframes behind `animate-spin`, `animate-ping`, `animate-pulse`, and `animate-bounce` now follow Tailwind's theme. `bounce` eases each half as Tailwind does, and `spin` and `ping` animate `transform`. `spin` turns through quarter turns, so it matches Tailwind only under the `linear` easing `animate-spin` uses.
+The keyframes behind `animate-spin`, `animate-ping`, `animate-pulse`, and `animate-bounce` now follow Tailwind's theme. `bounce` eases each half as Tailwind does, and `spin` and `ping` animate `transform`.
 
 These keyframes exist once an `animate-*` class, an arbitrary `animate-[…]` value, or an `@apply` in the render names them, and then any `animation` in the render can use them. A plain `animation: spin 1s` stays still, as in Chrome, when nothing in the render names `spin` and the stylesheet has no `@keyframes spin`. Your own `@keyframes` with the same name still wins.
 

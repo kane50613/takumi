@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["published.ts"],
+  "include": ["published.ts", "downstream.tsx"],
   "exclude": []
 }

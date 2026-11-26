@@ -260,10 +260,11 @@ impl Affine {
   /// [`gfx::SinCosDegrees`](https://source.chromium.org/chromium/chromium/src/+/main:ui/gfx/geometry/sin_cos_degrees.h)
   /// makes it.
   pub fn rotation(angle: Angle) -> Self {
-    let quarter_turns = *angle / 90.0;
+    let degrees = angle.normalized();
+    let quarter_turns = degrees / 90.0;
 
     if quarter_turns.fract() != 0.0 {
-      return Self::rotation_radians(angle.to_radians());
+      return Self::rotation_radians(degrees.to_radians());
     }
 
     let (sin, cos) = match quarter_turns.rem_euclid(4.0) as u8 {
@@ -345,8 +346,8 @@ impl Affine {
 
   /// Creates a new skew transform
   pub(crate) fn skew(x: Angle, y: Angle) -> Self {
-    let tanx = x.to_radians().tan();
-    let tany = y.to_radians().tan();
+    let tanx = x.normalized().to_radians().tan();
+    let tany = y.normalized().to_radians().tan();
 
     Self {
       a: 1.0,
