@@ -891,32 +891,47 @@ macro_rules! define_style {
         where
           D: serde::Deserializer<'de>,
         {
-          struct StyleVisitor;
+          deserializer.deserialize_map(StyleVisitor(None))
+        }
+      }
 
-          impl<'de> serde::de::Visitor<'de> for StyleVisitor {
-            type Value = Style;
+      /// A style object in a node tree, its values reused across the tree.
+      pub(crate) struct StyleSeed<'v>(pub(crate) &'v ParsedValues);
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-              formatter.write_str("a style object")
-            }
+      impl<'de> serde::de::DeserializeSeed<'de> for StyleSeed<'_> {
+        type Value = Style;
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-              A: serde::de::MapAccess<'de>,
-            {
-              let mut style = Style::default();
+        fn deserialize<D>(self, deserializer: D) -> Result<Style, D::Error>
+        where
+          D: serde::Deserializer<'de>,
+        {
+          deserializer.deserialize_map(StyleVisitor(Some(self.0)))
+        }
+      }
 
-              while let Some(key) = map.next_key::<Cow<'de, str>>()? {
-                let css_input = map.next_value_seed(CssValueSeed)?;
+      /// A style object, its values reused when it has a tree's parsed values.
+      struct StyleVisitor<'v>(Option<&'v ParsedValues>);
 
-                style.declarations.push_object_entry(key, css_input);
-              }
+      impl<'de> serde::de::Visitor<'de> for StyleVisitor<'_> {
+        type Value = Style;
 
-              Ok(style)
-            }
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+          formatter.write_str("a style object")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+          A: serde::de::MapAccess<'de>,
+        {
+          let mut style = Style::default();
+
+          while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+            let css_input = map.next_value_seed(CssValueSeed)?;
+
+            style.declarations.push_object_entry(key, css_input, self.0);
           }
 
-          deserializer.deserialize_map(StyleVisitor)
+          Ok(style)
         }
       }
 
@@ -3141,7 +3156,12 @@ impl StyleDeclarationBlock {
   }
 
   /// Appends what the `key: value` entry of a style object declares, or records it as ignored.
-  fn push_object_entry(&mut self, key: Cow<'_, str>, css_input: CssInput<'_>) {
+  fn push_object_entry(
+    &mut self,
+    key: Cow<'_, str>,
+    css_input: CssInput<'_>,
+    values: Option<&ParsedValues>,
+  ) {
     // `undefined` / `null` values are how JS callers express "no declaration".
     if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
       return;
@@ -3171,7 +3191,12 @@ impl StyleDeclarationBlock {
     } else {
       // An invalid value drops only its declaration, as CSS 2.2 4.2 rules for illegal values:
       // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
-      match ParsedValues::parse(property, css_input) {
+      let parsed = match values {
+        Some(values) => values.parse(property, css_input),
+        None => property.parse_css_input_declarations(css_input),
+      };
+
+      match parsed {
         Ok(declarations) => {
           self.append_parsed_declarations(declarations, important);
         }
