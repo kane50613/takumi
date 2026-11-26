@@ -831,7 +831,10 @@ fn test_linear_gradient_apply() {
     Some(
       [BackgroundImage::Linear(LinearGradient {
         repeating: false,
-        direction: crate::style::LinearGradientDirection::Angle(Angle::new(90.0)),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -2246,4 +2249,87 @@ fn test_shadow_ring_and_inset_layers_stack_as_tailwind_orders_them() {
   assert_eq!(ring[3].color, ColorInput::CurrentColor);
   assert_eq!(ring[3].spread_radius.to_css_string(), "calc(1px)");
   assert_eq!(ring[4], transparent());
+}
+
+#[test]
+fn test_gradient_directions_and_interpolation_modifiers_as_tailwind_writes_them() {
+  let image = |token: &str| match parse_property(token).as_deref() {
+    Some([StyleDeclaration::Deferred(deferred)]) => Some(deferred.specified_value.clone()),
+    _ => None,
+  };
+  let stops = |position: &str| format!("({position}, var(--tw-gradient-stops))");
+
+  for (token, expected) in [
+    (
+      "bg-linear-to-tr",
+      "linear-gradient".to_owned() + &stops("to top right in oklab"),
+    ),
+    (
+      "bg-linear-to-bl/srgb",
+      "linear-gradient".to_owned() + &stops("to bottom left in srgb"),
+    ),
+    (
+      "bg-linear-45/longer",
+      "linear-gradient".to_owned() + &stops("45deg in oklch longer hue"),
+    ),
+    (
+      "-bg-linear-45",
+      "linear-gradient".to_owned() + &stops("315deg in oklab"),
+    ),
+    (
+      "bg-linear-[to_right]",
+      "linear-gradient".to_owned() + &stops("to right"),
+    ),
+    (
+      "bg-linear-to-r/[in_hsl_longer_hue]",
+      "linear-gradient".to_owned() + &stops("to right in hsl longer hue"),
+    ),
+    (
+      "bg-radial/oklch",
+      "radial-gradient".to_owned() + &stops("in oklch"),
+    ),
+    (
+      "bg-radial-[at_25%_25%]",
+      "radial-gradient".to_owned() + &stops("at 25% 25%"),
+    ),
+    (
+      "bg-conic-90/decreasing",
+      "conic-gradient".to_owned() + &stops("from 90deg in oklch decreasing hue"),
+    ),
+    (
+      "bg-conic/srgb",
+      "conic-gradient".to_owned() + &stops("in srgb"),
+    ),
+  ] {
+    assert_eq!(image(token), Some(expected), "{token}");
+  }
+
+  for token in [
+    "-bg-linear-to-r",
+    "bg-linear-[to_right]/srgb",
+    "bg-radial-[circle]/srgb",
+    "rotate-to-r",
+  ] {
+    assert_eq!(parse_property(token), None, "{token}");
+  }
+}
+
+#[test]
+fn test_corner_gradient_keeps_its_keyword_for_the_box() {
+  let values = TailwindValues::from_str("bg-linear-to-br from-red-500 to-blue-500").unwrap();
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+  let images = style.background_data.background_image.as_deref().unwrap();
+  let [BackgroundImage::Linear(gradient)] = images else {
+    panic!("expected a single linear gradient");
+  };
+
+  assert_eq!(
+    gradient.direction,
+    LinearGradientDirection::Keyword(GradientKeywordDirection {
+      horizontal: Some(HorizontalKeyword::Right),
+      vertical: Some(VerticalKeyword::Bottom),
+    })
+  );
 }

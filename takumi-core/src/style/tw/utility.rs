@@ -7,7 +7,7 @@ use phf::phf_map;
 
 use super::{
   Namespace, TW_VAR_SPACING, TailwindPropertyParser, builder::TailwindDeclarationBuilder,
-  parse_opacity_modifier, parser::*, with_opacity,
+  extract_arbitrary_value, is_ident, parse_opacity_modifier, parser::*, with_opacity,
 };
 use crate::style::*;
 
@@ -48,6 +48,8 @@ const INSET_SHADOW: ShadowLayer = ShadowLayer {
 pub(super) struct Utility {
   /// What the root alone writes, as `border` does.
   bare: Option<fn(&mut TailwindDeclarationBuilder)>,
+  /// What the root alone writes with a `/modifier`, as `bg-radial/srgb` does.
+  modified: Option<fn(&str, &mut TailwindDeclarationBuilder) -> Option<()>>,
   /// The value forms the root reads, tried in order.
   values: &'static [Value],
   /// The theme namespaces an unknown token reads, each with the longhands it fills.
@@ -112,6 +114,7 @@ impl Utility {
   const fn fixed(emit: fn(&mut TailwindDeclarationBuilder)) -> Self {
     Self {
       bare: Some(emit),
+      modified: None,
       values: &[],
       theme: &[],
     }
@@ -120,6 +123,7 @@ impl Utility {
   const fn functional(values: &'static [Value]) -> Self {
     Self {
       bare: None,
+      modified: None,
       values,
       theme: &[],
     }
@@ -127,6 +131,14 @@ impl Utility {
 
   const fn bare(mut self, emit: fn(&mut TailwindDeclarationBuilder)) -> Self {
     self.bare = Some(emit);
+    self
+  }
+
+  const fn modified(
+    mut self,
+    emit: fn(&str, &mut TailwindDeclarationBuilder) -> Option<()>,
+  ) -> Self {
+    self.modified = Some(emit);
     self
   }
 
@@ -208,6 +220,12 @@ pub(super) fn emit(token: &str, builder: &mut TailwindDeclarationBuilder) -> Opt
   if let Some(emit) = UTILITIES.get(token).and_then(|utility| utility.bare) {
     emit(builder);
     return Some(());
+  }
+
+  if let Some((root, modifier)) = token.split_once('/')
+    && let Some(emit) = UTILITIES.get(root).and_then(|utility| utility.modified)
+  {
+    return emit(modifier, builder);
   }
 
   let (token, negative) = match token.strip_prefix('-') {
@@ -430,16 +448,19 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
   "bg-clip" => Utility::functional(&[value!(BackgroundClip: background_clip)]),
   "mask" => Utility::functional(&[value!(BackgroundImage, |image, builder| builder
     .push(StyleDeclaration::mask_image(Some([image].into()))))]),
-  "bg-linear" => Utility::functional(&[value!(Angle, |angle, builder| builder.push_deferred(
-    LonghandId::BackgroundImage,
-    format!("linear-gradient({}deg in oklab, var(--tw-gradient-stops))", *angle),
-  ))]),
-  "bg-radial" => Utility::fixed(|builder| builder.push_deferred(
-    LonghandId::BackgroundImage,
-    "radial-gradient(in oklab, var(--tw-gradient-stops))".to_owned(),
-  )),
-  "bg-conic" => Utility::functional(&[value!(Angle, conic_gradient)])
-    .bare(|builder| conic_gradient(Angle::zero(), builder)),
+  "bg-linear" => Utility::functional(&[Value { namespaces: &[], emit: linear_gradient }]),
+  "bg-radial" => Utility::functional(&[Value { namespaces: &[], emit: radial_gradient }])
+    .bare(|builder| push_gradient(builder, "radial-gradient", DEFAULT_INTERPOLATION))
+    .modified(|modifier, builder| {
+      push_gradient(builder, "radial-gradient", &gradient_interpolation(Some(modifier))?);
+      Some(())
+    }),
+  "bg-conic" => Utility::functional(&[Value { namespaces: &[], emit: conic_gradient }])
+    .bare(|builder| push_gradient(builder, "conic-gradient", DEFAULT_INTERPOLATION))
+    .modified(|modifier, builder| {
+      push_gradient(builder, "conic-gradient", &gradient_interpolation(Some(modifier))?);
+      Some(())
+    }),
   "from" => Utility::functional(&[
     value!(TwGradientPosition, |position, builder| builder
       .push_custom("--tw-gradient-from-position", &position.0.to_css_string())),
@@ -1030,17 +1051,124 @@ fn background_size(size: BackgroundSize, builder: &mut TailwindDeclarationBuilde
   builder.push(StyleDeclaration::background_size([size].into()));
 }
 
-fn conic_gradient(angle: Angle, builder: &mut TailwindDeclarationBuilder) {
-  let image = if *angle == 0.0 {
-    "conic-gradient(in oklab, var(--tw-gradient-stops))".to_owned()
-  } else {
-    format!(
-      "conic-gradient(from {}deg in oklab, var(--tw-gradient-stops))",
-      *angle
-    )
+/// The interpolation a gradient utility writes without a `/modifier`.
+const DEFAULT_INTERPOLATION: &str = "in oklab";
+
+/// `function(<position>, var(--tw-gradient-stops))`, the position Tailwind's
+/// `--tw-gradient-position` puts ahead of the stops.
+fn push_gradient(builder: &mut TailwindDeclarationBuilder, function: &str, position: &str) {
+  builder.push_deferred(
+    LonghandId::BackgroundImage,
+    format!("{function}({position}, var(--tw-gradient-stops))"),
+  );
+}
+
+/// The interpolation a gradient's `/modifier` names, as Tailwind's `resolveInterpolationModifier`
+/// reads it.
+fn gradient_interpolation(modifier: Option<&str>) -> Option<String> {
+  let Some(modifier) = modifier else {
+    return Some(DEFAULT_INTERPOLATION.to_owned());
   };
 
-  builder.push_deferred(LonghandId::BackgroundImage, image);
+  if let Some(arbitrary) = extract_arbitrary_value(modifier) {
+    return Some(arbitrary.into_owned());
+  }
+
+  if !is_ident(modifier) {
+    return None;
+  }
+
+  Some(match modifier {
+    "longer" | "shorter" | "increasing" | "decreasing" => format!("in oklch {modifier} hue"),
+    _ => format!("in {modifier}"),
+  })
+}
+
+/// A gradient utility's value: an arbitrary one as its position, which takes no modifier, or the
+/// position `named` reads from the value, or the miss it reports, followed by the interpolation
+/// of its `/modifier`.
+fn emit_gradient(
+  function: &str,
+  suffix: &str,
+  builder: &mut TailwindDeclarationBuilder,
+  named: impl FnOnce(&str) -> Result<String, ValueMatch>,
+) -> ValueMatch {
+  if let Some(arbitrary) = extract_arbitrary_value(suffix) {
+    push_gradient(builder, function, &arbitrary);
+    return ValueMatch::Emitted;
+  }
+
+  let (value, modifier) = match suffix.split_once('/') {
+    Some((value, modifier)) => (value, Some(modifier)),
+    None => (suffix, None),
+  };
+  let position = match named(value) {
+    Ok(position) => position,
+    Err(miss) => return miss,
+  };
+  let Some(interpolation) = gradient_interpolation(modifier) else {
+    return ValueMatch::Miss;
+  };
+
+  push_gradient(builder, function, &format!("{position} {interpolation}"));
+  ValueMatch::Emitted
+}
+
+/// Tailwind's `handleBgLinear`: a side or corner, or an angle a `-` negates.
+fn linear_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  if let Some(arbitrary) = negative.then(|| extract_arbitrary_value(suffix)).flatten() {
+    let Ok(angle) = Angle::from_css_str(&arbitrary) else {
+      return ValueMatch::NoNegative;
+    };
+
+    push_gradient(builder, "linear-gradient", &(-angle).to_css_string());
+    return ValueMatch::Emitted;
+  }
+
+  emit_gradient("linear-gradient", suffix, builder, |value| {
+    let direction = LinearGradientDirection::parse_tw(value).ok_or(ValueMatch::Miss)?;
+    let direction = match (direction, negative) {
+      (LinearGradientDirection::Angle(angle), true) => LinearGradientDirection::Angle(-angle),
+      (LinearGradientDirection::Keyword(_), true) => return Err(ValueMatch::NoNegative),
+      (direction, false) => direction,
+    };
+
+    Ok(direction.to_css_string())
+  })
+}
+
+/// Tailwind's `handleBgConic`: the angle it starts from, which a `-` negates, or an arbitrary
+/// position, which it does not.
+fn conic_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  emit_gradient("conic-gradient", suffix, builder, |value| {
+    let angle = Angle::parse_tw(value).ok_or(ValueMatch::Miss)?;
+    let angle = if negative { -angle } else { angle };
+
+    Ok(format!("from {}", angle.to_css_string()))
+  })
+}
+
+/// Tailwind's `bg-radial-[…]`, whose value is the gradient's shape and position.
+fn radial_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  if negative || !suffix.starts_with('[') {
+    return ValueMatch::Miss;
+  }
+
+  emit_gradient("radial-gradient", suffix, builder, |_| {
+    Err(ValueMatch::Miss)
+  })
 }
 
 /// Sets `--tw-border-style` with the sides, so a later width utility draws in this style.
