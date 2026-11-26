@@ -99,27 +99,22 @@ impl Breakpoint {
     viewport_width >= breakpoint_width as u32
   }
 
-  /// Where the breakpoint sorts among others: `max-*` first and widest first, then the rest
-  /// narrowest first, each by its built-in width, then its token. Approximate: Tailwind compares
-  /// the widths a theme gives.
+  /// Where the breakpoint sorts among others: `max-*` first, then the rest, each by its built-in
+  /// width as Tailwind's `compareBreakpoints` compares it, then its token. Approximate: Tailwind
+  /// compares the widths a theme gives.
   fn order(&self) -> BreakpointOrder {
-    let rem = match self.width {
-      Some(Length::Rem(rem) | Length::Em(rem)) => rem,
-      Some(Length::Px(px)) => px / 16.0,
-      _ => f32::INFINITY,
-    };
-    let bits = rem.to_bits();
+    let at_least = !self.below;
+    let width = self
+      .width
+      .map(|width| width.to_css_string().into())
+      .unwrap_or_default();
 
-    if self.below {
-      (false, !bits, Arc::clone(&self.token))
-    } else {
-      (true, bits, Arc::clone(&self.token))
-    }
+    (WidthOrder { at_least, width }, Arc::clone(&self.token))
   }
 }
 
 /// A breakpoint's sort key, from `Breakpoint::order`.
-type BreakpointOrder = (bool, u32, Arc<str>);
+type BreakpointOrder = (WidthOrder, Arc<str>);
 
 /// A container query variant, `@md:` or `@max-[400px]/sidebar:`, which applies while the nearest
 /// inline-size container, or the one it names, meets a width. Approximate: a named width is
@@ -127,18 +122,18 @@ type BreakpointOrder = (bool, u32, Arc<str>);
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ContainerVariant {
   pub(crate) query: ContainerQuery,
-  order: ContainerOrder,
+  order: WidthOrder,
 }
 
-/// Where a container variant sorts: `@max-*` first, then `@` and `@min-*`, each by its width as
-/// Tailwind's `compareBreakpoints` compares them.
+/// Where a breakpoint or container variant sorts: `max-*` first, then the rest, each by its width
+/// as Tailwind's `compareBreakpoints` compares them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ContainerOrder {
+struct WidthOrder {
   at_least: bool,
   width: Box<str>,
 }
 
-impl Ord for ContainerOrder {
+impl Ord for WidthOrder {
   fn cmp(&self, other: &Self) -> Ordering {
     self
       .at_least
@@ -147,7 +142,7 @@ impl Ord for ContainerOrder {
   }
 }
 
-impl PartialOrd for ContainerOrder {
+impl PartialOrd for WidthOrder {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     Some(self.cmp(other))
   }
@@ -216,7 +211,7 @@ impl ContainerVariant {
 
     Some(Self {
       query,
-      order: ContainerOrder {
+      order: WidthOrder {
         at_least,
         width: width.into(),
       },
@@ -436,7 +431,7 @@ impl Variants {
       arbitrary,
       late: self.late,
       container: {
-        let mut orders: Vec<ContainerOrder> = self
+        let mut orders: Vec<WidthOrder> = self
           .container
           .iter()
           .map(|container| container.order.clone())
@@ -466,7 +461,7 @@ pub(crate) struct VariantOrder {
   late: u8,
   /// Approximate: several container variants sort by their latest first, where Tailwind's variant
   /// bit set gives each group one bit.
-  container: Vec<ContainerOrder>,
+  container: Vec<WidthOrder>,
   breakpoint: Vec<BreakpointOrder>,
   ranks: u32,
 }
@@ -744,10 +739,11 @@ mod tests {
     };
 
     for pair in [
+      "max-[600px]",
       "max-lg",
       "max-md",
-      "max-[600px]",
-      "min-[600px]",
+      "min-[900px]",
+      "min-[1000px]",
       "sm",
       "min-md",
       "lg",
