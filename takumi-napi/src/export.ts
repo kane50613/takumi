@@ -277,5 +277,22 @@ export class Renderer {
 
 /** A fresh signal following `signal` for one native task, since napi-rs replaces its `onabort` and stops cancelling at the first finished task sharing it. */
 function taskSignal(signal: AbortSignal | undefined): AbortSignal | undefined {
-  return signal && AbortSignal.any([signal]);
+  if (!signal) {
+    return undefined;
+  }
+
+  // https://nodejs.org/api/globals.html#static-method-abortsignalanysignals arrived in Node 18.17.
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([signal]);
+  }
+
+  const controller = new AbortController();
+
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+  } else {
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+
+  return controller.signal;
 }

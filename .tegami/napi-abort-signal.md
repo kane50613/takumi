@@ -5,7 +5,10 @@ packages:
 
 # An abort signal keeps its `onabort` handler
 
-Passing a `signal` to a render used to replace the signal's `onabort` handler with the binding's own. Each native task now follows the signal through a signal of its own, so the caller's handler still runs. An abort also cancels a render queued after a font-subset read that already finished on the same signal.
+A `signal` passed to a render keeps the `onabort` handler you set on it. Aborting the signal now behaves as follows:
+
+- Your `onabort` handler runs. It used to be replaced, so it never ran.
+- Every render still waiting on the signal stops, even when an earlier render with the same signal has already finished.
 
 ```ts
 controller.signal.onabort = cleanup;

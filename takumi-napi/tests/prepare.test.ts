@@ -221,6 +221,29 @@ describe("prepare", () => {
     ).rejects.toThrow();
   });
 
+  test("follows a signal where AbortSignal.any is missing", async () => {
+    const any = Object.getOwnPropertyDescriptor(AbortSignal, "any");
+    const controller = new AbortController();
+    const onabort = mock();
+
+    controller.signal.onabort = onabort;
+    Reflect.deleteProperty(AbortSignal, "any");
+
+    try {
+      await renderer.render("<p>hi</p>", { width: 8, height: 8, signal: controller.signal });
+      controller.abort();
+
+      expect(onabort).toHaveBeenCalledTimes(1);
+      await expect(
+        renderer.render("<p>hi</p>", { width: 8, height: 8, signal: controller.signal }),
+      ).rejects.toThrow();
+    } finally {
+      if (any) {
+        Object.defineProperty(AbortSignal, "any", any);
+      }
+    }
+  });
+
   test("leaves a render without font subsets to read nothing ahead", async () => {
     const needs = spyOn(RendererInternal.prototype, "needs");
 
