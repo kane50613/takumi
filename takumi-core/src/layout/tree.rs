@@ -3598,8 +3598,13 @@ impl RenderContext {
       let style = cascade(declarations.clone(), sampled.clone());
       // A registered value reads the font size, colour scheme, and colour the cascade ends with,
       // which a longhand reading an animated custom property through `var()` still changes, as
-      // Blink applies the custom properties an element's other longhands read after them.
-      let resampled = self.sampled_custom_properties(&style, animations);
+      // Blink applies the custom properties an element's other longhands read after them. It
+      // interpolates from the custom properties before the animations, as the preview holds them.
+      let mut reference = style.clone();
+
+      reference.custom_properties = preview.custom_properties.clone();
+
+      let resampled = self.sampled_custom_properties(&reference, animations);
 
       if resampled == sampled {
         style
