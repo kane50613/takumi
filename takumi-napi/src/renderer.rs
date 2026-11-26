@@ -165,6 +165,9 @@ pub(crate) struct RendererState {
   pub(crate) fonts: FontStore,
   pub(crate) cache: Cache,
   pub(crate) sources: SourceCache,
+  /// The PDF header and footer HTML parsed last, kept apart from the documents in `sources`.
+  #[cfg(feature = "pdf")]
+  pub(crate) bands: SourceCache,
 }
 
 impl RendererState {
@@ -213,6 +216,8 @@ impl Renderer {
         fonts: FontStore::new(cache.clone()).map_err(map_error)?,
         cache,
         sources: SourceCache::default(),
+        #[cfg(feature = "pdf")]
+        bands: SourceCache::default(),
       }),
     })
   }

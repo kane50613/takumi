@@ -9,6 +9,7 @@ import type {
   RendererOptions,
 } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
+import type { PdfBindingOptions } from "@takumi-rs/bindings-js";
 
 export type {
   ContainerNode,

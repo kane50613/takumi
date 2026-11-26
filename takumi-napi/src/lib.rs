@@ -25,6 +25,8 @@ mod load_font_file_task;
 mod load_font_task;
 mod measure_task;
 mod needs_task;
+#[cfg(feature = "pdf")]
+mod pdf_task;
 mod pool;
 mod render_animation_task;
 mod render_job;
@@ -220,11 +222,7 @@ impl NodeSource {
   pub(crate) fn into_parts(self, sources: &SourceCache) -> Result<ParsedSource> {
     match self {
       Self::Tree(node) => Ok((*node, Vec::new())),
-      Self::Html(html) => sources.parse(SourceKind::Html, &html, |html| {
-        let parsed = parse_html(html, FromHtmlOptions::default()).map_err(map_error)?;
-
-        Ok((parsed.node, parsed.css))
-      }),
+      Self::Html(html) => sources.parse(SourceKind::Html, &html, parse_html_source),
       Self::Json(json) => sources.parse(SourceKind::Json, &json, |json| {
         let node = node_from_json(json)
           .map_err(|message| Error::from_reason(format!("{}, {message}", Status::InvalidArg)))?;
@@ -233,6 +231,13 @@ impl NodeSource {
       }),
     }
   }
+}
+
+/// The node tree HTML markup describes and the CSS of its `<style>` elements.
+pub(crate) fn parse_html_source(html: &str) -> Result<ParsedSource> {
+  let parsed = parse_html(html, FromHtmlOptions::default()).map_err(map_error)?;
+
+  Ok((parsed.node, parsed.css))
 }
 
 /// A render's source and the CSS that styles it, read on the main thread and parsed on the worker.

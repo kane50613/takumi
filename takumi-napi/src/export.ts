@@ -14,6 +14,7 @@ import { Renderer as RendererInternal } from "../index";
 export { setGlyphCacheMaxBytes } from "../index";
 
 import {
+  collectPdf,
   FontRegistry,
   Prepared,
   prepareSource,
@@ -30,8 +31,13 @@ import type {
   BackendPrepareOptions,
   BackendRenderOptions,
   BackendSvgOptions,
+  DocumentInput,
   FontLoader,
   JsonSource,
+  PdfPreparedRenderOptions,
+  PdfPrepareOptions,
+  PdfRenderOptions,
+  PreparedPdf,
   RegisteredFamilyLike,
 } from "@takumi-rs/bindings-js";
 
@@ -43,6 +49,27 @@ export type {
   FallbackFontsLoader,
   OutputFormatOptions,
   PrepareImagesInput,
+  ArchivalAttachment,
+  Attachment,
+  BandInput,
+  Dimensions,
+  DocumentInput,
+  PageMargin,
+  PageMarginSide,
+  PageOverrideInput,
+  PageRange,
+  PageRulesInput,
+  PageSize,
+  PageSizeName,
+  PdfMetadata,
+  PdfPreparedRenderOptions,
+  PdfPrepareOptions,
+  PdfRenderOptions,
+  PreparedPdf,
+  UncoveredText,
+  ViewportInput,
+  XmpProperty,
+  XmpSchema,
 } from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 
@@ -124,6 +151,37 @@ export class Renderer {
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
       (native, opts, signal) => this.inner.measure(native, opts, signal),
+    );
+  }
+
+  /** Reads what a PDF document and its bands need under `options`, then loads their font subsets and fetches their images. */
+  preparePdf(source: DocumentInput, options: PdfPrepareOptions = {}): Promise<PreparedPdf> {
+    return this.readPdf(source, options, prepareSource);
+  }
+
+  /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
+  renderPdf(source: PreparedPdf, options?: PdfPreparedRenderOptions): Promise<Buffer<ArrayBuffer>>;
+  renderPdf(source: DocumentInput, options?: PdfRenderOptions): Promise<Buffer<ArrayBuffer>>;
+  async renderPdf(
+    source: PreparedPdf | DocumentInput,
+    options: PdfRenderOptions = {},
+  ): Promise<Buffer<ArrayBuffer>> {
+    return renderPrepared(
+      this.fonts,
+      source instanceof Prepared ? source : await this.readPdf(source, options, readSource),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts, signal) => this.inner.renderPdf(native, opts, signal),
+    );
+  }
+
+  /** A PDF document and its bands read under `options` with `collect`, which fetches their images when it prepares them. */
+  private readPdf(
+    source: DocumentInput,
+    options: PdfPrepareOptions | PdfRenderOptions,
+    collect: typeof prepareSource,
+  ): Promise<PreparedPdf> {
+    return collectPdf(this.fonts, source, options, collect, (native, layout, request, signal) =>
+      this.inner.pdfNeeds(native, ...needsArgs(layout, request), signal),
     );
   }
 
