@@ -3340,8 +3340,8 @@ impl RenderContext {
     }
 
     // Blink's `StyleResolver::MatchPresentationalHints`, `dir` among them.
-    if direction.auto_isolate {
-      style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
+    if let Some(unicode_bidi) = direction.auto_unicode_bidi {
+      style.push(StyleDeclaration::unicode_bidi(unicode_bidi), false);
     }
 
     if let Some(presentation) = node_layers.presentation {
@@ -3805,7 +3805,7 @@ impl PageContext {
       return Self::default();
     };
     let (style, sizing, current_color) = parent_context.resolve_child_style(
-      &mut initial_containing_block.without_children(),
+      &mut initial_containing_block.without_children_keeping_direction(),
       0,
       &matched,
     );
@@ -3849,8 +3849,11 @@ impl PageContext {
     source_order: usize,
     matched: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
-    let (style, sizing, current_color) =
-      context.resolve_child_style(&mut root.without_children(), source_order, matched);
+    let (style, sizing, current_color) = context.resolve_child_style(
+      &mut root.without_children_keeping_direction(),
+      source_order,
+      matched,
+    );
 
     if style.base_data.display == Display::None {
       return Self::of_hidden_root();

@@ -1919,3 +1919,36 @@ fn dir_pseudo_class_reads_auto_directionality() {
     30.0
   );
 }
+
+/// A tel input keeps `ltr` directionality under an `rtl` parent, as Blink's
+/// `ElementInheritsDirectionality` has it, and `attr(dir)` reads `dir`'s text as written.
+#[test]
+fn a_tel_input_is_ltr_and_dir_keeps_its_text() {
+  let measure = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css)
+  };
+
+  assert_eq!(
+    measure(
+      r#"<div dir="rtl"><input type="tel"></div>"#,
+      "input { padding: 0; border: 0 } input:dir(ltr) { width: 30px }"
+    )
+    .children[0]
+      .children[0]
+      .width,
+    30.0
+  );
+
+  let width = |value: &str| {
+    measure(
+      &format!(r#"<div dir="{value}"></div>"#),
+      "div { display: inline-block } div::before { content: attr(dir) }",
+    )
+    .children[0]
+      .width
+  };
+
+  assert!(width("RTL") > width("rtl"));
+}

@@ -97,9 +97,7 @@ export class NodeMetadataReader {
   }
 }
 
-/** The `dir` field a `dir` attribute sets, none for `auto` or an invalid value, which stay attributes. */
+/** The `dir` field a `dir` attribute sets, which only the lowercase `ltr` and `rtl` do, so any other spelling stays an attribute. */
 function direction(value: unknown): NodeMetadata["dir"] {
-  const lowered = typeof value === "string" ? value.toLowerCase() : undefined;
-
-  return lowered === "ltr" || lowered === "rtl" ? lowered : undefined;
+  return value === "ltr" || value === "rtl" ? value : undefined;
 }

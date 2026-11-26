@@ -146,11 +146,13 @@ impl<'a> StyleArena<'a> {
 
     for style_node in &self.nodes {
       // Tree order puts every parent before its children.
-      let direction = style_node.node.own_directionality().unwrap_or_else(|| {
-        style_node
-          .parent
-          .map_or(Direction::Ltr, |parent| directions[parent])
-      });
+      let node = style_node.node;
+      let direction = node
+        .own_directionality()
+        .unwrap_or_else(|| match style_node.parent {
+          Some(parent) if !node.keeps_ltr_directionality() => directions[parent],
+          _ => Direction::Ltr,
+        });
 
       directions.push(direction);
     }

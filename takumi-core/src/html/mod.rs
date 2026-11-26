@@ -910,7 +910,13 @@ impl NodeBuilder<'_> {
             node = node.with_lang(lang);
           }
         }
-        "dir" if let Ok(dir) = Direction::from_css_str(value) => node = node.with_dir(dir),
+        // Only the lowercase spellings move into the field, so `attr(dir)` reads any other back.
+        "dir"
+          if matches!(value, "ltr" | "rtl")
+            && let Ok(dir) = Direction::from_css_str(value) =>
+        {
+          node = node.with_dir(dir);
+        }
         "style" => node = node.with_style(self.style(value)),
         // Consumed into `ImageData`; re-emitted by serialization, so keep it out
         // of the passthrough attributes to avoid duplicating on round-trip.
