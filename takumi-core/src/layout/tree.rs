@@ -2467,9 +2467,11 @@ impl RenderNode {
     // `@container` rules read the sizes a layout gives their containers, as Blink lays a container
     // out before it styles the boxes in it. Size containment keeps a container's size from its
     // contents, so it follows only from the queries of the containers around it: each build settles
-    // one more level of them, and the sizes settle within a build more than there are containers.
+    // one more level of them, and the sizes settle within a build more than the most containers a
+    // build found.
     let mut containers: Option<QueryContainers> = None;
     let mut pass = 0;
+    let mut budget = 0;
 
     loop {
       let tree = Self::build_in_containers(
@@ -2480,8 +2482,9 @@ impl RenderNode {
       );
       let sizes = tree.query_containers();
 
+      budget = budget.max(sizes.len());
       // A build past one per container settled nothing more; its tree stands.
-      if containers.as_ref() == Some(&sizes) || pass > sizes.len() {
+      if containers.as_ref() == Some(&sizes) || pass > budget {
         return tree;
       }
       containers = Some(sizes);

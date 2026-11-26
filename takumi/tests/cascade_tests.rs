@@ -1689,6 +1689,31 @@ fn a_container_unit_in_a_query_reads_the_outer_container() {
   assert_eq!(measured.children[0].children[0].children[0].width, 50.0);
 }
 
+/// Containers settle within as many builds as the most containers any build found, as one build
+/// can find fewer containers than an earlier one while the sizes still settle.
+#[test]
+fn containers_settle_after_earlier_containers_vanish() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="m1"><div class="m2"><div class="inner"><p class="target">x</p></div></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .m1 { container-type: inline-size; width: 100px }
+     @container (width > 300px) { .m1 { container-type: normal } }
+     .m2 { container-type: inline-size }
+     @container (width > 350px) { .m2 { container-type: normal } }
+     @container (width > 350px) { .inner { container: inner / inline-size; width: 250px } }
+     @container inner (width > 200px) { .target { width: 20px } }",
+  );
+  let inner = &measured.children[0].children[0].children[0].children[0];
+
+  assert_eq!(inner.width, 250.0);
+  assert_eq!(inner.children[0].width, 20.0);
+}
+
 /// A size-contained grid keeps its explicit tracks, sized without its items, as Blink's
 /// `BuildGridSizingTreeIgnoringChildren` sizes them.
 #[test]
