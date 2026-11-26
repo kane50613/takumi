@@ -72,7 +72,7 @@ impl ShadowShape {
 
 impl BoxPainter<'_> {
   /// Paints the outer `box-shadow` layers at `origin`, last listed first, clipped out of the
-  /// border box.
+  /// border box, a pixel inside it under an opaque background.
   pub fn paint_normal_box_shadows<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let shadows = self.shadows().outer;
 
@@ -89,8 +89,24 @@ impl BoxPainter<'_> {
       origin: None,
     };
 
+    let opaque_background = self
+      .context
+      .style
+      .background_data
+      .background_color
+      .resolve(self.context.current_color)
+      .0[3]
+      == u8::MAX;
+    // Blink's `ClipToBorderEdge`: under an opaque background the clip shrinks by a pixel, so that
+    // no antialiased gap shows between the shadow and the box.
+    let clip_out = if opaque_background {
+      border_box.outset(-1.0)
+    } else {
+      border_box
+    };
+
     device.set_role(PaintRole::BoxShadow);
-    device.push_clip_out(&border_box.into(), at);
+    device.push_clip_out(&clip_out.into(), at);
 
     for shadow in shadows.iter().rev() {
       let rect = border_box.outset(shadow.spread_radius);

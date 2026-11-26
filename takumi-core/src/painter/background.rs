@@ -54,7 +54,11 @@ impl BackgroundClipArea {
     };
 
     match context.style.background_data.background_clip {
-      BackgroundClip::BorderBox => Self::BorderBox(border),
+      // Blink insets the pixel-snapped border box without snapping the inset again.
+      BackgroundClip::BorderBox => match border.background_bleed_inset() {
+        Some(insets) => Self::Inner(ClipBox::inset_border_box(border, snapped.size(), insets)),
+        None => Self::BorderBox(border),
+      },
       BackgroundClip::PaddingBox => inner(ClipBox::padding_box(border, layout), layout.border),
       BackgroundClip::ContentBox => inner(
         ClipBox::content_box(border, layout),

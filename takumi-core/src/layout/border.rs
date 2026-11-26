@@ -477,6 +477,39 @@ impl BorderProperties {
     }
   }
 
+  /// How far a rounded background shrinks under a border every edge of which hides its edge, as
+  /// Blink's `kBackgroundBleedShrinkBackground` keeps its antialiased edge from showing through.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_painter_base.cc;l=1141>
+  pub(crate) fn background_bleed_inset(&self) -> Option<Rect<f32>> {
+    let sides = self.sides();
+    // Blink's `BorderEdge::ObscuresBackgroundEdge`.
+    let obscures_edge = sides.iter().all(|side| {
+      side.width > 0.0
+        && side.color.0[3] == u8::MAX
+        && !matches!(
+          side.style,
+          BorderStyle::None | BorderStyle::Hidden | BorderStyle::Dotted | BorderStyle::Dashed
+        )
+    });
+
+    if self.is_zero() || !obscures_edge {
+      return None;
+    }
+
+    let fraction = if sides.iter().any(|side| side.style == BorderStyle::Double) {
+      1.0 / 6.0
+    } else {
+      1.0 / 2.0
+    };
+
+    Some(Rect {
+      top: self.width.top * fraction,
+      right: self.width.right * fraction,
+      bottom: self.width.bottom * fraction,
+      left: self.width.left * fraction,
+    })
+  }
+
   /// Returns true if all corner radii are zero.
   #[inline]
   pub fn is_zero(&self) -> bool {
@@ -961,8 +994,11 @@ impl BorderProperties {
 mod tests {
   use crate::{
     geometry::{PathCommand, Point, Rect, Size},
-    layout::border::{BorderProperties, BorderSide},
-    style::{Sides, SpacePair},
+    layout::{
+      border::{BorderProperties, BorderSide},
+      decoration::ClipBox,
+    },
+    style::{BorderStyle, Color, Sides, SpacePair},
   };
 
   fn collapsed_border() -> BorderProperties {
@@ -1036,6 +1072,43 @@ mod tests {
 
     // 2 + 10 * (1 - (1 - 0.2)^3 * (1 - 0.04^3))
     assert!((border.radius.0[0].x - 6.88).abs() < 1e-3);
+  }
+
+  fn opaque_border(width: f32, style: BorderStyle, radius: SpacePair<f32>) -> BorderProperties {
+    BorderProperties {
+      width: Rect::all(width),
+      color: Rect::all(Color([0, 0, 0, 255])),
+      radius: Sides([radius; 4]),
+      style: Rect::all(style),
+      ..BorderProperties::default()
+    }
+  }
+
+  #[test]
+  fn a_double_border_too_thin_to_split_bleeds_like_a_solid_one() {
+    let inset = |style| {
+      opaque_border(2.0, style, SpacePair::from_single(10.0))
+        .background_bleed_inset()
+        .map(|inset| inset.top)
+    };
+
+    assert_eq!(inset(BorderStyle::Double), Some(1.0));
+    assert_eq!(inset(BorderStyle::Dashed), None);
+    assert_eq!(
+      opaque_border(6.0, BorderStyle::Double, SpacePair::from_single(10.0))
+        .background_bleed_inset()
+        .map(|inset| inset.top),
+      Some(1.0)
+    );
+  }
+
+  #[test]
+  fn a_bleed_inset_shrinks_the_used_radii() {
+    let border = opaque_border(8.0, BorderStyle::Solid, SpacePair { x: 100.0, y: 50.0 });
+    let inset = border.background_bleed_inset().expect("obscures its edge");
+    let clip = ClipBox::inset_border_box(border, BOX, inset);
+
+    assert_eq!(clip.border.radius.0[0], SpacePair { x: 46.0, y: 21.0 });
   }
 
   const BOX: Size<f32> = Size {

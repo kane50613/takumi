@@ -8,7 +8,7 @@
   </g>
   <path d="M194 205h172c13.25 0 24 10.75 24 24v172c0 13.25-10.75 24-24 24h-172c-13.25 0-24-10.75-24-24v-172c0-13.25 10.75-24 24-24Z" fill="#3b82f6" fill-opacity=".251"/>
   <clipPath id="cp1">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM490 205h220v220h-220v-220Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM491 206h218v218h-218v-218Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp1)">
     <path d="M530 245h220v220h-220v-220Z" fill="#2563eb"/>
@@ -16,7 +16,7 @@
   </g>
   <rect x="490" y="205" width="220" height="220" fill="#f1f5f9"/>
   <clipPath id="cp2">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM850 205h140c22.09 0 40 17.91 40 40v140c0 22.09-17.91 40-40 40h-140c-22.09 0-40-17.91-40-40v-140c0-22.09 17.91-40 40-40Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM850 206h140c21.54 0 39 17.46 39 39v140c0 21.54-17.46 39-39 39h-140c-21.54 0-39-17.46-39-39v-140c0-21.54 17.46-39 39-39Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp2)">
     <filter id="bl3" filterUnits="userSpaceOnUse" x="-36" y="-36" width="1272" height="702">

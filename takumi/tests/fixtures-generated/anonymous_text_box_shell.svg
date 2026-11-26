@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300">
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM40 40h480v200h-480v-200Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM41 41h478v198h-478v-198Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <filter id="bl1" filterUnits="userSpaceOnUse" x="-24" y="-24" width="648" height="348">
