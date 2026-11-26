@@ -200,13 +200,11 @@ test("rejects a viewport with paged options", async () => {
   await expect(renderer.renderPdf(doc, mixed)).rejects.toThrow("viewport is mutually exclusive");
 });
 
-const wasmBuilt = existsSync(
-  new URL("../../takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm", import.meta.url),
+const takumiPdfBuilt = ["pkg/takumi_pdf_wasm_bg.wasm", "dist/export.mjs"].every((file) =>
+  existsSync(new URL(`../../takumi-pdf-js/${file}`, import.meta.url)),
 );
 
-describe.skipIf(!wasmBuilt)("matches takumi-pdf", async () => {
-  const { PdfRenderer } = await import("takumi-pdf");
-  const wasm = new PdfRenderer();
+describe.skipIf(!takumiPdfBuilt)("matches takumi-pdf", () => {
   const cases: [string, DocumentInput, PdfRenderOptions][] = [
     ["a fixed page", doc, { viewport: { width: 600, height: 300 } }],
     ["paged A4", doc, {}],
@@ -220,8 +218,9 @@ describe.skipIf(!wasmBuilt)("matches takumi-pdf", async () => {
 
   for (const [name, input, options] of cases) {
     test(name, async () => {
+      const { PdfRenderer } = await import("takumi-pdf");
       const native = await renderer.renderPdf(input, options);
-      const web = await wasm.render(input, options);
+      const web = await new PdfRenderer().render(input, options);
 
       expect(pageCount(native)).toBe(pageCount(web));
       expect(mediaBox(native)).toEqual(mediaBox(web));
