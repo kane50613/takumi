@@ -290,16 +290,17 @@ const PREFERENCES: [(&str, &str); 4] = [
   ("contrast-less", "(prefers-contrast: less)"),
 ];
 
-/// The states of an element no static render is in, whose `not-` variants always apply.
-const UNREACHED_STATES: [&str; 8] = [
-  "autofill",
-  "focus-within",
-  "hover",
-  "focus",
-  "focus-visible",
-  "active",
-  "visited",
-  "target",
+/// The states of an element no static render is in, whose `not-` variants always apply, each with
+/// the registered variant Tailwind registers next, which places it in the `not` group.
+const UNREACHED_STATES: [(&str, &str); 8] = [
+  ("autofill", "optional"),
+  ("focus-within", "enabled"),
+  ("hover", "enabled"),
+  ("focus", "enabled"),
+  ("focus-visible", "enabled"),
+  ("active", "enabled"),
+  ("visited", "checked"),
+  ("target", "checked"),
 ];
 
 /// One variant of a utility, as Tailwind's `parseVariant` reads it.
@@ -410,7 +411,7 @@ impl Variant {
       return Some(Self::Structural {
         rank: structural_rank(token),
         pseudo_class,
-        not_order: (nots > 0).then(|| NotInner::Structural(structural_rank(base)).under_nots(nots)),
+        not_order: (nots > 0).then(|| NotInner::structural(base).under_nots(nots)),
       });
     }
 
@@ -466,16 +467,35 @@ pub(crate) struct NotOrder {
 }
 
 /// The variant a `not-` run wraps: a structural variant first, then a preference, a breakpoint,
-/// and a late variant.
+/// a late variant, and an arbitrary variant by its compound's text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum NotInner {
-  Structural(u8),
+  /// The rank of the structural variant, then the place of an unreached state registered ahead
+  /// of it.
+  Structural(u8, u8),
   Preference(u8),
   Breakpoint(BreakpointOrder),
   Late(u8),
+  Arbitrary(String),
 }
 
 impl NotInner {
+  /// The key of the structural, form state, attribute, or arbitrary variant `base`.
+  fn structural(base: &str) -> Self {
+    if let Some(compound) = arbitrary_compound(base) {
+      return Self::Arbitrary(compound);
+    }
+
+    if let Some(index) = UNREACHED_STATES
+      .iter()
+      .position(|(state, _)| *state == base)
+    {
+      return Self::Structural(structural_rank(UNREACHED_STATES[index].1), index as u8);
+    }
+
+    Self::Structural(structural_rank(base), u8::MAX)
+  }
+
   fn under_nots(self, nots: usize) -> NotOrder {
     NotOrder {
       nesting: Reverse(nots),
@@ -688,7 +708,7 @@ fn pseudo_class(variant: &str) -> Option<String> {
     return element_pseudo_class(base);
   }
 
-  if UNREACHED_STATES.contains(&base) {
+  if UNREACHED_STATES.iter().any(|(state, _)| *state == base) {
     return Some(format!(":not(:{base})"));
   }
 

@@ -2421,6 +2421,12 @@ fn test_not_variants_sort_in_the_not_group() {
   assert!(order("not-not-sm:w-4") < order("not-motion-safe:w-4"));
   assert!(order("not-enabled:w-4") < order("not-disabled:w-4"));
   assert!(order("not-first:w-4") < order("not-motion-safe:w-4"));
+  assert!(order("not-autofill:w-4") < order("not-optional:w-4"));
+  assert!(order("not-placeholder-shown:w-4") < order("not-autofill:w-4"));
+  assert!(order("not-hover:w-4") < order("not-focus:w-4"));
+  assert!(order("not-active:w-4") < order("not-enabled:w-4"));
+  assert!(order("not-visited:w-4") < order("not-checked:w-4"));
+  assert!(order("not-sm:w-4") < order("not-[&:first-child]:w-4"));
 }
 
 #[test]
