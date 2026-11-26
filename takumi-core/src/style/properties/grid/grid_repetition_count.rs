@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{ParseError as CssParseError, Parser, Token};
 
-use crate::style::{FromCss, ParseResult, ToCss, unexpected_token};
+use crate::style::{FromCss, ParseMode, ParseResult, ToCss, unexpected_token};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,7 +27,7 @@ pub enum GridRepetitionCount {
 impl GridRepetitionCount {}
 
 impl<'i> FromCss<'i> for GridRepetitionCount {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       if ident.eq_ignore_ascii_case("auto-fill") {
         return Ok(GridRepetitionCount::Keyword(

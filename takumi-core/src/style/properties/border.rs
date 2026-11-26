@@ -80,12 +80,12 @@ impl From<LineWidth> for Length {
 }
 
 impl<'i> FromCss<'i> for LineWidth {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(LineWidthKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
 
-    Ok(Self::Length(Length::from_css(input)?))
+    Ok(Self::Length(Length::from_css_in(input, mode)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["thin", "medium", "thick", "<length>"];
@@ -161,13 +161,13 @@ pub struct Border {
 }
 
 impl<'i> FromCss<'i> for Border {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut width = None;
     let mut style = None;
     let mut color = None;
 
     while !input.is_exhausted() {
-      if let Ok(value) = input.try_parse(LineWidth::from_css) {
+      if let Ok(value) = input.try_parse(|input| LineWidth::from_css_in(input, mode)) {
         width = Some(value);
         continue;
       }

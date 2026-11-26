@@ -49,10 +49,6 @@ impl Default for BackgroundSize {
 }
 
 impl<'i> FromCss<'i> for BackgroundSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(width) = input.try_parse(|input| Length::from_css_in(input, mode)) {
       let height = input
@@ -120,8 +116,8 @@ impl Animatable for BackgroundSize {
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    parse_comma_list(input, BackgroundSize::from_css)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    parse_comma_list(input, |input| BackgroundSize::from_css_in(input, mode))
   }
 
   const VALID_TOKENS: &'static [&'static str] = BackgroundSize::VALID_TOKENS;

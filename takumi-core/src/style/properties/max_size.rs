@@ -1,7 +1,8 @@
 use std::fmt;
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  discrete,
 };
 use cssparser::Parser;
 
@@ -61,7 +62,7 @@ impl Animatable for MaxSize {
 }
 
 impl<'i> FromCss<'i> for MaxSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -78,7 +79,7 @@ impl<'i> FromCss<'i> for MaxSize {
       return Ok(Self::None);
     }
 
-    Length::from_css(input).map(Self::Length)
+    Length::from_css_in(input, mode).map(Self::Length)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["none", "auto", "<length>"];

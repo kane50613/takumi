@@ -218,17 +218,17 @@ pub(crate) enum ParseMode {
 
 /// Trait for types that can be parsed from CSS.
 pub(crate) trait FromCss<'i> {
-  /// Parses the type from a [`Parser`] instance.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
+  /// Parses the type in `mode`, Blink's `CSSParserMode`.
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self>
   where
     Self: Sized;
 
-  /// Parses the type in `mode`, which only a type holding a length reads.
-  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self>
+  /// Parses the type as a style sheet writes it.
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
   where
     Self: Sized,
   {
-    Self::from_css(input)
+    Self::from_css_in(input, ParseMode::Css)
   }
 
   /// The keywords this type accepts, and the `<syntax>` of each other value it takes, for
@@ -244,10 +244,6 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   const VALID_TOKENS: &'static [&'static str] = T::VALID_TOKENS;
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
-
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
 
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let start = input.state();
@@ -278,7 +274,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 impl<'i> FromCss<'i> for String {
   const VALID_TOKENS: &'static [&'static str] = &["<string>", "<custom-ident>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     Ok(input.expect_ident_or_string()?.to_string())
   }
 }
@@ -674,7 +670,7 @@ impl Animatable for u32 {}
 impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [&'static str] = &["<integer>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
     if value < 0 {
       return Err(CssParseError::from_basic_kind(
@@ -710,10 +706,6 @@ macro_rules! impl_comma_list_from_css {
   };
   ($list:ty, $elem:ty, $valid:expr) => {
     impl<'i> $crate::style::FromCss<'i> for $list {
-      fn from_css(input: &mut cssparser::Parser<'i>) -> $crate::style::ParseResult<'i, Self> {
-        Self::from_css_in(input, $crate::style::ParseMode::Css)
-      }
-
       fn from_css_in(
         input: &mut cssparser::Parser<'i>,
         mode: $crate::style::ParseMode,
@@ -803,7 +795,7 @@ macro_rules! impl_css_enum {
         ),*
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css_in(input: &mut cssparser::Parser<'i>, _mode: $crate::style::ParseMode) -> crate::style::ParseResult<'i, Self> {
         let index = $parser(
           input,
           Self::VALID_TOKENS,
@@ -857,7 +849,7 @@ macro_rules! declare_box_alignment_enum_impl {
         "unsafe",
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css_in(input: &mut cssparser::Parser<'i>, _mode: $crate::style::ParseMode) -> crate::style::ParseResult<'i, Self> {
         let mut overflow_position = None;
 
         loop {

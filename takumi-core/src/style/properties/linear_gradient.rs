@@ -476,10 +476,6 @@ pub struct ResolvedGradientStop {
 }
 
 impl<'i> FromCss<'i> for StopPosition {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, StopPosition> {
     if let Ok(num) = input.try_parse(Parser::expect_number) {
       return Ok(StopPosition(Length::Percentage(
@@ -503,7 +499,7 @@ impl<'i> FromCss<'i> for StopPosition {
 
 impl<'i> FromCss<'i> for GradientStop {
   /// Parses a gradient hint from the input.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, GradientStop> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, GradientStop> {
     if let Ok(hint) = input.try_parse(StopPosition::from_css) {
       return Ok(GradientStop::Hint(hint));
     };
@@ -704,7 +700,7 @@ impl GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for GradientKeywordDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     input.expect_ident_matching("to")?;
 
     if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
@@ -735,7 +731,7 @@ impl<'i> FromCss<'i> for GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for LinearGradientDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(direction) = input.try_parse(GradientKeywordDirection::from_css) {
       return Ok(Self::Keyword(direction));
     }
@@ -751,10 +747,6 @@ impl LinearGradient {
 }
 
 impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, LinearGradient> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
@@ -800,7 +792,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 }
 
 impl<'i> FromCss<'i> for Angle {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Angle> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Angle> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()

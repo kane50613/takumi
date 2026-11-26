@@ -440,8 +440,8 @@ macro_rules! define_style {
     false
   }};
   // `where parse = path` parses the property with `path` instead of its type's `FromCss`.
-  (@parse $ty:ty, $parse:path) => { $parse };
-  (@parse $ty:ty) => { <$ty as FromCss>::from_css_in };
+  (@parse $ty:ty, $input:ident, $mode:expr, $parse:path) => { $parse($input, $mode) };
+  (@parse $ty:ty, $input:ident, $mode:expr) => { <$ty as FromCss>::from_css_in($input, $mode) };
   // `where mode = SvgAttribute` parses the property in that mode wherever it is written, as
   // Blink's `ParserModeOverridingScope`.
   (@mode $mode:ident, $forced:ident) => { ParseMode::$forced };
@@ -643,9 +643,11 @@ macro_rules! define_style {
           let declaration = match self {
             $($(
               Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
-                define_style!(@parse $longhand_ty $(, $longhand_parse)?)(
+                define_style!(
+                  @parse $longhand_ty,
                   input,
-                  define_style!(@mode mode $(, $longhand_mode)?),
+                  define_style!(@mode mode $(, $longhand_mode)?)
+                  $(, $longhand_parse)?
                 )?,
               ),
             )*)*
@@ -2723,7 +2725,7 @@ fn revert_target<T>(
 }
 
 impl<'i> FromCss<'i> for CssWideKeyword {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident_cloned()?;
 
     match_ignore_ascii_case! { ident.as_ref(),

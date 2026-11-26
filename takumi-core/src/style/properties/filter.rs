@@ -375,10 +375,6 @@ pub enum FilterCategory<'f> {
 }
 
 impl<'i> FromCss<'i> for Filters {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Filters::default());
@@ -432,10 +428,6 @@ fn parse_amount<'i>(input: &mut Parser<'i>) -> ParseResult<'i, PercentageNumber>
 }
 
 impl<'i> FromCss<'i> for Filter {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(parser, ParseMode::Css)
-  }
-
   fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 

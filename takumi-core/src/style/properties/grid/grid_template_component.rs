@@ -5,7 +5,7 @@ use cssparser::Parser;
 use super::write_space_separated;
 use crate::style::{
   FromCss, GridRepeatTrack, GridRepetitionCount, GridRepetitionKeyword, GridTrackSize,
-  MakeComputed, ParseResult, SizingContext, ToCss,
+  MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
 };
 
 /// An ordered list of [`GridTemplateComponent`] values.
@@ -54,7 +54,7 @@ impl MakeComputed for GridTemplateComponent {
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponent {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       return Ok(GridTemplateComponent::LineNames(parse_line_names(input)?));
     }
@@ -77,7 +77,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
             names.extend(parse_line_names(input)?);
           }
 
-          let Ok(size) = input.try_parse(GridTrackSize::from_css) else {
+          let Ok(size) = input.try_parse(|input| GridTrackSize::from_css_in(input, mode)) else {
             pending_leading_names = names;
             break;
           };
@@ -109,7 +109,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
       });
     }
 
-    let size = GridTrackSize::from_css(input)?;
+    let size = GridTrackSize::from_css_in(input, mode)?;
     Ok(GridTemplateComponent::Single(size))
   }
 
@@ -175,7 +175,7 @@ fn parse_line_name_list<'i>(input: &mut Parser<'i>) -> ParseResult<'i, GridTempl
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponents {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("subgrid"))
       .is_ok()
@@ -184,7 +184,9 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
     }
 
     let mut components = Vec::new();
-    while let Ok(component) = input.try_parse(GridTemplateComponent::from_css) {
+    while let Ok(component) =
+      input.try_parse(|input| GridTemplateComponent::from_css_in(input, mode))
+    {
       components.push(component);
     }
     Ok(components)

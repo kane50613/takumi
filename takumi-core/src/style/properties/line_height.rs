@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, parse_calc_number_expression,
-  tw::Namespace, tw::TailwindPropertyParser,
+  FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 /// Represents a line height value.
@@ -48,7 +48,7 @@ impl TailwindPropertyParser for LineHeight {
 }
 
 impl<'i> FromCss<'i> for LineHeight {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -67,7 +67,7 @@ impl<'i> FromCss<'i> for LineHeight {
     }
 
     let Ok(number) = input.try_parse(Parser::expect_number) else {
-      return Length::from_css(input).map(Into::into);
+      return Length::from_css_in(input, mode).map(Into::into);
     };
 
     Ok(LineHeight::Unitless(number))

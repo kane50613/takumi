@@ -37,10 +37,6 @@ impl<T: Copy> Sides<T> {
 }
 
 impl<'i, T: Clone + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let top = T::from_css_in(input, mode)?;
     let Ok(right) = input.try_parse(|input| T::from_css_in(input, mode)) else {

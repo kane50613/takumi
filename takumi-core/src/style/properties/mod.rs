@@ -415,11 +415,11 @@ impl Animatable for BorderRadius {
 }
 
 impl<'i> FromCss<'i> for BorderRadius {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let widths: Sides<Length> = Sides::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let widths: Sides<Length> = Sides::from_css_in(input, mode)?;
 
     let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-      Sides::from_css(input)?
+      Sides::from_css_in(input, mode)?
     } else {
       widths
     };
@@ -634,8 +634,8 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [&'static str] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let pair = SpacePair::<Length>::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let pair = SpacePair::<Length>::from_css_in(input, mode)?;
 
     if [pair.x, pair.y]
       .into_iter()
@@ -1344,7 +1344,7 @@ impl MakeComputed for TextTransform {}
 impl Animatable for TextTransform {}
 
 impl<'i> FromCss<'i> for TextTransform {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()

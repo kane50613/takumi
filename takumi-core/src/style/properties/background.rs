@@ -44,10 +44,6 @@ fn parse_attachment<'i>(input: &mut Parser<'i>) -> ParseResult<'i, ()> {
 }
 
 impl<'i> FromCss<'i> for Background {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut color = None;
     let mut image = None;

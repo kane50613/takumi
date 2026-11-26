@@ -199,10 +199,6 @@ impl BasicShape {
 }
 
 impl<'i> FromCss<'i> for ShapeRadius {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(parser, ParseMode::Css)
-  }
-
   fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(length) = parser.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(ShapeRadius::Length(length));
@@ -247,10 +243,6 @@ impl FillRule {
 }
 
 impl<'i> FromCss<'i> for ShapePosition {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(parser, ParseMode::Css)
-  }
-
   fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let first = Length::from_css_in(parser, mode)?;
     let second = parser
@@ -264,10 +256,6 @@ impl<'i> FromCss<'i> for ShapePosition {
 }
 
 impl<'i> FromCss<'i> for BasicShape {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(parser, ParseMode::Css)
-  }
-
   fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 

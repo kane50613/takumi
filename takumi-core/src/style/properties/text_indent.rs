@@ -72,15 +72,14 @@ impl Animatable for TextIndent {
 }
 
 impl<'i> FromCss<'i> for TextIndent {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut amount = None;
     let mut each_line = false;
     let mut hanging = false;
 
     while !input.is_exhausted() {
       if amount.is_none()
-        && let Ok(length) =
-          input.try_parse(|input| Length::parse_length_percentage(input, ParseMode::Css))
+        && let Ok(length) = input.try_parse(|input| Length::parse_length_percentage(input, mode))
       {
         amount = Some(length);
         continue;

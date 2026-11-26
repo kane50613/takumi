@@ -22,10 +22,6 @@ impl<T: Default> Default for SpacePair<T> {
 }
 
 impl<'i, T: Clone + FromCss<'i>> FromCss<'i> for SpacePair<T> {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let first = T::from_css_in(input, mode)?;
     if let Ok(second) = T::from_css_in(input, mode) {

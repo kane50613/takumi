@@ -46,7 +46,7 @@ impl MakeComputed for SvgResource {}
 impl Animatable for SvgResource {}
 
 impl<'i> FromCss<'i> for SvgResource {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -117,7 +117,7 @@ impl Animatable for SvgPaint {
 
 impl<'i> FromCss<'i> for SvgPaint {
   /// Blink's `css_parsing_utils::ParsePaintStroke`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(resource) = input.try_parse(SvgResource::from_css) {
       let fallback = input
         .try_parse(|input| {
@@ -220,10 +220,6 @@ impl Animatable for StrokeDasharray {
 }
 
 impl<'i> FromCss<'i> for StrokeDasharray {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut lengths = vec![Self::item(input, mode)?];
 
@@ -285,7 +281,7 @@ impl Animatable for StrokeMiterlimit {
 }
 
 impl<'i> FromCss<'i> for StrokeMiterlimit {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let limit = input.expect_number()?;
 
     if limit < 0.0 {
@@ -409,7 +405,7 @@ impl Animatable for PaintOrder {}
 
 impl<'i> FromCss<'i> for PaintOrder {
   /// Blink's `PaintOrder::ParseSingleValue`: the phases not named follow in natural order.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if accepts_keyword(input, "normal") {
       return Ok(Self::Normal);
     }
@@ -743,10 +739,6 @@ impl Animatable for BaselineShift {
 }
 
 impl<'i> FromCss<'i> for BaselineShift {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     for (keyword, shift) in [
       ("baseline", Self::default()),
@@ -866,7 +858,7 @@ impl Animatable for SvgPath {
 impl<'i> FromCss<'i> for SvgPath {
   /// Blink's `ConsumePathOrNone`: `none`, or a `path()` of complete path data, where an empty
   /// string is `none`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if accepts_keyword(input, "none") {
       return Ok(Self::default());
     }

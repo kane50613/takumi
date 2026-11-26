@@ -375,10 +375,6 @@ impl From<f32> for Length {
 }
 
 impl<'i> FromCss<'i> for Length {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 

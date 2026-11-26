@@ -106,10 +106,6 @@ impl<'i> FromCss<'i> for Size {
     "stretch",
   ];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(parse_sizing_keyword) {
       return Ok(keyword);

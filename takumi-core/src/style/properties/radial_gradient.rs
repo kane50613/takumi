@@ -96,7 +96,7 @@ pub enum RadialSize {
   },
 }
 impl<'i> FromCss<'i> for RadialSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(RadialSize::ClosestSide),
@@ -463,10 +463,6 @@ impl RadialGradient {
 }
 
 impl<'i> FromCss<'i> for RadialGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, RadialGradient> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, RadialGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 

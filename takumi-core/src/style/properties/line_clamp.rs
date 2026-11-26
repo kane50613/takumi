@@ -3,7 +3,8 @@ use std::fmt;
 use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser, serialize_string};
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum, tw::TailwindPropertyParser,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, impl_css_enum,
+  tw::TailwindPropertyParser,
 };
 
 /// `block-ellipsis`: `no-ellipsis | auto | <string>`. Inherited.
@@ -23,7 +24,7 @@ impl MakeComputed for BlockEllipsis {}
 impl Animatable for BlockEllipsis {}
 
 impl<'i> FromCss<'i> for BlockEllipsis {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|i| i.expect_ident_matching("no-ellipsis"))
       .or_else(|_| input.try_parse(|i| i.expect_ident_matching("none")))
@@ -143,7 +144,7 @@ impl Animatable for MaxLines {}
 
 impl<'i> FromCss<'i> for MaxLines {
   /// Blink's `MaxLines::ParseSingleValue`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut lines = None;
     let mut auto = false;
 
@@ -215,7 +216,7 @@ impl MakeComputed for LineClamp {}
 
 impl<'i> FromCss<'i> for LineClamp {
   /// Blink's `AlternativeLineClampShorthand::ParseShorthand`, with a `<string>` ellipsis too.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }
@@ -281,7 +282,7 @@ pub struct WebkitLineClamp(pub LineClamp);
 impl MakeComputed for WebkitLineClamp {}
 
 impl<'i> FromCss<'i> for WebkitLineClamp {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }

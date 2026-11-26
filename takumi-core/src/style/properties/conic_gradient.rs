@@ -359,10 +359,6 @@ impl ConicGradient {
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, ConicGradient> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, ConicGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 

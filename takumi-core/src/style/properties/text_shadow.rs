@@ -45,10 +45,6 @@ pub(crate) type TextShadows = Box<[TextShadow]>;
 impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, TextShadow> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, TextShadow> {
     let mut color = None;
     let mut lengths = None;

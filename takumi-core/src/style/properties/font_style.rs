@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
-use crate::style::{Angle, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{Angle, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -42,7 +42,7 @@ pub(crate) fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> 
 }
 
 impl<'i> FromCss<'i> for FontStyle {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! { ident,

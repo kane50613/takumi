@@ -435,8 +435,8 @@ impl Affine {
 }
 
 impl<'i> FromCss<'i> for Affine {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(input, ParseMode::Css)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    Self::parse(input, mode)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<number>"];
@@ -477,8 +477,8 @@ impl ParseMode {
 pub struct Transforms(pub Box<[Transform]>);
 
 impl<'i> FromCss<'i> for Transforms {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(input, ParseMode::Css)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    Self::parse(input, mode)
   }
 
   const VALID_TOKENS: &'static [&'static str] = Transform::VALID_TOKENS;
@@ -502,7 +502,7 @@ impl Transforms {
   /// The list an SVG `transform` attribute writes, none when it is malformed.
   #[cfg(feature = "svg")]
   pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
-    Self::parse(&mut Parser::new(text), ParseMode::SvgAttribute).ok()
+    Self::from_css_in(&mut Parser::new(text), ParseMode::SvgAttribute).ok()
   }
 }
 
@@ -708,8 +708,8 @@ impl Transform {
 }
 
 impl<'i> FromCss<'i> for Transform {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(parser, ParseMode::Css)
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    Self::parse(parser, mode)
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<transform-function>"];

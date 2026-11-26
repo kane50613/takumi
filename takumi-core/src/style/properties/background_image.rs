@@ -59,10 +59,6 @@ impl TailwindPropertyParser for BackgroundImage {
 }
 
 impl<'i> FromCss<'i> for BackgroundImage {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, BackgroundImage> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, BackgroundImage> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
@@ -104,10 +100,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     parse_comma_list(input, |input| BackgroundImage::from_css_in(input, mode))
   }

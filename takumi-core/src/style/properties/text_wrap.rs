@@ -1,7 +1,9 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{FromCss, MakeComputed, ParseResult, impl_css_enum, tw::TailwindPropertyParser};
+use crate::style::{
+  FromCss, MakeComputed, ParseMode, ParseResult, impl_css_enum, tw::TailwindPropertyParser,
+};
 
 /// Controls how text should be wrapped.
 /// Construct with [`TextWrap::builder`].
@@ -42,7 +44,7 @@ impl TailwindPropertyParser for TextWrap {
 }
 
 impl<'i> FromCss<'i> for TextWrap {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut mode = None;
     let mut style = TextWrapStyle::default();
 

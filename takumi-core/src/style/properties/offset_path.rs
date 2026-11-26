@@ -12,7 +12,7 @@ use kurbo::{
 use crate::{
   geometry::{Point, Size, arclen_accuracy},
   style::{
-    Angle, Animatable, BasicShape, Color, FromCss, Length, MakeComputed, ParseResult,
+    Angle, Animatable, BasicShape, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult,
     ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
   },
 };
@@ -163,11 +163,11 @@ impl MakeComputed for OffsetPath {
 }
 
 impl<'i> FromCss<'i> for OffsetPath {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(ray) = input.try_parse(parse_ray) {
       return Ok(OffsetPath::Ray(ray));
     }
-    if let Ok(shape) = input.try_parse(BasicShape::from_css) {
+    if let Ok(shape) = input.try_parse(|input| BasicShape::from_css_in(input, mode)) {
       return Ok(OffsetPath::Shape(shape));
     }
     Ok(OffsetPath::CoordBox(CoordBox::from_css(input)?))
@@ -233,14 +233,16 @@ impl OffsetAnchor {
 }
 
 impl<'i> FromCss<'i> for OffsetAnchor {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
     {
       return Ok(OffsetAnchor::Auto);
     }
-    Ok(OffsetAnchor::Position(ShapePosition::from_css(input)?))
+    Ok(OffsetAnchor::Position(ShapePosition::from_css_in(
+      input, mode,
+    )?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["auto", "<length>"];
@@ -285,7 +287,7 @@ impl OffsetPosition {
 }
 
 impl<'i> FromCss<'i> for OffsetPosition {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -298,7 +300,9 @@ impl<'i> FromCss<'i> for OffsetPosition {
     {
       return Ok(OffsetPosition::Auto);
     }
-    Ok(OffsetPosition::Position(ShapePosition::from_css(input)?))
+    Ok(OffsetPosition::Position(ShapePosition::from_css_in(
+      input, mode,
+    )?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["normal", "auto", "<length>"];
@@ -382,7 +386,7 @@ impl Animatable for OffsetRotate {
 }
 
 impl<'i> FromCss<'i> for OffsetRotate {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -460,9 +464,9 @@ pub struct OffsetShorthand {
 }
 
 impl<'i> FromCss<'i> for OffsetShorthand {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let position = input
-      .try_parse(OffsetPosition::from_css)
+      .try_parse(|input| OffsetPosition::from_css_in(input, mode))
       .unwrap_or_default();
 
     let path = input
@@ -476,7 +480,7 @@ impl<'i> FromCss<'i> for OffsetShorthand {
     if path.is_some() {
       loop {
         if distance.is_none()
-          && let Ok(value) = input.try_parse(Length::from_css)
+          && let Ok(value) = input.try_parse(|input| Length::from_css_in(input, mode))
         {
           distance = Some(value);
           continue;
@@ -494,7 +498,7 @@ impl<'i> FromCss<'i> for OffsetShorthand {
     }
 
     let anchor = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-      OffsetAnchor::from_css(input)?
+      OffsetAnchor::from_css_in(input, mode)?
     } else {
       OffsetAnchor::default()
     };

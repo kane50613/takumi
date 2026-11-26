@@ -40,7 +40,7 @@ impl TextDecorationLines {
 }
 
 impl<'i> FromCss<'i> for TextDecorationLines {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let first_ident = input.expect_ident()?;
 
     if first_ident.eq_ignore_ascii_case("none") {
@@ -160,7 +160,7 @@ impl Animatable for TextDecorationInset {
 }
 
 impl<'i> FromCss<'i> for TextDecorationInset {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -168,8 +168,10 @@ impl<'i> FromCss<'i> for TextDecorationInset {
       return Ok(Self::Auto);
     }
 
-    let start = Length::from_css(input)?;
-    let end = input.try_parse(Length::from_css).unwrap_or(start);
+    let start = Length::from_css_in(input, mode)?;
+    let end = input
+      .try_parse(|input| Length::from_css_in(input, mode))
+      .unwrap_or(start);
 
     if matches!(start, Length::Auto) || matches!(end, Length::Auto) {
       return Err(input.new_error_for_next_token());
@@ -396,10 +398,6 @@ impl FromIterator<AppliedTextDecoration> for AppliedTextDecorations {
 }
 
 impl<'i> FromCss<'i> for TextDecorationThickness {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("from-font"))
@@ -501,7 +499,7 @@ impl Animatable for TextUnderlineOffset {
 }
 
 impl<'i> FromCss<'i> for TextUnderlineOffset {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -509,7 +507,7 @@ impl<'i> FromCss<'i> for TextUnderlineOffset {
       return Ok(Self::Auto);
     }
 
-    Ok(Self::Length(Length::from_css(input)?))
+    Ok(Self::Length(Length::from_css_in(input, mode)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["auto", "<length>", "<percentage>"];
@@ -593,10 +591,6 @@ impl MakeComputed for TextDecoration {
 }
 
 impl<'i> FromCss<'i> for TextDecoration {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut line = TextDecorationLines::empty();
     let mut style = None;

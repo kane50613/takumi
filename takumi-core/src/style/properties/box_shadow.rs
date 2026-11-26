@@ -79,7 +79,7 @@ pub(super) fn parse_offsets_blur<'i>(
 }
 
 impl<'i> FromCss<'i> for BoxShadow {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, BoxShadow> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, BoxShadow> {
     let mut color = None;
     let mut lengths = None;
     let mut inset = false;
@@ -96,9 +96,9 @@ impl<'i> FromCss<'i> for BoxShadow {
 
       if lengths.is_none()
         && let Ok(value) = input.try_parse(|input| -> ParseResult<'i, _> {
-          let (horizontal, vertical, blur) = parse_offsets_blur(input, ParseMode::Css)?;
+          let (horizontal, vertical, blur) = parse_offsets_blur(input, mode)?;
           let spread = input
-            .try_parse(|input| parse_non_percentage_length(input, ParseMode::Css))
+            .try_parse(|input| parse_non_percentage_length(input, mode))
             .unwrap_or(Length::zero());
 
           Ok((horizontal, vertical, blur, spread))

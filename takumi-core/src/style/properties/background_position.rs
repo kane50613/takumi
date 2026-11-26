@@ -413,10 +413,6 @@ fn next_is_ident(input: &mut Parser<'_>) -> bool {
 }
 
 impl<'i> FromCss<'i> for PositionValue {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     Self::parse(input, PositionSyntax::Position, mode)
   }
@@ -449,10 +445,6 @@ impl PositionComponent {
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(v) = input.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(v.into());
@@ -482,10 +474,6 @@ impl<'i> FromCss<'i> for PositionComponent {
 pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::from_css_in(input, ParseMode::Css)
-  }
-
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     parse_comma_list(input, |input| {
       PositionValue::parse(input, PositionSyntax::Background, mode)
