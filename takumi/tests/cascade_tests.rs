@@ -2144,3 +2144,17 @@ fn a_scope_root_that_is_its_own_limit_scopes_nothing() {
     [1200.0, 1200.0, 1200.0]
   );
 }
+
+/// A nested `@scope` start in a top-level `@scope` reads as `:scope` and a descendant, as Blink's
+/// `ConsumeScopeRule` parses it with the scope nesting type.
+#[test]
+fn a_scope_start_in_a_scope_body_is_relative_to_its_root() {
+  assert_eq!(
+    card_widths("@scope (.card) { @scope (.card) { p { width: 30px } } }"),
+    [1200.0, 1200.0, 1200.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.outer) { @scope (.card) { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+}

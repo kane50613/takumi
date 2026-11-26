@@ -1477,6 +1477,17 @@ fn ensure_single_layer_name(
   ))
 }
 
+impl RuleParser {
+  /// How a selector at this level reads: relative to the scope root inside an `@scope`.
+  fn relative(&self) -> ParseRelative {
+    if self.scoped {
+      ParseRelative::ForScope
+    } else {
+      ParseRelative::No
+    }
+  }
+}
+
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
   type Prelude = SelectorList<SelectorImpl>;
   type QualifiedRule = StyleSheetFragment;
@@ -1486,13 +1497,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     &mut self,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    let relative = if self.scoped {
-      ParseRelative::ForScope
-    } else {
-      ParseRelative::No
-    };
-
-    SelectorList::parse(&TakumiSelectorParser, input, relative)
+    SelectorList::parse(&TakumiSelectorParser, input, self.relative())
   }
 
   fn parse_block(
@@ -1515,7 +1520,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input, ParseRelative::No)
+    parse_at_rule_prelude(name, input, self.relative())
   }
 
   fn parse_block(
