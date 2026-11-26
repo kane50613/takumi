@@ -1,5 +1,7 @@
 use std::{
+  f64::consts::SQRT_2,
   fmt,
+  mem::swap,
   ops::{Deref, Neg},
 };
 
@@ -589,12 +591,63 @@ impl Angle {
     Angle(value)
   }
 
-  /// The direction the angle points in, as degrees in [0, 360). Approximate: rotation, skew,
-  /// `hue-rotate()`, and `offset-rotate` take their sines, cosines, and tangents from this, where
-  /// Blink's `SinCosDegrees` and `tan` read the specified degrees, so an angle past a turn can
-  /// differ from Chrome in the last bits of the matrix.
+  /// The direction the angle points in, as degrees in [0, 360).
   pub fn normalized(self) -> f32 {
     self.0.rem_euclid(360.0)
+  }
+
+  /// The sine and cosine of the specified degrees, exact at multiples of 45deg, as gfx's
+  /// [`SinCosDegrees`](https://source.chromium.org/chromium/chromium/src/+/main:ui/gfx/geometry/sin_cos_degrees.h)
+  /// range-reduces them to the first octant in double precision.
+  pub(crate) fn sin_cos_degrees(self) -> (f32, f32) {
+    let mut degrees = f64::from(self.0);
+
+    if !(degrees > -90_000_000.0 && degrees < 90_000_000.0) {
+      let (sin, cos) = (degrees % 360.0).to_radians().sin_cos();
+
+      return (sin as f32, cos as f32);
+    }
+
+    let octants = degrees / 45.0;
+    let mut octant = octants as i32;
+
+    if f64::from(octant) == octants {
+      const HALF_SQRT_2: f64 = SQRT_2 / 2.0;
+      const OCTANTS: [(f64, f64); 8] = [
+        (0.0, 1.0),
+        (HALF_SQRT_2, HALF_SQRT_2),
+        (1.0, 0.0),
+        (HALF_SQRT_2, -HALF_SQRT_2),
+        (0.0, -1.0),
+        (-HALF_SQRT_2, -HALF_SQRT_2),
+        (-1.0, 0.0),
+        (-HALF_SQRT_2, HALF_SQRT_2),
+      ];
+      let (sin, cos) = OCTANTS[(octant & 7) as usize];
+
+      return (sin as f32, cos as f32);
+    }
+
+    if degrees < 0.0 {
+      octant -= 1;
+    }
+    degrees -= f64::from(octant) * 45.0;
+    if octant & 1 != 0 {
+      degrees = 45.0 - degrees;
+    }
+
+    let (mut sin, mut cos) = degrees.to_radians().sin_cos();
+
+    if (octant + 1) & 2 != 0 {
+      swap(&mut sin, &mut cos);
+    }
+    if octant & 4 != 0 {
+      sin = -sin;
+    }
+    if (octant + 2) & 4 != 0 {
+      cos = -cos;
+    }
+    (sin as f32, cos as f32)
   }
 }
 

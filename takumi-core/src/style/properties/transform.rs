@@ -256,37 +256,10 @@ impl Affine {
       && (self.d - 1.0).abs() < 1e-8
   }
 
-  /// Creates a new rotation transform, exact at whole quarter turns as Chromium's
-  /// [`gfx::SinCosDegrees`](https://source.chromium.org/chromium/chromium/src/+/main:ui/gfx/geometry/sin_cos_degrees.h)
-  /// makes it.
+  /// Creates a new rotation transform, as gfx's `Transform::Rotate` takes the angle's
+  /// [`Angle::sin_cos_degrees`].
   pub fn rotation(angle: Angle) -> Self {
-    let degrees = angle.normalized();
-    let quarter_turns = degrees / 90.0;
-
-    if quarter_turns.fract() != 0.0 {
-      return Self::rotation_radians(degrees.to_radians());
-    }
-
-    let (sin, cos) = match quarter_turns.rem_euclid(4.0) as u8 {
-      0 => (0.0, 1.0),
-      1 => (1.0, 0.0),
-      2 => (0.0, -1.0),
-      _ => (-1.0, 0.0),
-    };
-
-    Self {
-      a: cos,
-      b: sin,
-      c: -sin,
-      d: cos,
-      x: 0.0,
-      y: 0.0,
-    }
-  }
-
-  /// Creates a new rotation transform from an angle in radians
-  pub(crate) fn rotation_radians(radians: f32) -> Self {
-    let (sin, cos) = radians.sin_cos();
+    let (sin, cos) = angle.sin_cos_degrees();
 
     Self {
       a: cos,
@@ -344,10 +317,11 @@ impl Affine {
     (self.a.hypot(self.b), self.c.hypot(self.d))
   }
 
-  /// Creates a new skew transform
+  /// Creates a new skew transform, as gfx's `Transform::Skew` takes `TanDegrees` of each angle in
+  /// double precision.
   pub(crate) fn skew(x: Angle, y: Angle) -> Self {
-    let tanx = x.normalized().to_radians().tan();
-    let tany = y.normalized().to_radians().tan();
+    let tan_degrees = |angle: Angle| f64::from(*angle).to_radians().tan() as f32;
+    let (tanx, tany) = (tan_degrees(x), tan_degrees(y));
 
     Self {
       a: 1.0,
@@ -894,6 +868,23 @@ mod tests {
         (cos, sin, -sin, cos),
         "{degrees}deg"
       );
+    }
+  }
+
+  /// gfx's `SinCosDegrees` and `TanDegrees` read the specified degrees in double precision.
+  #[test]
+  fn rotation_and_skew_read_the_specified_degrees() {
+    for degrees in [30.0_f32, 400.0, -330.0, 1000.5, 98765.4] {
+      let radians = f64::from(degrees).to_radians();
+      let rotation = Affine::rotation(Angle::new(degrees));
+      let skew = Affine::skew(Angle::new(degrees), Angle::zero());
+
+      assert_eq!(
+        (rotation.a, rotation.b),
+        (radians.cos() as f32, radians.sin() as f32),
+        "{degrees}deg"
+      );
+      assert_eq!(skew.c, radians.tan() as f32, "{degrees}deg");
     }
   }
 
