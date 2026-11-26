@@ -38,9 +38,10 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
     .map(TwRule::parse)
     .collect::<Option<Vec<_>>>()?;
 
-  if rules.iter().any(|rule| {
-    rule.breakpoint.is_some() || rule.container.is_some() || !rule.media.is_empty()
-  }) {
+  if rules
+    .iter()
+    .any(|rule| rule.breakpoint.is_some() || rule.container.is_some() || !rule.media.is_empty())
+  {
     return None;
   }
 

@@ -2038,7 +2038,9 @@ fn structural_variants_cascade_as_tailwind_registers_them() {
 fn the_container_utility_sets_container_type_and_name() {
   assert_eq!(
     parse_property("@container"),
-    Some(vec![StyleDeclaration::container_type(ContainerType::InlineSize)])
+    Some(vec![StyleDeclaration::container_type(
+      ContainerType::InlineSize
+    )])
   );
   assert_eq!(
     parse_property("@container-size/sidebar"),
@@ -2080,4 +2082,3 @@ fn media_variants_follow_the_viewport() {
   assert!(expand_apply("dark:w-4").is_none());
   assert!(expand_apply("@sm:w-4").is_none());
 }
-

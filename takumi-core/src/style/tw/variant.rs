@@ -153,7 +153,10 @@ pub(crate) enum LateCondition {
 /// The late variants in the order Tailwind registers them.
 const LATE: [(&str, LateCondition); 6] = [
   ("portrait", LateCondition::Media("(orientation: portrait)")),
-  ("landscape", LateCondition::Media("(orientation: landscape)")),
+  (
+    "landscape",
+    LateCondition::Media("(orientation: landscape)"),
+  ),
   (
     "ltr",
     LateCondition::PseudoClass(r#":where(:dir(ltr), [dir="ltr"], [dir="ltr"] *)"#),
@@ -339,7 +342,10 @@ impl Variants {
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
       late: self.late,
-      container: self.container.as_ref().map(|container| container.order.clone()),
+      container: self
+        .container
+        .as_ref()
+        .map(|container| container.order.clone()),
       breakpoint: self.breakpoint.as_ref().map(Breakpoint::order),
       ranks: self.ranks,
     }
