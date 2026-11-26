@@ -150,6 +150,8 @@ impl DeferredDeclaration {
   ) -> Option<ParsedDeclarations> {
     let resolved_value = resolve_var_references(&self.specified_value, custom_properties)?;
 
+    // A presentation attribute's substituted value parses as CSS text too, as WPT
+    // svg/styling/css-var-on-length-attributes-02.svg expects.
     self
       .property
       .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)), ParseMode::Css)
