@@ -40,7 +40,10 @@ use crate::{
     ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, size_attribute,
   },
   resources::{image::ImageSource, image_buffer::ImageBuffer},
-  style::{Direction, FromCssStr, Lang, Length, Style, StyleDeclarationBlock, TailwindValues},
+  style::{
+    Direction, FromCssStr, Lang, Length, Style, StyleDeclarationBlock, TailwindValues,
+    selector::STYLE_OWNER_RULE,
+  },
 };
 use typed_builder::TypedBuilder;
 
@@ -388,13 +391,31 @@ pub struct StyleElement {
   pub text: String,
   /// The `media` attribute, none when it is absent or empty.
   pub media: Option<String>,
+  /// The owner its parent element names, which an `@scope` without a start roots at.
+  owner: Option<u32>,
 }
 
 impl StyleElement {
-  /// The text, inside an `@media` rule when the element has a `media` attribute.
+  /// The text, inside an `@media` rule when the element has a `media` attribute, between the
+  /// owner it names and the end of that owner when it may hold an `@scope` rule.
   pub fn css(&self) -> String {
-    in_media(self.media.as_deref(), self.text.clone())
+    let css = in_media(self.media.as_deref(), self.text.clone());
+
+    match self.owner {
+      // An at-keyword starts with a literal `@`, however its name is escaped.
+      Some(owner) if self.text.contains('@') => {
+        format!("@{STYLE_OWNER_RULE} {owner};{css}\n@{STYLE_OWNER_RULE} none;")
+      }
+      _ => css,
+    }
   }
+}
+
+/// The owner of a `<style>` element, its parent's `NodeRef` id.
+/// Approximate: an owner is unique only within one parse, so trees and CSS composed from separate
+/// parses can share an owner.
+fn style_owner(parent: NodeRef<'_>) -> Option<u32> {
+  u32::try_from(parent.id()).ok()
 }
 
 /// A `<link rel="stylesheet">`, which the document loads from `href`.
@@ -448,20 +469,29 @@ impl ParsedHtml {
   fn read_style_sheets(&mut self, document: NodeRef<'_>) {
     let mut sheets = Vec::new();
     let mut preferred_set: Option<&str> = None;
-    let mut pending: Vec<_> = document.children().rev().collect();
+    let mut pending: Vec<_> = document
+      .children()
+      .rev()
+      .map(|child| (child, None))
+      .collect();
 
-    while let Some(node) = pending.pop() {
+    while let Some((node, parent)) = pending.pop() {
       let NodeData::Element { name, .. } = node.data() else {
         continue;
       };
 
       if name.ns != Namespace::Html {
-        pending.extend(node.children().rev());
+        pending.extend(node.children().rev().map(|child| (child, Some(node))));
         continue;
       }
 
       let sheet = match &*name.local {
-        "style" => style_element(node).map(DocumentStyleSheet::Inline),
+        "style" => style_element(node)
+          .map(|style| StyleElement {
+            owner: parent.and_then(style_owner),
+            ..style
+          })
+          .map(DocumentStyleSheet::Inline),
         "link" => stylesheet_href(node).map(|href| {
           DocumentStyleSheet::Link(StyleSheetLink {
             href: href.to_owned(),
@@ -486,7 +516,7 @@ impl ParsedHtml {
           None
         }
         _ => {
-          pending.extend(node.children().rev());
+          pending.extend(node.children().rev().map(|child| (child, Some(node))));
           None
         }
       };
@@ -551,6 +581,7 @@ fn style_element(style: NodeRef<'_>) -> Option<StyleElement> {
   Some(StyleElement {
     text,
     media: media_attribute(style).map(str::to_owned),
+    owner: None,
   })
 }
 
@@ -854,6 +885,13 @@ impl NodeBuilder<'_> {
     let NodeData::Element { attrs, .. } = handle.data() else {
       return node;
     };
+
+    if handle.children().any(|child| {
+      matches!(child.data(), NodeData::Element { name, .. }
+        if name.ns == Namespace::Html && &*name.local == "style")
+    }) {
+      node.metadata.style_owner = style_owner(handle);
+    }
 
     let mut attributes = BTreeMap::new();
     let mut auto_direction = tag == "bdi";

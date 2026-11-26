@@ -33,7 +33,7 @@ use crate::{
     tree::{BoxFragment, LayoutTree, NodeOrigin, push_tight},
   },
   layout_unit::LayoutUnit,
-  style::{Display, JustifyContent},
+  style::{ContainerType, Display, JustifyContent},
 };
 #[cfg(feature = "fragmentation")]
 use crate::{
@@ -668,6 +668,13 @@ impl<'r> LayoutTree<'r> {
 
     match algorithm {
       Algorithm::Hidden => return MinMaxSizesResult::default(),
+      // Size containment treats a replaced element as having no natural size.
+      Algorithm::Replaced if style.contains_inline_size() => {
+        return MinMaxSizesResult::new(
+          MinMaxSizes::both(resolver.border_padding.inline_sum()),
+          depends_on_block_constraints,
+        );
+      }
       Algorithm::Replaced => {
         let mut replaced_space = space.clone();
 
@@ -717,6 +724,16 @@ impl<'r> LayoutTree<'r> {
           control.default_inline_size(&render_node.context) + resolver.border_padding.inline_sum(),
         ),
         false,
+      );
+    }
+
+    // Blink's `CalculateMinMaxSizesIgnoringChildren`, after a text control's default size: an
+    // inline-size-contained box takes no inline size from its content. A grid sizes its explicit
+    // columns without its items in its own algorithm.
+    if style.contains_inline_size() && !matches!(algorithm, Algorithm::Grid) {
+      return MinMaxSizesResult::new(
+        MinMaxSizes::both(resolver.border_padding.inline_sum()),
+        depends_on_block_constraints,
       );
     }
 
@@ -854,6 +871,7 @@ impl<'r> LayoutTree<'r> {
       || style.is_out_of_flow()
       || style.is_scroll_container()
       || style.applies_layout_containment()
+      || style.container_type != ContainerType::Normal
       || self.render_node(node).context.style.line_clamp().is_some()
       // https://drafts.csswg.org/css-align/#distribution-block
       || style.align_content != JustifyContent::Normal

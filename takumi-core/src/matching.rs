@@ -9,7 +9,7 @@ use selectors::{
   attr::{CaseSensitivity, NamespaceConstraint},
   bloom::BloomFilter,
   matching::*,
-  parser::{AncestorHashes, Combinator, Component, Selector},
+  parser::{AncestorHashes, Combinator, Component, Selector, SelectorList},
 };
 use smallvec::SmallVec;
 
@@ -19,11 +19,15 @@ use crate::{
     InputType, has_attribute, is_disableable_form_control, is_element, is_mutable_text_control,
     is_placeholder_shown, required_state,
   },
+  geometry::Size,
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    BreakpointOverrides, Direction, LonghandId, MediaQueryList, StyleDeclarationBlock, TwRule,
-    selector::{CssRule, FormState, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
+    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, FontUnits,
+    LonghandId, MediaQueryList, SizingContext, StyleDeclarationBlock, TwRule,
+    selector::{
+      CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
+    },
     tw::TailwindCache,
   },
   viewport::Viewport,
@@ -714,8 +718,8 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   layered_important_start: usize,
   /// The rule each block came from and whether it is the `!important` block, in cascade order.
   rules: SmallVec<[(RuleId, bool); 4]>,
-  /// Each block's layer in cascade order: named layers, then the `tw` layer, then unlayered rules,
-  /// reversed among important blocks.
+  /// Each block's layer in declaration order: named layers, then the `tw` layer, then unlayered
+  /// rules, for important blocks as for normal ones.
   layers: SmallVec<[usize; 4]>,
 }
 
@@ -798,6 +802,8 @@ struct MatchedRule<'a> {
   important: bool,
   layer_order: usize,
   specificity: u32,
+  /// How many generations up its `@scope` root is, `u32::MAX` without one.
+  proximity: u32,
   /// A stylesheet rule's position, or a `tw` rule's place in Tailwind's sort of this render's
   /// utilities.
   source_order: usize,
@@ -1026,6 +1032,18 @@ pub(crate) fn match_stylesheets_view<'a>(
   viewport: Viewport,
   tailwind: &TailwindCache,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
+  match_stylesheets_in_containers(root, stylesheets, viewport, tailwind, None)
+}
+
+/// [`match_stylesheets_view`] with the query containers `@container` rules read, by their place in
+/// `root`, without which no container query holds.
+pub(crate) fn match_stylesheets_in_containers<'a>(
+  root: &Node,
+  stylesheets: &[&'a StyleSheet],
+  viewport: Viewport,
+  tailwind: &TailwindCache,
+  containers: Option<&QueryContainers>,
+) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
   let (mut rule_offset, mut layer_offset) = (0, 0);
 
@@ -1118,48 +1136,88 @@ pub(crate) fn match_stylesheets_view<'a>(
         let rule = &placement.sheet.rules()[position];
         let source_order = placement.rule_offset + position;
         let ancestor_hashes = &rule_index.ancestor_hashes[position];
-        let mut best_specificities: [Option<u32>; 3] = [None; 3];
+        // A container query asks the element's ancestors, and a pseudo-element's its originating
+        // element and up, as Blink's `ContainerQueryEvaluator` starts from each.
+        let holds = |start: Option<ArenaElement<'_>>| {
+          rule
+            .container_queries
+            .iter()
+            .all(|query| container_query_holds(query, start, containers, viewport))
+        };
+        let element_holds = holds(element.parent_element());
+        let pseudo_holds = rule.container_queries.is_empty() || holds(Some(element));
 
-        for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
-          let Some(target) = selector_target(selector) else {
-            continue;
-          };
-          if is_replaced && target != SelectorTarget::Element {
-            continue;
-          }
-
-          if early_reject_by_local_name(selector, 0, element) {
-            continue;
-          }
-
-          let ctx = if target == SelectorTarget::Element {
-            &mut element_ctx
-          } else {
-            &mut pseudo_ctx
-          };
-
-          if matches_selector(
-            selector,
-            0,
-            Some(&ancestor_hashes[selector_index]),
-            element,
-            ctx,
-          ) {
-            let specificity = selector.specificity();
-            let slot = &mut best_specificities[target as usize];
-
-            *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
-          }
+        if !element_holds && !pseudo_holds {
+          continue;
         }
 
-        for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut())
-        {
+        let roots = match &rule.scope {
+          Some(scope) => scope_roots(scope, element, &mut element_ctx),
+          None => SmallVec::from_slice(&[(None, u32::MAX)]),
+        };
+
+        // The highest specificity a selector matches with under any root, the closest root's
+        // proximity among equals, as each root's match is a declaration of its own in Blink.
+        let mut best: [Option<(u32, u32)>; 3] = [None; 3];
+
+        for (root, proximity) in roots {
+          element_ctx.scope_element = root;
+          pseudo_ctx.scope_element = root;
+
+          for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
+            let Some(target) = selector_target(selector) else {
+              continue;
+            };
+            if is_replaced && target != SelectorTarget::Element {
+              continue;
+            }
+            if !(if target == SelectorTarget::Element {
+              element_holds
+            } else {
+              pseudo_holds
+            }) {
+              continue;
+            }
+
+            if early_reject_by_local_name(selector, 0, element) {
+              continue;
+            }
+
+            let ctx = if target == SelectorTarget::Element {
+              &mut element_ctx
+            } else {
+              &mut pseudo_ctx
+            };
+
+            if matches_selector(
+              selector,
+              0,
+              Some(&ancestor_hashes[selector_index]),
+              element,
+              ctx,
+            ) {
+              let slot = &mut best[target as usize];
+              let matched = (selector.specificity(), proximity);
+
+              // Higher specificity first, then the closer root.
+              if slot.is_none_or(|(specificity, closest)| {
+                (matched.0, u32::MAX - matched.1) > (specificity, u32::MAX - closest)
+              }) {
+                *slot = Some(matched);
+              }
+            }
+          }
+        }
+        element_ctx.scope_element = None;
+        pseudo_ctx.scope_element = None;
+
+        for (best, bucket) in best.into_iter().zip(node_rules.iter_mut()) {
           record_matches(
             rule,
             source_order,
             placement.layer_offset,
             layers,
-            best_specificity,
+            best,
             bucket,
           );
         }
@@ -1204,6 +1262,195 @@ pub(crate) fn match_stylesheets_view<'a>(
   per_node
 }
 
+/// A query container as a layout left it: its `container-type`, its names, the size of its content
+/// box, and the font sizes its relative lengths resolve in.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct QueryContainer {
+  pub(crate) container_type: ContainerType,
+  pub(crate) name: ContainerName,
+  pub(crate) size: Size<f32>,
+  /// What a relative length in a query reads: the container's own font and line height.
+  pub(crate) font: QueryFont,
+}
+
+impl QueryContainer {
+  /// Its size on the axes its `container-type` contains, the others unknown.
+  fn contained_size(&self) -> Size<Option<f32>> {
+    Size {
+      width: self
+        .container_type
+        .contains_inline_size()
+        .then_some(self.size.width),
+      height: self
+        .container_type
+        .contains_block_size()
+        .then_some(self.size.height),
+    }
+  }
+}
+
+/// A container's font metrics, which the relative lengths in a query read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct QueryFont {
+  pub(crate) font_size: f32,
+  pub(crate) root_font_size: Option<f32>,
+  pub(crate) line_height: f32,
+  pub(crate) root_line_height: Option<f32>,
+  pub(crate) units: FontUnits,
+}
+
+impl QueryFont {
+  /// The metrics of a box sized in `sizing`.
+  pub(crate) fn of(sizing: &SizingContext) -> Self {
+    Self {
+      font_size: sizing.font_size,
+      root_font_size: sizing.root_font_size,
+      line_height: sizing.line_height,
+      root_line_height: sizing.root_line_height,
+      units: FontUnits {
+        ch: sizing.ch,
+        ex: sizing.ex,
+      },
+    }
+  }
+
+  /// A query's sizing at `viewport` in these metrics.
+  fn sizing(self, viewport: Viewport) -> SizingContext {
+    SizingContext::for_media(viewport).with_font_metrics(
+      self.font_size,
+      self.root_font_size,
+      self.line_height,
+      self.root_line_height,
+      self.units,
+    )
+  }
+}
+
+/// The query containers of a tree, by their place in its pre-order.
+pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
+
+/// Whether a condition of `query` holds of its query container: the nearest of `start` and its
+/// ancestors that the condition names, if it names one, and whose `container-type` contains each
+/// axis it reads. <https://drafts.csswg.org/css-conditional-5/#container-rule>
+fn container_query_holds(
+  query: &ContainerQuery,
+  start: Option<ArenaElement<'_>>,
+  containers: Option<&QueryContainers>,
+  viewport: Viewport,
+) -> bool {
+  let Some(containers) = containers else {
+    return false;
+  };
+
+  query.conditions().iter().any(|condition| {
+    let reads_block_axis = condition.reads_block_axis();
+    let found = successors(start, Element::parent_element).find_map(|ancestor| {
+      containers
+        .get(&ancestor.index)
+        .filter(|container| {
+          (if reads_block_axis {
+            container.container_type.contains_block_size()
+          } else {
+            container.container_type.contains_inline_size()
+          }) && condition
+            .name
+            .as_deref()
+            .is_none_or(|name| container.name.has(name))
+        })
+        .map(|container| (ancestor, container))
+    });
+
+    found.is_some_and(|(element, container)| {
+      let mut sizing = container.font.sizing(viewport);
+
+      // A container unit in the query reads the container's own query containers, as Blink's
+      // `CSSContainerValues` starts from the container's parent and `FindSizeForContainerAxis`
+      // looks for each axis on its own.
+      let outer_size = |axis: fn(Size<Option<f32>>) -> Option<f32>| {
+        successors(element.parent_element(), Element::parent_element).find_map(|ancestor| {
+          containers
+            .get(&ancestor.index)
+            .and_then(|outer| axis(outer.contained_size()))
+        })
+      };
+
+      sizing.container_size = Size {
+        width: outer_size(|size| size.width),
+        height: outer_size(|size| size.height),
+      };
+      condition.matches(container.contained_size(), viewport, &sizing)
+    })
+  })
+}
+
+/// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
+/// it is: an inclusive ancestor its start selectors match, or without them the parent of the
+/// `<style>` element holding the rule, the tree's root for a sheet no element holds, with no
+/// element its end selectors match from `element` up to it. Inside another `@scope`, a root must
+/// be in that scope from an outer root `element` is in scope of too.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+fn scope_roots(
+  scope: &Scope,
+  element: ArenaElement<'_>,
+  ctx: &mut MatchingContext<'_, SelectorImpl>,
+) -> SmallVec<[(Option<OpaqueElement>, u32); 2]> {
+  let matches = |selectors: &SelectorList<SelectorImpl>,
+                 element: ArenaElement<'_>,
+                 root: Option<OpaqueElement>,
+                 ctx: &mut MatchingContext<'_, SelectorImpl>| {
+    ctx.nest_for_scope(root, |ctx| {
+      selectors
+        .slice()
+        .iter()
+        .any(|selector| matches_selector(selector, 0, None, element, ctx))
+    })
+  };
+  let mut roots = SmallVec::new();
+  let element_outer_roots = scope
+    .parent
+    .as_ref()
+    .map(|parent| scope_roots(parent, element, ctx));
+
+  for (proximity, root) in successors(Some(element), Element::parent_element).enumerate() {
+    let outer_roots: SmallVec<[(Option<OpaqueElement>, u32); 2]> =
+      match (&scope.parent, &element_outer_roots) {
+        (Some(parent), Some(element_outer_roots)) if proximity > 0 => {
+          scope_roots(parent, root, ctx)
+            .into_iter()
+            .filter(|(outer, _)| {
+              element_outer_roots
+                .iter()
+                .any(|(element_outer, _)| element_outer == outer)
+            })
+            .collect()
+        }
+        (_, Some(element_outer_roots)) => element_outer_roots.clone(),
+        _ => SmallVec::from_slice(&[(None, 0)]),
+      };
+    let is_root = match &scope.start {
+      Some(start) => outer_roots
+        .iter()
+        .any(|&(outer, _)| matches(start, root, outer, ctx)),
+      None => {
+        (match scope.owner {
+          Some(owner) => root.style_node().node.metadata.style_owner == Some(owner),
+          None => root.parent_element().is_none(),
+        }) && !outer_roots.is_empty()
+      }
+    };
+    let limited = scope.end.as_ref().is_some_and(|end| {
+      successors(Some(element), Element::parent_element)
+        .take_while(|limit| limit.opaque() != root.opaque())
+        .any(|limit| matches(end, limit, Some(root.opaque()), ctx))
+    });
+
+    if is_root && !limited {
+      roots.push((Some(root.opaque()), proximity as u32));
+    }
+  }
+  roots
+}
+
 fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> {
   match selector.pseudo_element() {
     None => Some(SelectorTarget::Element),
@@ -1213,16 +1460,17 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
   }
 }
 
-/// Records `rule`'s blocks in `bucket` at `best_specificity` when one of its selectors matched.
+/// Records `rule`'s blocks in `bucket` at the specificity and scope proximity it matched with,
+/// when one of its selectors matched.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
   layer_offset: usize,
   layers: usize,
-  best_specificity: Option<u32>,
+  best_specificity: Option<(u32, u32)>,
   bucket: &mut Vec<MatchedRule<'a>>,
 ) {
-  let Some(specificity) = best_specificity else {
+  let Some((specificity, proximity)) = best_specificity else {
     return;
   };
   let layer = rule.layer_order.map(|layer| layer_offset + layer);
@@ -1232,6 +1480,7 @@ fn record_matches<'a>(
       important: false,
       layer_order: layer_order(layer, false, layers),
       specificity,
+      proximity,
       source_order,
       id: RuleId::Sheet(source_order),
       declarations: MatchedBlock::Sheet(&rule.normal_declarations),
@@ -1242,6 +1491,7 @@ fn record_matches<'a>(
       important: true,
       layer_order: layer_order(layer, true, layers),
       specificity,
+      proximity,
       source_order,
       id: RuleId::Sheet(source_order),
       declarations: MatchedBlock::Sheet(&rule.important_declarations),
@@ -1271,6 +1521,7 @@ fn record_tw_match<'a>(
     important: tw_rule.important,
     layer_order: layer_order(Some(layers - 1), tw_rule.important, layers),
     specificity: tw_rule.specificity,
+    proximity: u32::MAX,
     source_order,
     id: RuleId::Tw(tw_rule.id),
     declarations: MatchedBlock::Tw(Arc::clone(tw_rule)),
@@ -1282,17 +1533,28 @@ fn finalize_bucket<'a>(
   layers: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
+  // Blink's `ElementRuleCollector::CompareRules`: a closer scope root wins after specificity.
   sort_by_key(rules, |rule| {
     (
       rule.important,
       rule.layer_order,
       rule.specificity,
-      rule.source_order,
+      (
+        u16::MAX - u16::try_from(rule.proximity).unwrap_or(u16::MAX),
+        rule.source_order,
+      ),
     )
   });
   for rule in rules.drain(..) {
     matched.rules.push((rule.id, rule.important));
-    matched.layers.push(rule.layer_order);
+    // `layer_order` reverses important blocks, which a layer comparison reads unreversed.
+    matched
+      .layers
+      .push(match (rule.important, rule.layer_order) {
+        (true, 0) => layers,
+        (true, layer_order) => layers - layer_order,
+        (false, layer_order) => layer_order,
+      });
 
     if rule.important {
       if rule.layer_order == 0 {

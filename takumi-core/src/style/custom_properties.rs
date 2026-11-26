@@ -131,8 +131,9 @@ impl CustomProperties {
     self.registrations = Arc::clone(registrations);
   }
 
-  /// A copy with each value a child inherits of a registered property computed against `sizing`,
-  /// if any changes: a `<length>` to px, an `<angle>` to deg, a `<color>` to its color, and so on.
+  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>` to
+  /// px, an `<angle>` to deg, a `<color>` to its color, and so on. A child takes the ones that do
+  /// not inherit through `inherit` alone, as Blink's `ApplyInherit` copies the computed value.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
   pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
     let mut computed: Option<Self> = None;
@@ -140,7 +141,7 @@ impl CustomProperties {
     for rule in self
       .registrations
       .values()
-      .filter(|rule| rule.inherits && rule.syntax != PropertySyntax::Universal)
+      .filter(|rule| rule.syntax != PropertySyntax::Universal)
     {
       let Some(value) = self.get(&rule.name) else {
         continue;
@@ -172,7 +173,11 @@ impl CustomProperties {
       };
       let value = self.own(name);
 
-      if value.is_some_and(contains_var_references) {
+      // A revert keyword `var()` substituted waits for the cascade to roll it back.
+      if value.is_some_and(|value| {
+        contains_var_references(value)
+          || CssWideKeyword::from_css_str(value).is_ok_and(CssWideKeyword::reverts)
+      }) {
         continue;
       }
       if let Some(computed) = value.and_then(|value| rule.syntax.compute(value, None)) {

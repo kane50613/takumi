@@ -93,7 +93,7 @@ fn an_invalid_value_in_a_style_attribute() {
 
 #[test]
 fn a_style_sheet_reports_its_at_rules_and_declarations() {
-  let css = "@container (min-width: 400px) { .card { color: red } }
+  let css = "@counter-style thumbs { system: cyclic; symbols: '+' }
     .card { filter: blurry(4px); widht: 10px }
     @media (min-width: 1px) { .card { text-emphasis: dot } }
     @keyframes spin { to { initial-letter: 2 } }";
@@ -105,11 +105,7 @@ fn a_style_sheet_reports_its_at_rules_and_declarations() {
   reported.sort();
 
   let mut expected = vec![
-    sheet(
-      "@container",
-      "(min-width: 400px)",
-      IgnoredReason::UnknownAtRule,
-    ),
+    sheet("@counter-style", "thumbs", IgnoredReason::UnknownAtRule),
     sheet("filter", "blurry(4px)", IgnoredReason::InvalidValue),
     sheet("widht", "10px", IgnoredReason::UnknownProperty),
     sheet("text-emphasis", "dot", IgnoredReason::UnknownProperty),

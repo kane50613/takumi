@@ -23,6 +23,10 @@ pub struct SizingContext {
   /// `ex`, `lh`, or `rlh`.
   #[builder(default, setter(skip))]
   pub(crate) font_read: Option<Rc<Cell<bool>>>,
+  /// Set, for the layout that shares it, when a `color` that is a colour function of
+  /// `currentColor` resolves against the parent's colour.
+  #[builder(default, setter(skip))]
+  pub(crate) current_color_read: Option<Rc<Cell<bool>>>,
   /// The font size in pixels.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
@@ -53,7 +57,7 @@ pub struct SizingContext {
 }
 
 /// The pixel bases the `ch` and `ex` units read from the primary font.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct FontUnits {
   pub(crate) ch: f32,
   pub(crate) ex: f32,
@@ -98,6 +102,7 @@ impl SizingContext {
         .map(|size| size.map(|size| self.to_css(size))),
       container_read: Cell::new(false),
       font_read: self.font_read.clone(),
+      current_color_read: self.current_color_read.clone(),
       font_size: self.to_css(self.font_size),
       root_font_size: self.root_font_size.map(|size| self.to_css(size)),
       line_height: self.to_css(self.line_height),
@@ -141,6 +146,24 @@ impl SizingContext {
     }
   }
 
+  /// The sizing a media or container query resolves its lengths in: the viewport's font.
+  pub(crate) fn for_media(viewport: Viewport) -> Self {
+    Self {
+      viewport,
+      container_size: Size::NONE,
+      container_read: Default::default(),
+      font_read: None,
+      current_color_read: None,
+      font_size: viewport.font_size,
+      root_font_size: None,
+      line_height: viewport.font_size,
+      root_line_height: Some(viewport.font_size),
+      ch: viewport.font_size / 2.0,
+      ex: viewport.font_size / 2.0,
+      color_scheme: viewport.color_scheme,
+    }
+  }
+
   /// A copy whose `light-dark()` colours resolve in `color_scheme`.
   pub(crate) fn with_color_scheme(self, color_scheme: ColorScheme) -> Self {
     Self {
@@ -163,6 +186,23 @@ impl SizingContext {
     Self {
       font_read: Some(read),
       ..self.clone()
+    }
+  }
+
+  /// A copy whose `color`, and that of every context made from it, sets `read` when a colour
+  /// function in it resolves against the parent's colour.
+  #[cfg(feature = "svg")]
+  pub(crate) fn noting_current_color_reads(&self, read: Rc<Cell<bool>>) -> Self {
+    Self {
+      current_color_read: Some(read),
+      ..self.clone()
+    }
+  }
+
+  /// Notes that a `color` resolved against the parent's colour.
+  pub(crate) fn note_current_color_read(&self) {
+    if let Some(read) = &self.current_color_read {
+      read.set(true);
     }
   }
 

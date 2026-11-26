@@ -204,6 +204,12 @@ impl ComputedStyle {
         || self.creates_stacking_context(is_flex_or_grid_item))
   }
 
+  /// Blink's `ContainsStyle`: `contain: style`, or a `container-type`, which applies it.
+  pub(crate) fn contains_style(&self) -> bool {
+    self.misc_data.contain.contains(Contain::STYLE)
+      || self.misc_data.container_type != ContainerType::Normal
+  }
+
   /// Whether the box contains `fixed` descendants, as Blink's `ComputeIsFixedContainer`.
   pub fn contains_fixed_descendants(&self) -> bool {
     self.misc_data.contain.contains(Contain::LAYOUT)
@@ -234,8 +240,7 @@ impl ComputedStyle {
   ) -> Point<f32> {
     // Blink's `NeedsIsolationNodes`.
     let isolates = self.misc_data.contain.contains(Contain::PAINT)
-      || (self.misc_data.contain.contains(Contain::STYLE)
-        && self.misc_data.contain.contains(Contain::LAYOUT));
+      || (self.contains_style() && self.misc_data.contain.contains(Contain::LAYOUT));
 
     if isolates {
       return Point::ZERO;

@@ -13,6 +13,7 @@ use selectors::parser::{
   SelectorImpl as SelectorImplTrait, SelectorList,
 };
 
+use crate::style::ContainerQuery;
 #[cfg(feature = "font-face")]
 use crate::style::font_face_rule::FontFaceRule;
 pub use crate::style::media_query::MediaQueryList;
@@ -424,12 +425,20 @@ impl RuleDeclarations {
   }
 }
 
-/// What a nested rule inherits from the rules around it: the media queries and
-/// layer gating it, and whether invalid items are dropped.
+/// What a nested rule inherits from the rules around it: the media queries, layer, scope, and
+/// container queries gating it, and whether invalid items are dropped.
 #[derive(Clone, Copy)]
 struct NestingContext<'a> {
   media_queries: &'a [MediaQueryList],
   layer: Option<&'a LayerPath>,
+  /// The scope of an `@scope` rule nested in a style rule around it.
+  scope: Option<&'a Arc<Scope>>,
+  /// The queries of `@container` rules nested in style rules around it.
+  container_queries: &'a [Arc<ContainerQuery>],
+  /// In the direct body of a nested `@scope`, where a selector is relative to the scope's root.
+  scope_body: bool,
+  /// The owner the sheet's [`STYLE_OWNER_RULE`] names.
+  style_owner: Option<u32>,
   lossy: bool,
 }
 
@@ -552,7 +561,13 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
     &mut self,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::ForNesting)
+    let relative = if self.context.scope_body {
+      ParseRelative::ForScope
+    } else {
+      ParseRelative::ForNesting
+    };
+
+    SelectorList::parse(&TakumiSelectorParser, input, relative)
   }
 
   fn parse_block(
@@ -563,10 +578,12 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
   ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     let selectors = nested_selectors.replace_parent_selector(&self.parent_selectors);
 
-    self
-      .context
-      .parse_style_rule_block(selectors, input)
-      .map(StyleRuleBodyItem::Rules)
+    NestingContext {
+      scope_body: false,
+      ..self.context
+    }
+    .parse_style_rule_block(selectors, input)
+    .map(StyleRuleBodyItem::Rules)
   }
 }
 
@@ -580,7 +597,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::ForNesting)
   }
 
   fn parse_block(
@@ -706,7 +723,11 @@ impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
 
 struct RuleParser {
   current_layer: Option<LayerPath>,
+  /// The owner the sheet's [`STYLE_OWNER_RULE`] names.
+  style_owner: Option<u32>,
   lossy: bool,
+  /// Inside `@scope`, where a selector without `:scope` or `&` is relative to the scope's root.
+  scoped: bool,
   /// False inside `@media`, `@layer` and `@supports` blocks, where `@import`
   /// is invalid and its preflight flag must not escape the gate.
   top_level: bool,
@@ -717,7 +738,9 @@ impl RuleParser {
   fn nested(&self, current_layer: Option<LayerPath>) -> Self {
     Self {
       current_layer,
+      style_owner: self.style_owner,
       lossy: self.lossy,
+      scoped: self.scoped,
       top_level: false,
     }
   }
@@ -727,6 +750,10 @@ impl RuleParser {
     NestingContext {
       media_queries: &[],
       layer: self.current_layer.as_ref(),
+      scope: None,
+      container_queries: &[],
+      scope_body: false,
+      style_owner: self.style_owner,
       lossy: self.lossy,
     }
   }
@@ -774,9 +801,41 @@ enum AtRulePrelude {
   },
   /// `@apply`, already expanded into the declarations its utilities stand for.
   Apply(Box<StyleDeclarationBlock>),
+  /// `@scope`, its root and limit selectors.
+  Scope(Scope),
+  /// `@container`, its query.
+  Container(ContainerQuery),
+  /// The owner [`STYLE_OWNER_RULE`] names, none for `none`.
+  StyleOwner(Option<u32>),
   /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
   Unknown(Box<IgnoredDeclaration>),
+}
+
+/// The scope an `@scope` rule gives the style rules in it: the elements its `start` selectors
+/// match, or without them its `<style>` element's parent or the tree's root, down to but not into the elements its `end` selectors
+/// match. <https://drafts.csswg.org/css-cascade-6/#scoped-styles>
+#[derive(Debug, Clone)]
+pub(crate) struct Scope {
+  pub(crate) start: Option<SelectorList<SelectorImpl>>,
+  pub(crate) end: Option<SelectorList<SelectorImpl>>,
+  /// The owner of the `<style>` element holding a rule without `start`, whose element is its root.
+  pub(crate) owner: Option<u32>,
+  /// The scope of an `@scope` rule this one is in, which its roots must be in.
+  pub(crate) parent: Option<Arc<Scope>>,
+}
+
+impl Scope {
+  /// This scope inside `outer`, at the end of its chain of enclosing scopes.
+  fn within(&self, outer: &Arc<Scope>) -> Arc<Scope> {
+    Arc::new(Self {
+      parent: Some(match &self.parent {
+        Some(parent) => parent.within(outer),
+        None => Arc::clone(outer),
+      }),
+      ..self.clone()
+    })
+  }
 }
 
 /// A style rule with its selectors and declaration blocks. Opaque: its
@@ -795,6 +854,10 @@ pub(crate) struct CssRule {
   pub(crate) layer: Option<LayerPath>,
   /// Resolved ordinal of the rule's layer.
   pub(crate) layer_order: Option<usize>,
+  /// The scope of the `@scope` rule it is in.
+  pub(crate) scope: Option<Arc<Scope>>,
+  /// The queries of the `@container` rules it is in, which must all hold.
+  pub(crate) container_queries: Vec<Arc<ContainerQuery>>,
 }
 
 fn parse_property_rule<'i>(
@@ -924,7 +987,7 @@ impl<'i> AtRuleParser<'i> for ThemeBlockParser<'_> {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::No)
   }
 
   fn parse_block(
@@ -980,6 +1043,8 @@ impl NestingContext<'_> {
       media_queries: self.media_queries.to_vec(),
       layer: self.layer.cloned(),
       layer_order: None,
+      scope: self.scope.cloned(),
+      container_queries: self.container_queries.to_vec(),
     }
   }
 
@@ -1125,6 +1190,43 @@ impl NestingContext<'_> {
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      AtRulePrelude::Container(query) => {
+        let mut container_queries = self.container_queries.to_vec();
+
+        container_queries.push(Arc::new(query));
+        NestingContext {
+          container_queries: &container_queries,
+          ..self
+        }
+        .parse_style_rule_block(parent_selectors.clone(), input)
+      }
+      // A nested `@scope` roots at the elements its start selects relative to the rule around it,
+      // or without a start at its `<style>` element's parent as Blink's `ConsumeScopeRule` makes an
+      // implicit scope at any nesting, and its declarations apply to the root itself.
+      // <https://drafts.csswg.org/css-cascade-6/#nested-scope>
+      AtRulePrelude::Scope(scope) => {
+        let owner = scope.start.is_none().then_some(self.style_owner).flatten();
+        let scope = Arc::new(Scope {
+          start: scope
+            .start
+            .map(|start| start.replace_parent_selector(parent_selectors)),
+          end: scope.end,
+          owner,
+          parent: self.scope.cloned(),
+        });
+        let root = SelectorList::parse(
+          &TakumiSelectorParser,
+          &mut Parser::new(":where(:scope)"),
+          ParseRelative::No,
+        )?;
+
+        NestingContext {
+          scope: Some(&scope),
+          scope_body: true,
+          ..self
+        }
+        .parse_style_rule_block(root, input)
+      }
       AtRulePrelude::Unknown(at_rule) => {
         skip_block(input);
         Ok(StyleSheetFragment::ignoring(*at_rule))
@@ -1138,6 +1240,7 @@ impl NestingContext<'_> {
       | AtRulePrelude::Property(_)
       | AtRulePrelude::Page(_)
       | AtRulePrelude::TailwindImport { .. }
+      | AtRulePrelude::StyleOwner(_)
       | AtRulePrelude::Apply(_) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
@@ -1155,9 +1258,15 @@ fn tailwind_entry_preflight(target: &str) -> Option<bool> {
   }
 }
 
+/// The internal at-rule an HTML `<style>` element's CSS starts with to name its owner, which the
+/// parser then gives each `@scope` rule without a start, and ends with as `none`.
+pub(crate) const STYLE_OWNER_RULE: &str = "-takumi-style-owner";
+
+/// Parses an at-rule's prelude, an `@scope` start `scope_start` relative to the rule around it.
 fn parse_at_rule_prelude<'i>(
   name: CowRcStr<'i>,
   input: &mut Parser<'i>,
+  scope_start: ParseRelative,
 ) -> Result<AtRulePrelude, ParseError<StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
     if input.is_exhausted() {
@@ -1176,6 +1285,57 @@ fn parse_at_rule_prelude<'i>(
 
   if name.eq_ignore_ascii_case("media") {
     return MediaQueryList::parse(input).map(AtRulePrelude::Media);
+  }
+
+  if name.eq_ignore_ascii_case("container") {
+    return ContainerQuery::parse(input).map(AtRulePrelude::Container);
+  }
+
+  if name.eq_ignore_ascii_case("scope") {
+    let selectors = |input: &mut Parser<'i>, relative| {
+      // Pseudo-elements are invalid in a scope's root and limit selectors.
+      input.parse_nested_block(|input| {
+        SelectorList::parse_disallow_pseudo(&TakumiSelectorParser, input, relative)
+      })
+    };
+    let start = input
+      .try_parse(|input| {
+        input.expect_parenthesis_block()?;
+        selectors(input, scope_start)
+      })
+      .ok();
+    let end = input
+      .try_parse(|input| {
+        input.expect_ident_matching("to")?;
+        input.expect_parenthesis_block()?;
+        selectors(input, ParseRelative::ForScope)
+      })
+      .ok();
+
+    input.expect_exhausted()?;
+    return Ok(AtRulePrelude::Scope(Scope {
+      start,
+      end,
+      owner: None,
+      parent: None,
+    }));
+  }
+
+  if name.eq_ignore_ascii_case(STYLE_OWNER_RULE) {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      input.expect_exhausted()?;
+      return Ok(AtRulePrelude::StyleOwner(None));
+    }
+
+    let owner = input.expect_integer()?;
+
+    input.expect_exhausted()?;
+    return u32::try_from(owner)
+      .map(|owner| AtRulePrelude::StyleOwner(Some(owner)))
+      .map_err(|_| ParseError::unexpected_token());
   }
 
   if name.eq_ignore_ascii_case("supports") {
@@ -1326,7 +1486,13 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     &mut self,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
+    let relative = if self.scoped {
+      ParseRelative::ForScope
+    } else {
+      ParseRelative::No
+    };
+
+    SelectorList::parse(&TakumiSelectorParser, input, relative)
   }
 
   fn parse_block(
@@ -1349,7 +1515,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::No)
   }
 
   fn parse_block(
@@ -1375,7 +1541,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Keyframes(name) => self.context().parse_keyframes_block(name, input),
       AtRulePrelude::Theme => self.context().parse_theme_block(input),
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
-      AtRulePrelude::TailwindImport { .. } | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+      AtRulePrelude::TailwindImport { .. }
+      | AtRulePrelude::StyleOwner(_)
+      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
       AtRulePrelude::Media(media_query) => {
@@ -1400,6 +1568,34 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           page_rule.media_queries.push(media_query.clone());
         }
 
+        Ok(fragment)
+      }
+      AtRulePrelude::Container(query) => {
+        let query = Arc::new(query);
+        let mut fragment = self
+          .nested(self.current_layer.clone())
+          .parse_fragment(input)?;
+
+        for rule in &mut fragment.rules {
+          rule.container_queries.push(Arc::clone(&query));
+        }
+        Ok(fragment)
+      }
+      AtRulePrelude::Scope(scope) => {
+        let owner = scope.start.is_none().then_some(self.style_owner).flatten();
+        let scope = Arc::new(Scope { owner, ..scope });
+        let mut fragment = Self {
+          scoped: true,
+          ..self.nested(self.current_layer.clone())
+        }
+        .parse_fragment(input)?;
+
+        for rule in &mut fragment.rules {
+          rule.scope = Some(match &rule.scope {
+            Some(inner) => inner.within(&scope),
+            None => Arc::clone(&scope),
+          });
+        }
         Ok(fragment)
       }
       AtRulePrelude::Supports(true) => self
@@ -1445,6 +1641,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         declared_layers: self.declared_layers(&layer_names),
         ..StyleSheetFragment::default()
       }),
+      AtRulePrelude::StyleOwner(owner) if self.top_level => {
+        self.style_owner = owner;
+        Ok(StyleSheetFragment::default())
+      }
       AtRulePrelude::TailwindImport { preflight } => {
         if !self.top_level {
           return Err(());
@@ -1595,6 +1795,14 @@ impl StyleSheet {
   /// Style rules in source order.
   pub(crate) fn rules(&self) -> &[CssRule] {
     &self.rules
+  }
+
+  /// Whether a rule is in an `@container` rule.
+  pub(crate) fn has_container_queries(&self) -> bool {
+    self
+      .rules
+      .iter()
+      .any(|rule| !rule.container_queries.is_empty())
   }
 
   /// Collects unique resource URLs referenced by the declarations of its rules, keyframes, and
@@ -1755,7 +1963,9 @@ impl StyleSheet {
     let mut parser = Parser::new(css);
     let mut rule_parser = RuleParser {
       current_layer: None,
+      style_owner: None,
       lossy,
+      scoped: false,
       top_level: true,
     };
 

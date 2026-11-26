@@ -50,17 +50,21 @@ use crate::{
     text_control::{TextControl, TextControlBox},
   },
   layout_unit::{BoxStrut, LayoutUnit},
-  matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  matching::{
+    MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers, QueryFont,
+    RuleId, match_stylesheets_in_containers, match_stylesheets_view,
+  },
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
   sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
-    Color, ColorInput, ComputedStyle, ContentItem, ContentValue, Direction, Display,
-    ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId, MatchedStyleKey, Position,
-    PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, page_rule::PageContext,
+    Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
+    Direction, Display, ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId,
+    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
+    page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -2456,11 +2460,50 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
-    let matched_styles = match_stylesheets_view(
+    if !parent_context.stylesheet().has_container_queries() {
+      return Self::build_in_containers(parent_context, node, blockifies_children, None);
+    }
+
+    // `@container` rules read the sizes a layout gives their containers, as Blink lays a container
+    // out before it styles the boxes in it. Size containment keeps a container's size from its
+    // contents, so it follows only from the queries of the containers around it: each build settles
+    // one more level of them, and the sizes settle within a build more than the most containers a
+    // build found.
+    let mut containers: Option<QueryContainers> = None;
+    let mut pass = 0;
+    let mut budget = 0;
+
+    loop {
+      let tree = Self::build_in_containers(
+        parent_context,
+        node.clone(),
+        blockifies_children,
+        containers.as_ref(),
+      );
+      let sizes = tree.query_containers();
+
+      budget = budget.max(sizes.len());
+      // A build past one per container settled nothing more; its tree stands.
+      if containers.as_ref() == Some(&sizes) || pass > budget {
+        return tree;
+      }
+      containers = Some(sizes);
+      pass += 1;
+    }
+  }
+
+  fn build_in_containers(
+    parent_context: &RenderContext,
+    node: Node,
+    blockifies_children: bool,
+    containers: Option<&QueryContainers>,
+  ) -> Self {
+    let matched_styles = match_stylesheets_in_containers(
       &node,
       &[parent_context.stylesheet()],
       parent_context.sizing.viewport,
       parent_context.cache().tailwind(),
+      containers,
     );
     let mut list_item_counts = ListItemCounts::default();
 
@@ -2491,6 +2534,57 @@ impl RenderNode {
       }
     }
     tree
+  }
+
+  /// The query containers among its boxes, sized by laying it out in its viewport, which a renderer
+  /// lays the tree out in too. Approximate: a PDF finds them in its first page area, so a later
+  /// page kind of another content width reads the first one's container sizes, where Blink sizes
+  /// each fragment's containers in its own page.
+  fn query_containers(&self) -> QueryContainers {
+    let mut tree = LayoutTree::from_render_node(self);
+    let available_space = tree.initial_containing_block(self.context.sizing.viewport.into());
+
+    tree.compute_layout(available_space);
+
+    let found: Vec<(NodeId, usize, ContainerType, ContainerName, QueryFont)> = tree
+      .render_nodes
+      .iter()
+      .enumerate()
+      .filter_map(|(index, render_node)| {
+        let NodeOrigin::Authored { source_order } = render_node.origin else {
+          return None;
+        };
+        let style = &render_node.context.style.misc_data;
+
+        (style.container_type != ContainerType::Normal).then(|| {
+          (
+            NodeId::new(index),
+            source_order,
+            style.container_type,
+            style.container_name.clone(),
+            QueryFont::of(&render_node.context.sizing),
+          )
+        })
+      })
+      .collect();
+    let results = tree.into_results();
+
+    found
+      .into_iter()
+      .filter_map(|(node, source_order, container_type, name, font)| {
+        let size = results.layout(node).ok()?.content_box_size();
+
+        Some((
+          source_order,
+          QueryContainer {
+            container_type,
+            name,
+            size,
+            font,
+          },
+        ))
+      })
+      .collect()
   }
 
   /// The root blockified and establishing a formatting context, per
@@ -3197,12 +3291,7 @@ impl RenderContext {
   ) -> (NodeStyle, CascadeSources) {
     let mut style = NodeStyle::default();
     let mut sources = CascadeSources::new();
-    // Each block is a rule of its own.
-    let mut source = |style: &NodeStyle, origin: CascadeOrigin, layer: usize| {
-      let rule = sources
-        .last()
-        .map_or(0, |source: &CascadeSource| source.rule + 1);
-
+    let mut source = |style: &NodeStyle, origin: CascadeOrigin, layer: usize, rule: usize| {
       sources.resize(
         style.declarations.declarations.len(),
         CascadeSource {
@@ -3212,28 +3301,43 @@ impl RenderContext {
         },
       );
     };
+    // A matched rule keeps one identity across its normal and important blocks, after the
+    // identities of the blocks that are no stylesheet's rule.
+    const STYLE_ATTRIBUTE: usize = 4;
+    let mut matched_rules: SmallVec<[RuleId; 8]> = SmallVec::new();
+    let mut rule_ids = matched_declarations.rules().iter().map(|&(id, _)| {
+      let position = matched_rules
+        .iter()
+        .position(|&seen| seen == id)
+        .unwrap_or_else(|| {
+          matched_rules.push(id);
+          matched_rules.len() - 1
+        });
+
+      STYLE_ATTRIBUTE + 1 + position
+    });
 
     // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
     // <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
     if node_layers.dir.is_some() {
       style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 0);
     }
 
     if let Some(preset) = node_layers.preset {
       style.append_block(Arc::unwrap_or_clone(preset).declarations);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 1);
     }
 
     if let Some(dir) = node_layers.dir {
       style.push(StyleDeclaration::direction(dir), false);
-      source(&style, CascadeOrigin::UserAgent, 0);
+      source(&style, CascadeOrigin::UserAgent, 0, 2);
     }
 
     // Blink's `StyleResolver::MatchPresentationalHints`.
     if let Some(presentation) = node_layers.presentation {
       style.append_block(presentation.declarations);
-      source(&style, CascadeOrigin::PresentationalHint, 0);
+      source(&style, CascadeOrigin::PresentationalHint, 0, 3);
     }
 
     let mut layers = matched_declarations.layers().iter().copied();
@@ -3248,6 +3352,7 @@ impl RenderContext {
         &style,
         CascadeOrigin::Author,
         layers.next().unwrap_or_default(),
+        rule_ids.next().unwrap_or_default(),
       );
     }
 
@@ -3260,7 +3365,7 @@ impl RenderContext {
 
     if let Some(inline_normal) = inline_normal {
       style.append_block(inline_normal);
-      source(&style, CascadeOrigin::Author, usize::MAX);
+      source(&style, CascadeOrigin::Author, usize::MAX, STYLE_ATTRIBUTE);
     }
 
     // Important declarations reverse layer order.
@@ -3274,12 +3379,18 @@ impl RenderContext {
         &style,
         CascadeOrigin::AuthorImportant,
         layers.next().unwrap_or_default(),
+        rule_ids.next().unwrap_or_default(),
       );
     }
 
     if let Some(inline_important) = inline_important {
       style.append_block(inline_important);
-      source(&style, CascadeOrigin::AuthorImportant, usize::MAX);
+      source(
+        &style,
+        CascadeOrigin::AuthorImportant,
+        usize::MAX,
+        STYLE_ATTRIBUTE,
+      );
     }
 
     (style, sources)
@@ -3359,8 +3470,11 @@ impl RenderContext {
         .tag_name()
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
     let layers = node.take_style_layers();
-    let key = (layers.is_preset_only() && !is_document_root)
-      .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+    // A context noting reads of the parent's colour resolves every style itself, so that a shared
+    // style cannot skip the note.
+    let key =
+      (layers.is_preset_only() && !is_document_root && self.sizing.current_color_read.is_none())
+        .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
     let cache = self.matched_styles();
 
     if let Some(key) = &key
@@ -3434,6 +3548,7 @@ impl RenderContext {
     // Blink's `Color::ApplyValue`: `currentColor` in a colour function of `color` is the parent's
     // colour, so the function resolves when `color` computes.
     if style.inherited_data.color.is_unresolved_color_function() {
+      self.sizing.note_current_color_read();
       style.inherited_data_mut().color = ColorInput::Value(current_color);
     }
     (style, sizing, current_color)
@@ -3452,46 +3567,82 @@ impl RenderContext {
     inherited_parent: &ComputedStyle,
     (lang, is_document_root): (Option<Lang>, bool),
   ) -> ComputedStyle {
-    let mut longhands = animations.longhands();
+    // The cascade decides which animated longhands an important declaration hides; the preview
+    // that samples the custom properties leaves out the ones any does.
+    let longhands = animations.longhands();
+    let mut previewed = longhands;
 
-    longhands.difference(&declarations.important_longhands(sources));
+    previewed.difference(&declarations.important_longhands(sources));
 
-    let origin = AnimatedStyle {
-      context: self,
-      animations,
-      longhands,
-      custom_properties: self.animated_custom_properties(&base, animations, &longhands),
+    let preview = self.previewed_style(&base, animations, &previewed);
+    let cascade = |declarations: NodeStyle, custom_properties| {
+      let origin = AnimatedStyle {
+        context: self,
+        animations,
+        longhands,
+        custom_properties,
+      };
+
+      declarations.inherit_element(
+        inherited_parent,
+        lang,
+        is_document_root,
+        sources,
+        Some(&origin),
+      )
     };
-    let mut style = declarations.inherit_element(
-      inherited_parent,
-      lang,
-      is_document_root,
-      sources,
-      Some(&origin),
-    );
+    let sampled = self.sampled_custom_properties(&preview, animations);
+    let mut style = if sampled.is_empty() {
+      cascade(declarations, sampled)
+    } else {
+      let style = cascade(declarations.clone(), sampled.clone());
+      // A registered value reads the font size, colour scheme, and colour the cascade ends with,
+      // which a longhand reading an animated custom property through `var()` still changes, as
+      // Blink applies the custom properties an element's other longhands read after them. It
+      // interpolates from the custom properties before the animations, as the preview holds them.
+      let mut reference = style.clone();
+
+      reference.custom_properties = preview.custom_properties.clone();
+
+      let resampled = self.sampled_custom_properties(&reference, animations);
+
+      if resampled == sampled {
+        style
+      } else {
+        cascade(declarations, resampled)
+      }
+    };
 
     style.copy_longhands(&LonghandId::animation(), &base);
     style
   }
 
-  /// The custom properties `animations` set on `base`, sampled once its high-priority `longhands`
-  /// animate, so a keyframed `light-dark()` resolves in the animated colour scheme.
-  fn animated_custom_properties(
+  /// `base` once its high-priority `longhands` animate, so a keyframed `light-dark()` resolves in
+  /// the animated colour scheme.
+  fn previewed_style(
     &self,
     base: &ComputedStyle,
     animations: &ElementAnimations<'_>,
     longhands: &PropertyMask,
-  ) -> Vec<(String, String)> {
+  ) -> ComputedStyle {
     let mut style = base.clone();
 
     for (phase, mut group) in LonghandId::high_priority().into_iter().enumerate() {
       group.intersect(longhands);
       self.apply_animations(animations, &mut style, &group, phase);
     }
+    style
+  }
 
-    let sizing = self.child_sizing(&style, &self.sizing, false);
+  /// The custom properties `animations` set, sampled against the font and colour of `style`.
+  fn sampled_custom_properties(
+    &self,
+    style: &ComputedStyle,
+    animations: &ElementAnimations<'_>,
+  ) -> Vec<(String, String)> {
+    let sizing = self.child_sizing(style, &self.sizing, false);
 
-    animations.custom_properties(&style, &sizing, self.child_current_color(&style, &sizing))
+    animations.custom_properties(style, &sizing, self.child_current_color(style, &sizing))
   }
 
   /// Applies the animations of `longhands` to `style` in `phase` of the cascade: `color-scheme`
@@ -3597,7 +3748,7 @@ impl RenderContext {
 struct AnimatedStyle<'a> {
   context: &'a RenderContext,
   animations: &'a ElementAnimations<'a>,
-  /// The longhands they set that no important declaration does.
+  /// The longhands they set.
   longhands: PropertyMask,
   custom_properties: Vec<(String, String)>,
 }

@@ -990,10 +990,30 @@ fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
     @property --ink { syntax: '<color>'; inherits: false; initial-value: black }
     @keyframes ink { from, to { color-scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
     .a { background-color: var(--ink); animation: ink 1s paused }
-    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }";
+    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }
+    @keyframes theme { from, to { --scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    @keyframes scheme { from, to { color-scheme: var(--scheme) } }
+    .c { --scheme: light; color-scheme: light; background-color: var(--ink); animation: theme 1s paused, scheme 1s paused }";
 
   assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
   assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
+  // The scheme a keyframe reads through another animated property decides `--ink` too.
+  assert_eq!(first_pixel_with_css("c", css), [0, 0, 255, 255]);
+}
+
+/// A keyframed registered `em` reads the font size the cascade ends with, after a `font-size` reads
+/// another keyframed custom property through `var()`.
+#[test]
+fn animated_registered_em_reads_the_cascaded_font_size() {
+  assert_eq!(
+    box_size(
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @keyframes k { from, to { --size: 20px; --w: 5em } }
+       .box { font-size: var(--size, 16px); width: var(--w); animation: k 1s paused }"
+    )
+    .0,
+    100.0
+  );
 }
 
 /// The width and height `.box` measures to under `css`.
@@ -1128,19 +1148,57 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     .1,
     16.0
   );
-  // `revert-layer` reaches the layer below, and an important one the normal declarations.
+  // `revert-layer` reaches the layer below, whatever the importance: an important one skips the
+  // normal declarations of its own layer, as Blink's `ForLayerComparison` drops importance.
   assert_eq!(
     paragraph("@layer a { .box { width: 30px } } .box { width: 50px; width: revert-layer }").0,
     30.0
   );
   assert_eq!(
     paragraph(".box { width: 30px } p.box { width: revert-layer !important }").0,
+    1200.0
+  );
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { width: 30px } } .box { width: 50px } p.box { width: revert-layer !important }"
+    )
+    .0,
     30.0
   );
-  // `revert-rule` reaches another rule, past its own earlier declaration.
+  // `revert-rule` reaches another rule, past its own earlier declarations of either importance.
   assert_eq!(
     paragraph(".box { width: 30px } p.box { width: 70px; width: revert-rule }").0,
     30.0
+  );
+  assert_eq!(
+    paragraph(".box { width: 30px } p.box { width: 70px; width: revert-rule !important }").0,
+    30.0
+  );
+  // Leaving its own rule, an important `revert-rule` lets an animation of the property win.
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 30px } p.box { width: revert-rule !important; animation: w 1s }"
+    )
+    .0,
+    100.0
+  );
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 30px } p.box { width: 40px !important; animation: w 1s }"
+    )
+    .0,
+    40.0
+  );
+  // Rolling back to another important declaration, it hides the animation as that one does.
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 50px !important } p.box { width: revert-rule !important; animation: w 1s }"
+    )
+    .0,
+    50.0
   );
   // Without a weaker declaration, a revert keyword is `unset`.
   assert_eq!(paragraph(".box { width: revert-layer }").0, 1200.0);
@@ -1152,4 +1210,597 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     .0,
     40.0
   );
+  // So does one whose `var()` substitutes the keyword.
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { --w: 40px } } .box { --w: var(--missing, revert-layer); width: var(--w) }"
+    )
+    .0,
+    40.0
+  );
+  // A registered one keeps the keyword past its syntax until it rolls back.
+  assert_eq!(
+    paragraph(
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @layer a { .box { --w: 40px } } .box { --w: var(--missing, revert-layer); width: var(--w) }"
+    )
+    .0,
+    40.0
+  );
+}
+
+/// The widths of `.card`, its `.a` paragraph, and the `.b` paragraph in its `.content` box, in
+/// `<section class="outer"><div class="card">…</div></section>` under `css`.
+fn card_widths(css: &str) -> [f32; 3] {
+  let node = Node::from_html(
+    r#"<section class="outer"><div class="card"><p class="a">x</p><div class="content"><p class="b">y</p></div></div></section>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+  let card = &measured.children[0].children[0];
+
+  [
+    card.width,
+    card.children[0].width,
+    card.children[1].children[0].width,
+  ]
+}
+
+/// `@scope` limits its rules to the elements under a root and above a limit, and a rule from a
+/// closer root wins after specificity, as Blink's `ElementRuleCollector` sorts them.
+#[test]
+fn scope_rules_apply_between_their_root_and_limit() {
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 30px } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.card) to (.content) { p { width: 30px } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+  // `:scope` is the root, which a selector without it never matches.
+  assert_eq!(
+    card_widths("@scope (.card) { :scope { width: 100px } .card { width: 50px } }")[0],
+    100.0
+  );
+  // A closer root wins over a later rule, and any root over an unscoped rule.
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } @scope (.outer) { p { width: 10px } }")[1],
+    20.0
+  );
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } p { width: 50px }")[1],
+    20.0
+  );
+  // Specificity still comes first.
+  assert_eq!(
+    card_widths("@scope (.card) { p { width: 20px } } p.a { width: 50px }")[1],
+    50.0
+  );
+}
+
+/// The size of `.box`, a parsed `<div>` holding text, under `css`.
+fn text_box_size(css: &str) -> (f32, f32) {
+  let node = Node::from_html(
+    r#"<div class="box">hello world</div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+
+  (measured.children[0].width, measured.children[0].height)
+}
+
+/// `container-type` contains a box's size, as Blink's `ShouldApplyInlineSizeContainment` and
+/// `ShouldApplyBlockSizeContainment` have it, so the content gives it none.
+#[test]
+fn container_type_contains_the_size_its_content_would_give() {
+  let (width, height) = text_box_size(".box { display: inline-block }");
+
+  assert!(width > 0.0 && height > 0.0);
+  assert_eq!(
+    text_box_size(".box { display: inline-block; container-type: inline-size; padding: 2px }").0,
+    4.0
+  );
+  assert_eq!(text_box_size(".box { container-type: size }").1, 0.0);
+  assert_eq!(
+    text_box_size(".box { container-type: inline-size }").1,
+    height
+  );
+}
+
+/// The width of `.target` in a `.card` container under `css`.
+fn target_in_card(css: &str) -> f32 {
+  let node = Node::from_html(
+    r#"<div class="card"><p class="target">x</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(Node::container([node]), css);
+
+  measured.children[0].children[0].width
+}
+
+/// `@container` rules read the size of the nearest container that `container-type` lets answer
+/// them and that has the name they ask for, as Blink evaluates container queries.
+#[test]
+fn container_queries_read_the_nearest_matching_container() {
+  let rule = "@container (min-width: 200px) { .target { width: 50px } }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      ".card {{ container-type: inline-size; width: 300px }} {rule}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      ".card {{ container-type: inline-size; width: 100px }} {rule}"
+    )),
+    100.0
+  );
+  // Without a container, the query does not hold.
+  assert_eq!(
+    target_in_card(&format!(".card {{ width: 300px }} {rule}")),
+    300.0
+  );
+  // A name picks the container.
+  assert_eq!(
+    target_in_card(
+      ".card { container: card / inline-size; width: 300px }
+       @container card (min-width: 200px) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container: card / inline-size; width: 300px }
+       @container other (min-width: 200px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+  // The block axis needs `container-type: size`.
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 300px; height: 300px }
+       @container (min-height: 10px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: size; width: 300px; height: 300px }
+       @container (min-height: 10px) and (inline-size > 200px) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+  // A media query cannot read `inline-size`.
+  assert_eq!(
+    target_in_card(
+      ".card { width: 300px } @media (min-inline-size: 1px) { .target { width: 50px } }"
+    ),
+    300.0
+  );
+}
+
+/// A container whose size an outer container's query sets answers the queries inside it at that
+/// size, as Blink sizes it before styling what is inside.
+#[test]
+fn a_container_answers_at_the_size_an_outer_query_gives_it() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><p class="target">x</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inner { container-type: inline-size; width: 100px }
+     @container (min-width: 300px) { .inner { width: 250px } }
+     @container (min-width: 200px) { .target { width: 50px } }",
+  );
+  let inner = &measured.children[0].children[0];
+
+  assert_eq!(inner.width, 250.0);
+  assert_eq!(inner.children[0].width, 50.0);
+}
+
+/// A relative length in a query reads the container's own font, as Blink evaluates it against the
+/// container's computed values.
+#[test]
+fn a_container_query_reads_the_container_font() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 280px; font-size: 20px }
+       @container (min-width: 15em) { .target { width: 50px } }"
+    ),
+    280.0
+  );
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 310px; font-size: 20px }
+       @container (min-width: 15em) { .target { width: 50px } }"
+    ),
+    50.0
+  );
+}
+
+/// Containers nested deep, each widened by the query of the one around it, settle all the way in.
+#[test]
+fn nested_containers_settle_at_any_depth() {
+  let html = (0..6).fold(r#"<p class="target">x</p>"#.to_owned(), |inner, _| {
+    format!(r#"<div class="c">{inner}</div>"#)
+  });
+  let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".c { container-type: inline-size; width: 100px }
+     body > .c, .c:only-child:not(.c .c) { width: 300px }
+     @container (min-width: 200px) { .c { width: 250px } .target { width: 50px } }",
+  );
+  let mut node = &measured.children[0];
+
+  while let Some(child) = node.children.first() {
+    node = child;
+  }
+  assert_eq!(node.width, 50.0);
+}
+
+/// `@container` and `@scope` nest in a style rule: the first gates the rule's declarations, and
+/// the second roots at the elements its start picks with `&`, or without a start at the tree's root
+/// for a sheet no element holds.
+#[test]
+fn container_and_scope_rules_nest_in_style_rules() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-type: inline-size; width: 300px }
+       .target { @container (min-width: 200px) { width: 50px } }"
+    ),
+    50.0
+  );
+  assert_eq!(
+    card_widths(".card { @scope { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths(".card { @scope to (.content) { p { width: 30px } } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+  assert_eq!(
+    card_widths(".outer { @scope (& > .card) { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+}
+
+/// A nested `@scope` start is relative to the rule around it, as Blink's `StyleScope::Consume`
+/// parses it with the rule's nesting type.
+#[test]
+fn a_nested_scope_start_is_relative_to_its_rule() {
+  let parsed = takumi::parse_html(
+    r#"<section class="outer"><div class="card"><p>a</p></div></section><div class="card"><p>b</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measure = |css: &str| {
+    let measured = measure_with_css(parsed.node.clone(), css);
+
+    [
+      measured.children[0].children[0].children[0].width,
+      measured.children[1].children[0].width,
+    ]
+  };
+
+  assert_eq!(
+    measure(".outer { @scope (.card) { p { width: 30px } } }"),
+    [30.0, 1200.0]
+  );
+  assert_eq!(
+    measure(".outer { @scope (& > .card) { p { width: 30px } } }"),
+    [30.0, 1200.0]
+  );
+}
+
+/// A style rule directly in a nested `@scope` is relative to the scope's root, as Blink parses
+/// the body of every `@scope` with the scope nesting type.
+#[test]
+fn a_nested_scope_body_is_relative_to_its_root() {
+  assert_eq!(
+    card_widths(".card { @scope (&) { :scope { width: 100px } } }")[0],
+    100.0
+  );
+  assert_eq!(
+    card_widths(".card { @scope (&) { > p { width: 30px } } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+}
+
+/// A nested `@scope` without a start roots at the parent of its `<style>` element, not at the rule
+/// around it, as Blink's `ConsumeScopeRule` makes an implicit scope whatever its nesting.
+#[test]
+fn a_nested_scope_without_a_start_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="wrap"><style>.card { @scope { > p { width: 30px } } }</style><p>a</p><div class="card"><p>b</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].width, 30.0);
+  assert_ne!(measured.children[1].children[0].width, 30.0);
+}
+
+/// An `@scope` without a start inside another `@scope` still roots at its `<style>` element's
+/// parent, as Blink's `ForEachImplicitScopeTrigger` triggers nested implicit scopes too.
+#[test]
+fn an_implicit_scope_inside_another_scope_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="x"><div class="wrap"><style>@scope (.x) { @scope { p { width: 30px } } }</style><p>a</p></div><p>b</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}
+
+/// A `<style>` element's owner ends with its CSS, so an `@scope` without a start in a sheet after it
+/// roots at the tree's root.
+#[test]
+fn a_style_element_owner_ends_with_its_css() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@scope { .none { width: 1px } }</style><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let css = format!(
+    "{}@scope {{ :scope > p {{ width: 20px }} }}",
+    parsed.css.concat()
+  );
+  let measured = measure_with_css(parsed.node, &css);
+
+  assert_ne!(measured.children[0].children[0].width, 20.0);
+  assert_eq!(measured.children[1].width, 20.0);
+}
+
+/// An `@scope` written with an escape in its name still roots at its `<style>` element's parent.
+#[test]
+fn an_escaped_scope_rule_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@\73 cope { p { width: 30px } }</style><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}
+
+/// `inherit` on a registered property that does not inherit takes the parent's computed value, as
+/// Blink's `ApplyInherit` copies it.
+#[test]
+fn inherit_takes_a_registered_property_computed() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("box")]).with_class_name("parent")]),
+    "@property --size { syntax: '<length>'; inherits: false; initial-value: 0px }
+     .parent { font-size: 10px; --size: 2em }
+     .box { font-size: 20px; --size: inherit; width: var(--size) }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 20.0);
+}
+
+/// A pseudo-element asks from its originating element up, a query list holds when one of its
+/// conditions does, and a feature other than a size one, or a percentage, holds of no container.
+#[test]
+fn container_queries_ask_as_blink_evaluates_them() {
+  let before = |css: &str| {
+    let node =
+      Node::from_html(r#"<div class="card"></div>"#, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].height
+  };
+
+  assert_eq!(
+    before(
+      ".card { container-type: inline-size; width: 300px }
+       @container (min-width: 200px) { .card::before { content: ''; display: block; height: 7px } }"
+    ),
+    7.0
+  );
+
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (min-width: 900px), (max-width: 400px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (resolution: 1dppx) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (inline-size > 50%) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}
+
+/// A nested `@scope` stops at the limit of the scope around it, a rule takes its highest
+/// specificity under any root, and pseudo-elements make a scope's selectors invalid.
+#[test]
+fn scopes_follow_their_enclosing_limits_and_specificity() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><div class="stop"><p class="target">x</p></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measure = |css: &str| {
+    let measured = measure_with_css(Node::container([node.clone()]), css);
+
+    measured.children[0].children[0].children[0].children[0].width
+  };
+
+  assert_eq!(
+    measure("@scope (.outer) to (.stop) { @scope (.inner) { p { width: 30px } } }"),
+    1200.0
+  );
+  assert_eq!(
+    measure("@scope (.outer) { @scope (.inner) { p { width: 30px } } }"),
+    30.0
+  );
+  // One rule matches `p` under the closer root and `.outer:scope p` under the farther one, and
+  // takes the higher specificity, which outranks `.target`.
+  assert_eq!(
+    measure(
+      "@scope (.outer, .inner) { .outer:scope p, p { width: 40px } } .target { width: 20px }"
+    ),
+    40.0
+  );
+  assert_eq!(
+    measure("@scope (.outer) to (.stop::before) { p { width: 30px } }"),
+    1200.0
+  );
+}
+
+/// A container unit in a query reads the queried container's own query container, as Blink's
+/// `CSSContainerValues` starts from the container's parent.
+#[test]
+fn a_container_unit_in_a_query_reads_the_outer_container() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="inner"><p class="target">x</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inner { container: inner / inline-size; width: 300px }
+     @container inner (width > 50cqw) { .target { width: 50px } }",
+  );
+
+  assert_eq!(measured.children[0].children[0].children[0].width, 50.0);
+}
+
+/// A container unit in a query reads each axis from the nearest container around the queried one
+/// that contains it, as Blink's `FindSizeForContainerAxis` looks for each axis on its own.
+#[test]
+fn a_container_unit_in_a_query_reads_each_axis_on_its_own() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="middle"><div class="inner"><p class="target">x</p></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: size; width: 400px; height: 400px }
+     .middle { container-type: inline-size }
+     .inner { container: inner / inline-size; width: 300px }
+     @container inner (width > 50cqh) { .target { width: 50px } }",
+  );
+
+  assert_eq!(
+    measured.children[0].children[0].children[0].children[0].width,
+    50.0
+  );
+}
+
+/// Containers settle within as many builds as the most containers any build found, as one build
+/// can find fewer containers than an earlier one while the sizes still settle.
+#[test]
+fn containers_settle_after_earlier_containers_vanish() {
+  let node = Node::from_html(
+    r#"<div class="outer"><div class="m1"><div class="m2"><div class="inner"><p class="target">x</p></div></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .m1 { container-type: inline-size; width: 100px }
+     @container (width > 300px) { .m1 { container-type: normal } }
+     .m2 { container-type: inline-size }
+     @container (width > 350px) { .m2 { container-type: normal } }
+     @container (width > 350px) { .inner { container: inner / inline-size; width: 250px } }
+     @container inner (width > 200px) { .target { width: 20px } }",
+  );
+  let inner = &measured.children[0].children[0].children[0].children[0];
+
+  assert_eq!(inner.width, 250.0);
+  assert_eq!(inner.children[0].width, 20.0);
+}
+
+/// A size-contained grid keeps its explicit tracks, sized without its items, as Blink's
+/// `BuildGridSizingTreeIgnoringChildren` sizes them.
+#[test]
+fn a_contained_grid_keeps_its_explicit_tracks() {
+  assert_eq!(
+    text_box_size(
+      ".box { display: inline-grid; container-type: inline-size; grid-template-columns: 120px }"
+    )
+    .0,
+    120.0
+  );
+  assert_eq!(
+    text_box_size(".box { display: grid; container-type: size; grid-template-rows: 100px }").1,
+    100.0
+  );
+  assert_eq!(
+    text_box_size(".box { display: grid; container-type: size }").1,
+    0.0
+  );
+}
+
+/// A size-contained subgrid takes its block size without its items, as Blink's
+/// `ComputeGridGeometry` reads the contained size in a subgrid too.
+#[test]
+fn a_contained_subgrid_sizes_its_block_without_its_items() {
+  let node = Node::from_html(
+    r#"<div class="grid"><div class="sub"><div class="child"></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".grid { display: grid; grid-template-columns: 200px; align-items: start }
+     .sub { container-type: size; display: grid; grid-template-columns: subgrid; padding: 5px; border: 2px solid }
+     .child { height: 80px }",
+  );
+
+  assert_eq!(measured.children[0].children[0].height, 14.0);
+}
+
+/// An `@scope` rule without a start roots at the parent of the `<style>` element holding it.
+/// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+#[test]
+fn a_scope_without_a_start_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    "<div class=\"card\"><style>@scope { p { width: 30px } :scope { width: 200px } }</style><p>a</p></div><p>b</p>",
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].width, 200.0);
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}
+
+/// A size query container establishes an independent formatting context, so a child's margin does
+/// not collapse through it. <https://drafts.csswg.org/css-contain-3/#container-type>
+#[test]
+fn a_query_container_keeps_its_children_margins() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("child")]).with_class_name("outer")]),
+    ".outer { display: block; container-type: inline-size } .child { height: 20px; margin-bottom: 4px }",
+  );
+
+  assert_eq!(measured.children[0].height, 24.0);
 }

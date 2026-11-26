@@ -81,6 +81,8 @@ pub(crate) struct NodeMetadata {
   pub dir: Option<Direction>,
   /// The BCP-47 language tag for this node, equivalent to the `lang` attribute.
   pub lang: Option<Lang>,
+  /// The owner a `<style>` child of the element names, which an `@scope` without a start roots at.
+  pub style_owner: Option<u32>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -432,6 +434,7 @@ impl Node {
       tw,
       dir: _,
       lang: _,
+      style_owner: _,
     } = &self.metadata;
 
     matches!(self.kind, NodeKind::Text(_))

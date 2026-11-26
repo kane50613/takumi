@@ -1977,6 +1977,7 @@ mod tests {
       r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#,
       r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#,
       r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg { color: inherit }</style><rect width="4" height="4" fill="currentColor"/></svg>"#,
+      r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><style>svg { color: color-mix(in srgb, currentColor, white) }</style><rect width="4" height="4" fill="currentColor"/></svg>"#,
     ];
     // A nested image is a document of its own, isolated from the host as any image is.
     let reads_none = [
