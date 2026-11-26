@@ -682,7 +682,11 @@ mod tests {
     let tree = render_tree(list, &css);
 
     assert_eq!(
-      marker_of(first_child(&tree)).context.sizing.container_size.width,
+      marker_of(first_child(&tree))
+        .context
+        .sizing
+        .container_size
+        .width,
       Some(400.0)
     );
   }

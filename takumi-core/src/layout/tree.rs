@@ -4002,8 +4002,8 @@ mod tests {
         )
         .stylesheet(Arc::new(parse_stylesheet(css)))
         .build();
-      let root = Node::container([Node::container([]).with_class_name("box")])
-        .with_class_name("container");
+      let root =
+        Node::container([Node::container([]).with_class_name("box")]).with_class_name("container");
 
       RenderNode::from_node(&context, root).reads_query_container()
     };
