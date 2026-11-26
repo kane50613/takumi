@@ -1,7 +1,7 @@
 //! Tailwind's variants, such as `md:`, `first:`, and `before:`: the conditions a utility applies
 //! under, and where they sort it.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use selectors::parser::{ParseRelative, Selector, SelectorList};
@@ -91,14 +91,65 @@ pub(crate) struct ContainerVariant {
   order: ContainerOrder,
 }
 
-/// Where a container variant sorts: `@max-*` first, widest first, then `@` and `@min-*`, narrowest
-/// first, a width that is not a length first in its group, as Tailwind's
-/// `compareBreakpointVariants` puts it.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// Where a container variant sorts: `@max-*` first, then `@` and `@min-*`, each by its width as
+/// Tailwind's `compareBreakpoints` compares them.
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ContainerOrder {
   at_least: bool,
-  width: u32,
-  name: Box<str>,
+  width: Box<str>,
+}
+
+impl Ord for ContainerOrder {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self
+      .at_least
+      .cmp(&other.at_least)
+      .then_with(|| compare_breakpoints(&self.width, &other.width, self.at_least))
+  }
+}
+
+impl PartialOrd for ContainerOrder {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+/// Tailwind's `compareBreakpoints`: by unit, or by function name for a CSS function, then by the
+/// number the width starts with, then by text when no number decides.
+fn compare_breakpoints(a: &str, z: &str, ascending: bool) -> Ordering {
+  if a == z {
+    return Ordering::Equal;
+  }
+
+  let bucket = |width: &str| match width.find('(') {
+    Some(function) => width[..function].to_owned(),
+    None => width
+      .chars()
+      .filter(|character| !character.is_ascii_digit() && *character != '.')
+      .collect(),
+  };
+
+  bucket(a)
+    .cmp(&bucket(z))
+    .then_with(|| match leading_number(a).partial_cmp(&leading_number(z)) {
+      Some(order) if ascending => order,
+      Some(order) => order.reverse(),
+      None => a.cmp(z),
+    })
+}
+
+/// JavaScript's `parseFloat`: the number `text` starts with, `NaN` without one.
+fn leading_number(text: &str) -> f64 {
+  let end = text
+    .char_indices()
+    .find(|&(index, character)| {
+      !(character.is_ascii_digit()
+        || character == '.'
+        || (index == 0 && matches!(character, '-' | '+')))
+    })
+    .map_or(text.len(), |(index, _)| index);
+
+  text[..end].parse().unwrap_or(f64::NAN)
 }
 
 impl ContainerVariant {
@@ -106,7 +157,11 @@ impl ContainerVariant {
   /// optional `/name`.
   fn parse(token: &str) -> Option<Self> {
     let rest = token.strip_prefix('@')?;
-    let (rest, name) = rest.split_once('/').unwrap_or((rest, ""));
+    let (rest, name) = match split_top_level(rest, b'/') {
+      Some((_, name)) if split_top_level(name, b'/').is_some() => return None,
+      Some(split) => split,
+      None => (rest, ""),
+    };
     let (at_least, value) = match rest.strip_prefix("max-") {
       Some(value) => (false, value),
       None => (true, rest.strip_prefix("min-").unwrap_or(rest)),
@@ -119,24 +174,12 @@ impl ContainerVariant {
     let operator = if at_least { ">=" } else { "<" };
     let text = format!("{name} (width {operator} {width})");
     let query = ContainerQuery::parse(&mut Parser::new(&text)).ok()?;
-    let rem = match Length::from_css_str(&width) {
-      Ok(Length::Rem(rem)) => Some(rem),
-      Ok(Length::Px(px)) => Some(px / 16.0),
-      _ => None,
-    };
-    let width = match (rem, at_least) {
-      (Some(rem), true) => rem.to_bits().saturating_add(1),
-      (Some(rem), false) => u32::MAX - 1 - rem.to_bits(),
-      (None, true) => 0,
-      (None, false) => u32::MAX,
-    };
 
     Some(Self {
       query,
       order: ContainerOrder {
         at_least,
-        width,
-        name: name.into(),
+        width: width.into(),
       },
     })
   }
@@ -260,7 +303,8 @@ fn structural_rank(token: &str) -> u8 {
 #[derive(Debug, Default)]
 pub(super) struct Variants {
   pub(super) breakpoint: Option<Breakpoint>,
-  pub(super) container: Option<ContainerVariant>,
+  /// The container queries `@` variants ask, every one of which must hold.
+  pub(super) container: Vec<ContainerVariant>,
   /// The media queries the late variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
@@ -285,7 +329,7 @@ impl Variants {
     Some((variants, token))
   }
 
-  /// Adds `variant`, or `None` for a second breakpoint, container query, or pseudo-element.
+  /// Adds `variant`, or `None` for a second breakpoint or pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
       Variant::Breakpoint(breakpoint) => {
@@ -293,11 +337,7 @@ impl Variants {
           return None;
         }
       }
-      Variant::Container(container) => {
-        if self.container.replace(container).is_some() {
-          return None;
-        }
-      }
+      Variant::Container(container) => self.container.push(container),
       Variant::Late { condition, rank } => {
         match condition {
           LateCondition::Media(query) => self
@@ -342,10 +382,16 @@ impl Variants {
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
       late: self.late,
-      container: self
-        .container
-        .as_ref()
-        .map(|container| container.order.clone()),
+      container: {
+        let mut orders: Vec<ContainerOrder> = self
+          .container
+          .iter()
+          .map(|container| container.order.clone())
+          .collect();
+
+        orders.sort_unstable_by(|left, right| right.cmp(left));
+        orders
+      },
       breakpoint: self.breakpoint.as_ref().map(Breakpoint::order),
       ranks: self.ranks,
     }
@@ -356,7 +402,9 @@ impl Variants {
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VariantOrder {
   late: u8,
-  container: Option<ContainerOrder>,
+  /// Approximate: several container variants sort by their latest first, where Tailwind's variant
+  /// bit set gives each group one bit.
+  container: Vec<ContainerOrder>,
   breakpoint: Option<(u32, Arc<str>)>,
   ranks: u32,
 }
@@ -457,10 +505,14 @@ fn condition(pseudo_classes: &str) -> Option<Selector<SelectorImpl>> {
     .then(|| selector.clone())
 }
 
-/// Splits a token at the first top-level variant `:`, mirroring Tailwind's
-/// `segment`: a `:` nested in brackets, quotes, or escaped by `\` is not a
-/// separator, so `url('https://…')` stays intact.
+/// Splits a token at the first top-level variant `:`.
 fn split_variant(token: &str) -> Option<(&str, &str)> {
+  split_top_level(token, b':')
+}
+
+/// Splits `token` at the first top-level `separator`, mirroring Tailwind's `segment`: one nested
+/// in brackets, quotes, or escaped by `\` is not a separator, so `url('https://…')` stays intact.
+fn split_top_level(token: &str, separator: u8) -> Option<(&str, &str)> {
   let bytes = token.as_bytes();
   let mut stack: Vec<u8> = Vec::new();
   let mut index = 0;
@@ -481,7 +533,9 @@ fn split_variant(token: &str) -> Option<(&str, &str)> {
           stack.pop();
         }
       }
-      b':' if stack.is_empty() => return Some((&token[..index], &token[index + 1..])),
+      byte if byte == separator && stack.is_empty() => {
+        return Some((&token[..index], &token[index + 1..]));
+      }
       _ => {}
     }
     index += 1;
@@ -563,13 +617,13 @@ mod tests {
       "[&:nth-child(4)]",
       "sm",
       "md",
+      "@max-[100px]",
       "@max-lg",
       "@max-sm",
-      "@max-[100px]",
       "@[10em]",
+      "@[400px]",
       "@sm",
       "@min-md",
-      "@md/sidebar",
       "portrait",
       "ltr",
       "rtl",
@@ -586,6 +640,7 @@ mod tests {
     for pair in ordered.windows(2) {
       assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
     }
+    assert_eq!(order("@md/sidebar"), order("@min-md"));
   }
 
   #[test]

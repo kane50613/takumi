@@ -8,8 +8,8 @@ packages:
 The `tw` prop now reads these Tailwind v4 utilities and variants, as Tailwind compiles them:
 
 - `@container` sets `container-type`, and `@container/name` also sets `container-name`.
-- `@sm:`, `@min-md:`, `@max-lg:`, and `@min-[400px]:` apply while the nearest inline-size container meets the width, and `@sm/name:` asks the container with that name.
-- `rtl:` and `ltr:` follow the element's `dir`, including `dir="auto"`.
+- `@sm:`, `@min-md:`, `@max-lg:`, and `@min-[400px]:` apply while the nearest inline-size container meets the width, `@sm/name:` asks the container with that name, and `@sm:@max-md:` applies within the range.
+- `rtl:` and `ltr:` follow the element's direction, including `dir="auto"`, and also apply anywhere inside an element with that `dir`, as in Tailwind.
 - `portrait:`, `landscape:`, `dark:`, and `print:` follow the render's viewport, color scheme, and output.
 
 ```tsx

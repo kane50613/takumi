@@ -69,8 +69,8 @@ pub(crate) struct TwRule {
   pub(crate) declarations: StyleDeclarationBlock,
   pub(crate) important: bool,
   pub(crate) breakpoint: Option<Breakpoint>,
-  /// The container query an `@` variant asks of the element's containers.
-  pub(crate) container: Option<ContainerQuery>,
+  /// The container queries `@` variants ask of the element's containers.
+  pub(crate) container: Vec<ContainerQuery>,
   /// The media queries the late variants require of the viewport.
   pub(crate) media: Vec<MediaQueryList>,
   /// The pseudo-classes the utility's structural and direction variants require of the element.
@@ -126,7 +126,11 @@ impl TwRule {
       declarations,
       important,
       breakpoint: variants.breakpoint,
-      container: variants.container.map(|container| container.query),
+      container: variants
+        .container
+        .into_iter()
+        .map(|container| container.query)
+        .collect(),
       media: variants.media,
       condition,
       pseudo_element: variants.pseudo_element,

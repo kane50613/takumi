@@ -1994,6 +1994,22 @@ fn tailwind_container_variants_ask_their_container() {
 
   assert_eq!(nested("@sm/side"), 80.0);
   assert_eq!(nested("@sm"), 40.0);
+
+  // Container variants compound into a range, and a `/` inside brackets is part of the width.
+  for (width, expected) in [(400, 80.0), (500, 40.0)] {
+    assert_eq!(
+      child(&format!(
+        r#"<div tw="@container w-[{width}px]"><p tw="w-10 @sm:@max-md:w-20">x</p></div>"#
+      ))
+      .0,
+      expected,
+      "{width}"
+    );
+  }
+  assert_eq!(
+    child(r#"<div tw="@container w-[400px]"><p tw="w-10 @[calc(600px/2)]:w-20">x</p></div>"#).0,
+    80.0
+  );
 }
 
 /// Tailwind's `rtl:` and `ltr:` compile to `:where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)`, which

@@ -1247,15 +1247,16 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
         SelectorTarget::Element => element.parent_element(),
         _ => Some(element),
       };
-      let applies =
-        (!is_replaced || target == SelectorTarget::Element)
-          && rule.is_active(viewport, breakpoints)
-          && rule.container.as_ref().is_none_or(|query| {
-            container_query_holds(query, container_start, containers, viewport)
-          })
-          && rule.condition.as_ref().is_none_or(|condition| {
-            matches_selector(condition, 0, None, element, &mut element_ctx)
-          });
+      let applies = (!is_replaced || target == SelectorTarget::Element)
+        && rule.is_active(viewport, breakpoints)
+        && rule
+          .container
+          .iter()
+          .all(|query| container_query_holds(query, container_start, containers, viewport))
+        && rule
+          .condition
+          .as_ref()
+          .is_none_or(|condition| matches_selector(condition, 0, None, element, &mut element_ctx));
 
       if applies {
         record_tw_match(

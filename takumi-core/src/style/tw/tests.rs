@@ -2081,4 +2081,7 @@ fn media_variants_follow_the_viewport() {
   assert!(!active("print:w-4", dark));
   assert!(expand_apply("dark:w-4").is_none());
   assert!(expand_apply("@sm:w-4").is_none());
+  assert!(expand_apply("rtl:w-4").is_none());
+  assert!(expand_apply("first:w-4").is_none());
+  assert!(expand_apply("w-4").is_some());
 }
