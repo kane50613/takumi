@@ -2356,3 +2356,37 @@ fn test_bare_drop_shadow_draws_both_theme_layers() {
     vec![layer(2.0, 26), layer(1.0, 15)]
   );
 }
+
+#[test]
+fn test_not_negates_at_rule_variants() {
+  let active = |token: &str, viewport: Viewport| {
+    TwRule::parse(token)
+      .unwrap_or_else(|| panic!("{token} compiles"))
+      .is_active(viewport, &Default::default())
+  };
+  let dark = Viewport {
+    color_scheme: ColorScheme::Dark,
+    ..Viewport::new((100, 200))
+  };
+  let print = Viewport {
+    media_target: MediaTarget::Print,
+    ..Viewport::new((1000, 100))
+  };
+
+  assert!(!active("not-dark:w-4", dark));
+  assert!(active("not-dark:w-4", print));
+  assert!(!active("not-print:w-4", print));
+  assert!(active("not-print:w-4", dark));
+  assert!(!active("not-motion-safe:w-4", dark));
+  assert!(active("not-contrast-more:w-4", dark));
+  assert!(active("not-md:w-4", dark));
+  assert!(!active("not-md:w-4", print));
+  assert!(active("not-max-md:w-4", print));
+  assert!(!active("not-max-md:w-4", dark));
+  assert!(TwRule::parse("not-before:w-4").is_none());
+
+  let order = |token: &str| TwRule::parse(token).unwrap().order;
+
+  assert!(order("not-md:w-4") < order("first:w-4"));
+  assert!(order("not-dark:w-4") < order("md:w-4"));
+}

@@ -29,6 +29,8 @@ pub(crate) struct Breakpoint {
   pub token: Arc<str>,
   /// Whether the variant applies below its width, as `max-*` does.
   below: bool,
+  /// Whether a `not-` variant flipped `below`, so the breakpoint sorts as Tailwind's `not` does.
+  negated: bool,
 }
 
 impl Breakpoint {
@@ -53,6 +55,7 @@ impl Breakpoint {
         width: Some(width),
         token: value.into(),
         below,
+        negated: false,
       });
     }
 
@@ -73,7 +76,18 @@ impl Breakpoint {
       width,
       token: value.into(),
       below,
+      negated: false,
     })
+  }
+
+  /// The breakpoint `not-` makes of this one: Tailwind's `@media not (width >= …)` holds exactly
+  /// where the opposite `max-*` or `min-*` breakpoint does.
+  fn negated(self) -> Self {
+    Self {
+      below: !self.below,
+      negated: !self.negated,
+      ..self
+    }
   }
 
   /// Check if the breakpoint matches the viewport width.
@@ -291,6 +305,9 @@ pub(crate) enum Variant {
     query: &'static str,
     rank: u8,
   },
+  /// A media query variant under `not-`, `not-dark:` or `not-print:`, which Tailwind's `not`
+  /// compiles to `@media not …`.
+  NotMedia(String),
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
@@ -301,6 +318,8 @@ pub(crate) enum Variant {
   PseudoElement(PseudoElement),
 }
 
+/// Where Tailwind registers `not-*`, ahead of every other variant this rank orders.
+const NOT_RANK: u8 = 0;
 /// Where Tailwind registers `before:` and `after:`, after `not-*` and ahead of every structural
 /// variant.
 const BEFORE_RANK: u8 = 1;
@@ -376,14 +395,32 @@ impl Variant {
       });
     }
 
+    if let Some(negated) = token.strip_prefix("not-") {
+      return Self::parse(negated)?.negated();
+    }
+
     Breakpoint::parse(token).map(Self::Breakpoint)
+  }
+
+  /// The variant `not-` makes of this at-rule variant, or `None` for one Tailwind's `not` does
+  /// not negate here. Approximate: Tailwind also negates a container query and `ltr:` and `rtl:`.
+  fn negated(self) -> Option<Self> {
+    match self {
+      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.negated())),
+      Self::Late {
+        condition: LateCondition::Media(query),
+        ..
+      }
+      | Self::Preference { query, .. } => Some(Self::NotMedia(format!("not {query}"))),
+      _ => None,
+    }
   }
 }
 
 /// Where a structural variant sorts. Approximate: values of one variant keep their order.
 fn structural_rank(token: &str) -> u8 {
   if token.starts_with("not-") {
-    return 0;
+    return NOT_RANK;
   }
 
   if let Some(index) = REGISTERED.iter().position(|(name, _)| *name == token) {
@@ -437,7 +474,12 @@ impl Variants {
   /// Adds `variant`, or `None` for a second pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
-      Variant::Breakpoint(breakpoint) => self.breakpoint.push(breakpoint),
+      Variant::Breakpoint(breakpoint) => {
+        if breakpoint.negated {
+          self.ranks |= 1 << NOT_RANK;
+        }
+        self.breakpoint.push(breakpoint);
+      }
       Variant::Container(container) => self.container.push(container),
       Variant::Late { condition, rank } => {
         match condition {
@@ -453,6 +495,12 @@ impl Variants {
           .media
           .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?);
         self.preference |= 1 << rank;
+      }
+      Variant::NotMedia(query) => {
+        self
+          .media
+          .push(MediaQueryList::parse(&mut Parser::new(&query)).ok()?);
+        self.ranks |= 1 << NOT_RANK;
       }
       Variant::Structural { pseudo_class, rank } => {
         self.pseudo_classes.push_str(&pseudo_class);
@@ -500,7 +548,13 @@ impl Variants {
           .iter()
           .map(|container| container.order.clone()),
       ),
-      breakpoint: descending(self.breakpoint.iter().map(Breakpoint::order)),
+      breakpoint: descending(
+        self
+          .breakpoint
+          .iter()
+          .filter(|breakpoint| !breakpoint.negated)
+          .map(Breakpoint::order),
+      ),
       preference: self.preference,
       ranks: self.ranks,
     }
