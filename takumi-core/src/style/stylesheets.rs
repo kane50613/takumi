@@ -1281,7 +1281,7 @@ macro_rules! define_style {
         pub lang: Option<Lang>,
         /// The inherited `lang` attribute's text where `lang` does not spell it, which `:lang()`
         /// matches as Blink's `Element::ComputeInheritedLanguage` keeps it.
-        pub(crate) lang_text: Option<Arc<str>>,
+        pub lang_text: Option<Arc<str>>,
         /// `display` before an out-of-flow or floating box blockified it, as Blink's
         /// `OriginalDisplay`.
         pub original_display: Display,
