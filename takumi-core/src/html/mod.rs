@@ -1284,9 +1284,9 @@ mod tests {
   }
 
   #[test]
-  fn dir_is_case_insensitive() {
+  fn dir_keeps_its_text_as_written() {
     let node = parse(r#"<div dir="RTL">x</div>"#);
-    assert!(node.to_html().contains(r#"dir="rtl""#));
+    assert!(node.to_html().contains(r#"dir="RTL""#));
   }
 
   #[test]
