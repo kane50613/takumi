@@ -2390,3 +2390,28 @@ fn test_not_negates_at_rule_variants() {
   assert!(order("not-md:w-4") < order("first:w-4"));
   assert!(order("not-dark:w-4") < order("md:w-4"));
 }
+
+#[test]
+fn test_a_long_not_chain_parses_by_parity() {
+  let chain = |count: usize, variant: &str| format!("{}{variant}:w-4", "not-".repeat(count));
+
+  for variant in ["first", "hover", "md", "dark"] {
+    assert!(
+      TwRule::parse(&chain(100_001, variant)).is_some(),
+      "{variant}"
+    );
+  }
+
+  let dark = Viewport {
+    color_scheme: ColorScheme::Dark,
+    ..Viewport::new((100, 200))
+  };
+  let active = |token: &str| {
+    TwRule::parse(token)
+      .unwrap()
+      .is_active(dark, &Default::default())
+  };
+
+  assert!(!active(&chain(100_001, "dark")));
+  assert!(active(&chain(100_000, "dark")));
+}

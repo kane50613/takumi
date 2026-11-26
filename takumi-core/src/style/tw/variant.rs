@@ -395,8 +395,16 @@ impl Variant {
       });
     }
 
-    if let Some(negated) = token.strip_prefix("not-") {
-      return Self::parse(negated)?.negated();
+    let (base, negated) = strip_negations(token);
+
+    if base.len() != token.len() {
+      let variant = Self::parse(base)?;
+
+      return if negated {
+        variant.negated()
+      } else {
+        Some(variant)
+      };
     }
 
     Breakpoint::parse(token).map(Self::Breakpoint)
@@ -584,19 +592,29 @@ pub(crate) struct VariantOrder {
   ranks: u32,
 }
 
-/// The selector a structural, form state, or attribute variant compiles to, or `None` for any
-/// other variant.
+/// The variant under a run of `not-` prefixes, and whether the run negates it: Tailwind's `not`
+/// compounds with itself, and each pair cancels out.
+fn strip_negations(token: &str) -> (&str, bool) {
+  let base = token.trim_start_matches("not-");
+  let negations = (token.len() - base.len()) / "not-".len();
+
+  (base, negations % 2 == 1)
+}
+
+/// The selector a structural, form state, or attribute variant compiles to, under any `not-`
+/// prefixes, or `None` for any other variant.
 fn pseudo_class(variant: &str) -> Option<String> {
+  match strip_negations(variant) {
+    (base, true) if UNREACHED_STATES.contains(&base) => Some(format!(":not(:{base})")),
+    (base, true) => Some(format!(":not({})", element_pseudo_class(base)?)),
+    (base, false) => element_pseudo_class(base),
+  }
+}
+
+/// The selector a structural, form state, or attribute variant without `not-` compiles to.
+fn element_pseudo_class(variant: &str) -> Option<String> {
   if let Some((_, pseudo_class)) = REGISTERED.iter().find(|(name, _)| *name == variant) {
     return Some((*pseudo_class).to_owned());
-  }
-
-  if let Some(negated) = variant.strip_prefix("not-") {
-    if UNREACHED_STATES.contains(&negated) {
-      return Some(format!(":not(:{negated})"));
-    }
-
-    return Some(format!(":not({})", pseudo_class(negated)?));
   }
 
   if let Some(compound) = arbitrary_compound(variant) {
@@ -782,6 +800,8 @@ mod tests {
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
       ("not-hover", Some(":not(:hover)")),
+      ("not-not-first", Some(":first-child")),
+      ("not-not-not-first", Some(":not(:first-child)")),
       ("not-focus-within", Some(":not(:focus-within)")),
       ("not-enabled", Some(":not(:enabled)")),
       ("disabled", Some(":disabled")),
