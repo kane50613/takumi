@@ -454,7 +454,11 @@ fn pseudo_class(variant: &str) -> Option<String> {
       .and_then(|rest| rest.strip_suffix(']'))
     {
       Some(bracketed) => arbitrary(bracketed),
-      None => argument.parse::<u32>().ok()?.to_string(),
+      None => argument
+        .parse::<u32>()
+        .ok()
+        .filter(|number| number.to_string() == argument)?
+        .to_string(),
     };
 
     return Some(format!(":{function}({argument})"));
@@ -563,6 +567,8 @@ mod tests {
         Some(":is([data-state=foo_bar])"),
       ),
       ("nth-x", None),
+      ("nth-007", None),
+      ("nth-last-of-type-01", None),
       ("hover", None),
       ("md", None),
     ] {
