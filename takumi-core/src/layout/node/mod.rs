@@ -62,8 +62,9 @@ impl Names {
 
 /// The attributes a node holds in its own fields rather than in `attributes`, which builders leave
 /// out of `attributes` and [`Node::attribute`] reads back. `dir` holds only `ltr` and `rtl` as
-/// written in lowercase, so any other value stays in `attributes`. Approximate: `style` keeps no
-/// attribute text, so `[style]` does not match.
+/// written in lowercase, and `lang` only a tag in its canonical spelling, so any other value stays
+/// in `attributes`, which [`Node::attribute`] reads first. Approximate: `style` keeps no attribute
+/// text, so `[style]` does not match.
 const LIFTED_ATTRIBUTES: [&str; 5] = ["id", "class", "lang", "dir", "src"];
 
 /// Shared metadata stored by every renderable node.
@@ -568,7 +569,14 @@ impl Node {
       };
       attrs.push(format!("dir=\"{}\"", dir_str));
     }
-    if let Some(lang) = &self.metadata.lang {
+    if let Some(lang) = &self.metadata.lang
+      && !self
+        .metadata
+        .attributes
+        .iter()
+        .flatten()
+        .any(|(name, _)| name.as_ref() == "lang")
+    {
       attrs.push(format!("lang=\"{}\"", escape_attr(lang.as_str())));
     }
     let image = match &self.kind {
@@ -776,19 +784,17 @@ impl Node {
     self.attribute("scope")
   }
 
-  /// The value of attribute `name`, from the field that holds it when one does.
+  /// The value of attribute `name`, as written when `attributes` keeps it, else from the field that
+  /// holds it.
   pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
-    if let Some(Some(value)) = self.lifted_attribute(name) {
-      return Some(value);
-    }
-
     self
       .metadata
       .attributes
-      .as_ref()?
       .iter()
+      .flat_map(|attributes| attributes.iter())
       .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
       .map(|(_, value)| value.as_ref())
+      .or_else(|| self.lifted_attribute(name).flatten())
   }
 
   /// The value of `name` from the field that holds it, `None` when no field holds `name`.

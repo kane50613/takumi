@@ -24,7 +24,11 @@ const nonAttributeProps = new Set([
   "suppressHydrationWarning",
 ]);
 
-const attributeValueTypes = new Set(["string", "number", "bigint", "boolean"]);
+/** The props React DOM writes `true` and `false` for, as it does any `aria-*` or `data-*` prop. */
+const booleanishProps = new Set(["contentEditable", "draggable", "spellCheck"]);
+
+/** The attribute names React DOM writes for props that spell them otherwise. */
+const attributeNames: Record<string, string> = { htmlFor: "for" };
 
 /** Reads node metadata from element props under one set of {@link FromJsxOptions}. */
 export class NodeMetadataReader {
@@ -52,9 +56,9 @@ export class NodeMetadataReader {
     return {
       tagName,
       className,
-      id: props.id,
+      id: textValue(props.id),
       dir,
-      lang: props.lang,
+      lang: textValue(props.lang),
       attributes: this.attributes(tagName, props, dir !== undefined),
       tw: typeof tw === "string" ? tw : undefined,
       style,
@@ -77,7 +81,9 @@ export class NodeMetadataReader {
     let attributes: Record<string, string> | undefined;
 
     for (const [name, value] of Object.entries(props)) {
-      if (nonAttributeProps.has(name) || name === this.tailwindClassesProperty) continue;
+      if (nonAttributeProps.has(name) || name === this.tailwindClassesProperty) {
+        continue;
+      }
 
       if (
         name === "lang" ||
@@ -87,14 +93,38 @@ export class NodeMetadataReader {
         continue;
       }
 
-      if (value === false || !attributeValueTypes.has(typeof value)) continue;
+      const text = attributeText(name, value);
+
+      if (text === undefined) {
+        continue;
+      }
 
       attributes ??= {};
-      attributes[name] = value === true ? "" : String(value);
+      attributes[attributeNames[name] ?? name] = text;
     }
 
     return attributes;
   }
+}
+
+/** The text React DOM writes for a prop `name` of `value`, `undefined` when it writes none. */
+function attributeText(name: string, value: unknown): string | undefined {
+  if (typeof value !== "boolean") {
+    return textValue(value);
+  }
+
+  if (booleanishProps.has(name) || name.startsWith("aria-") || name.startsWith("data-")) {
+    return String(value);
+  }
+
+  return value ? "" : undefined;
+}
+
+/** The text of a string, number, or bigint prop. */
+function textValue(value: unknown): string | undefined {
+  return typeof value === "string" || typeof value === "number" || typeof value === "bigint"
+    ? String(value)
+    : undefined;
 }
 
 /** The `dir` field a `dir` attribute sets, which only the lowercase `ltr` and `rtl` do, so any other spelling stays an attribute. */

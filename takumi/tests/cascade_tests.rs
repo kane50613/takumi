@@ -1839,6 +1839,26 @@ fn attributes_held_in_fields_match_attribute_selectors() {
   }
 }
 
+/// A `lang` keeps the text it is written with, which `[lang]` reads, whether or not it is a
+/// language tag takumi reads.
+#[test]
+fn lang_keeps_its_text_for_attribute_selectors() {
+  for lang in ["EN_us", "", "x-foo"] {
+    let node = Node::from_html(
+      &format!(r#"<div lang="{lang}"></div>"#),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses");
+    let css = format!(r#"div[lang="{lang}"] {{ width: 30px }}"#);
+
+    assert_eq!(
+      measure_with_css(Node::container([node]), &css).children[0].width,
+      30.0,
+      "{lang:?}"
+    );
+  }
+}
+
 #[test]
 fn generated_content_reads_attributes_held_in_fields() {
   for attribute in ["dir", "lang"] {

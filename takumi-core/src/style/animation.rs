@@ -93,27 +93,25 @@ impl<'s> ElementAnimations<'s> {
     let base_snapshot = style.clone();
 
     for animation in animations {
-      let resolved_frames = resolve_keyframes(&animation.keyframes, &base_snapshot);
-      let Some(segment) =
-        sample_keyframe_segment(&resolved_frames, &base_snapshot, animation.sample.progress)
-      else {
-        continue;
-      };
+      let keyframes = ResolvedKeyframes::new(&animation.keyframes, &base_snapshot);
+      let mut animated = animation.longhands;
 
-      let eased_progress = animation
-        .timing_function
-        .apply(segment.progress, animation.sample.before);
-      let mut animated_properties = segment.animated_properties;
+      animated.intersect(longhands);
+      for interval in keyframes.intervals(&animated, animation.sample.progress) {
+        let eased_progress = keyframes
+          .timing_function(interval.from)
+          .unwrap_or(animation.timing_function)
+          .apply(interval.progress, animation.sample.before);
 
-      animated_properties.intersect(longhands);
-      style.apply_interpolated_properties(
-        segment.from_style,
-        segment.to_style,
-        &animated_properties,
-        eased_progress,
-        sizing,
-        current_color,
-      );
+        style.apply_interpolated_properties(
+          keyframes.style(interval.from, &base_snapshot),
+          keyframes.style(interval.to, &base_snapshot),
+          &interval.longhands,
+          eased_progress,
+          sizing,
+          current_color,
+        );
+      }
     }
   }
 
@@ -131,7 +129,7 @@ impl<'s> ElementAnimations<'s> {
 
     for animation in &self.animations {
       for name in animation.keyframes.custom_property_names() {
-        let (from, to, progress) = animation.keyframes.custom_property_segment(
+        let (from, to, progress, timing_function) = animation.keyframes.custom_property_segment(
           name,
           style.custom_properties.get(name),
           animation.sample.progress,
@@ -143,8 +141,8 @@ impl<'s> ElementAnimations<'s> {
           })
         };
         let (from, to) = (resolve(from), resolve(to));
-        let progress = animation
-          .timing_function
+        let progress = timing_function
+          .unwrap_or(animation.timing_function)
           .apply(progress, animation.sample.before);
         let interpolated = from.as_deref().zip(to.as_deref()).and_then(|(from, to)| {
           style
@@ -231,6 +229,23 @@ pub(crate) fn find_keyframes<'a>(
     .or_else(|| tailwind_animation_keyframes(name).map(Cow::Owned))
 }
 
+impl KeyframeRule {
+  /// The `animation-timing-function` it declares, which eases the interval it starts.
+  /// <https://drafts.csswg.org/css-animations-1/#keyframes>
+  fn timing_function(&self) -> Option<AnimationTimingFunction> {
+    self
+      .declarations
+      .iter()
+      .rev()
+      .find_map(|declaration| match declaration {
+        StyleDeclaration::AnimationTimingFunction(timing_functions) => {
+          Some(repeated_list_value(timing_functions, 0))
+        }
+        _ => None,
+      })
+  }
+}
+
 impl KeyframesRule {
   /// The names of the custom properties its keyframes declare, each once.
   fn custom_property_names(&self) -> Vec<&str> {
@@ -242,16 +257,21 @@ impl KeyframesRule {
       .collect()
   }
 
-  /// The keyframes on either side of `progress` that declare the custom property `name`, the
-  /// `underlying` value standing in for an offset of 0 or 1 none declares, and the progress
-  /// between them, as Blink samples each property's keyframes apart from the others.
+  /// The values on either side of `progress` of the keyframes that declare the custom property
+  /// `name`, the `underlying` value standing in for an offset of 0 or 1 none declares, the
+  /// progress between them, and the timing function the earlier keyframe declares.
   fn custom_property_segment<'k>(
     &'k self,
     name: &str,
     underlying: Option<&'k str>,
     progress: f32,
-  ) -> (Option<&'k str>, Option<&'k str>, f32) {
-    let mut points: Vec<(f32, Option<&str>)> = self
+  ) -> (
+    Option<&'k str>,
+    Option<&'k str>,
+    f32,
+    Option<AnimationTimingFunction>,
+  ) {
+    let mut points: Vec<(f32, Option<(&str, &KeyframeRule)>)> = self
       .keyframes
       .iter()
       .filter_map(|keyframe| {
@@ -271,34 +291,22 @@ impl KeyframesRule {
           keyframe
             .offsets
             .iter()
-            .map(move |&offset| (offset, Some(value))),
+            .map(move |&offset| (offset, Some((value, keyframe)))),
         )
       })
       .flatten()
       .collect();
 
     sort_by_key(&mut points, |&(offset, _)| offset);
-    if points.first().is_none_or(|&(offset, _)| offset > 0.0) {
-      points.insert(0, (0.0, underlying));
-    }
-    if points.last().is_none_or(|&(offset, _)| offset < 1.0) {
-      points.push((1.0, underlying));
-    }
 
-    let end = points
-      .iter()
-      .position(|&(offset, _)| offset >= progress)
-      .unwrap_or(points.len() - 1)
-      .max(1);
-    let ((from_offset, from), (to_offset, to)) = (points[end - 1], points[end]);
-    let width = to_offset - from_offset;
-    let local = if width <= f32::EPSILON {
-      1.0
-    } else {
-      ((progress - from_offset) / width).clamp(0.0, 1.0)
-    };
+    let (from, to, local) = property_interval(points, progress);
 
-    (from, to, local)
+    (
+      from.map(|(value, _)| value).or(underlying),
+      to.map(|(value, _)| value).or(underlying),
+      local,
+      from.and_then(|(_, keyframe)| keyframe.timing_function()),
+    )
   }
 
   /// The longhands its keyframes declare.
@@ -456,11 +464,8 @@ fn sample_animation_progress(
     };
   }
 
-  if duration_ms <= 0.0 {
-    return Some(AnimationSample::active(end_progress(direction, 0)));
-  }
-
   let total_active_duration = match iteration_count {
+    _ if duration_ms <= 0.0 => 0.0,
     AnimationIterationCount::Infinite => f32::INFINITY,
     AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
   };
@@ -487,18 +492,12 @@ fn sample_animation_progress(
     };
   }
 
-  let progress_within_iteration = active_time / duration_ms;
-  let mut iteration_index = progress_within_iteration.floor() as usize;
-  let mut progress = progress_within_iteration.fract();
-  if active_time > 0.0 && progress_within_iteration.fract().abs() <= f32::EPSILON {
-    progress = 1.0;
-    iteration_index = iteration_index.saturating_sub(1);
-  }
+  let overall_progress = active_time / duration_ms;
 
   Some(AnimationSample::active(apply_direction(
-    progress,
+    overall_progress.fract(),
     direction,
-    iteration_index,
+    overall_progress.floor() as usize,
   )))
 }
 
@@ -531,133 +530,51 @@ fn apply_direction(progress: f32, direction: AnimationDirection, iteration_index
   }
 }
 
-fn sample_keyframe_segment<'a>(
-  resolved_frames: &'a ResolvedKeyframes,
-  base_style: &'a ComputedStyle,
+/// The points on either side of `progress` among `points`, sorted by offset, `None` standing in for
+/// the underlying value at an offset of 0 or 1 no point takes, and the progress between them, as
+/// Blink samples each property's keyframes apart from the others.
+/// <https://drafts.csswg.org/web-animations-1/#the-effect-value-of-a-keyframe-animation-effect>
+fn property_interval<T: Copy>(
+  mut points: Vec<(f32, Option<T>)>,
   progress: f32,
-) -> Option<InterpolationSegment<'a>> {
-  let first = resolved_frames.points.first()?;
-
-  // A progress on the first keyframe starts the interval from it.
-  if progress < first.offset {
-    let segment_progress = if first.offset <= 0.0 {
-      1.0
-    } else {
-      progress / first.offset
-    };
-    let to = resolved_frames.style(first);
-
-    return Some(InterpolationSegment {
-      from_style: base_style,
-      to_style: &to.style,
-      animated_properties: to.mask,
-      progress: segment_progress.clamp(0.0, 1.0),
-    });
+) -> (Option<T>, Option<T>, f32) {
+  if points.first().is_none_or(|&(offset, _)| offset > 0.0) {
+    points.insert(0, (0.0, None));
+  }
+  if points.last().is_none_or(|&(offset, _)| offset < 1.0) {
+    points.push((1.0, None));
   }
 
-  for window in resolved_frames.points.windows(2) {
-    let [start_point, end_point] = window else {
-      continue;
-    };
-    if progress <= end_point.offset {
-      let width = end_point.offset - start_point.offset;
-      let segment_progress = if width <= f32::EPSILON {
-        1.0
-      } else {
-        (progress - start_point.offset) / width
-      };
-      let from = resolved_frames.style(start_point);
-      let to = resolved_frames.style(end_point);
-      let mut animated_properties = from.mask;
-
-      animated_properties.union(&to.mask);
-      return Some(InterpolationSegment {
-        from_style: &from.style,
-        to_style: &to.style,
-        animated_properties,
-        progress: segment_progress.clamp(0.0, 1.0),
-      });
-    }
-  }
-
-  let last = resolved_frames.points.last()?;
-  let segment_progress = if last.offset >= 1.0 {
+  let start = points
+    .iter()
+    .rposition(|&(offset, _)| offset <= progress && offset < 1.0)
+    .unwrap_or(0);
+  let ((from_offset, from), (to_offset, to)) = (points[start], points[start + 1]);
+  let width = to_offset - from_offset;
+  let local = if width <= f32::EPSILON {
     1.0
   } else {
-    (progress - last.offset) / (1.0 - last.offset)
+    ((progress - from_offset) / width).clamp(0.0, 1.0)
   };
-  let from = resolved_frames.style(last);
 
-  Some(InterpolationSegment {
-    from_style: &from.style,
-    to_style: base_style,
-    animated_properties: from.mask,
-    progress: segment_progress.clamp(0.0, 1.0),
-  })
-}
-
-fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> ResolvedKeyframes {
-  let mut points = keyframes
-    .keyframes
-    .iter()
-    .enumerate()
-    .flat_map(|(style_index, keyframe)| {
-      keyframe
-        .offsets
-        .iter()
-        .copied()
-        .map(move |offset| ResolvedKeyframePoint {
-          offset,
-          style_index,
-        })
-    })
-    .collect::<Vec<_>>();
-
-  sort_by_key(&mut points, |point| point.offset);
-
-  let mut styles: Vec<ResolvedKeyframeStyle> = Vec::with_capacity(points.len());
-  let mut merged_points: Vec<ResolvedKeyframePoint> = Vec::with_capacity(points.len());
-  for point in points {
-    let keyframe = &keyframes.keyframes[point.style_index];
-
-    if let Some(last_point) = merged_points.last_mut()
-      && (last_point.offset - point.offset).abs() <= f32::EPSILON
-    {
-      styles[last_point.style_index].apply(keyframe);
-      continue;
-    }
-
-    let style_index = styles.len();
-    let mut style = ResolvedKeyframeStyle {
-      style: base_style.clone(),
-      mask: PropertyMask::new(),
-    };
-
-    style.apply(keyframe);
-    styles.push(style);
-    merged_points.push(ResolvedKeyframePoint {
-      offset: point.offset,
-      style_index,
-    });
-  }
-
-  ResolvedKeyframes {
-    points: merged_points,
-    styles,
-  }
+  (from, to, local)
 }
 
 /// A keyframe's style and the longhands its declarations animate.
 #[derive(Debug)]
-struct ResolvedKeyframeStyle {
+struct ResolvedKeyframe {
+  offset: f32,
   style: ComputedStyle,
   mask: PropertyMask,
+  timing_function: Option<AnimationTimingFunction>,
 }
 
-impl ResolvedKeyframeStyle {
+impl ResolvedKeyframe {
   /// Approximate: a CSS-wide keyword in a keyframe keeps the base style's value, where Blink rolls
   /// `revert` back to the user-agent origin and resolves `inherit` and `unset` against the parent.
   fn apply(&mut self, keyframe: &KeyframeRule) {
+    self.timing_function = keyframe.timing_function().or(self.timing_function);
+
     for declaration in keyframe.declarations.iter() {
       declaration.apply_to_computed(&mut self.style);
       self.mask.extend(declaration.affected_longhands().iter());
@@ -665,30 +582,102 @@ impl ResolvedKeyframeStyle {
   }
 }
 
-#[derive(Debug)]
-struct ResolvedKeyframePoint {
-  offset: f32,
-  style_index: usize,
-}
-
+/// An animation's keyframes in offset order, those at one offset merged, each over the base style.
 #[derive(Debug)]
 struct ResolvedKeyframes {
-  points: Vec<ResolvedKeyframePoint>,
-  styles: Vec<ResolvedKeyframeStyle>,
+  frames: Vec<ResolvedKeyframe>,
 }
 
 impl ResolvedKeyframes {
-  fn style(&self, point: &ResolvedKeyframePoint) -> &ResolvedKeyframeStyle {
-    &self.styles[point.style_index]
+  fn new(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> Self {
+    let mut points = keyframes
+      .keyframes
+      .iter()
+      .flat_map(|keyframe| {
+        keyframe
+          .offsets
+          .iter()
+          .map(move |&offset| (offset, keyframe))
+      })
+      .collect::<Vec<_>>();
+
+    sort_by_key(&mut points, |&(offset, _)| offset);
+
+    let mut frames: Vec<ResolvedKeyframe> = Vec::with_capacity(points.len());
+
+    for (offset, keyframe) in points {
+      if let Some(last) = frames.last_mut()
+        && (last.offset - offset).abs() <= f32::EPSILON
+      {
+        last.apply(keyframe);
+        continue;
+      }
+
+      let mut frame = ResolvedKeyframe {
+        offset,
+        style: base_style.clone(),
+        mask: PropertyMask::new(),
+        timing_function: None,
+      };
+
+      frame.apply(keyframe);
+      frames.push(frame);
+    }
+
+    Self { frames }
+  }
+
+  /// The keyframe intervals `progress` falls in for `longhands`, each with the longhands it holds.
+  fn intervals(&self, longhands: &PropertyMask, progress: f32) -> Vec<KeyframeInterval> {
+    let mut intervals: Vec<KeyframeInterval> = Vec::new();
+
+    for longhand in longhands.iter() {
+      let points = self
+        .frames
+        .iter()
+        .enumerate()
+        .filter(|(_, frame)| frame.mask.contains(&longhand))
+        .map(|(index, frame)| (frame.offset, Some(index)))
+        .collect();
+      let (from, to, progress) = property_interval(points, progress);
+
+      match intervals
+        .iter_mut()
+        .find(|interval| interval.from == from && interval.to == to)
+      {
+        Some(interval) => {
+          interval.longhands.insert(longhand);
+        }
+        None => intervals.push(KeyframeInterval {
+          from,
+          to,
+          progress,
+          longhands: [longhand].into_iter().collect(),
+        }),
+      }
+    }
+
+    intervals
+  }
+
+  /// The timing function the keyframe at `index` declares, which an implicit keyframe has none of.
+  fn timing_function(&self, index: Option<usize>) -> Option<AnimationTimingFunction> {
+    index.and_then(|index| self.frames[index].timing_function)
+  }
+
+  /// The style of the keyframe at `index`, or `base_style` for an implicit keyframe.
+  fn style<'a>(&'a self, index: Option<usize>, base_style: &'a ComputedStyle) -> &'a ComputedStyle {
+    index.map_or(base_style, |index| &self.frames[index].style)
   }
 }
 
+/// The keyframes on either side of an animation's progress that some longhands share.
 #[derive(Debug)]
-struct InterpolationSegment<'a> {
-  from_style: &'a ComputedStyle,
-  to_style: &'a ComputedStyle,
-  animated_properties: PropertyMask,
+struct KeyframeInterval {
+  from: Option<usize>,
+  to: Option<usize>,
   progress: f32,
+  longhands: PropertyMask,
 }
 
 macro_rules! impl_passthrough_animatable {
@@ -858,6 +847,49 @@ mod tests {
     let animated = animate(style, &stylesheet, 0);
 
     assert_eq!(animated.svg_data.opacity.0, 0.5);
+  }
+
+  /// A linear 1000ms animation of `keyframes` on a default style.
+  fn linear_animation(keyframes: &str) -> (ComputedStyle, StyleSheet) {
+    let stylesheet = StyleSheet::parse(&format!("@keyframes k {{ {keyframes} }}")).unwrap();
+    let style = ComputedStyle {
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("k").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+
+    (style, stylesheet)
+  }
+
+  /// A keyframe that leaves a property out is skipped for it, so the property interpolates between
+  /// the keyframes that declare it.
+  /// <https://drafts.csswg.org/web-animations-1/#the-effect-value-of-a-keyframe-animation-effect>
+  #[test]
+  fn a_property_skips_the_keyframes_that_leave_it_out() {
+    let (style, stylesheet) = linear_animation(
+      "0% { opacity: 0; rotate: 0deg } 50% { rotate: 90deg } 100% { opacity: 1; rotate: 180deg }",
+    );
+    let animated = animate(style, &stylesheet, 250);
+
+    assert_eq!(animated.svg_data.opacity.0, 0.25);
+    assert_eq!(animated.misc3_data.rotate, Some(Angle::new(45.0)));
+  }
+
+  /// A keyframe's `animation-timing-function` eases the interval it starts.
+  /// <https://drafts.csswg.org/css-animations-1/#keyframes>
+  #[test]
+  fn a_keyframe_timing_function_eases_the_interval_it_starts() {
+    let (style, stylesheet) = linear_animation(
+      "from { opacity: 0; animation-timing-function: steps(1, end) } 50% { opacity: 0.5 } to { opacity: 1 }",
+    );
+    let at = |time| animate(style.clone(), &stylesheet, time).svg_data.opacity.0;
+
+    assert_eq!(at(250), 0.0);
+    assert_eq!(at(750), 0.75);
   }
 
   /// `style` with every animation it runs at `time` applied.
@@ -1371,8 +1403,9 @@ mod tests {
     assert_eq!(progress.map(|sample| sample.progress), Some(0.5));
   }
 
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-simple-iteration-progress>
   #[test]
-  fn animation_progress_uses_end_of_iteration_for_exact_normal_boundaries() {
+  fn animation_progress_starts_the_next_iteration_at_an_inner_boundary() {
     let progress = sample_animation_progress(
       1000.0,
       1000.0,
@@ -1382,7 +1415,27 @@ mod tests {
       AnimationFillMode::Both,
     );
 
-    assert_eq!(progress.map(|sample| sample.progress), Some(1.0));
+    assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
+  }
+
+  #[test]
+  fn a_zero_duration_animation_fills_only_forwards() {
+    let sample = |fill_mode| {
+      sample_animation_progress(
+        0.0,
+        0.0,
+        0.0,
+        AnimationIterationCount::Number(1.0),
+        AnimationDirection::Normal,
+        fill_mode,
+      )
+      .map(|sample| sample.progress)
+    };
+
+    assert_eq!(sample(AnimationFillMode::None), None);
+    assert_eq!(sample(AnimationFillMode::Backwards), None);
+    assert_eq!(sample(AnimationFillMode::Forwards), Some(1.0));
+    assert_eq!(sample(AnimationFillMode::Both), Some(1.0));
   }
 
   #[test]

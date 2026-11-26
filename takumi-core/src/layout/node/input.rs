@@ -9,7 +9,7 @@ use crate::{
   layout::node::{
     ImageData, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, NodeMetadata, TextData,
   },
-  style::{ParsedValues, Style},
+  style::{Lang, ParsedValues, Style},
 };
 
 impl<'de> Deserialize<'de> for Node {
@@ -183,6 +183,7 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
     let mut src = None;
     let mut width = None;
     let mut height = None;
+    let mut lang = None;
 
     while let Some(field) = map.next_key::<NodeField>()? {
       // Once `type` is read, a key another node type owns is skipped unread.
@@ -224,10 +225,32 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
         NodeField::Style => metadata.style = map.next_value()?,
         NodeField::Tw => metadata.tw = map.next_value()?,
         NodeField::Dir => metadata.dir = map.next_value()?,
-        NodeField::Lang => metadata.lang = map.next_value()?,
+        NodeField::Lang => lang = map.next_value::<Option<Box<str>>>()?,
         _ => {
           map.next_value::<IgnoredAny>()?;
         }
+      }
+    }
+
+    if let Some(text) = lang {
+      let (lang, keeps_text) = Lang::from_attribute(&text);
+      let has_lang_attribute = metadata
+        .attributes
+        .iter()
+        .flatten()
+        .any(|(name, _)| name.as_ref() == "lang");
+
+      metadata.lang = lang;
+      if keeps_text && !has_lang_attribute {
+        metadata.attributes = Some(
+          metadata
+            .attributes
+            .take()
+            .into_iter()
+            .flatten()
+            .chain([(self.names.get("lang"), text)])
+            .collect(),
+        );
       }
     }
 
@@ -257,7 +280,7 @@ mod tests {
 
   use crate::{
     layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
-    style::Style,
+    style::{Lang, Style},
   };
 
   fn error(value: serde_json::Value) -> String {
@@ -371,5 +394,19 @@ mod tests {
     assert!(error(json!({ "type": "video" })).contains("unknown variant `video`"));
     assert!(error(json!({ "type": "text" })).contains("missing field `text`"));
     assert!(error(json!({ "type": "image" })).contains("missing field `src`"));
+  }
+
+  #[test]
+  fn keeps_the_text_of_a_lang_it_does_not_spell() {
+    for (text, lang) in [("EN_us", Some("en-US")), ("", None), ("i-klingon", None)] {
+      let node: Node = from_value(json!({ "type": "text", "text": "a", "lang": text })).unwrap();
+
+      assert_eq!(node.metadata.lang.as_ref().map(Lang::as_str), lang);
+      assert_eq!(node.attribute("lang"), Some(text));
+    }
+
+    let node: Node = from_value(json!({ "type": "text", "text": "a", "lang": "en-US" })).unwrap();
+
+    assert_eq!(node.metadata.attributes, None);
   }
 }

@@ -951,6 +951,9 @@ pub(crate) fn draw_background(
     .iter()
     .any(|layer| layer.blend_mode != BlendMode::Normal);
 
+  // Approximate: the color paints even under an opaque image layer, and the color and each layer
+  // antialias their own rounded edge, where Blink skips a color the top layer occludes and, under
+  // `kBackgroundBleedClipLayer`, clips them all in one layer so the edge blends once.
   if !isolated && !matches!(background.clip, BackgroundClipArea::BorderArea(_)) {
     painter.background_color(Point::ZERO, &mut device);
   }
