@@ -365,7 +365,9 @@ impl ParsedHtml {
     for index in 0..=self.css.len() {
       while let Some(link) = links.next_if(|link| link.css_index == index) {
         if let Some(text) = fetch(link) {
-          css.push(in_media(link.media.as_deref(), text));
+          let css_text = in_media(link.media.as_deref(), text.clone());
+
+          css.push(owned_css(link.owner, &text, css_text));
         }
       }
 
@@ -394,19 +396,27 @@ impl StyleElement {
   /// The text, inside an `@media` rule when the element has a `media` attribute, between the
   /// owner it names and the end of that owner when it may hold an `@scope` rule.
   pub fn css(&self) -> String {
-    let css = in_media(self.media.as_deref(), self.text.clone());
-
-    match self.owner {
-      // An at-keyword starts with a literal `@`, however its name is escaped.
-      Some(owner) if self.text.contains('@') => {
-        format!("@{STYLE_OWNER_RULE} {owner};{css}\n@{STYLE_OWNER_RULE} none;")
-      }
-      _ => css,
-    }
+    owned_css(
+      self.owner,
+      &self.text,
+      in_media(self.media.as_deref(), self.text.clone()),
+    )
   }
 }
 
-/// The owner of a `<style>` element, its parent's `NodeRef` id.
+/// `css`, the CSS of a sheet whose source is `text`, between the owner it names and the end of
+/// that owner when it may hold an `@scope` rule.
+fn owned_css(owner: Option<u32>, text: &str, css: String) -> String {
+  match owner {
+    // An at-keyword starts with a literal `@`, however its name is escaped.
+    Some(owner) if text.contains('@') => {
+      format!("@{STYLE_OWNER_RULE} {owner};{css}\n@{STYLE_OWNER_RULE} none;")
+    }
+    _ => css,
+  }
+}
+
+/// The owner of a `<style>` or `<link>` element, its parent's `NodeRef` id.
 /// Approximate: an owner is unique only within one parse, so trees and CSS composed from separate
 /// parses can share an owner.
 fn style_owner(parent: NodeRef<'_>) -> Option<u32> {
@@ -423,6 +433,8 @@ pub struct StyleSheetLink {
   pub media: Option<String>,
   /// How many [`ParsedHtml::css`] entries come before the link in document order.
   pub css_index: usize,
+  /// The owner its parent element names, which an `@scope` without a start roots at.
+  owner: Option<u32>,
 }
 
 /// Parse HTML markup into a node tree, its `<style>` elements, and the style sheets it links.
@@ -492,6 +504,7 @@ impl ParsedHtml {
             href: href.to_owned(),
             media: media_attribute(node).map(str::to_owned),
             css_index: 0,
+            owner: parent.and_then(style_owner),
           })
         }),
         "base" => {
@@ -883,7 +896,9 @@ impl NodeBuilder<'_> {
 
     if handle.children().any(|child| {
       matches!(child.data(), NodeData::Element { name, .. }
-        if name.ns == Namespace::Html && &*name.local == "style")
+        if name.ns == Namespace::Html
+          && (&*name.local == "style"
+            || (&*name.local == "link" && stylesheet_href(child).is_some())))
     }) {
       node.metadata.style_owner = style_owner(handle);
     }

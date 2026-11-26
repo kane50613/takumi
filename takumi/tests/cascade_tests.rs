@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use takumi::prelude::*;
 
-use crate::test_utils::{block, measure_with_css};
+use crate::test_utils::{block, create_test_viewport, measure_with_css};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -2045,4 +2045,151 @@ fn tailwind_direction_variants_read_dir() {
     measure_with_css(Node::container([node]), "").children[0].children[1].width,
     80.0
   );
+}
+
+/// A container unit reads the nearest query container, not the box's parent, and the viewport
+/// without one, as Blink's `CSSToLengthConversionData::ContainerSizes` finds it.
+#[test]
+fn container_units_read_the_nearest_query_container() {
+  let node = Node::from_html(
+    r#"<div class="container"><div class="padded"><p class="target">x</p></div></div><div class="loose"><p class="free">x</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".container { container-type: inline-size; width: 400px }
+     .padded { padding: 0 100px }
+     .target { width: 50cqw; margin: 0 }
+     .loose { padding: 50px }
+     .free { width: 10cqw; margin: 0 }",
+  );
+  let viewport_width = create_test_viewport().size.width.expect("has a width") as f32;
+
+  assert_eq!(
+    measured.children[0].children[0].children[0].children[0].width,
+    200.0
+  );
+  assert_eq!(
+    measured.children[0].children[1].children[0].width,
+    viewport_width / 10.0
+  );
+}
+
+/// An unknown condition holds of no container but leaves the other conditions of its list, as
+/// Blink's `ConsumeGeneralEnclosed` parses it and `SelectsAnyContainer` rejects only its query.
+#[test]
+fn an_unknown_container_condition_leaves_the_rest_of_its_list() {
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (unknown-feature: 1px), (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (unknown-feature: 1px) or (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}
+
+/// A `style()` or `scroll-state()` condition parses, holding of no container, and leaves the other
+/// conditions of its list.
+#[test]
+fn an_unsupported_container_function_leaves_the_rest_of_its_list() {
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container style(--wide: 1), scroll-state(stuck: top), (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container style(--wide: 1) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}
+
+/// A query that names its container alone holds inside any box of that name, whatever its
+/// `container-type`, as Blink's `ConsumeContainerQuery` takes a name with no condition.
+#[test]
+fn a_container_query_of_a_name_alone_holds_inside_that_name() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-name: card; width: 300px }
+       @container card { .target { width: 50px } }
+       @container other { .target { width: 60px } }"
+    ),
+    50.0
+  );
+}
+
+/// A root its own limit matches scopes nothing, as Blink's `CalculateActivations` checks a new
+/// activation against the limit, and a limit without `:scope` reads as `:scope` and a descendant,
+/// which the root is not.
+#[test]
+fn a_scope_root_that_is_its_own_limit_scopes_nothing() {
+  assert_eq!(
+    card_widths("@scope (.card) to (.card) { p { width: 30px } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.card) to (:scope) { p { width: 30px } }"),
+    [1200.0, 1200.0, 1200.0]
+  );
+}
+
+/// A nested `@scope` start in a top-level `@scope` reads as `:scope` and a descendant, as Blink's
+/// `ConsumeScopeRule` parses it with the scope nesting type.
+#[test]
+fn a_scope_start_in_a_scope_body_is_relative_to_its_root() {
+  assert_eq!(
+    card_widths("@scope (.card) { @scope (.card) { p { width: 30px } } }"),
+    [1200.0, 1200.0, 1200.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.outer) { @scope (.card) { p { width: 30px } } }"),
+    [1200.0, 30.0, 30.0]
+  );
+}
+
+/// Declarations directly in a top-level `@scope` apply to its root at no specificity, and the rule
+/// after them still parses, as Blink's `ConsumeBlockContents` makes them nested declarations on
+/// `:where(:scope)`.
+#[test]
+fn declarations_in_a_scope_body_apply_to_its_root() {
+  assert_eq!(
+    card_widths("@scope (.card) { width: 100px; p { width: 30px } }"),
+    [100.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths(".card { width: 200px } @scope (.card) { width: 100px }")[0],
+    200.0
+  );
+  assert_eq!(
+    card_widths("* { width: 200px } @scope (.card) { width: 100px }")[0],
+    100.0
+  );
+}
+
+/// An `@scope` without a start in a linked style sheet roots at the parent of its `<link>`, as
+/// Blink's `ImplicitScopeTrigger` reads the sheet's owner node.
+#[test]
+fn a_linked_scope_without_a_start_roots_at_its_link_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><link rel="stylesheet" href="a.css"><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let css = parsed.css_with_links(|_| Some("@scope { p { width: 30px } }".to_owned()));
+  let measured = measure_with_css(parsed.node, &css.concat());
+
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
 }

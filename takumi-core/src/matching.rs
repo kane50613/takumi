@@ -1292,6 +1292,17 @@ pub(crate) struct QueryContainer {
 }
 
 impl QueryContainer {
+  /// The sizes container units read inside it: its own on the axes it contains, `outer`'s on the
+  /// others.
+  pub(crate) fn size_within(&self, outer: Size<Option<f32>>) -> Size<Option<f32>> {
+    let contained = self.contained_size();
+
+    Size {
+      width: contained.width.or(outer.width),
+      height: contained.height.or(outer.height),
+    }
+  }
+
   /// Its size on the axes its `container-type` contains, the others unknown.
   fn contained_size(&self) -> Size<Option<f32>> {
     Size {
@@ -1349,7 +1360,7 @@ pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
 
 /// Whether a condition of `query` holds of its query container: the nearest of `start` and its
 /// ancestors that the condition names, if it names one, and whose `container-type` contains each
-/// axis it reads. <https://drafts.csswg.org/css-conditional-5/#container-rule>
+/// axis it reads, if it asks about a size. <https://drafts.csswg.org/css-conditional-5/#container-rule>
 fn container_query_holds(
   query: &ContainerQuery,
   start: Option<ArenaElement<'_>>,
@@ -1366,14 +1377,16 @@ fn container_query_holds(
       containers
         .get(&ancestor.index)
         .filter(|container| {
-          (if reads_block_axis {
-            container.container_type.contains_block_size()
-          } else {
-            container.container_type.contains_inline_size()
-          }) && condition
-            .name
-            .as_deref()
-            .is_none_or(|name| container.name.has(name))
+          (!condition.queries_size()
+            || if reads_block_axis {
+              container.container_type.contains_block_size()
+            } else {
+              container.container_type.contains_inline_size()
+            })
+            && condition
+              .name
+              .as_deref()
+              .is_none_or(|name| container.name.has(name))
         })
         .map(|container| (ancestor, container))
     });
@@ -1403,10 +1416,13 @@ fn container_query_holds(
 
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
 /// it is: an inclusive ancestor its start selectors match, or without them the parent of the
-/// `<style>` element holding the rule, the tree's root for a sheet no element holds, with no
-/// element its end selectors match from `element` up to it. Inside another `@scope`, a root must
-/// be in that scope from an outer root `element` is in scope of too.
+/// `<style>` or `<link>` element holding the rule, the tree's root for a sheet no element holds,
+/// with no element its end selectors match from `element` up to and including it. Inside another
+/// `@scope`, a root must be in that scope from an outer root `element` is in scope of too.
 /// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
+///
+/// Approximate: a sheet no element holds, such as one a caller passes in, roots at the tree's
+/// root, where Blink's `ImplicitScopeTrigger` roots nothing for a sheet without an owner node.
 fn scope_roots(
   scope: &Scope,
   element: ArenaElement<'_>,
@@ -1458,7 +1474,7 @@ fn scope_roots(
     };
     let limited = scope.end.as_ref().is_some_and(|end| {
       successors(Some(element), Element::parent_element)
-        .take_while(|limit| limit.opaque() != root.opaque())
+        .take(proximity + 1)
         .any(|limit| matches(end, limit, Some(root.opaque()), ctx))
     });
 

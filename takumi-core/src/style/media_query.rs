@@ -57,6 +57,8 @@ enum MediaFeature {
   Orientation(MediaOrientation),
   /// The scheme to match, or none for the boolean context, which every scheme matches.
   PrefersColorScheme(Option<ColorScheme>),
+  /// A `<general-enclosed>`: a feature or condition this parser does not know, which never holds.
+  Unknown,
 }
 
 /// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
@@ -396,6 +398,7 @@ impl MediaFeature {
       Self::PrefersColorScheme(scheme) => {
         scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
       }
+      Self::Unknown => false,
     }
   }
 }
@@ -461,9 +464,17 @@ impl MediaCondition {
     Ok(operands)
   }
 
-  /// `( <media-condition> ) | ( <media-feature> )`
+  /// `( <media-condition> ) | ( <media-feature> ) | <general-enclosed>`, as Blink's
+  /// `ConditionalParser::ConsumeInner` falls back to `ConsumeGeneralEnclosed`.
   fn parse_in_parens<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let token = input.next()?.clone();
+
+    if let Token::Function(_) = token {
+      return input.parse_nested_block(|input| {
+        while input.next().is_ok() {}
+        Ok(Self::Feature(MediaFeature::Unknown))
+      });
+    }
 
     if token != Token::ParenthesisBlock {
       return Err(CssParseError::unexpected_token());
@@ -483,7 +494,17 @@ impl MediaCondition {
         return Ok(Self::Feature(feature));
       }
 
-      Self::parse(input)
+      if let Ok(condition) = input.try_parse(|input| {
+        let condition = Self::parse(input)?;
+
+        input.expect_exhausted()?;
+        Ok::<_, ParseError<StyleSheetParseError>>(condition)
+      }) {
+        return Ok(condition);
+      }
+
+      while input.next().is_ok() {}
+      Ok(Self::Feature(MediaFeature::Unknown))
     })
   }
 
@@ -590,6 +611,9 @@ fn viewport_size(viewport: Viewport) -> Size<Option<f32>> {
 
 /// An `@container` rule's query: a comma-separated list of conditions, which holds when one does.
 /// <https://drafts.csswg.org/css-conditional-5/#container-rule>
+///
+/// Approximate: `style()` and `scroll-state()` parse as `<general-enclosed>`, so a condition that
+/// uses them holds of no container, where Blink evaluates them against the container.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ContainerQuery(Vec<ContainerCondition>);
 
@@ -608,52 +632,70 @@ impl ContainerQuery {
 }
 
 /// One condition of a container query: the name of the container it asks, if it names one, and a
-/// size condition on that container.
+/// size condition on that container, which a query that names its container may leave out, as
+/// Blink's `ConsumeContainerQuery` takes a name alone.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ContainerCondition {
   pub(crate) name: Option<Box<str>>,
-  condition: MediaCondition,
+  condition: Option<MediaCondition>,
 }
 
 impl ContainerCondition {
   fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let name = input.try_parse(ContainerName::parse_name).ok();
-    let condition = MediaCondition::parse(input)?;
+    let condition = if name.is_some() {
+      input.try_parse(MediaCondition::parse).ok()
+    } else {
+      Some(MediaCondition::parse(input)?)
+    };
 
     Ok(Self { name, condition })
   }
 
+  /// Whether it asks about a size, which only a container whose `container-type` contains the axes
+  /// it reads answers, where a name alone picks any container of that name.
+  pub(crate) fn queries_size(&self) -> bool {
+    self.condition.is_some()
+  }
+
   /// Whether it reads the block axis, which only a `container-type: size` container answers.
   pub(crate) fn reads_block_axis(&self) -> bool {
-    self.condition.any_feature(&|feature| {
-      matches!(
-        feature,
-        MediaFeature::Height(..)
-          | MediaFeature::BlockSize(..)
-          | MediaFeature::AspectRatio(..)
-          | MediaFeature::Orientation(..)
-      )
+    self.condition.as_ref().is_some_and(|condition| {
+      condition.any_feature(&|feature| {
+        matches!(
+          feature,
+          MediaFeature::Height(..)
+            | MediaFeature::BlockSize(..)
+            | MediaFeature::AspectRatio(..)
+            | MediaFeature::Orientation(..)
+        )
+      })
     })
   }
 
   /// Whether a container whose content box is `size` across, an axis it does not contain left
   /// unknown, satisfies it, its relative lengths in the container's `sizing`, as Blink evaluates
   /// them against the container's computed values. A feature other than a size one is unknown to a
-  /// container query, which then does not hold.
+  /// container query, which then does not hold, as Blink's `ContainerSelector::SelectsAnyContainer`
+  /// selects no container for it.
   pub(crate) fn matches(
     &self,
     size: Size<Option<f32>>,
     viewport: Viewport,
     sizing: &SizingContext,
   ) -> bool {
-    let unknown = self.condition.any_feature(&|feature| {
-      matches!(
-        feature,
-        MediaFeature::Resolution(..) | MediaFeature::PrefersColorScheme(..)
-      )
-    });
+    self.condition.as_ref().is_none_or(|condition| {
+      let unknown = condition.any_feature(&|feature| {
+        matches!(
+          feature,
+          MediaFeature::Resolution(..)
+            | MediaFeature::PrefersColorScheme(..)
+            | MediaFeature::Unknown
+        )
+      });
 
-    !unknown && self.condition.matches(viewport, size, sizing)
+      !unknown && condition.matches(viewport, size, sizing)
+    })
   }
 }
 
@@ -674,7 +716,9 @@ impl MediaQueryList {
                 condition.any_feature(&|feature| {
                   matches!(
                     feature,
-                    MediaFeature::InlineSize(..) | MediaFeature::BlockSize(..)
+                    MediaFeature::InlineSize(..)
+                      | MediaFeature::BlockSize(..)
+                      | MediaFeature::Unknown
                   )
                 })
               })

@@ -151,10 +151,10 @@ impl RenderOptions<'_> {
 /// Measures the layout of a node.
 pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let render_context = options.take_render_context();
-  let mut root = RenderNode::from_node(&render_context, options.node);
+  let root = RenderNode::from_node(&render_context, options.node);
   let layout_results = LayoutResults::compute_document(&root, options.viewport.into());
 
-  MeasuredNode::of(&mut root, &layout_results, options.viewport.size.into())
+  MeasuredNode::of(&root, &layout_results)
 }
 
 /// The characters of a node's text that no registered font it can use draws, each once. They
