@@ -767,7 +767,7 @@ describe("fromJsx", () => {
         type: "button",
         "data-kind": "hero",
         "aria-label": "Promo",
-        draggable: "",
+        draggable: "true",
       },
       children: [
         {
@@ -776,11 +776,44 @@ describe("fromJsx", () => {
           tagName: "img",
           attributes: {
             alt: "Preview",
-            draggable: "",
+            draggable: "true",
           },
         },
       ],
     } satisfies ContainerNode);
+  });
+
+  test("writes boolean props as React DOM does", async () => {
+    const element = (
+      <label
+        htmlFor="name"
+        data-on={false}
+        aria-hidden
+        draggable={false}
+        spellCheck
+        contentEditable={false}
+        hidden={false}
+        inert
+      >
+        a
+      </label>
+    );
+    const { node } = await fromJsx(element);
+
+    expect(renderToStaticMarkup(element)).toBe(
+      '<label for="name" data-on="false" aria-hidden="true" draggable="false" spellCheck="true" contentEditable="false" inert="">a</label>',
+    );
+    expect(node).toMatchObject({
+      attributes: {
+        for: "name",
+        "data-on": "false",
+        "aria-hidden": "true",
+        draggable: "false",
+        spellCheck: "true",
+        contentEditable: "false",
+        inert: "",
+      },
+    });
   });
 
   test("writes a number id and lang as text", async () => {
