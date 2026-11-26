@@ -188,15 +188,26 @@ impl TailwindPropertyParser for FontFamily {
   }
 }
 
+/// Blink's `FontFamilyNeedsQuoting`: a name that is a reserved ident, a generic family, or not an
+/// ident, as `IsCSSTokenizerIdentifier` reads one.
+fn font_family_needs_quoting(name: &str) -> bool {
+  let ident = name.strip_prefix('-').unwrap_or(name);
+  let mut characters = ident.chars();
+  let is_ident = characters
+    .next()
+    .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || !first.is_ascii())
+    && characters.all(|character| {
+      character.is_ascii_alphanumeric() || matches!(character, '_' | '-') || !character.is_ascii()
+    });
+
+  !is_ident || is_reserved_custom_ident(name) || GenericFamilyType::parse(name).is_some()
+}
+
 impl ToCss for FontFamilyToken {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Owned(name) => {
-        let needs_quoting = name.contains(' ')
-          || name.contains('"')
-          || name.contains('\\')
-          || name.chars().next().is_some_and(|c| c.is_ascii_digit());
-        if needs_quoting {
+        if font_family_needs_quoting(name) {
           serialize_string(name, dest)
         } else {
           dest.write_str(name)
@@ -216,7 +227,27 @@ impl ToCss for FontFamily {
 #[cfg(test)]
 mod tests {
   use super::{FontFamily, FontFamilyToken, GenericFamilyType as GenericFamily};
-  use crate::style::{FromCssStr, tw::TailwindPropertyParser};
+  use crate::style::{FromCssStr, ToCss, tw::TailwindPropertyParser};
+
+  #[test]
+  fn quotes_the_names_blink_quotes() {
+    for (name, expected) in [
+      ("Inter", "Inter"),
+      ("-Inter_2", "-Inter_2"),
+      ("serif", "\"serif\""),
+      ("Inherit", "\"Inherit\""),
+      ("default", "\"default\""),
+      ("A,B", "\"A,B\""),
+      ("Noto Sans", "\"Noto Sans\""),
+      ("2Fast", "\"2Fast\""),
+      ("-", "\"-\""),
+    ] {
+      assert_eq!(
+        FontFamilyToken::Owned(name.to_owned()).to_css_string(),
+        expected
+      );
+    }
+  }
 
   #[test]
   fn parses_single_generic_family() {
