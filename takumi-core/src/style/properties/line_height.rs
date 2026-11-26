@@ -77,6 +77,16 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
+  /// Whether the line height is authored as a negative number or length, which Blink's
+  /// `ConsumeLineHeight` rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    match self {
+      Self::Normal => false,
+      Self::Unitless(value) => value < 0.0,
+      Self::Length(length) => length.is_negative(),
+    }
+  }
+
   /// Resolves to pixels, using `normal_basis` for `normal`, a negative calculation clamped to zero.
   pub fn to_px(self, sizing: &SizingContext, normal_basis: f32) -> f32 {
     match self {

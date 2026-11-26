@@ -1945,7 +1945,7 @@ define_style! {
       color_scheme: ColorSchemes where inherit = true,
       font_size: FontSize where inherit = true where non_negative = true,
       font_family: FontFamily where inherit = true,
-      line_height: LineHeight where inherit = true,
+      line_height: LineHeight where inherit = true where non_negative = true,
       font_weight: FontWeight where inherit = true,
       font_variation_settings: FontVariationSettings where inherit = true,
       font_feature_settings: FontFeatureSettings where inherit = true,

@@ -1963,6 +1963,25 @@ fn font_size_rejects_a_negative_length_and_auto() {
 }
 
 #[test]
+fn line_height_rejects_a_negative_value() {
+  let line_height = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .inherited_data
+      .line_height
+  };
+
+  for css in [
+    "line-height: 2; line-height: -1",
+    "line-height: 2; line-height: -10px",
+    "line-height: 2; line-height: -50%",
+    "line-height: 2; font: 16px/-1 serif",
+  ] {
+    assert_eq!(line_height(css), LineHeight::Unitless(2.0), "{css}");
+  }
+}
+
+#[test]
 fn spacing_takes_normal_as_zero_and_rejects_auto() {
   let style = |css: &str| {
     style_with(StyleDeclarationBlock::parse_loosy(css).declarations).inherit(&ComputedStyle::default())
