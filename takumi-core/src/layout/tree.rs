@@ -2547,13 +2547,15 @@ impl RenderNode {
           return None;
         };
         let style = &render_node.context.style.misc_data;
+        let node = NodeId::new(index);
 
+        // Blink's `ContainerQueryEvaluator::UpdateContainerSize` keeps the axes it contains.
         (style.container_type != ContainerType::Normal || !style.container_name.0.is_empty()).then(
           || {
             (
-              NodeId::new(index),
+              node,
               source_order,
-              style.container_type,
+              tree.layout_style(node).contained_container_type(),
               style.container_name.clone(),
               QueryFont::of(&render_node.context.sizing),
             )

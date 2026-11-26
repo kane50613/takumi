@@ -241,12 +241,21 @@ impl LayoutStyle {
   /// Blink's `ShouldApplyInlineSizeContainment`: a `container-type` contains the inline size of
   /// a box that is neither a non-atomic inline nor an internal table box.
   pub(crate) fn contains_inline_size(&self) -> bool {
-    self.container_type.contains_inline_size() && self.size_containment_applies()
+    self.contained_container_type().contains_inline_size()
   }
 
   /// Blink's `ShouldApplyBlockSizeContainment`.
   pub(crate) fn contains_block_size(&self) -> bool {
-    self.container_type.contains_block_size() && self.size_containment_applies()
+    self.contained_container_type().contains_block_size()
+  }
+
+  /// The `container-type` on the axes size containment applies on, `normal` on a box it does not.
+  pub(crate) fn contained_container_type(&self) -> ContainerType {
+    if self.size_containment_applies() {
+      self.container_type
+    } else {
+      ContainerType::Normal
+    }
   }
 
   /// Whether size containment applies to the box: not to a non-atomic inline, a box whose inner

@@ -2173,6 +2173,33 @@ fn an_inherited_container_unit_resolves_where_it_is_declared() {
   );
 }
 
+/// A `container-type` on a box size containment does not apply to, a non-atomic inline or a table,
+/// makes no size container, as Blink's `ContainerQueryEvaluator` keeps only the contained axes.
+#[test]
+fn a_box_without_size_containment_is_no_size_container() {
+  let node = Node::from_html(
+    r#"<div class="outer"><span class="inline"><b class="unit"></b></span><div class="table"><div class="cell"><i class="unit"></i><i class="queried"></i></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inline, .table { container-type: inline-size }
+     .table { display: table; width: 100px }
+     .cell { display: table-cell }
+     .unit { display: inline-block; width: 10cqw; height: 1px }
+     .queried { display: block; width: 1px }
+     @container (width < 200px) { .queried { width: 50px } }",
+  );
+  let outer = &measured.children[0];
+  let cell = &outer.children[1].children[0].children[0].children[0];
+
+  assert_eq!(outer.children[0].children[0].width, 40.0);
+  assert_eq!(cell.children[0].children[0].width, 40.0);
+  assert_eq!(cell.children[1].width, 1.0);
+}
+
 /// An unknown condition holds of no container but leaves the other conditions of its list, as
 /// Blink's `ConsumeGeneralEnclosed` parses it and `SelectsAnyContainer` rejects only its query.
 #[test]
