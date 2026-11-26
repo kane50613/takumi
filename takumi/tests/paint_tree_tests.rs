@@ -1,4 +1,7 @@
-use std::fs::{create_dir_all, write};
+use std::{
+  f32::consts::TAU,
+  fs::{create_dir_all, write},
+};
 
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
@@ -851,4 +854,37 @@ fn a_fully_obscured_shadow_paints_nothing() {
   );
 
   assert!(!roles(find(&document, "box")).contains(&Role::BoxShadow));
+}
+
+#[test]
+fn a_conic_gradient_from_a_huge_angle_spans_a_full_turn() {
+  let node = Node::container([]).with_id("conic");
+  let document = build_with(
+    node,
+    "#conic { width: 40px; height: 40px; background: conic-gradient(from 1e12deg, red, blue) }",
+  );
+  let conic = find(&document, "conic");
+  let spans: Vec<f32> = conic
+    .drawables
+    .iter()
+    .filter_map(|drawable| match drawable {
+      Drawable::Fill { paint, .. } => Some(paint),
+      _ => None,
+    })
+    .filter_map(|paint| match paint {
+      Paint::Pattern { tile, .. } => Some(tile.as_ref()),
+      paint => Some(paint),
+    })
+    .filter_map(|paint| match paint {
+      Paint::ConicGradient {
+        start_angle,
+        end_angle,
+        ..
+      } => Some(end_angle - start_angle),
+      _ => None,
+    })
+    .collect();
+
+  assert_eq!(spans.len(), 1);
+  assert!((spans[0] - TAU).abs() < 1e-4, "{spans:?}");
 }
