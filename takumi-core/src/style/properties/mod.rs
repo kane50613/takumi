@@ -729,6 +729,14 @@ pub enum Direction {
 }
 
 impl Direction {
+  /// The keyword, as the `dir` attribute spells it.
+  pub(crate) fn as_str(self) -> &'static str {
+    match self {
+      Self::Ltr => "ltr",
+      Self::Rtl => "rtl",
+    }
+  }
+
   /// The physical `(start, end)` inline sides, given as `left` and `right`.
   pub(crate) fn inline_sides<T>(self, left: T, right: T) -> (T, T) {
     match self {

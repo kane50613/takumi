@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="takumi-presets" content="chromium" />
+    <title>html_dir_auto</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      p,
+      .row {
+        margin: 0;
+        padding: 8px;
+        font-family: Geist, "Scheherazade New Test";
+        font-size: 28px;
+        background-color: rgb(240, 240, 240);
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      b {
+        padding: 0 12px;
+        background-color: rgb(186, 230, 253);
+      }
+      :is(p, .row, b, bdi):dir(rtl) {
+        outline: 3px solid rgb(234, 88, 12);
+        outline-offset: -3px;
+      }
+    </style>
+  </head>
+  <body style="width: 520px; height: 490px">
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px">
+      <p dir="auto">مرحبا بالعالم</p>
+      <p dir="auto"><span dir="ltr">Name:</span> مرحبا</p>
+      <p dir="auto">abc مرحبا</p>
+      <div class="row" dir="auto"><b>1</b><b>2</b>مرحبا</div>
+      <p><bdi>مرحبا</bdi> world</p>
+      <p dir="auto">2026-11-19</p>
+    </div>
+  </body>
+</html>

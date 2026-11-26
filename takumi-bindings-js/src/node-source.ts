@@ -5,6 +5,9 @@ const LONE_SURROGATE = /\p{Cs}/u;
 /** The most arrays and objects `serde_json` reads nested inside each other. */
 const MAX_DEPTH = 127;
 
+/** The longest string a tree sent as JSON holds. JSON copies a longer one, such as a `data:` URI, more times than the tree. */
+const MAX_JSON_STRING = 64 * 1024;
+
 /**
  * JSON text a binding reads in place of a node tree, faster than the tree, and off the main thread in napi.
  *
@@ -13,8 +16,8 @@ const MAX_DEPTH = 127;
 export type JsonSource = { json: string };
 
 /**
- * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH}, the
- * tree itself otherwise, and HTML as is.
+ * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH} and
+ * every string within {@link MAX_JSON_STRING}, the tree itself otherwise, and HTML as is.
  * @internal
  */
 export function toNativeSource(source: Node | string): Node | string | JsonSource {
@@ -53,7 +56,7 @@ export function toNativeSource(source: Node | string): Node | string | JsonSourc
 function isJsonValue(value: unknown): boolean {
   switch (typeof value) {
     case "string":
-      return !LONE_SURROGATE.test(value);
+      return value.length <= MAX_JSON_STRING && !LONE_SURROGATE.test(value);
     case "number":
       return Number.isFinite(value);
     case "boolean":

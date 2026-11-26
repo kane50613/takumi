@@ -2,7 +2,6 @@
 
 use std::{cell::OnceCell, collections::HashMap, fmt, iter::successors, ops::Deref, sync::Arc};
 
-use cssparser::match_ignore_ascii_case;
 use rustc_hash::FxHashMap;
 use selectors::{
   Element, OpaqueElement, SelectorImpl as SelectorImplTrait,
@@ -37,6 +36,8 @@ struct StyleArena<'a> {
   nodes: Vec<StyleNode<'a>>,
   /// Built on the first form state query, so a match pass reads the tree for it once.
   form_controls: OnceCell<FormControls>,
+  /// Each node's directionality, built on the first `:dir()` query, as Blink caches it on the node.
+  directionality: OnceCell<Box<[Direction]>>,
 }
 
 /// Checkedness and selectedness the whole tree decides, by arena index.
@@ -138,10 +139,32 @@ impl fmt::Debug for ArenaElement<'_> {
 }
 
 impl<'a> StyleArena<'a> {
+  /// Every node's directionality, in one pass: an `auto` scan stops at descendants with their own
+  /// `dir`, so each text is read once.
+  fn directionalities(&self) -> Box<[Direction]> {
+    let mut directions: Vec<Direction> = Vec::with_capacity(self.nodes.len());
+
+    for style_node in &self.nodes {
+      // Tree order puts every parent before its children.
+      let node = style_node.node;
+      let direction = node
+        .own_directionality()
+        .unwrap_or_else(|| match style_node.parent {
+          Some(parent) if !node.keeps_ltr_directionality() => directions[parent],
+          _ => Direction::Ltr,
+        });
+
+      directions.push(direction);
+    }
+
+    directions.into()
+  }
+
   fn new(root: &'a Node) -> Self {
     let mut arena = StyleArena {
       nodes: Vec::new(),
       form_controls: OnceCell::new(),
+      directionality: OnceCell::new(),
     };
     arena.add_node(root, None, None);
     arena
@@ -454,20 +477,12 @@ impl<'a> ArenaElement<'a> {
     false
   }
 
-  /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality)
-  /// from `dir` attributes. Approximate: `dir="auto"` does not read the text.
+  /// HTML's [directionality](https://html.spec.whatwg.org/multipage/dom.html#the-directionality).
   fn directionality(&self) -> Direction {
-    let mut current = Some(*self);
-
-    while let Some(element) = current {
-      if let Some(direction) = element.style_node().node.metadata.dir {
-        return direction;
-      }
-
-      current = element.parent_element();
-    }
-
-    Direction::Ltr
+    self
+      .tree
+      .directionality
+      .get_or_init(|| self.tree.directionalities())[self.index]
   }
 
   fn at(&self, index: Option<usize>) -> Option<Self> {
@@ -860,8 +875,12 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
         Component::Class(class) => keep(SelectorKey::Class(class.to_string())),
         Component::AttributeInNoNamespaceExists {
           local_name_lower, ..
-        } => keep(attribute_key(local_name_lower)),
-        Component::AttributeInNoNamespace { local_name, .. } => keep(attribute_key(local_name)),
+        } => keep(SelectorKey::Attribute(
+          local_name_lower.to_ascii_lowercase(),
+        )),
+        Component::AttributeInNoNamespace { local_name, .. } => {
+          keep(SelectorKey::Attribute(local_name.to_ascii_lowercase()))
+        }
         Component::LocalName(name) => {
           keep(SelectorKey::Tag(name.lower_name.to_ascii_lowercase()));
         }
@@ -872,14 +891,6 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
     if iter.next_sequence() != Some(Combinator::PseudoElement) {
       return key;
     }
-  }
-}
-
-/// `id`, `class`, and `lang` live outside a node's attribute map, so they key no bucket.
-fn attribute_key(name: &str) -> SelectorKey {
-  match_ignore_ascii_case! { name,
-    "id" | "class" | "lang" => SelectorKey::Any,
-    _ => SelectorKey::Attribute(name.to_ascii_lowercase()),
   }
 }
 
@@ -1748,7 +1759,8 @@ mod tests {
     let css = "[DATA-X] { color: red } [data-y='1'] { color: red } [id] { color: red }";
     let node = Node::container([]).with_attributes(BTreeMap::from([("data-X".into(), "".into())]));
 
-    assert_eq!(candidates(css, &node), [0, 2]);
-    assert_eq!(candidates(css, &Node::container([])), [2]);
+    assert_eq!(candidates(css, &node), [0]);
+    assert_eq!(candidates(css, &Node::container([]).with_id("x")), [2]);
+    assert_eq!(candidates(css, &Node::container([])), [0; 0]);
   }
 }

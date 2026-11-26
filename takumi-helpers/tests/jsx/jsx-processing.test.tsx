@@ -367,7 +367,6 @@ describe("fromJsx", () => {
       height: undefined,
       preset: defaultStylePresets.img,
       attributes: {
-        src: "https://example.com/image.jpg",
         alt: "Test",
       },
       tagName: "img",
@@ -386,7 +385,6 @@ describe("fromJsx", () => {
       height: undefined,
       preset: defaultStylePresets.img,
       attributes: {
-        src: "https://example.com/image.jpg",
         alt: "Test",
       },
       tagName: "img",
@@ -406,7 +404,6 @@ describe("fromJsx", () => {
       height: 100,
       preset: defaultStylePresets.img,
       attributes: {
-        src: "https://example.com/image.jpg",
         width: "100",
         height: "100",
         alt: "Test",
@@ -670,7 +667,6 @@ describe("fromJsx", () => {
               height: undefined,
               preset: defaultStylePresets.img,
               attributes: {
-                src: "https://example.com/logo.png",
                 alt: "Logo",
               },
               tagName: "img",
@@ -781,7 +777,6 @@ describe("fromJsx", () => {
           attributes: {
             alt: "Preview",
             draggable: "",
-            src: "https://example.com/a.png",
           },
         },
       ],
@@ -862,9 +857,6 @@ describe("fromJsx", () => {
       preset: defaultStylePresets.div,
       tagName: "div",
       dir: "rtl",
-      attributes: {
-        dir: "rtl",
-      },
     } satisfies TextNode);
   });
 
@@ -885,13 +877,22 @@ describe("fromJsx", () => {
           tagName: "span",
         },
       ],
-      attributes: {
-        dir: "ltr",
-      },
       preset: defaultStylePresets.div,
       tagName: "div",
       dir: "ltr",
     } satisfies ContainerNode);
+  });
+
+  test("keeps a dir other than ltr or rtl as an attribute", async () => {
+    const { node } = await fromJsx(<div dir="auto">Hello</div>);
+
+    expect(node).toEqual({
+      type: "text",
+      text: "Hello",
+      preset: defaultStylePresets.div,
+      tagName: "div",
+      attributes: { dir: "auto" },
+    } satisfies TextNode);
   });
 
   test("parses html dir field on image nodes", async () => {
@@ -904,9 +905,7 @@ describe("fromJsx", () => {
       height: undefined,
       preset: defaultStylePresets.img,
       attributes: {
-        src: "https://example.com/a.png",
         alt: "test",
-        dir: "rtl",
       },
       tagName: "img",
       dir: "rtl",

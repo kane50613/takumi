@@ -1,6 +1,9 @@
 mod container;
+mod directionality;
 mod image;
 mod input;
+
+pub(crate) use directionality::DirectionStyle;
 
 use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
@@ -11,6 +14,8 @@ pub(crate) use self::image::is_image_reference;
 pub use self::image::resolve_image;
 #[cfg(feature = "html")]
 pub(crate) use self::image::size_attribute;
+use cssparser::match_ignore_ascii_case;
+
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
@@ -54,6 +59,12 @@ impl Names {
     shared
   }
 }
+
+/// The attributes a node holds in its own fields rather than in `attributes`, which builders leave
+/// out of `attributes` and [`Node::attribute`] reads back. `dir` holds only `ltr` and `rtl` as
+/// written in lowercase, so any other value stays in `attributes`. Approximate: `style` keeps no
+/// attribute text, so `[style]` does not match.
+const LIFTED_ATTRIBUTES: [&str; 5] = ["id", "class", "lang", "dir", "src"];
 
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
@@ -516,13 +527,6 @@ impl Node {
     self
   }
 
-  /// Sets the presentation attributes' style and returns the updated node.
-  #[cfg(feature = "html")]
-  pub(crate) fn with_presentation(mut self, presentation: Style) -> Self {
-    self.metadata.presentation = Some(Box::new(presentation));
-    self
-  }
-
   /// Sets the inline style and returns the updated node.
   pub fn with_style(mut self, style: Style) -> Self {
     self.metadata.style = Some(Box::new(style));
@@ -682,8 +686,8 @@ impl Node {
       preset,
       presentation: self.metadata.presentation.take(),
       inline,
-      dir: self.metadata.dir.take(),
-      lang: self.metadata.lang.take(),
+      direction: self.direction_style(),
+      lang: self.metadata.lang,
     }
   }
 
@@ -772,18 +776,12 @@ impl Node {
     self.attribute("scope")
   }
 
-  /// `id` and `class` resolve to the structured metadata fields rather than
-  /// the `attributes` map.
+  /// The value of attribute `name`, from the field that holds it when one does.
   pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
-    if name.eq_ignore_ascii_case("id") {
-      return self.metadata.id.as_deref();
+    if let Some(Some(value)) = self.lifted_attribute(name) {
+      return Some(value);
     }
-    if name.eq_ignore_ascii_case("class") {
-      return self.metadata.class_name.as_deref();
-    }
-    if name.eq_ignore_ascii_case("lang") {
-      return self.metadata.lang.as_ref().map(Lang::as_str);
-    }
+
     self
       .metadata
       .attributes
@@ -791,6 +789,20 @@ impl Node {
       .iter()
       .find(|(attr_name, _)| attr_name.eq_ignore_ascii_case(name))
       .map(|(_, value)| value.as_ref())
+  }
+
+  /// The value of `name` from the field that holds it, `None` when no field holds `name`.
+  fn lifted_attribute(&self, name: &str) -> Option<Option<&str>> {
+    let value = match_ignore_ascii_case! { name,
+      "id" => self.metadata.id.as_deref(),
+      "class" => self.metadata.class_name.as_deref(),
+      "lang" => self.metadata.lang.as_ref().map(Lang::as_str),
+      "dir" => self.metadata.dir.map(Direction::as_str),
+      "src" => self.img_src(),
+      _ => return None,
+    };
+
+    Some(value)
   }
 }
 
@@ -803,7 +815,7 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) presentation: Option<Box<Style>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
-  pub(crate) dir: Option<Direction>,
+  pub(crate) direction: DirectionStyle,
   pub(crate) lang: Option<Lang>,
 }
 
@@ -812,7 +824,7 @@ impl NodeStyleLayers {
   pub(crate) fn is_preset_only(&self) -> bool {
     self.presentation.is_none()
       && self.inline.is_none()
-      && self.dir.is_none()
+      && self.direction.is_empty()
       && self.lang.is_none()
   }
 }
@@ -844,11 +856,35 @@ impl Node {
 
   /// The names in the element's attribute map.
   pub(crate) fn attribute_names(&self) -> impl Iterator<Item = &str> {
+    let in_field = |name: &str| matches!(self.lifted_attribute(name), Some(Some(_)));
+
+    LIFTED_ATTRIBUTES
+      .into_iter()
+      .filter(move |name| in_field(name))
+      .chain(
+        self
+          .metadata
+          .attributes
+          .iter()
+          .flat_map(|attributes| attributes.iter().map(|(name, _)| name.as_ref()))
+          .filter(move |name| !in_field(name)),
+      )
+  }
+
+  /// The URL an `<img>` loads, which its `src` attribute reads.
+  fn img_src(&self) -> Option<&str> {
+    let NodeKind::Image(ImageData {
+      src: ImageSourceInput::Url(src),
+      ..
+    }) = &self.kind
+    else {
+      return None;
+    };
+
     self
-      .metadata
-      .attributes
-      .iter()
-      .flat_map(|attributes| attributes.iter().map(|(name, _)| name.as_ref()))
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("img"))
+      .then_some(src)
   }
 
   /// The rules the element's `tw` utilities compile to through `cache`, in the order they were

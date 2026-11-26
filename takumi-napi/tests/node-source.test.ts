@@ -54,6 +54,7 @@ describe("toNativeSource", () => {
     ["a class instance", { ...text("x"), tagName: new Date(0) } as unknown as Node],
     ["a bigint", { ...text("x"), tagName: 1n } as unknown as Node],
     ["a function", { ...text("x"), tagName: () => "p" } as unknown as Node],
+    ["a string past 64 KiB", image({ src: `data:image/png;base64,${"A".repeat(64 * 1024)}` })],
   ])("keeps a tree holding %s as the tree", (_, node) => {
     expect(toNativeSource(node)).toBe(node);
   });

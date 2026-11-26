@@ -1804,3 +1804,151 @@ fn a_query_container_keeps_its_children_margins() {
 
   assert_eq!(measured.children[0].height, 24.0);
 }
+
+/// The attributes a node holds in its own fields match attribute selectors as the rest do.
+#[test]
+fn attributes_held_in_fields_match_attribute_selectors() {
+  let width = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].width
+  };
+
+  assert_eq!(
+    width(
+      r#"<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/%3E">"#,
+      r#"img[src^="data:image/svg"] { width: 30px }"#,
+    ),
+    30.0
+  );
+  for (attribute, selector) in [
+    (r#"dir="rtl""#, r#"[dir="rtl"]"#),
+    (r#"dir="auto""#, r#"[dir="auto"]"#),
+    (r#"lang="en-US""#, r#"[lang|="en"]"#),
+    (r#"class="a b""#, "[class~=b]"),
+    (r#"id="x""#, "[id]"),
+  ] {
+    assert_eq!(
+      width(
+        &format!("<div {attribute}></div>"),
+        &format!("div{selector} {{ width: 30px }}"),
+      ),
+      30.0,
+      "{selector}"
+    );
+  }
+}
+
+#[test]
+fn generated_content_reads_attributes_held_in_fields() {
+  for attribute in ["dir", "lang"] {
+    let html = format!(
+      r#"<div {attribute}="{}"></div>"#,
+      if attribute == "dir" { "rtl" } else { "en" }
+    );
+    let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parses");
+    let css =
+      format!("div {{ display: inline-block }} div::before {{ content: attr({attribute}) }}");
+
+    assert!(
+      measure_with_css(Node::container([node]), &css).children[0].width > 0.0,
+      "attr({attribute})"
+    );
+  }
+}
+
+/// `dir` maps to `direction` as a presentational hint, from the attribute or, under `auto`, the
+/// first strong character of the text, as Blink's `HTMLElement` does.
+#[test]
+fn dir_sets_direction_from_the_attribute_or_the_text() {
+  let first_child_x = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].children[0].transform[4]
+  };
+  let flex = "div { display: flex; width: 100px } i { width: 10px; height: 10px }";
+
+  assert_eq!(first_child_x(r#"<div dir="rtl"><i></i></div>"#, flex), 90.0);
+  assert_eq!(
+    first_child_x(
+      r#"<div dir="auto"><i></i><span dir="ltr">abc</span>مرحبا</div>"#,
+      flex
+    ),
+    90.0
+  );
+  assert_eq!(
+    first_child_x(r#"<div dir="auto"><i></i>abc</div>"#, flex),
+    0.0
+  );
+  assert_eq!(first_child_x(r#"<div dir="AUTO"><i></i></div>"#, flex), 0.0);
+  // A presentational hint is an author declaration, so `revert` rolls it back too.
+  assert_eq!(
+    first_child_x(
+      r#"<div dir="rtl"><i></i></div>"#,
+      &format!("{flex} div {{ direction: revert }}")
+    ),
+    0.0
+  );
+}
+
+#[test]
+fn dir_pseudo_class_reads_auto_directionality() {
+  let measure = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css)
+  };
+
+  assert_eq!(
+    measure(
+      r#"<div dir="auto">مرحبا</div>"#,
+      "div:dir(rtl) { width: 30px }"
+    )
+    .children[0]
+      .width,
+    30.0
+  );
+  assert_eq!(
+    measure(
+      r#"<p dir="rtl"><bdi>abc</bdi></p>"#,
+      "bdi:dir(ltr) { display: inline-block; width: 30px }"
+    )
+    .children[0]
+      .children[0]
+      .width,
+    30.0
+  );
+}
+
+/// A tel input keeps `ltr` directionality under an `rtl` parent, as Blink's
+/// `ElementInheritsDirectionality` has it, and `attr(dir)` reads `dir`'s text as written.
+#[test]
+fn a_tel_input_is_ltr_and_dir_keeps_its_text() {
+  let measure = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css)
+  };
+
+  assert_eq!(
+    measure(
+      r#"<div dir="rtl"><input type="tel"></div>"#,
+      "input { padding: 0; border: 0 } input:dir(ltr) { width: 30px }"
+    )
+    .children[0]
+      .children[0]
+      .width,
+    30.0
+  );
+
+  let width = |value: &str| {
+    measure(
+      &format!(r#"<div dir="{value}"></div>"#),
+      "div { display: inline-block } div::before { content: attr(dir) }",
+    )
+    .children[0]
+      .width
+  };
+
+  assert!(width("RTL") > width("rtl"));
+}
