@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import { createElement } from "react";
 import { container, text } from "@takumi-rs/helpers";
 import { Renderer, type DocumentInput, type PdfRenderOptions } from "../src/export";
 
@@ -198,6 +199,29 @@ test("rejects a viewport with paged options", async () => {
   const mixed = JSON.parse('{ "viewport": { "width": 600, "height": 300 }, "size": "a4" }');
 
   await expect(renderer.renderPdf(doc, mixed)).rejects.toThrow("viewport is mutually exclusive");
+});
+
+test("rejects an aborted signal before resolving components", async () => {
+  const controller = new AbortController();
+  const Document = mock(() => createElement("div", null, "Hello PDF"));
+
+  controller.abort();
+
+  await expect(
+    renderer.renderPdf(createElement(Document), { signal: controller.signal }),
+  ).rejects.toThrow();
+  expect(Document).not.toHaveBeenCalled();
+});
+
+test("keeps the caller's onabort handler", async () => {
+  const controller = new AbortController();
+  const onabort = mock(() => {});
+
+  controller.signal.onabort = onabort;
+  await renderer.renderPdf(doc, { signal: controller.signal });
+  controller.abort();
+
+  expect(onabort).toHaveBeenCalledTimes(1);
 });
 
 const takumiPdfBuilt = ["pkg/takumi_pdf_wasm_bg.wasm", "dist/export.mjs"].every((file) =>

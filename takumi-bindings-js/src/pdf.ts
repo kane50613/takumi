@@ -483,6 +483,9 @@ export async function collectPdf<TFamily extends RegisteredFamilyLike>(
     extras,
     layout: { header, footer, pages, css, ...rest },
   } = splitExtras(options);
+
+  extras.signal?.throwIfAborted();
+
   const document = await resolveLayout(node, { header, footer, pages, css });
   const layout = { ...rest, ...document.layout };
 
