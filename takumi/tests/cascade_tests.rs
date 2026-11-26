@@ -1515,6 +1515,33 @@ fn a_nested_scope_body_is_relative_to_its_root() {
   );
 }
 
+/// A conditional group rule in a nested `@scope`'s body takes rules only, as in Blink, where only a
+/// group rule nested in a style rule reads declarations.
+#[test]
+fn a_group_rule_in_a_nested_scope_body_takes_rules_only() {
+  for group in [
+    "@media (width > 0px)",
+    "@supports (display: block)",
+    "@container (width > 0px)",
+    "@layer a",
+  ] {
+    assert_eq!(
+      card_widths(&format!(
+        ".outer {{ container-type: inline-size }} .card {{ @scope (&) {{ {group} {{ width: 10px }} }} }}"
+      ))[0],
+      1200.0,
+      "{group}"
+    );
+    assert_eq!(
+      card_widths(&format!(
+        ".outer {{ container-type: inline-size }} .card {{ @scope (&) {{ {group} {{ > p {{ width: 30px }} }} }} }}"
+      )),
+      [1200.0, 30.0, 1200.0],
+      "{group}"
+    );
+  }
+}
+
 /// A nested `@scope` without a start roots at the parent of its `<style>` element, not at the rule
 /// around it, as Blink's `ConsumeScopeRule` makes an implicit scope whatever its nesting.
 #[test]

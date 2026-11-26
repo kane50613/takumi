@@ -530,6 +530,8 @@ impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
   context: NestingContext<'a>,
+  /// Whether the body takes declarations as well as rules.
+  declarations: bool,
 }
 
 /// One declaration of a rule body, which a style sheet wrote.
@@ -655,7 +657,7 @@ impl<'i> RuleBodyItemParser<'i, StyleRuleBodyItem, StyleSheetParseError>
   }
 
   fn parse_declarations(&self) -> bool {
-    true
+    self.declarations
   }
 }
 
@@ -1129,9 +1131,30 @@ impl NestingContext<'_> {
     selectors: SelectorList<SelectorImpl>,
     input: &mut Parser<'i>,
   ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
+    self.parse_nested_body(selectors, input, true)
+  }
+
+  /// The body of a conditional group rule or `@layer` nested in a rule on `parent_selectors`,
+  /// which takes rules only in a nested `@scope`'s body, as Blink's
+  /// `ConsumeRuleListOrNestedDeclarationList` reads declarations only under a style rule.
+  fn parse_group_rule_block<'i>(
+    self,
+    parent_selectors: &SelectorList<SelectorImpl>,
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
+    self.parse_nested_body(parent_selectors.clone(), input, !self.scope_body)
+  }
+
+  fn parse_nested_body<'i>(
+    self,
+    selectors: SelectorList<SelectorImpl>,
+    input: &mut Parser<'i>,
+    declarations: bool,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let mut parser = NestedStyleRuleParser {
       parent_selectors: selectors.clone(),
       context: self,
+      declarations,
     };
 
     self.parse_rule_body(selectors, input, &mut parser)
@@ -1191,7 +1214,7 @@ impl NestingContext<'_> {
           layer: Some(&nested_layer),
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
       AtRulePrelude::Media(media_query) => {
         let mut media_queries = self.media_queries.to_vec();
@@ -1201,9 +1224,9 @@ impl NestingContext<'_> {
           media_queries: &media_queries,
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
-      AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
+      AtRulePrelude::Supports(true) => self.parse_group_rule_block(parent_selectors, input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
       AtRulePrelude::Container(query) => {
         let mut container_queries = self.container_queries.to_vec();
@@ -1213,7 +1236,7 @@ impl NestingContext<'_> {
           container_queries: &container_queries,
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
       // A nested `@scope` roots at the elements its start selects relative to the rule around it,
       // or without a start at its `<style>` element's parent as Blink's `ConsumeScopeRule` makes an
