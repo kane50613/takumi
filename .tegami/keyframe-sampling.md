@@ -9,6 +9,7 @@ packages:
 - An `animation-timing-function` declared in a keyframe eases the interval that keyframe starts.
 - A repeating animation shows the start of its next iteration at a boundary, so `1s infinite` at 1000ms draws its first keyframe.
 - A zero-duration animation applies only with `animation-fill-mode: forwards` or `both`.
+- A keyframe declaration marked `!important` is invalid, so the animation leaves that property alone.
 
 ```css
 @keyframes grow {
