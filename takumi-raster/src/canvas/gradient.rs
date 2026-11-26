@@ -40,28 +40,59 @@ pub(crate) fn try_overlay_gradient_tile(
   true
 }
 
-pub(crate) fn overlay_gradient_tile<T>(
+/// [`GradientOverlayTile`] without its row state, so one overlay serves every gradient.
+trait GradientRows {
+  fn tile_size(&self) -> Size<u32>;
+  fn fill_tile_row(&self, x_start: u32, y: u32, out: &mut [[u8; 4]]);
+  fn overlay_tile(
+    &self,
+    data: &mut [u8],
+    bottom_width: u32,
+    bottom_height: u32,
+    offset: Point<f32>,
+  );
+}
+
+impl<T: GradientOverlayTile> GradientRows for T {
+  fn tile_size(&self) -> Size<u32> {
+    Size::new(self.width(), self.height())
+  }
+
+  fn fill_tile_row(&self, x_start: u32, y: u32, out: &mut [[u8; 4]]) {
+    self.fill_row(x_start, y, out);
+  }
+
+  fn overlay_tile(
+    &self,
+    data: &mut [u8],
+    bottom_width: u32,
+    bottom_height: u32,
+    offset: Point<f32>,
+  ) {
+    self.overlay_unconstrained(data, bottom_width, bottom_height, offset);
+  }
+}
+
+fn overlay_gradient_tile(
   pixmap: &mut PixmapMut<'_>,
-  gradient: &T,
+  gradient: &dyn GradientRows,
   offset: Point<f32>,
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
-) where
-  T: GradientOverlayTile,
-{
+) {
   let bottom_width = pixmap.width();
   let bottom_height = pixmap.height();
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
     let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    gradient.overlay_unconstrained(bottom_data, bottom_width, bottom_height, offset);
+    gradient.overlay_tile(bottom_data, bottom_width, bottom_height, offset);
     return;
   }
 
   let Some(bounds) = OverlayBounds::new(
     Size::new(bottom_width, bottom_height),
     offset,
-    Size::new(gradient.width(), gradient.height()),
+    gradient.tile_size(),
   ) else {
     return;
   };
@@ -74,7 +105,7 @@ pub(crate) fn overlay_gradient_tile<T>(
     bounds,
     mode,
     combined_mask,
-    |y, span, row| gradient.fill_row(x_start + span.start as u32, y, &mut row[span]),
+    |y, span, row| gradient.fill_tile_row(x_start + span.start as u32, y, &mut row[span]),
   );
 }
 

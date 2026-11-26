@@ -45,26 +45,25 @@ impl<'a> SceneEmitter<'a> {
     doc: &mut SvgDocument,
   ) -> io::Result<()> {
     let base = doc.transform();
-    let mut conversion = ConversionContext::new(
-      &self.scene.properties,
-      ChunkWriter {
-        emitter: self,
-        chunks,
-        owners,
-        backdrops,
-        base,
-        doc,
-        groups: Vec::new(),
-        error: None,
-      },
-    );
+    let mut conversion = ConversionContext::new(&self.scene.properties);
+    let mut writer = ChunkWriter {
+      emitter: self,
+      chunks,
+      owners,
+      backdrops,
+      base,
+      doc,
+      groups: Vec::new(),
+      error: None,
+    };
 
     for chunk in emitted {
-      conversion.switch_to(chunk.state());
-      conversion.sink().emit(chunk);
+      conversion.switch_to(chunk.state(), &mut writer);
+      writer.emit(chunk);
     }
 
-    conversion.finish().error.map_or(Ok(()), Err)
+    conversion.finish(&mut writer);
+    writer.error.map_or(Ok(()), Err)
   }
 
   /// The box `paint` names, placed relative to `current`, with the transform its group needs
