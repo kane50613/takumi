@@ -2075,3 +2075,23 @@ fn container_units_read_the_nearest_query_container() {
     viewport_width / 10.0
   );
 }
+
+/// An unknown condition holds of no container but leaves the other conditions of its list, as
+/// Blink's `ConsumeGeneralEnclosed` parses it and `SelectsAnyContainer` rejects only its query.
+#[test]
+fn an_unknown_container_condition_leaves_the_rest_of_its_list() {
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (unknown-feature: 1px), (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container (unknown-feature: 1px) or (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}

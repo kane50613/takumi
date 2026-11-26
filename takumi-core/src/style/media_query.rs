@@ -57,6 +57,8 @@ enum MediaFeature {
   Orientation(MediaOrientation),
   /// The scheme to match, or none for the boolean context, which every scheme matches.
   PrefersColorScheme(Option<ColorScheme>),
+  /// A `<general-enclosed>`: a feature or condition this parser does not know, which never holds.
+  Unknown,
 }
 
 /// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
@@ -396,6 +398,7 @@ impl MediaFeature {
       Self::PrefersColorScheme(scheme) => {
         scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
       }
+      Self::Unknown => false,
     }
   }
 }
@@ -461,7 +464,8 @@ impl MediaCondition {
     Ok(operands)
   }
 
-  /// `( <media-condition> ) | ( <media-feature> )`
+  /// `( <media-condition> ) | ( <media-feature> ) | <general-enclosed>`, as Blink's
+  /// `ConditionalParser::ConsumeInner` falls back to `ConsumeGeneralEnclosed`.
   fn parse_in_parens<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let token = input.next()?.clone();
 
@@ -483,7 +487,17 @@ impl MediaCondition {
         return Ok(Self::Feature(feature));
       }
 
-      Self::parse(input)
+      if let Ok(condition) = input.try_parse(|input| {
+        let condition = Self::parse(input)?;
+
+        input.expect_exhausted()?;
+        Ok::<_, ParseError<StyleSheetParseError>>(condition)
+      }) {
+        return Ok(condition);
+      }
+
+      while input.next().is_ok() {}
+      Ok(Self::Feature(MediaFeature::Unknown))
     })
   }
 
@@ -639,7 +653,8 @@ impl ContainerCondition {
   /// Whether a container whose content box is `size` across, an axis it does not contain left
   /// unknown, satisfies it, its relative lengths in the container's `sizing`, as Blink evaluates
   /// them against the container's computed values. A feature other than a size one is unknown to a
-  /// container query, which then does not hold.
+  /// container query, which then does not hold, as Blink's `ContainerSelector::SelectsAnyContainer`
+  /// selects no container for it.
   pub(crate) fn matches(
     &self,
     size: Size<Option<f32>>,
@@ -649,7 +664,7 @@ impl ContainerCondition {
     let unknown = self.condition.any_feature(&|feature| {
       matches!(
         feature,
-        MediaFeature::Resolution(..) | MediaFeature::PrefersColorScheme(..)
+        MediaFeature::Resolution(..) | MediaFeature::PrefersColorScheme(..) | MediaFeature::Unknown
       )
     });
 
@@ -674,7 +689,9 @@ impl MediaQueryList {
                 condition.any_feature(&|feature| {
                   matches!(
                     feature,
-                    MediaFeature::InlineSize(..) | MediaFeature::BlockSize(..)
+                    MediaFeature::InlineSize(..)
+                      | MediaFeature::BlockSize(..)
+                      | MediaFeature::Unknown
                   )
                 })
               })
