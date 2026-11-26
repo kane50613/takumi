@@ -801,9 +801,10 @@ mod tests {
   #[test]
   fn test_transform_from_str() {
     assert_eq!(
-      Transform::from_css_str("translate(10, 20px)"),
+      Transform::from_css_str("translate(10px, 20px)"),
       Ok(Transform::Translate(Length::Px(10.0), Length::Px(20.0)))
     );
+    assert!(Transform::from_css_str("translate(10, 20px)").is_err());
   }
 
   #[test]

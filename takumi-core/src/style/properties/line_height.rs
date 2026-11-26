@@ -120,7 +120,9 @@ impl ToCss for LineHeight {
 #[cfg(test)]
 mod tests {
   use crate::{
-    style::{FromCssStr, Length, LineHeight, MakeComputed, SizingContext, tw::TailwindPropertyParser},
+    style::{
+      FromCssStr, Length, LineHeight, MakeComputed, SizingContext, tw::TailwindPropertyParser,
+    },
     viewport::Viewport,
   };
 

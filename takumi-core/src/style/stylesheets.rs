@@ -18,8 +18,8 @@ use crate::{
   Error, Xxh3HashSet,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, CustomProperties, DeclarationOrigin, IgnoredDeclaration,
-    IgnoredReason, SizingContext,
+    CssInput, CssNumber, CssUnexpected, CssValueSeed, CustomProperties, DeclarationOrigin,
+    IgnoredDeclaration, IgnoredReason, SizingContext,
     properties::*,
     selector::{StyleDeclarationParser, log_ignored},
     unexpected_token,
@@ -815,7 +815,7 @@ macro_rules! define_style {
 
           let source: Cow<'_, str> = match &css_input {
             CssInput::Str(value) => Cow::Borrowed(value.as_ref()),
-            CssInput::Number(number) => Cow::Owned(number.to_string()),
+            CssInput::Number(number) => Cow::Owned(self.number_css(*number)),
             CssInput::Unexpected(_) => unreachable!(),
           };
 
@@ -841,6 +841,25 @@ macro_rules! define_style {
           drop(source);
 
           result.map_err(|(expected, failure)| CssInputParseError::new(css_input, expected, failure))
+        }
+
+        /// The CSS text a style object's `number` stands for: the number where the property
+        /// takes it, else the number in px.
+        ///
+        /// Approximate: React writes px after a number for every property outside its
+        /// `isUnitlessNumber` list, where this writes it wherever the property rejects the number.
+        pub(crate) fn number_css(self, number: CssNumber) -> String {
+          let number = number.to_string();
+
+          if matches!(self, Self::Ignored | Self::Custom)
+            || self
+              .parse_css_input_declarations(CssInput::Str(Cow::Borrowed(&number)))
+              .is_ok()
+          {
+            return number;
+          }
+
+          format!("{number}px")
         }
 
         /// Parse-error "expected ..." text for this property's value type.
@@ -1825,13 +1844,13 @@ define_style! {
     }
     /// Blink's `svg->geometry` field group: the lengths and path SVG shapes are laid out from.
     svg_geometry_data: StyleSvgGeometryData {
-      x: Length = Length::zero(),
-      y: Length = Length::zero(),
-      cx: Length = Length::zero(),
-      cy: Length = Length::zero(),
-      r: Length where non_negative = true = Length::zero(),
-      rx: Length where non_negative = true = Length::Auto,
-      ry: Length where non_negative = true = Length::Auto,
+      x: Length where parse = SvgAttributeMode::parse = Length::zero(),
+      y: Length where parse = SvgAttributeMode::parse = Length::zero(),
+      cx: Length where parse = SvgAttributeMode::parse = Length::zero(),
+      cy: Length where parse = SvgAttributeMode::parse = Length::zero(),
+      r: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::zero(),
+      rx: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::Auto,
+      ry: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::Auto,
       d: SvgPath,
     }
     /// Blink's `svg->stop` field group.
@@ -1841,7 +1860,7 @@ define_style! {
     }
     /// Blink's `svg->svgmisc` field group.
     svg_misc_data: StyleSvgMiscData {
-      baseline_shift: BaselineShift,
+      baseline_shift: BaselineShift where parse = SvgAttributeMode::parse,
       flood_color: ColorInput = ColorInput::Value(Color::black()),
       flood_opacity: PercentageNumber,
       lighting_color: ColorInput = ColorInput::Value(Color::white()),
@@ -2025,10 +2044,10 @@ define_style! {
     /// Blink's `svginherited->stroke` field group, but for `stroke-linejoin`, which `misc_inherited_data` keeps.
     svg_stroke_data: StyleSvgStrokeData {
       stroke: SvgPaint where inherit = true = SvgPaint::None,
-      stroke_width: Length where inherit = true where non_negative = true = Length::Px(1.0),
+      stroke_width: Length where inherit = true where non_negative = true where parse = SvgAttributeMode::parse = Length::Px(1.0),
       stroke_opacity: PercentageNumber where inherit = true,
-      stroke_dasharray: Option<StrokeDasharray> where inherit = true,
-      stroke_dashoffset: Length where inherit = true = Length::zero(),
+      stroke_dasharray: Option<StrokeDasharray> where inherit = true where parse = SvgAttributeMode::parse,
+      stroke_dashoffset: Length where inherit = true where parse = SvgAttributeMode::parse = Length::zero(),
       stroke_linecap: LineCap where inherit = true,
       stroke_miterlimit: StrokeMiterlimit where inherit = true,
     }

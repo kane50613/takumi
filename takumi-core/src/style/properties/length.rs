@@ -1,4 +1,4 @@
-use std::{fmt, ops::Neg};
+use std::{cell::Cell, fmt, ops::Neg};
 
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
@@ -16,6 +16,41 @@ use crate::{
   },
 };
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+
+thread_local! {
+  static SVG_ATTRIBUTE_MODE: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Blink's `kSVGAttributeMode`, where a unitless number is a length in px. Elsewhere only a
+/// unitless zero is, as Blink's `ShouldAcceptUnitlessLength`.
+pub(crate) struct SvgAttributeMode;
+
+impl SvgAttributeMode {
+  /// Runs `parse` in the mode, as Blink's `ParserModeOverridingScope`.
+  pub(crate) fn scope<T>(parse: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+
+    impl Drop for Restore {
+      fn drop(&mut self) {
+        SVG_ATTRIBUTE_MODE.set(self.0);
+      }
+    }
+
+    let _restore = Restore(SVG_ATTRIBUTE_MODE.replace(true));
+
+    parse()
+  }
+
+  /// Parses `T` in the mode, for the properties Blink parses in it: the SVG geometry
+  /// properties, `stroke-width`, `stroke-dasharray`, `stroke-dashoffset`, and `baseline-shift`.
+  pub(crate) fn parse<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
+    Self::scope(|| T::from_css(input))
+  }
+
+  pub(crate) fn is_active() -> bool {
+    SVG_ATTRIBUTE_MODE.get()
+  }
+}
 
 const CALC_ZERO_EPSILON: f32 = 1e-6;
 const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
@@ -391,7 +426,9 @@ impl<'i> FromCss<'i> for Length {
         length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
       }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
-      Token::Number { value, .. } => Ok(Self::Px(*value)),
+      Token::Number { value, .. } if *value == 0.0 || SvgAttributeMode::is_active() => {
+        Ok(Self::Px(*value))
+      }
       _ => Err(unexpected_token!(token)),
     }
   }
@@ -758,9 +795,15 @@ mod tests {
   }
 
   #[test]
-  fn parse_calc_number_expression_becomes_px() {
-    let parsed = Length::from_css_str("calc(1 + 2)");
-    assert_eq!(parsed, Ok(Length::Px(3.0)));
+  fn a_unitless_number_is_a_length_only_when_zero_or_in_svg_attribute_mode() {
+    assert_eq!(Length::from_css_str("0"), Ok(Length::Px(0.0)));
+    assert!(Length::from_css_str("5").is_err());
+    assert!(Length::from_css_str("calc(1 + 2)").is_err());
+    SvgAttributeMode::scope(|| {
+      assert_eq!(Length::from_css_str("5"), Ok(Length::Px(5.0)));
+      assert_eq!(Length::from_css_str("calc(1 + 2)"), Ok(Length::Px(3.0)));
+    });
+    assert!(Length::from_css_str("5").is_err());
   }
 
   #[test]
@@ -1154,23 +1197,26 @@ mod tests {
 
   #[test]
   fn parse_calc_supports_constants() {
-    assert_eq!(
-      Length::from_css_str("calc(pi)").as_ref(),
-      Ok(&Length::Px(std::f32::consts::PI))
-    );
-    assert_eq!(
-      Length::from_css_str("calc(e)").as_ref(),
-      Ok(&Length::Px(std::f32::consts::E))
-    );
+    // A constant is a number, which is a length only in SVG attribute mode.
+    SvgAttributeMode::scope(|| {
+      assert_eq!(
+        Length::from_css_str("calc(pi)").as_ref(),
+        Ok(&Length::Px(std::f32::consts::PI))
+      );
+      assert_eq!(
+        Length::from_css_str("calc(e)").as_ref(),
+        Ok(&Length::Px(std::f32::consts::E))
+      );
 
-    let inf = Length::from_css_str("calc(infinity)");
-    assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
+      let inf = Length::from_css_str("calc(infinity)");
+      assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
-    let neg_inf = Length::from_css_str("calc(-infinity)");
-    assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
+      let neg_inf = Length::from_css_str("calc(-infinity)");
+      assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
-    let nan = Length::from_css_str("calc(nan)");
-    assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
+      let nan = Length::from_css_str("calc(nan)");
+      assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
+    });
   }
 
   #[test]

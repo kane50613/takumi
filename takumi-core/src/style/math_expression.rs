@@ -16,7 +16,7 @@ use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_c
 use crate::{
   layout::layout_style::LayoutLength,
   style::{
-    Length, ParseResult, SizingContext, ToCss,
+    Length, ParseResult, SizingContext, SvgAttributeMode, ToCss,
     calc::{CalcFormula, CalcUnit, CalcValue},
     interner::{self, Interner},
     length_from_dimension_unit,
@@ -239,7 +239,8 @@ pub(crate) fn parse_length<'i>(name: &str, input: &mut Parser<'i>) -> ParseResul
   let node = input.parse_nested_block(|input| parse_function(name, input, 0))?;
 
   match node.kind() {
-    Some(Kind::LENGTH | Kind::NUMBER) => {}
+    Some(Kind::LENGTH) => {}
+    Some(Kind::NUMBER) if SvgAttributeMode::is_active() => {}
     _ => return Err(CssParseError::unexpected_token()),
   }
   if let Some(linear) = node.linear() {

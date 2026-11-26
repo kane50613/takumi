@@ -133,17 +133,9 @@ mod tests {
   use crate::style::{FromCssStr, Length};
 
   #[test]
-  fn deserialize_single_number() {
+  fn deserialize_axis_pair_lengths() {
     assert_eq!(
-      Sides::<Length>::from_css_str("5"),
-      Ok(Sides([Length::Px(5.0); 4]))
-    );
-  }
-
-  #[test]
-  fn deserialize_axis_pair_numbers() {
-    assert_eq!(
-      Sides::<Length>::from_css_str("10 20"),
+      Sides::<Length>::from_css_str("10px 20px"),
       Ok(Sides([
         Length::Px(10.0),
         Length::Px(20.0),

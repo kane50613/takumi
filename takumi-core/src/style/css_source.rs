@@ -55,10 +55,12 @@ impl<'de> Deserialize<'de> for Declarations {
 
           // `undefined` / `null` is how a JS caller writes "no declaration".
           if !matches!(value, CssInput::Unexpected(CssUnexpected::Unit)) {
-            declarations.push(Declaration {
-              name,
-              value: value.into_string(),
-            });
+            let value = match value {
+              CssInput::Number(number) => PropertyId::from_camel_case(&name).number_css(number),
+              value => value.into_string(),
+            };
+
+            declarations.push(Declaration { name, value });
           }
         }
 
@@ -424,7 +426,7 @@ mod tests {
         "selector": ".card",
         "style": { "margin": "1px", "marginTop": "2px", "--brand": "#5b21b6", "width": 55 },
       })),
-      Ok(".card{--brand:#5b21b6;margin:1px;margin-top:2px;width:55;}".into())
+      Ok(".card{--brand:#5b21b6;margin:1px;margin-top:2px;width:55px;}".into())
     );
   }
 

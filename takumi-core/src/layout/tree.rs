@@ -3777,7 +3777,10 @@ impl RenderContext {
     );
     // Blink's `CSSToLengthConversionData::LineHeightSize`: `lh` reads the element's own line
     // height, which resolves against its own font size.
-    let line_height = style.inherited_data.line_height.to_px(&sizing, normal_basis);
+    let line_height = style
+      .inherited_data
+      .line_height
+      .to_px(&sizing, normal_basis);
 
     sizing.line_height = line_height;
     sizing.root_line_height = sizing

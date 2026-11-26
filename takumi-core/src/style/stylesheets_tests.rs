@@ -116,6 +116,38 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
   Ok(())
 }
 
+#[test]
+fn a_unitless_length_is_px_only_in_a_style_object_or_an_svg_property()
+-> Result<(), serde_json::Error> {
+  let text = style_with(
+    StyleDeclarationBlock::parse_loosy(
+      "font-size: 20px; font-size: 12; text-indent: 5; margin-top: 0; stroke-width: 3",
+    )
+    .declarations,
+  )
+  .inherit(&ComputedStyle::default());
+  let object = from_value::<Style>(json!({ "fontSize": 12, "lineHeight": 1.5, "textIndent": 5 }))?
+    .inherit(&ComputedStyle::default());
+
+  assert_eq!(
+    text.inherited_data.font_size,
+    FontSize::Length(Length::Px(20.0))
+  );
+  assert_eq!(text.misc_inherited1_data.text_indent.amount, Length::zero());
+  assert_eq!(text.box_data.margin_top, Length::Px(0.0));
+  assert_eq!(text.svg_stroke_data.stroke_width, Length::Px(3.0));
+  assert_eq!(
+    object.inherited_data.font_size,
+    FontSize::Length(Length::Px(12.0))
+  );
+  assert_eq!(object.inherited_data.line_height, LineHeight::Unitless(1.5));
+  assert_eq!(
+    object.misc_inherited1_data.text_indent.amount,
+    Length::Px(5.0)
+  );
+  Ok(())
+}
+
 /// The JSX presets ship these as a camel-case style object.
 #[test]
 fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
@@ -1984,7 +2016,8 @@ fn line_height_rejects_a_negative_value() {
 #[test]
 fn spacing_takes_normal_as_zero_and_rejects_auto() {
   let style = |css: &str| {
-    style_with(StyleDeclarationBlock::parse_loosy(css).declarations).inherit(&ComputedStyle::default())
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
   };
 
   for (css, spacing) in [
