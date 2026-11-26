@@ -437,6 +437,8 @@ struct NestingContext<'a> {
   container_queries: &'a [Arc<ContainerQuery>],
   /// In the direct body of a nested `@scope`, where a selector is relative to the scope's root.
   scope_body: bool,
+  /// The owner the sheet's [`STYLE_OWNER_RULE`] names.
+  style_owner: Option<u32>,
   lossy: bool,
 }
 
@@ -751,6 +753,7 @@ impl RuleParser {
       scope: None,
       container_queries: &[],
       scope_body: false,
+      style_owner: self.style_owner,
       lossy: self.lossy,
     }
   }
@@ -1197,17 +1200,18 @@ impl NestingContext<'_> {
         }
         .parse_style_rule_block(parent_selectors.clone(), input)
       }
-      // A nested `@scope` roots at the elements the rule around it matches, or at the ones its
-      // start selects with `&` for that rule, and its declarations apply to the root itself.
+      // A nested `@scope` roots at the elements its start selects relative to the rule around it,
+      // or without a start at its `<style>` element's parent as Blink's `ConsumeScopeRule` makes an
+      // implicit scope at any nesting, and its declarations apply to the root itself.
       // <https://drafts.csswg.org/css-cascade-6/#nested-scope>
       AtRulePrelude::Scope(scope) => {
+        let owner = scope.start.is_none().then_some(self.style_owner).flatten();
         let scope = Arc::new(Scope {
-          start: Some(match scope.start {
-            Some(start) => start.replace_parent_selector(parent_selectors),
-            None => parent_selectors.clone(),
-          }),
+          start: scope
+            .start
+            .map(|start| start.replace_parent_selector(parent_selectors)),
           end: scope.end,
-          owner: None,
+          owner,
           parent: self.scope.cloned(),
         });
         let root = SelectorList::parse(

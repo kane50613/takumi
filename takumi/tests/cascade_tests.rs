@@ -1448,7 +1448,8 @@ fn nested_containers_settle_at_any_depth() {
 }
 
 /// `@container` and `@scope` nest in a style rule: the first gates the rule's declarations, and
-/// the second roots at the elements the rule matches, or the ones its start picks with `&`.
+/// the second roots at the elements its start picks with `&`, or without a start at the tree's root
+/// for a sheet no element holds.
 #[test]
 fn container_and_scope_rules_nest_in_style_rules() {
   assert_eq!(
@@ -1466,7 +1467,6 @@ fn container_and_scope_rules_nest_in_style_rules() {
     card_widths(".card { @scope to (.content) { p { width: 30px } } }"),
     [1200.0, 30.0, 1200.0]
   );
-  assert_eq!(card_widths(".card { @scope { width: 100px } }")[0], 100.0);
   assert_eq!(
     card_widths(".outer { @scope (& > .card) { p { width: 30px } } }"),
     [1200.0, 30.0, 30.0]
@@ -1513,6 +1513,21 @@ fn a_nested_scope_body_is_relative_to_its_root() {
     card_widths(".card { @scope (&) { > p { width: 30px } } }"),
     [1200.0, 30.0, 1200.0]
   );
+}
+
+/// A nested `@scope` without a start roots at the parent of its `<style>` element, not at the rule
+/// around it, as Blink's `ConsumeScopeRule` makes an implicit scope whatever its nesting.
+#[test]
+fn a_nested_scope_without_a_start_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="wrap"><style>.card { @scope { > p { width: 30px } } }</style><p>a</p><div class="card"><p>b</p></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].width, 30.0);
+  assert_ne!(measured.children[1].children[0].width, 30.0);
 }
 
 /// `inherit` on a registered property that does not inherit takes the parent's computed value, as
