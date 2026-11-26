@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="104" viewBox="0 0 160 104">
+  <rect x="4" y="4" width="64" height="16" fill="#ee9393"/>
+  <path d="M4 4h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#6e1313" fill-rule="evenodd"/>
+  <rect x="80" y="4" width="64" height="16" fill="#92b1f5"/>
+  <path d="M80 4h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#133276" fill-rule="evenodd"/>
+  <rect x="4" y="28" width="64" height="16" fill="#ef4444" fill-opacity=".6"/>
+  <path d="M4 28h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#8d0c0c" fill-rule="evenodd"/>
+  <rect x="80" y="28" width="64" height="16" fill="#3b82f6" fill-opacity=".6"/>
+  <path d="M80 28h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#073c92" fill-rule="evenodd"/>
+  <rect x="4" y="52" width="64" height="16" fill="#efefef"/>
+  <path d="M4 52h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#00e" fill-rule="evenodd"/>
+  <rect x="80" y="52" width="64" height="16" fill="#6b6b6b"/>
+  <path d="M80 52h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#9e9eff" fill-rule="evenodd"/>
+  <rect x="4" y="76" width="64" height="16" fill="#fff"/>
+  <path d="M4 76h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#000" fill-rule="evenodd"/>
+  <rect x="80" y="76" width="64" height="16" fill="#121212"/>
+  <path d="M80 76h64v16h-64v-16Zm4 4h56v8h-56v-8Z" fill="#fff" fill-rule="evenodd"/>
+</svg>

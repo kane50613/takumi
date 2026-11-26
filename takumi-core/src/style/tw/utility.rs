@@ -304,7 +304,7 @@ macro_rules! value {
   };
   (@form $negatable:tt; $ty:ty $([$($namespace:expr),+])? : $($constructor:ident),+) => {
     value!(@form $negatable; $ty $([$($namespace),+])?, |value, builder| {
-      $(builder.push(StyleDeclaration::$constructor(value));)+
+      $(builder.push(StyleDeclaration::$constructor(value.clone()));)+
     })
   };
   (@form $negatable:tt; $ty:ty $([$($namespace:expr),+])?, $emit:expr) => {
@@ -1062,7 +1062,7 @@ fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
       "drop-shadow(var(--drop-shadow-{token}, {}))",
       drop_shadow.shadow.to_css_string()
     ),
-    None => Filter::DropShadow(drop_shadow.shadow).to_css_string(),
+    None => Filter::DropShadow(drop_shadow.shadow.clone()).to_css_string(),
   }
 }
 

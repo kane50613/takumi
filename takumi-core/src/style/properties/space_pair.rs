@@ -8,26 +8,26 @@ use cssparser::Parser;
 
 /// A pair of values for horizontal and vertical axes.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SpacePair<T: Copy> {
+pub struct SpacePair<T> {
   /// The horizontal value.
   pub x: T,
   /// The vertical value.
   pub y: T,
 }
 
-impl<T: Copy + Default> Default for SpacePair<T> {
+impl<T: Default> Default for SpacePair<T> {
   fn default() -> Self {
-    Self::from_single(T::default())
+    Self::from_pair(T::default(), T::default())
   }
 }
 
-impl<'i, T: Copy + FromCss<'i>> FromCss<'i> for SpacePair<T> {
+impl<'i, T: Clone + FromCss<'i>> FromCss<'i> for SpacePair<T> {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let first = T::from_css(input)?;
     if let Ok(second) = T::from_css(input) {
       Ok(Self::from_pair(first, second))
     } else {
-      Ok(Self::from_single(first))
+      Ok(Self::from_pair(first.clone(), first))
     }
   }
 
@@ -42,7 +42,9 @@ impl<T: Copy> SpacePair<T> {
   pub const fn from_single(value: T) -> Self {
     Self::from_pair(value, value)
   }
+}
 
+impl<T> SpacePair<T> {
   /// Create a new [`SpacePair`] from a pair of values.
   #[inline]
   pub const fn from_pair(x: T, y: T) -> Self {
@@ -50,14 +52,14 @@ impl<T: Copy> SpacePair<T> {
   }
 }
 
-impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
+impl<T: MakeComputed> MakeComputed for SpacePair<T> {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.x.make_computed(sizing);
     self.y.make_computed(sizing);
   }
 }
 
-impl<T: Animatable + Copy> Animatable for SpacePair<T> {
+impl<T: Animatable> Animatable for SpacePair<T> {
   fn missing_value() -> Option<Self> {
     Some(Self::from_pair(T::missing_value()?, T::missing_value()?))
   }
@@ -99,7 +101,7 @@ impl BorderRadiusPair {
   }
 }
 
-impl<T: Copy + ToCss> ToCss for SpacePair<T> {
+impl<T: ToCss> ToCss for SpacePair<T> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     self.x.to_css(dest)?;
     dest.write_str(" ")?;

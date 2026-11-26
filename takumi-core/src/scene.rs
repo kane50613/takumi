@@ -1900,7 +1900,7 @@ pub(crate) fn box_ink_reach(context: &RenderContext, size: Size<f32>) -> f32 {
     .filter(|shadow| !shadow.inset)
     .map(|shadow| {
       shadow_reach(&SizedShadow::from_box_shadow(
-        *shadow,
+        shadow,
         &context.sizing,
         context.current_color,
         size,

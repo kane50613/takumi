@@ -121,6 +121,29 @@ fn the_host_color_is_what_current_color_is() {
 }
 
 #[test]
+fn a_colour_function_of_current_color_reads_the_host_color() {
+  for body in [
+    r#"<rect width="10" height="10" fill="color-mix(in srgb, currentColor, red)"/>"#,
+    r#"<rect width="10" height="10" fill="none" stroke="rgb(from currentColor r g b)"/>"#,
+  ] {
+    let reads = SvgDocument::parse(&svg(body)).ok().and_then(|document| {
+      document
+        .ops(
+          SvgHost::Image {
+            current_color: Some(Color([10, 20, 30, 255])),
+            fonts: None,
+            cache: None,
+          },
+          document.declared_size(),
+        )
+        .map(|(_, reads)| reads)
+    });
+
+    assert!(reads.is_some_and(|reads| reads.color), "{body}");
+  }
+}
+
+#[test]
 fn unknown_elements_count_for_sibling_selectors_and_draw_nothing() {
   let ops = ops(
     r#"<rect width="10" height="10"/><foo><rect width="5" height="5"/></foo><rect width="10" height="10"/>
@@ -357,6 +380,29 @@ fn only_the_presentation_attributes_blink_maps_are_styled() {
   .unwrap_or_default();
 
   assert_eq!(fills(&ops), [Some(BLACK)]);
+}
+
+#[test]
+fn a_root_background_of_current_color_paints() {
+  let ops = SvgDocument::parse(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10" style="color: blue; background-color: color-mix(in srgb, currentColor, red)"><rect width="5" height="5"/></svg>"#,
+  )
+  .ok()
+  .and_then(|document| {
+    document
+      .ops(
+        SvgHost::Image {
+          current_color: Some(BLACK),
+          fonts: None,
+          cache: None,
+        },
+        document.declared_size(),
+      )
+      .map(|(ops, _)| ops)
+  })
+  .unwrap_or_default();
+
+  assert_eq!(fills(&ops), [Some(Color([128, 0, 128, 255])), Some(BLACK)]);
 }
 
 #[test]

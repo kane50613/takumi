@@ -306,13 +306,13 @@ macro_rules! push_axis_declarations {
 
 macro_rules! push_four_side_declarations {
   ($target:expr, $values:expr, $top:ident, $right:ident, $bottom:ident, $left:ident) => {{
-    let values = $values;
+    let [top, right, bottom, left] = $values;
     push_expanded_declarations!(
       $target;
-      StyleDeclaration::$top(values[0]),
-      StyleDeclaration::$right(values[1]),
-      StyleDeclaration::$bottom(values[2]),
-      StyleDeclaration::$left(values[3]),
+      StyleDeclaration::$top(top),
+      StyleDeclaration::$right(right),
+      StyleDeclaration::$bottom(bottom),
+      StyleDeclaration::$left(left),
     );
   }};
 }
@@ -1358,8 +1358,8 @@ macro_rules! define_style {
             self.misc_inherited1_data_mut().webkit_text_fill_color = interpolated_with_missing(
               &from.misc_inherited1_data.webkit_text_fill_color,
               &to.misc_inherited1_data.webkit_text_fill_color,
-              from.inherited_data.color,
-              to.inherited_data.color,
+              from.inherited_data.color.clone(),
+              to.inherited_data.color.clone(),
               interpolation_context,
             );
           }
@@ -1856,7 +1856,9 @@ define_style! {
       text_underline_offset: TextUnderlineOffset where inherit = true,
       webkit_text_fill_color: Option<ColorInput> where inherit = true,
       webkit_text_stroke_color: Option<ColorInput> where inherit = true,
-      webkit_text_stroke_width: Option<Length> where inherit = true,
+      webkit_text_stroke_width: Option<Length>
+        where inherit = true
+        where parse = parse_line_width_length,
       widows: MinLines where inherit = true,
     }
     /// Blink's `svginherited` field group.
@@ -2201,9 +2203,9 @@ define_style! {
       target.push(StyleDeclaration::border_right_style(value.style));
       target.push(StyleDeclaration::border_bottom_style(value.style));
       target.push(StyleDeclaration::border_left_style(value.style));
-      target.push(StyleDeclaration::border_top_color(value.color));
-      target.push(StyleDeclaration::border_right_color(value.color));
-      target.push(StyleDeclaration::border_bottom_color(value.color));
+      target.push(StyleDeclaration::border_top_color(value.color.clone()));
+      target.push(StyleDeclaration::border_right_color(value.color.clone()));
+      target.push(StyleDeclaration::border_bottom_color(value.color.clone()));
       target.push(StyleDeclaration::border_left_color(value.color));
     },
     border_top: Border => [BorderTopWidth, BorderTopStyle, BorderTopColor] |value, target| {
@@ -2231,7 +2233,7 @@ define_style! {
       target.push(StyleDeclaration::border_inline_end_width(value.width));
       target.push(StyleDeclaration::border_inline_start_style(value.style));
       target.push(StyleDeclaration::border_inline_end_style(value.style));
-      target.push(StyleDeclaration::border_inline_start_color(value.color));
+      target.push(StyleDeclaration::border_inline_start_color(value.color.clone()));
       target.push(StyleDeclaration::border_inline_end_color(value.color));
     },
     border_inline_start: Border => [BorderInlineStartWidth, BorderInlineStartStyle, BorderInlineStartColor] |value, target| {
@@ -2249,7 +2251,7 @@ define_style! {
       target.push(StyleDeclaration::border_bottom_width(value.width));
       target.push(StyleDeclaration::border_top_style(value.style));
       target.push(StyleDeclaration::border_bottom_style(value.style));
-      target.push(StyleDeclaration::border_top_color(value.color));
+      target.push(StyleDeclaration::border_top_color(value.color.clone()));
       target.push(StyleDeclaration::border_bottom_color(value.color));
     },
     border_block_start: Border => [BorderTopWidth, BorderTopStyle, BorderTopColor] |value, target| {
@@ -2309,7 +2311,7 @@ define_style! {
       target.push(StyleDeclaration::background_color(
         value
           .iter()
-          .filter_map(|background| background.color)
+          .filter_map(|background| background.color.clone())
           .next_back()
           .unwrap_or(ColorInput::transparent()),
       ));
@@ -2364,7 +2366,7 @@ define_style! {
     },
     webkit_text_stroke: Option<TextStroke> => [WebkitTextStrokeWidth, WebkitTextStrokeColor] |value, target| {
       target.push(StyleDeclaration::webkit_text_stroke_width(
-        value.map(|value| value.width),
+        value.as_ref().map(|value| value.width),
       ));
       target.push(StyleDeclaration::webkit_text_stroke_color(
         value.and_then(|value| value.color),

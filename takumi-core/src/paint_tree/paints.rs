@@ -478,7 +478,7 @@ impl PaintFilter {
         },
         Filter::DropShadow(shadow) => {
           let shadow =
-            SizedShadow::from_text_shadow(*shadow, &context.sizing, context.current_color, size);
+            SizedShadow::from_text_shadow(shadow, &context.sizing, context.current_color, size);
 
           Self::DropShadow {
             offset: PaintPoint {

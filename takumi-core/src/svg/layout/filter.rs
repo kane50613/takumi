@@ -187,7 +187,7 @@ impl SvgLayout<'_> {
         }
       }
       Filter::DropShadow(shadow) => {
-        let Color([red, green, blue, alpha]) = self.resolve_color(styled, shadow.color);
+        let Color([red, green, blue, alpha]) = self.resolve_color(styled, &shadow.color);
 
         Kind::DropShadow(DropShadow {
           input,
@@ -879,7 +879,7 @@ impl SvgLayout<'_> {
   /// The color and opacity of the flood `styled` makes, from `flood-color` and `flood-opacity`.
   fn flood(&self, styled: &Styled) -> (Color, f32) {
     let data = &styled.style().svg_misc_data;
-    let Color([red, green, blue, alpha]) = self.resolve_color(styled, data.flood_color);
+    let Color([red, green, blue, alpha]) = self.resolve_color(styled, &data.flood_color);
 
     (
       Color([red, green, blue, 255]),
@@ -890,7 +890,7 @@ impl SvgLayout<'_> {
   /// The color of the lighting primitive `styled`, whose alpha does not matter.
   fn lighting_color(&self, styled: &Styled) -> Color {
     let Color([red, green, blue, _]) =
-      self.resolve_color(styled, styled.style().svg_misc_data.lighting_color);
+      self.resolve_color(styled, &styled.style().svg_misc_data.lighting_color);
 
     Color([red, green, blue, 255])
   }

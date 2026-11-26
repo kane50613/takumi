@@ -189,11 +189,12 @@ impl<'a> SvgLayout<'a> {
     reads
   }
 
-  /// `color` in the context of `styled`. Approximate: a `color: currentColor` under an ancestor's
-  /// own color counts as a read of the host's.
-  fn resolve_color(&self, styled: &Styled, color: ColorInput) -> Color {
+  /// `color` in the context of `styled`. Approximate: a colour reading `currentColor` under an
+  /// ancestor's own `color` counts as a read of the host's, and one under a `color` that mixed the
+  /// host's, such as `color-mix(in srgb, currentColor, red)`, does not.
+  fn resolve_color(&self, styled: &Styled, color: &ColorInput) -> Color {
     if self.inherits_color
-      && color == ColorInput::CurrentColor
+      && color.reads_current_color()
       && styled.style().inherited_data.color == ColorInput::CurrentColor
     {
       self.read(HostReads {
@@ -249,10 +250,9 @@ impl<'a> SvgLayout<'a> {
         PreserveAspectRatio::default(),
       ),
     };
-    let background = match root.style().background_data.background_color {
-      ColorInput::Value(color) if color.0[3] != 0 => Some(color),
-      _ => None,
-    };
+    let background =
+      Some(self.resolve_color(&root, &root.style().background_data.background_color))
+        .filter(|color| color.0[3] != 0);
     let scope = Scope::root(view_box_rect);
     let mut tree = Container::new(Affine::IDENTITY);
 

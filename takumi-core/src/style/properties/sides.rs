@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{array, fmt};
 
 use cssparser::Parser;
 
@@ -12,7 +12,7 @@ use crate::{
 
 /// Represents the values for the four sides of a box (top, right, bottom, left).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Sides<T: Copy>(pub [T; 4]);
+pub struct Sides<T>(pub [T; 4]);
 
 /// One of the two box axes.
 pub enum Axis {
@@ -36,26 +36,20 @@ impl<T: Copy> Sides<T> {
   }
 }
 
-impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
+impl<'i, T: Clone + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let mut values = [T::from_css(input)?; 4];
-    let mut count = 1;
+    let top = T::from_css(input)?;
+    let Ok(right) = input.try_parse(T::from_css) else {
+      return Ok(Sides::from(top));
+    };
+    let Ok(bottom) = input.try_parse(T::from_css) else {
+      return Ok(Sides([top.clone(), right.clone(), top, right]));
+    };
+    let Ok(left) = input.try_parse(T::from_css) else {
+      return Ok(Sides([top, right.clone(), bottom, right]));
+    };
 
-    while count < 4 {
-      let Ok(value) = input.try_parse(T::from_css) else {
-        break;
-      };
-
-      values[count] = value;
-      count += 1;
-    }
-
-    Ok(match count {
-      1 => Sides(values),
-      2 => Sides([values[0], values[1], values[0], values[1]]),
-      3 => Sides([values[0], values[1], values[2], values[1]]),
-      _ => Sides(values),
-    })
+    Ok(Sides([top, right, bottom, left]))
   }
 
   const VALID_TOKENS: &'static [&'static str] = T::VALID_TOKENS;
@@ -63,30 +57,30 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneToFourValues;
 }
 
-impl<T: Copy> From<Sides<T>> for Rect<T> {
-  fn from(value: Sides<T>) -> Self {
+impl<T> From<Sides<T>> for Rect<T> {
+  fn from(Sides([top, right, bottom, left]): Sides<T>) -> Self {
     Rect {
-      top: value.0[0],
-      right: value.0[1],
-      bottom: value.0[2],
-      left: value.0[3],
+      top,
+      right,
+      bottom,
+      left,
     }
   }
 }
 
-impl<T: Default + Copy> Default for Sides<T> {
+impl<T: Default> Default for Sides<T> {
   fn default() -> Self {
-    Self([T::default(); 4])
+    Self(array::from_fn(|_| T::default()))
   }
 }
 
-impl<T: Copy> From<T> for Sides<T> {
+impl<T: Clone> From<T> for Sides<T> {
   fn from(value: T) -> Self {
-    Self([value; 4])
+    Self(array::from_fn(|_| value.clone()))
   }
 }
 
-impl<T: Copy + MakeComputed> MakeComputed for Sides<T> {
+impl<T: MakeComputed> MakeComputed for Sides<T> {
   fn make_computed(&mut self, sizing: &SizingContext) {
     for value in &mut self.0 {
       value.make_computed(sizing);
@@ -94,7 +88,7 @@ impl<T: Copy + MakeComputed> MakeComputed for Sides<T> {
   }
 }
 
-impl<T: Animatable + Copy> Animatable for Sides<T> {
+impl<T: Animatable> Animatable for Sides<T> {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -121,7 +115,7 @@ impl Sides<Length> {
   }
 }
 
-impl<T: Copy + ToCss> ToCss for Sides<T> {
+impl<T: ToCss> ToCss for Sides<T> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     self.0[0].to_css(dest)?;
     dest.write_str(" ")?;

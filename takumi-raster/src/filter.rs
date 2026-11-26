@@ -311,7 +311,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
               width: pixmap.width() as f32,
               height: pixmap.height() as f32,
             };
-            let shadow = SizedShadow::from_text_shadow(*drop_shadow, sizing, current_color, size);
+            let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow)?;
           }
           // Runs the SVG filter pipeline; `apply_svg_filter` hands the
