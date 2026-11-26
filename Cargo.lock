@@ -628,7 +628,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 [[package]]
 name = "font-types"
 version = "0.12.6"
-source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+source = "git+https://github.com/kane50613/fontations?rev=053322cc407b291a1041b294841b61850de3f38f#053322cc407b291a1041b294841b61850de3f38f"
 dependencies = [
  "bytemuck",
 ]
@@ -782,7 +782,7 @@ dependencies = [
 [[package]]
 name = "harfrust"
 version = "0.14.0"
-source = "git+https://github.com/kane50613/harfrust?rev=de393280a638ef3de24fad5eae26bb9454b44681#de393280a638ef3de24fad5eae26bb9454b44681"
+source = "git+https://github.com/kane50613/harfrust?rev=c3fcdcf000613e4bf6bd0e6858b3e0721c82c897#c3fcdcf000613e4bf6bd0e6858b3e0721c82c897"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1510,7 +1510,7 @@ dependencies = [
 [[package]]
 name = "read-fonts"
 version = "0.45.0"
-source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+source = "git+https://github.com/kane50613/fontations?rev=053322cc407b291a1041b294841b61850de3f38f#053322cc407b291a1041b294841b61850de3f38f"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -1745,7 +1745,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 [[package]]
 name = "skrifa"
 version = "0.48.0"
-source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+source = "git+https://github.com/kane50613/fontations?rev=053322cc407b291a1041b294841b61850de3f38f#053322cc407b291a1041b294841b61850de3f38f"
 dependencies = [
  "bytemuck",
  "read-fonts",
@@ -2386,7 +2386,7 @@ dependencies = [
 [[package]]
 name = "write-fonts"
 version = "0.54.0"
-source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+source = "git+https://github.com/kane50613/fontations?rev=053322cc407b291a1041b294841b61850de3f38f#053322cc407b291a1041b294841b61850de3f38f"
 dependencies = [
  "font-types",
  "indexmap",
