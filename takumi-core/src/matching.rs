@@ -650,8 +650,8 @@ impl Element for ArenaElement<'_> {
     pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
-    let ranges = match pc {
-      PseudoClass::Lang(ranges) => ranges,
+    let range = match pc {
+      PseudoClass::Lang(range) => range,
       PseudoClass::Dir(direction) => {
         return *direction
           == match self.directionality() {
@@ -667,7 +667,7 @@ impl Element for ArenaElement<'_> {
     let mut current = Some(*self);
     while let Some(element) = current {
       if let Some(lang) = element.style_node().node.attribute("lang") {
-        return ranges.iter().any(|range| lang_matches(lang, range));
+        return lang_matches(lang, range);
       }
       current = element.parent_element();
     }
