@@ -1564,6 +1564,20 @@ fn a_style_element_owner_ends_with_its_css() {
   assert_eq!(measured.children[1].width, 20.0);
 }
 
+/// An `@scope` written with an escape in its name still roots at its `<style>` element's parent.
+#[test]
+fn an_escaped_scope_rule_roots_at_its_style_element_parent() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@\73 cope { p { width: 30px } }</style><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(parsed.node, &parsed.css.concat());
+
+  assert_eq!(measured.children[0].children[0].width, 30.0);
+  assert_ne!(measured.children[1].width, 30.0);
+}
+
 /// `inherit` on a registered property that does not inherit takes the parent's computed value, as
 /// Blink's `ApplyInherit` copies it.
 #[test]
