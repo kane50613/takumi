@@ -185,6 +185,7 @@ pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
     "unset",
     "revert",
     "revert-layer",
+    "revert-rule",
     "default",
   ]
   .iter()

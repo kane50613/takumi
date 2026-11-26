@@ -1827,7 +1827,7 @@ fn all_sets_every_longhand_but_direction_and_unicode_bidi() {
 
 #[test]
 fn all_takes_only_a_css_wide_keyword() {
-  for css in ["all: red", "all: unset red", "all: revert", "all: none"] {
+  for css in ["all: red", "all: unset red", "all: none"] {
     assert!(
       StyleDeclarationBlock::parse_loosy(css).is_empty(),
       "{css} parsed as valid"
@@ -2223,4 +2223,38 @@ fn clip_path_with_incomplete_path_data_is_invalid() {
     "clip-path",
     "path('M0 0 L 10 10')"
   ));
+}
+
+/// A CSS-wide keyword is one only as the whole value, as Blink's `ConsumeCSSWideKeyword` reads it,
+/// so a family name that starts with one stays a family name.
+#[test]
+fn a_css_wide_keyword_is_one_only_as_the_whole_value() {
+  let declarations = |css: &str| {
+    StyleDeclarationBlock::parse_loosy(css)
+      .iter()
+      .cloned()
+      .collect::<Vec<_>>()
+  };
+
+  assert!(matches!(
+    declarations("font-family: revert-rule Display")[..],
+    [StyleDeclaration::FontFamily(_)]
+  ));
+  assert_eq!(declarations("width: revert-rule extra"), []);
+  assert_eq!(declarations("font-family: default"), []);
+  assert_eq!(declarations("font-family: serif inherit"), []);
+  assert_eq!(
+    declarations("width: revert-rule !important"),
+    [StyleDeclaration::CssWideKeyword(
+      LonghandId::Width,
+      CssWideKeyword::RevertRule
+    )]
+  );
+  assert_eq!(
+    declarations("font-family: inherit"),
+    [StyleDeclaration::CssWideKeyword(
+      LonghandId::FontFamily,
+      CssWideKeyword::Inherit
+    )]
+  );
 }

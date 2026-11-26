@@ -56,14 +56,17 @@ use crate::{
   sort_key::sort_by,
   sort_key::sort_by_key,
   style::{
-    Affine, AnimationOrigin, BackgroundImage, BackgroundImages, Color, ColorInput, ComputedStyle,
-    ContentItem, ContentValue, Direction, Display, ElementAnimations, Float, FontUnits, Lang,
-    LineHeight, LonghandId, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
-    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi,
-    WhiteSpaceCollapse, page_rule::PageContext,
+    Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
+    Color, ColorInput, ComputedStyle, ContentItem, ContentValue, Direction, Display,
+    ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId, MatchedStyleKey, Position,
+    PropertyMask, Registrations, SizingContext, Style as NodeStyle, StyleDeclaration,
+    StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse, page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
+
+/// Where each of an element's declarations cascades from, in cascade order.
+type CascadeSources = SmallVec<[CascadeSource; 16]>;
 
 /// A render-tree child paired with its layout node id.
 #[derive(Debug, Clone)]
@@ -3191,34 +3194,61 @@ impl RenderContext {
     &self,
     node_layers: NodeStyleLayers,
     matched_declarations: &MatchedDeclarationsView<'_>,
-  ) -> NodeStyle {
+  ) -> (NodeStyle, CascadeSources) {
     let mut style = NodeStyle::default();
+    let mut sources = CascadeSources::new();
+    // Each block is a rule of its own.
+    let mut source = |style: &NodeStyle, origin: CascadeOrigin, layer: usize| {
+      let rule = sources
+        .last()
+        .map_or(0, |source: &CascadeSource| source.rule + 1);
+
+      sources.resize(
+        style.declarations.declarations.len(),
+        CascadeSource {
+          origin,
+          layer,
+          rule,
+        },
+      );
+    };
 
     // HTML's `[dir] { unicode-bidi: isolate }`, ahead of the preset so `bdo`'s override wins.
     // <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
     if node_layers.dir.is_some() {
       style.push(StyleDeclaration::unicode_bidi(UnicodeBidi::Isolate), false);
+      source(&style, CascadeOrigin::UserAgent, 0);
     }
 
     if let Some(preset) = node_layers.preset {
       style.append_block(Arc::unwrap_or_clone(preset).declarations);
+      source(&style, CascadeOrigin::UserAgent, 0);
     }
 
     if let Some(dir) = node_layers.dir {
       style.push(StyleDeclaration::direction(dir), false);
+      source(&style, CascadeOrigin::UserAgent, 0);
     }
 
     // Blink's `StyleResolver::MatchPresentationalHints`.
     if let Some(presentation) = node_layers.presentation {
       style.append_block(presentation.declarations);
+      source(&style, CascadeOrigin::PresentationalHint, 0);
     }
 
-    for declarations in matched_declarations.layered_normal() {
-      style.merge_matched_block(declarations, false);
-    }
+    let mut layers = matched_declarations.layers().iter().copied();
 
-    for declarations in matched_declarations.unlayered_normal() {
-      style.merge_matched_block(declarations, false);
+    for declarations in matched_declarations
+      .layered_normal()
+      .iter()
+      .chain(matched_declarations.unlayered_normal())
+    {
+      style.merge_matched_block(declarations);
+      source(
+        &style,
+        CascadeOrigin::Author,
+        layers.next().unwrap_or_default(),
+      );
     }
 
     // An element's own declarations outrank selector-based ones at the same
@@ -3230,22 +3260,29 @@ impl RenderContext {
 
     if let Some(inline_normal) = inline_normal {
       style.append_block(inline_normal);
+      source(&style, CascadeOrigin::Author, usize::MAX);
     }
 
     // Important declarations reverse layer order.
-    for declarations in matched_declarations.unlayered_important() {
-      style.merge_matched_block(declarations, true);
-    }
-
-    for declarations in matched_declarations.layered_important() {
-      style.merge_matched_block(declarations, true);
+    for declarations in matched_declarations
+      .unlayered_important()
+      .iter()
+      .chain(matched_declarations.layered_important())
+    {
+      style.merge_matched_block(declarations);
+      source(
+        &style,
+        CascadeOrigin::AuthorImportant,
+        layers.next().unwrap_or_default(),
+      );
     }
 
     if let Some(inline_important) = inline_important {
       style.append_block(inline_important);
+      source(&style, CascadeOrigin::AuthorImportant, usize::MAX);
     }
 
-    style
+    (style, sources)
   }
 
   /// This style as a child inherits it, with the stylesheet's registered custom properties.
@@ -3369,10 +3406,11 @@ impl RenderContext {
   ) -> (ComputedStyle, SizingContext, Color) {
     let lang = layers.lang;
 
-    let declarations = self.cascade(layers, matched);
+    let (declarations, sources) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
     let animating = declarations.may_animate().then(|| declarations.clone());
-    let base = declarations.inherit_element(&inherited_parent, lang, is_document_root, None);
+    let base =
+      declarations.inherit_element(&inherited_parent, lang, is_document_root, &sources, None);
     let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
@@ -3381,6 +3419,7 @@ impl RenderContext {
     )) {
       Some((declarations, animations)) => self.animated_style(
         declarations,
+        &sources,
         base,
         &animations,
         &inherited_parent,
@@ -3407,6 +3446,7 @@ impl RenderContext {
   fn animated_style(
     &self,
     declarations: NodeStyle,
+    sources: &[CascadeSource],
     base: ComputedStyle,
     animations: &ElementAnimations<'_>,
     inherited_parent: &ComputedStyle,
@@ -3414,7 +3454,7 @@ impl RenderContext {
   ) -> ComputedStyle {
     let mut longhands = animations.longhands();
 
-    longhands.difference(&declarations.important_longhands());
+    longhands.difference(&declarations.important_longhands(sources));
 
     let origin = AnimatedStyle {
       context: self,
@@ -3422,8 +3462,13 @@ impl RenderContext {
       longhands,
       custom_properties: self.animated_custom_properties(&base, animations, &longhands),
     };
-    let mut style =
-      declarations.inherit_element(inherited_parent, lang, is_document_root, Some(&origin));
+    let mut style = declarations.inherit_element(
+      inherited_parent,
+      lang,
+      is_document_root,
+      sources,
+      Some(&origin),
+    );
 
     style.copy_longhands(&LonghandId::animation(), &base);
     style

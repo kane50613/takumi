@@ -5,7 +5,10 @@ use cssparser::{
 };
 
 use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
-use crate::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, ValueError};
+use crate::style::{
+  CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, ParseResult, ValueError,
+  unexpected_token,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CssInputParseFailure {
@@ -110,14 +113,39 @@ impl<'de> CssInputParseError<'de> {
 }
 
 impl CssWideKeyword {
-  /// The keyword a string input spells, if any.
+  /// The keyword a string input spells, if it is the whole value.
   pub(crate) fn from_css_input(css_input: &CssInput<'_>) -> Option<Self> {
     let CssInput::Str(value) = css_input else {
       return None;
     };
     let mut parser = Parser::new(value.as_ref());
 
-    Self::from_css(&mut parser).ok()
+    parser.parse_entirely(Self::from_css).ok()
+  }
+
+  /// The keyword when it is the whole value but for a trailing `!important`, which it leaves
+  /// unread, as Blink's `CSSPropertyParser::ConsumeCSSWideKeyword` takes one, so `revert-rule
+  /// Display` stays a family name.
+  pub(crate) fn parse_whole_value<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let keyword = Self::from_css(input)?;
+    let state = input.state();
+    let ends = input.is_exhausted()
+      || input
+        .try_parse(|input| {
+          parse_important(input)?;
+          input.expect_exhausted()
+        })
+        .is_ok();
+
+    input.reset(&state);
+
+    if ends {
+      return Ok(keyword);
+    }
+
+    let token = input.next()?.clone();
+
+    Err(unexpected_token!(&token))
   }
 }
 
