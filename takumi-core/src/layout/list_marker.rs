@@ -670,6 +670,27 @@ mod tests {
     );
   }
 
+  /// A container item's marker reads the item's container sizes, as its `::before` does: Blink's
+  /// `DetermineStartingElement` starts a pseudo-element's container lookup at its originating
+  /// element.
+  #[test]
+  fn a_container_items_marker_reads_the_item() {
+    let list = Node::container([item([])]).with_class_name("list");
+    let css = format!(
+      "{LIST_CSS} .list {{ margin: 0cqw }} .item {{ container-type: inline-size; width: 400px }}"
+    );
+    let tree = render_tree(list, &css);
+
+    assert_eq!(
+      marker_of(first_child(&tree))
+        .context
+        .sizing
+        .container_size
+        .width,
+      Some(400.0)
+    );
+  }
+
   #[test]
   fn a_none_counter_style_generates_no_marker() {
     let list = Node::container([item([])]).with_class_name("list");

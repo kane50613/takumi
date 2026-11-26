@@ -2425,7 +2425,7 @@ impl RenderNode {
 
     if !parent_context.stylesheet().has_container_queries()
       && !node.has_tw_container_queries(parent_context.cache().tailwind())
-      && !tree.holds_query_container()
+      && !(tree.holds_query_container() && tree.reads_query_container())
     {
       return tree;
     }
@@ -2516,6 +2516,18 @@ impl RenderNode {
         .any(RenderNode::holds_query_container)
   }
 
+  /// Whether a length of a box in it resolved against a query container while the tree built.
+  /// Approximate: a `list-style-image` gradient resolves its container units only when painted, so
+  /// a tree that reads a container there alone builds once, and the gradient reads the viewport.
+  fn reads_query_container(&self) -> bool {
+    self.context.sizing.container_read.get()
+      || self
+        .children
+        .iter()
+        .flatten()
+        .any(RenderNode::reads_query_container)
+  }
+
   /// The query containers among its boxes, sized by laying it out in its viewport, which a renderer
   /// lays the tree out in too. Approximate: a PDF finds them in its first page area, so a later
   /// page kind of another content width reads the first one's container sizes, where Blink sizes
@@ -2535,13 +2547,15 @@ impl RenderNode {
           return None;
         };
         let style = &render_node.context.style.misc_data;
+        let node = NodeId::new(index);
 
+        // Blink's `ContainerQueryEvaluator::UpdateContainerSize` keeps the axes it contains.
         (style.container_type != ContainerType::Normal || !style.container_name.0.is_empty()).then(
           || {
             (
-              NodeId::new(index),
+              node,
               source_order,
-              style.container_type,
+              tree.layout_style(node).contained_container_type(),
               style.container_name.clone(),
               QueryFont::of(&render_node.context.sizing),
             )
@@ -3189,7 +3203,13 @@ impl PendingRenderNode {
     render_node.is_text_run = self.is_text_run;
 
     if let Some(ordinal) = self.marker_ordinal
-      && let Some(marker) = list_marker(&render_node.context, ordinal)
+      && let Some(marker) = list_marker(
+        self
+          .container_context
+          .as_ref()
+          .unwrap_or(&render_node.context),
+        ordinal,
+      )
     {
       render_node.attach_marker(marker);
     }
@@ -3967,6 +3987,38 @@ mod tests {
       Direction::Ltr,
       "without an @page rule the root is not styled"
     );
+  }
+
+  /// Only a container unit reads a query container, so a tree whose lengths have none builds once.
+  #[test]
+  fn only_container_units_read_a_query_container() {
+    let reads = |css: &str| {
+      let context = RenderContext::builder()
+        .fonts(Fonts::default().snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((Some(800), Some(600))))
+            .build(),
+        )
+        .stylesheet(Arc::new(parse_stylesheet(css)))
+        .build();
+      let root =
+        Node::container([Node::container([]).with_class_name("box")]).with_class_name("container");
+
+      RenderNode::from_node(&context, root).reads_query_container()
+    };
+    let container = ".container { container-type: inline-size; width: 400px }";
+
+    assert!(!reads(&format!(
+      "{container} .box {{ width: calc(100% - 10px) }}"
+    )));
+    assert!(reads(&format!(
+      "{container} .box {{ width: calc(100% - 10cqw) }}"
+    )));
+    assert!(reads(&format!("{container} .box {{ width: 10cqw }}")));
+    assert!(reads(&format!(
+      "{container} .box {{ background-image: radial-gradient(10cqw 5cqw, red, blue) }}"
+    )));
   }
 
   #[test]

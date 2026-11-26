@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use takumi::prelude::*;
 
-use crate::test_utils::{block, create_test_viewport, measure_with_css};
+use crate::test_utils::{block, create_test_viewport, measure_with_css, measure_with_stylesheets};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -1515,6 +1515,33 @@ fn a_nested_scope_body_is_relative_to_its_root() {
   );
 }
 
+/// A conditional group rule in a nested `@scope`'s body takes rules only, as in Blink, where only a
+/// group rule nested in a style rule reads declarations.
+#[test]
+fn a_group_rule_in_a_nested_scope_body_takes_rules_only() {
+  for group in [
+    "@media (width > 0px)",
+    "@supports (display: block)",
+    "@container (width > 0px)",
+    "@layer a",
+  ] {
+    assert_eq!(
+      card_widths(&format!(
+        ".outer {{ container-type: inline-size }} .card {{ @scope (&) {{ {group} {{ width: 10px }} }} }}"
+      ))[0],
+      1200.0,
+      "{group}"
+    );
+    assert_eq!(
+      card_widths(&format!(
+        ".outer {{ container-type: inline-size }} .card {{ @scope (&) {{ {group} {{ > p {{ width: 30px }} }} }} }}"
+      )),
+      [1200.0, 30.0, 1200.0],
+      "{group}"
+    );
+  }
+}
+
 /// A nested `@scope` without a start roots at the parent of its `<style>` element, not at the rule
 /// around it, as Blink's `ConsumeScopeRule` makes an implicit scope whatever its nesting.
 #[test]
@@ -1559,6 +1586,30 @@ fn a_style_element_owner_ends_with_its_css() {
     parsed.css.concat()
   );
   let measured = measure_with_css(parsed.node, &css);
+
+  assert_ne!(measured.children[0].children[0].width, 20.0);
+  assert_eq!(measured.children[1].width, 20.0);
+}
+
+/// An unclosed comment or block ends with its `<style>` element, as Blink parses each sheet on its
+/// own, so it neither swallows nor gates the next sheet, nor roots that sheet's implicit `@scope`.
+#[test]
+fn each_style_element_parses_on_its_own() {
+  let parsed = takumi::parse_html(
+    r#"<div><style>/* x</style><style>p { width: 5px }</style><p>a</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_stylesheets(parsed.node, parsed.css);
+
+  assert_eq!(measured.children[0].width, 5.0);
+
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@media (width > 1px) { @scope {</style><p>a</p></div><style>@scope { :scope > p { width: 20px } }</style><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_stylesheets(parsed.node, parsed.css);
 
   assert_ne!(measured.children[0].children[0].width, 20.0);
   assert_eq!(measured.children[1].width, 20.0);
@@ -2094,6 +2145,59 @@ fn container_units_read_the_nearest_query_container() {
     measured.children[0].children[1].children[0].width,
     viewport_width / 10.0
   );
+}
+
+/// A container unit in an inherited property resolves on the element that declares it, against
+/// its own container, and its descendants inherit the pixels, as Blink computes the value once.
+#[test]
+fn an_inherited_container_unit_resolves_where_it_is_declared() {
+  let node = Node::from_html(
+    r#"<div class="container"><p class="line">x</p><p class="indent"><span class="mark"></span></p></div><p class="reference"><span class="mark"></span></p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".container { container-type: inline-size; width: 400px; line-height: 10cqw; text-indent: 5cqw }
+     p { margin: 0 }
+     .reference { text-indent: 5vw; line-height: 0 }
+     .mark { display: inline-block; width: 1px; height: 1px }",
+  );
+  let viewport_width = create_test_viewport().size.width.expect("has a width") as f32;
+  let container = &measured.children[0].children[0];
+
+  assert_eq!(container.children[0].height, viewport_width / 10.0);
+  assert_eq!(
+    container.children[1].children[0].transform[4],
+    measured.children[0].children[1].children[0].transform[4]
+  );
+}
+
+/// A `container-type` on a box size containment does not apply to, a non-atomic inline or a table,
+/// makes no size container, as Blink's `ContainerQueryEvaluator` keeps only the contained axes.
+#[test]
+fn a_box_without_size_containment_is_no_size_container() {
+  let node = Node::from_html(
+    r#"<div class="outer"><span class="inline"><b class="unit"></b></span><div class="table"><div class="cell"><i class="unit"></i><i class="queried"></i></div></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".outer { container-type: inline-size; width: 400px }
+     .inline, .table { container-type: inline-size }
+     .table { display: table; width: 100px }
+     .cell { display: table-cell }
+     .unit { display: inline-block; width: 10cqw; height: 1px }
+     .queried { display: block; width: 1px }
+     @container (width < 200px) { .queried { width: 50px } }",
+  );
+  let outer = &measured.children[0];
+  let cell = &outer.children[1].children[0].children[0].children[0];
+
+  assert_eq!(outer.children[0].children[0].width, 40.0);
+  assert_eq!(cell.children[0].children[0].width, 40.0);
+  assert_eq!(cell.children[1].width, 1.0);
 }
 
 /// An unknown condition holds of no container but leaves the other conditions of its list, as

@@ -530,6 +530,8 @@ impl_parser_traits!(StyleDeclarationParser, StyleDeclarationBlock);
 struct NestedStyleRuleParser<'a> {
   parent_selectors: SelectorList<SelectorImpl>,
   context: NestingContext<'a>,
+  /// Whether the body takes declarations as well as rules.
+  declarations: bool,
 }
 
 /// One declaration of a rule body, which a style sheet wrote.
@@ -655,7 +657,7 @@ impl<'i> RuleBodyItemParser<'i, StyleRuleBodyItem, StyleSheetParseError>
   }
 
   fn parse_declarations(&self) -> bool {
-    true
+    self.declarations
   }
 }
 
@@ -1129,9 +1131,30 @@ impl NestingContext<'_> {
     selectors: SelectorList<SelectorImpl>,
     input: &mut Parser<'i>,
   ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
+    self.parse_nested_body(selectors, input, true)
+  }
+
+  /// The body of a conditional group rule or `@layer` nested in a rule on `parent_selectors`,
+  /// which takes rules only in a nested `@scope`'s body, as Blink's
+  /// `ConsumeRuleListOrNestedDeclarationList` reads declarations only under a style rule.
+  fn parse_group_rule_block<'i>(
+    self,
+    parent_selectors: &SelectorList<SelectorImpl>,
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
+    self.parse_nested_body(parent_selectors.clone(), input, !self.scope_body)
+  }
+
+  fn parse_nested_body<'i>(
+    self,
+    selectors: SelectorList<SelectorImpl>,
+    input: &mut Parser<'i>,
+    declarations: bool,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let mut parser = NestedStyleRuleParser {
       parent_selectors: selectors.clone(),
       context: self,
+      declarations,
     };
 
     self.parse_rule_body(selectors, input, &mut parser)
@@ -1191,7 +1214,7 @@ impl NestingContext<'_> {
           layer: Some(&nested_layer),
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
       AtRulePrelude::Media(media_query) => {
         let mut media_queries = self.media_queries.to_vec();
@@ -1201,9 +1224,9 @@ impl NestingContext<'_> {
           media_queries: &media_queries,
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
-      AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
+      AtRulePrelude::Supports(true) => self.parse_group_rule_block(parent_selectors, input),
       AtRulePrelude::Supports(false) => Ok(skip_block(input)),
       AtRulePrelude::Container(query) => {
         let mut container_queries = self.container_queries.to_vec();
@@ -1213,7 +1236,7 @@ impl NestingContext<'_> {
           container_queries: &container_queries,
           ..self
         }
-        .parse_style_rule_block(parent_selectors.clone(), input)
+        .parse_group_rule_block(parent_selectors, input)
       }
       // A nested `@scope` roots at the elements its start selects relative to the rule around it,
       // or without a start at its `<style>` element's parent as Blink's `ConsumeScopeRule` makes an
@@ -2025,13 +2048,13 @@ impl StyleSheet {
     self.keyframes.extend(keyframes);
   }
 
-  /// Parses a list of stylesheets.
+  /// Parses a list of stylesheets, each on its own, into one sheet in their order.
   pub fn parse_list<I, S>(stylesheets: I) -> Result<Self, StyleSheetParseError>
   where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
   {
-    Self::parse(&concat_css(stylesheets))
+    Self::parse_with_mode(stylesheets, false)
   }
 
   /// Parses a list of stylesheets while discarding invalid rules.
@@ -2040,56 +2063,49 @@ impl StyleSheet {
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
   {
-    Self::parse_loosy(&concat_css(stylesheets))
+    Self::parse_with_mode(stylesheets, true).unwrap_or_default()
   }
 
   /// Parses a list of owned stylesheets while discarding invalid rules.
   pub fn parse_owned_list_loosy(stylesheets: Vec<String>) -> Self {
-    if stylesheets.is_empty() {
-      return Self::default();
-    }
-
-    if stylesheets.len() == 1 {
-      return Self::parse_loosy(&stylesheets[0]);
-    }
-
-    let mut combined_css = String::with_capacity(stylesheets.iter().map(String::len).sum());
-
-    for css in stylesheets {
-      combined_css.push_str(&css);
-    }
-
-    Self::parse_loosy(&combined_css)
+    Self::parse_list_loosy(stylesheets)
   }
 
   /// Parses a stylesheet.
   pub fn parse(css: &str) -> Result<Self, StyleSheetParseError> {
-    Self::parse_with_mode(css, false)
+    Self::parse_list([css])
   }
 
   /// Parses a stylesheet while discarding invalid rules.
   pub fn parse_loosy(css: &str) -> Self {
-    Self::parse_with_mode(css, true).unwrap_or_default()
+    Self::parse_list_loosy([css])
   }
 
-  fn parse_with_mode(css: &str, lossy: bool) -> Result<Self, StyleSheetParseError> {
-    let mut parser = Parser::new(css);
-    let mut rule_parser = RuleParser {
-      current_layer: None,
-      style_owner: None,
-      lossy,
-      scoped: false,
-      top_level: true,
-    };
-
+  /// Parses each of `stylesheets` on its own, as Blink's `CSSParserImpl::ParseStyleSheet` parses
+  /// each `StyleSheetContents`, so an unclosed block or comment ends with its sheet.
+  fn parse_with_mode<S: AsRef<str>>(
+    stylesheets: impl IntoIterator<Item = S>,
+    lossy: bool,
+  ) -> Result<Self, StyleSheetParseError> {
     let mut fragment = StyleSheetFragment::default();
 
-    for parsed in StyleSheetParser::new(&mut parser, &mut rule_parser) {
-      match parsed {
-        Ok(parsed) => fragment.extend(parsed),
-        Err((_, source, location)) if lossy => log_ignored(source, location),
-        Err((error, context, _)) => {
-          return Err(StyleSheetParseError::from_parse_error(context, error));
+    for css in stylesheets {
+      let mut parser = Parser::new(css.as_ref());
+      let mut rule_parser = RuleParser {
+        current_layer: None,
+        style_owner: None,
+        lossy,
+        scoped: false,
+        top_level: true,
+      };
+
+      for parsed in StyleSheetParser::new(&mut parser, &mut rule_parser) {
+        match parsed {
+          Ok(parsed) => fragment.extend(parsed),
+          Err((_, source, location)) if lossy => log_ignored(source, location),
+          Err((error, context, _)) => {
+            return Err(StyleSheetParseError::from_parse_error(context, error));
+          }
         }
       }
     }
@@ -2203,17 +2219,6 @@ fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
   }
 
   breakpoints
-}
-
-/// The stylesheets as one text, in order.
-fn concat_css<S: AsRef<str>>(stylesheets: impl IntoIterator<Item = S>) -> String {
-  let mut combined_css = String::new();
-
-  for css in stylesheets {
-    combined_css.push_str(css.as_ref());
-  }
-
-  combined_css
 }
 
 #[cfg(test)]

@@ -51,6 +51,7 @@ pub struct RadialGradient {
 
 impl MakeComputed for RadialGradient {
   fn make_computed(&mut self, sizing: &SizingContext) {
+    self.size.make_computed(sizing);
     self.center.make_computed(sizing);
     self.stops.make_computed(sizing);
   }
@@ -114,7 +115,14 @@ impl<'i> FromCss<'i> for RadialSize {
   ];
 }
 
-impl MakeComputed for RadialSize {}
+impl MakeComputed for RadialSize {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let Self::Explicit { radius_x, radius_y } = self {
+      radius_x.make_computed(sizing);
+      radius_y.make_computed(sizing);
+    }
+  }
+}
 
 /// Resolved geometry and stops shared by gradient renderers.
 pub struct RadialGradientGeometry {
