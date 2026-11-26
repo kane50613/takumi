@@ -181,8 +181,8 @@ impl CalcTerms {
   pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
     let viewport_width = sizing.viewport.unit_width();
     let viewport_height = sizing.viewport.unit_height();
-    let container_width = sizing.query_container_width();
-    let container_height = sizing.query_container_height();
+    let container_width = || sizing.query_container_width();
+    let container_height = || sizing.query_container_height();
     let mut absolute_css = 0.0;
     let mut px = 0.0;
     let mut percent = 0.0;
@@ -200,10 +200,10 @@ impl CalcTerms {
         CalcUnit::Ex => px += value * sizing.ex_basis(),
         CalcUnit::Vh => px += value * viewport_height / 100.0,
         CalcUnit::Vw => px += value * viewport_width / 100.0,
-        CalcUnit::Cqh => px += value * container_height / 100.0,
-        CalcUnit::Cqw => px += value * container_width / 100.0,
-        CalcUnit::CqMin => px += value * container_width.min(container_height) / 100.0,
-        CalcUnit::CqMax => px += value * container_width.max(container_height) / 100.0,
+        CalcUnit::Cqh => px += value * container_height() / 100.0,
+        CalcUnit::Cqw => px += value * container_width() / 100.0,
+        CalcUnit::CqMin => px += value * container_width().min(container_height()) / 100.0,
+        CalcUnit::CqMax => px += value * container_width().max(container_height()) / 100.0,
         CalcUnit::VMin => px += value * viewport_width.min(viewport_height) / 100.0,
         CalcUnit::VMax => px += value * viewport_width.max(viewport_height) / 100.0,
       }
