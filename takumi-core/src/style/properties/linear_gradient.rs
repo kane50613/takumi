@@ -589,7 +589,10 @@ impl Angle {
     Angle(value)
   }
 
-  /// The direction the angle points in, as degrees in [0, 360).
+  /// The direction the angle points in, as degrees in [0, 360). Approximate: rotation, skew,
+  /// `hue-rotate()`, and `offset-rotate` take their sines, cosines, and tangents from this, where
+  /// Blink's `SinCosDegrees` and `tan` read the specified degrees, so an angle past a turn can
+  /// differ from Chrome in the last bits of the matrix.
   pub fn normalized(self) -> f32 {
     self.0.rem_euclid(360.0)
   }
