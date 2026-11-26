@@ -54,3 +54,14 @@ const { height } = await measure("<footer>Page 1 of 12</footer>", { size: "a4" }
 ```
 
 The size is the document's own, not the space it laid out in. A box with `width: 100px` measures 100 wide on any page. See [Sizing the margin](/docs/pdf/headers#sizing-the-margin).
+
+## Render with @takumi-rs/core
+
+The native `Renderer` from `@takumi-rs/core` renders PDFs on Node.js and Bun without WebAssembly. `renderPdf(input, options?)` takes the same input and [`render()` options](/docs/pdf/reference/render) as `PdfRenderer.render()`, writes the same bytes, and resolves to a `Buffer`. `preparePdf(input, options?)` loads a document's fonts and images as `prepare()` does, and `renderPdf()` takes the prepared document. To measure a band, use `PdfRenderer.measure()`.
+
+```ts title="Render a PDF with the native renderer"
+import { Renderer } from "@takumi-rs/core";
+
+const renderer = new Renderer();
+const pdf = await renderer.renderPdf("<h1>Invoice 1042</h1>", { size: "a4" });
+```
