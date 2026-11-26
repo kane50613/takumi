@@ -3,7 +3,7 @@
 
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::Parser;
 use selectors::parser::{ParseRelative, Selector, SelectorList};
 
 use super::{extract_arbitrary_value, is_ident};
@@ -31,7 +31,7 @@ pub(crate) struct Breakpoint {
 impl Breakpoint {
   /// Parse a breakpoint from a token.
   pub fn parse(token: &str) -> Option<Self> {
-    let width = match_ignore_ascii_case! {token,
+    let width = match token {
       "sm" => Some(Length::Rem(40.0)),
       "md" => Some(Length::Rem(48.0)),
       "lg" => Some(Length::Rem(64.0)),
@@ -46,7 +46,7 @@ impl Breakpoint {
 
     Some(Breakpoint {
       width,
-      token: token.to_ascii_lowercase().into(),
+      token: token.into(),
     })
   }
 
@@ -549,7 +549,7 @@ fn split_top_level(token: &str, separator: u8) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-  use super::{Variant, Variants, condition, pseudo_class, split_variant};
+  use super::{Breakpoint, Variant, Variants, condition, pseudo_class, split_variant};
   use crate::style::selector::PseudoElement;
 
   #[test]
@@ -574,6 +574,16 @@ mod tests {
     ] {
       assert_eq!(pseudo_class(variant).as_deref(), expected, "{variant}");
     }
+  }
+
+  #[test]
+  fn variant_names_and_theme_keys_are_case_sensitive() {
+    assert_eq!(
+      Breakpoint::parse("SM").map(|breakpoint| breakpoint.width),
+      Some(None)
+    );
+    assert!(Variant::parse("@MD").is_none());
+    assert!(Variant::parse("@max-LG").is_none());
   }
 
   #[test]
