@@ -254,13 +254,7 @@
     </filter>
     <g filter="url(#ft2)">
       <rect x="0" y="0" width="140" height="140" fill="#000" fill-opacity="0"/>
-      <g transform="matrix(1 0 0 1 0 0)">
-      </g>
-      <g transform="matrix(1 0 0 1 0 0)">
-        <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
-      </g>
-      <g transform="matrix(1 0 0 1 0 0)">
-      </g>
+      <use href="#i0" transform="matrix(1.094 0 0 1.094 0 0)"/>
     </g>
   </g>
   <g transform="matrix(1.076 .229 -.229 1.076 996.692 194.673)">
