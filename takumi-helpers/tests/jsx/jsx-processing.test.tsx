@@ -817,6 +817,18 @@ describe("fromJsx", () => {
     });
   });
 
+  test("renames props as React DOM does", async () => {
+    const form = <form acceptCharset="utf-8" />;
+    const meta = <meta httpEquiv="refresh" />;
+
+    expect(renderToStaticMarkup(form)).toBe('<form accept-charset="utf-8"></form>');
+    expect(renderToStaticMarkup(meta)).toBe('<meta http-equiv="refresh"/>');
+    expect((await fromJsx(form)).node).toMatchObject({ attributes: { "accept-charset": "utf-8" } });
+    expect((await fromJsx({ type: "div", props: { httpEquiv: "refresh" } })).node).toMatchObject({
+      attributes: { "http-equiv": "refresh" },
+    });
+  });
+
   test("writes a number id and lang as text", async () => {
     const { node } = await fromJsx({
       type: "div",

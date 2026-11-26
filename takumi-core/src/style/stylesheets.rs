@@ -1050,7 +1050,7 @@ macro_rules! define_style {
         pub(crate) fn inherit_element(
           self,
           parent: &ComputedStyle,
-          lang: Option<Lang>,
+          lang: Option<Option<Lang>>,
           is_document_root: bool,
           sources: &[CascadeSource],
           animations: Option<&dyn AnimationOrigin>,
@@ -1058,7 +1058,7 @@ macro_rules! define_style {
           let mut style = self.cascade(parent, is_document_root, sources, animations);
 
           if let Some(lang) = lang {
-            style.lang = Some(lang);
+            style.lang = lang;
           }
           style
         }

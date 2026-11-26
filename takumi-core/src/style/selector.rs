@@ -124,8 +124,9 @@ pub(crate) struct SelectorImpl;
 // such as `:lang()`, `:dir()`, and the form control states, match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PseudoClass {
-  /// `:lang(en, fr, ...)` — one or more comma-separated BCP-47 basic-filtering ranges.
-  Lang(Vec<Box<str>>),
+  /// `:lang(en)`, by the one identifier stable Blink takes, as its `CSSSelectorParser` parses it
+  /// without `CSSLangExtendedRanges`.
+  Lang(Ident),
   /// `:dir(ltr)` or `:dir(rtl)`, by the keyword it names; any other keyword matches nothing.
   Dir(Ident),
   /// A form control state, such as `:disabled`.
@@ -140,14 +141,9 @@ impl ToCss for PseudoClass {
     W: Write,
   {
     match self {
-      Self::Lang(ranges) => {
+      Self::Lang(range) => {
         dest.write_str(":lang(")?;
-        for (i, range) in ranges.iter().enumerate() {
-          if i > 0 {
-            dest.write_str(", ")?;
-          }
-          dest.write_str(range)?;
-        }
+        range.to_css(dest)?;
         dest.write_char(')')
       }
       Self::Dir(direction) => {
@@ -314,15 +310,9 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     _after_part: bool,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
     if name.eq_ignore_ascii_case("lang") {
-      let ranges = parser.parse_comma_separated(|input| {
-        let token = input.next()?.clone();
-        match &token {
-          Token::Ident(ident) => Ok(ident.as_ref().into()),
-          Token::QuotedString(s) => Ok(s.as_ref().into()),
-          _ => Err(ParseError::unexpected_token()),
-        }
-      })?;
-      return Ok(PseudoClass::Lang(ranges));
+      let range = parser.expect_ident()?;
+
+      return Ok(PseudoClass::Lang(Ident::from(range.as_ref())));
     }
 
     if name.eq_ignore_ascii_case("dir") {
@@ -2519,18 +2509,19 @@ mod tests {
     assert_eq!(selector_text(&sheet.rules[2]), ".a::before");
   }
 
+  /// Stable Blink's `:lang()` takes one identifier and drops a rule with a list or a string.
   #[test]
-  fn test_lang_pseudo_class_round_trips_its_ranges() {
+  fn test_lang_pseudo_class_takes_one_identifier() {
     let sheet = parse_stylesheet_loosy(
       r#"
-        .a:lang(en) { color: blue; }
-        .a:lang(zh-Hant, "ja") { color: red; }
+        .a:lang(zh-Hant) { color: blue; }
+        .a:lang(en, fr) { color: red; }
+        .a:lang("ja") { color: red; }
       "#,
     );
 
-    assert_eq!(sheet.rules.len(), 2);
-    assert_eq!(selector_text(&sheet.rules[0]), ".a:lang(en)");
-    assert_eq!(selector_text(&sheet.rules[1]), ".a:lang(zh-Hant, ja)");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(selector_text(&sheet.rules[0]), ".a:lang(zh-Hant)");
   }
 
   #[test]

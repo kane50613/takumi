@@ -126,6 +126,8 @@ A point without a percentage sits evenly between its neighbours, and a point wit
 
 Pass `timeMs` to render the frame at that point of the timeline.
 
+An animation with `animation-play-state: paused` stays at its start whatever `timeMs` is, as in Chrome. To hold a fixed frame, pause it and pick the frame with a negative `animation-delay`, such as `-250ms`.
+
 ```tsx twoslash title="render.tsx"
 // @noErrors
 import { render } from "takumi-js";

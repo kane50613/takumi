@@ -191,8 +191,14 @@ fn active_animations<'s>(
       let keyframes = find_keyframes(stylesheet, name.as_ref()?, viewport)?;
       let duration: AnimationTime = repeated_list_value(&animation.animation_duration, index);
       let delay: AnimationTime = repeated_list_value(&animation.animation_delay, index);
+      // Blink pauses a paused CSS animation as it creates it, holding its current time at 0.
+      // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/animation/css/css_animations.cc>
+      let current_time = match repeated_list_value(&animation.animation_play_state, index) {
+        AnimationPlayState::Running => time as f32,
+        AnimationPlayState::Paused => 0.0,
+      };
       let sample = sample_animation_progress(
-        time as f32,
+        current_time,
         duration.milliseconds,
         delay.milliseconds,
         repeated_list_value(&animation.animation_iteration_count, index),
@@ -219,7 +225,7 @@ pub(crate) fn find_keyframes<'a>(
     .iter()
     .rev()
     .find(|rule| {
-      rule.name.eq_ignore_ascii_case(name)
+      rule.name == name
         && rule
           .media_queries
           .iter()
@@ -230,6 +236,16 @@ pub(crate) fn find_keyframes<'a>(
 }
 
 impl KeyframeRule {
+  /// The longhands its declarations set.
+  fn longhands(&self) -> PropertyMask {
+    let mut longhands = PropertyMask::new();
+
+    for declaration in self.declarations.iter() {
+      longhands.union(&declaration.affected_longhands());
+    }
+    longhands
+  }
+
   /// The `animation-timing-function` it declares, which eases the interval it starts.
   /// <https://drafts.csswg.org/css-animations-1/#keyframes>
   fn timing_function(&self) -> Option<AnimationTimingFunction> {
@@ -313,12 +329,8 @@ impl KeyframesRule {
   fn longhands(&self) -> PropertyMask {
     let mut longhands = PropertyMask::new();
 
-    for declaration in self
-      .keyframes
-      .iter()
-      .flat_map(|keyframe| keyframe.declarations.iter())
-    {
-      longhands.union(&declaration.affected_longhands());
+    for keyframe in &self.keyframes {
+      longhands.union(&keyframe.longhands());
     }
     longhands
   }
@@ -337,7 +349,7 @@ impl KeyframesRule {
 }
 
 fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
-  match name.to_ascii_lowercase().as_str() {
+  match name {
     "spin" => Some(KeyframesRule {
       name: "spin".to_string(),
       keyframes: vec![
@@ -422,29 +434,24 @@ fn keyframe<const N: usize>(offset: f32, declarations: [StyleDeclaration; N]) ->
 /// One sampled point on an animation's timeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct AnimationSample {
-  /// Progress through the current iteration.
+  /// Directed progress through the current iteration.
   progress: f32,
-  /// Whether the sample comes from before the active phase, which the step
-  /// easing functions treat as sitting on the lower step.
+  /// Whether a step easing function sitting exactly on a jump takes the lower step, which Blink
+  /// calls the left limit direction.
   before: bool,
 }
 
-impl AnimationSample {
-  fn active(progress: f32) -> Self {
-    Self {
-      progress,
-      before: false,
-    }
-  }
-
-  fn before(progress: f32) -> Self {
-    Self {
-      progress,
-      before: true,
-    }
-  }
+/// Where a sample falls against an animation's active interval.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AnimationPhase {
+  Before,
+  Active,
+  After,
 }
 
+/// The sample of an animation at `time_ms`, or `None` when it neither runs nor fills then, as
+/// Blink's `Timing::CalculateTimings` samples it.
+/// <https://w3.org/TR/web-animations-1/#core-animation-model-calculations>
 fn sample_animation_progress(
   time_ms: f32,
   duration_ms: f32,
@@ -453,80 +460,92 @@ fn sample_animation_progress(
   direction: AnimationDirection,
   fill_mode: AnimationFillMode,
 ) -> Option<AnimationSample> {
-  let active_time = time_ms - delay_ms;
-
-  if active_time < 0.0 {
-    return match fill_mode {
-      AnimationFillMode::Backwards | AnimationFillMode::Both => {
-        Some(AnimationSample::before(start_progress(direction)))
-      }
-      _ => None,
-    };
-  }
-
-  let total_active_duration = match iteration_count {
-    _ if duration_ms <= 0.0 => 0.0,
+  let iteration_count = match iteration_count {
     AnimationIterationCount::Infinite => f32::INFINITY,
-    AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
+    AnimationIterationCount::Number(count) => count.max(0.0),
+  };
+  let duration_ms = duration_ms.max(0.0);
+  let active_duration = if duration_ms == 0.0 || iteration_count == 0.0 {
+    0.0
+  } else {
+    duration_ms * iteration_count
+  };
+  let local_active_time = time_ms - delay_ms;
+  let fills_backwards = matches!(
+    fill_mode,
+    AnimationFillMode::Backwards | AnimationFillMode::Both
+  );
+  let fills_forwards = matches!(
+    fill_mode,
+    AnimationFillMode::Forwards | AnimationFillMode::Both
+  );
+  let (phase, active_time) = if local_active_time < 0.0 {
+    (AnimationPhase::Before, fills_backwards.then_some(0.0)?)
+  } else if local_active_time >= active_duration {
+    (
+      AnimationPhase::After,
+      fills_forwards.then_some(active_duration)?,
+    )
+  } else {
+    (AnimationPhase::Active, local_active_time)
   };
 
-  if active_time >= total_active_duration {
-    return match fill_mode {
-      AnimationFillMode::Forwards | AnimationFillMode::Both => {
-        let end_progress = match iteration_count {
-          AnimationIterationCount::Infinite => end_progress(direction, 0),
-          AnimationIterationCount::Number(count) => {
-            let count = count.max(0.0);
-            let completed_iterations = count.floor() as usize;
-            let fraction = count.fract();
-            if fraction > f32::EPSILON {
-              apply_direction(fraction, direction, completed_iterations)
-            } else {
-              end_progress(direction, count.max(1.0) as usize - 1)
-            }
-          }
-        };
-        Some(AnimationSample::active(end_progress))
-      }
-      _ => None,
+  let overall_progress = match phase {
+    _ if duration_ms > 0.0 => active_time / duration_ms,
+    AnimationPhase::Before => 0.0,
+    _ => iteration_count,
+  };
+  let mut simple_progress = if overall_progress.is_infinite() {
+    0.0
+  } else {
+    overall_progress.fract()
+  };
+
+  if simple_progress <= f32::EPSILON && phase == AnimationPhase::After && iteration_count != 0.0 {
+    simple_progress = 1.0;
+  }
+
+  let current_iteration = if phase == AnimationPhase::After && iteration_count.is_infinite() {
+    f32::INFINITY
+  } else if simple_progress == 1.0 {
+    (overall_progress.floor() - 1.0).max(0.0)
+  } else {
+    overall_progress.floor()
+  };
+  let forwards = is_current_direction_forwards(direction, current_iteration);
+  let mut progress = if forwards {
+    simple_progress
+  } else {
+    1.0 - simple_progress
+  };
+
+  if phase == AnimationPhase::After {
+    progress = match forwards {
+      true if (progress - 1.0).abs() <= f32::EPSILON => 1.0,
+      false if progress.abs() <= f32::EPSILON => 0.0,
+      _ => progress,
     };
   }
 
-  let overall_progress = active_time / duration_ms;
-
-  Some(AnimationSample::active(apply_direction(
-    overall_progress.fract(),
-    direction,
-    overall_progress.floor() as usize,
-  )))
+  Some(AnimationSample {
+    progress,
+    before: if forwards {
+      phase == AnimationPhase::Before
+    } else {
+      phase == AnimationPhase::After
+    },
+  })
 }
 
-fn start_progress(direction: AnimationDirection) -> f32 {
-  apply_direction(0.0, direction, 0)
-}
+/// Whether `direction` plays the iteration at `current_iteration` forwards.
+fn is_current_direction_forwards(direction: AnimationDirection, current_iteration: f32) -> bool {
+  let even = current_iteration.is_infinite() || current_iteration % 2.0 == 0.0;
 
-fn end_progress(direction: AnimationDirection, iteration_index: usize) -> f32 {
-  apply_direction(1.0, direction, iteration_index)
-}
-
-fn apply_direction(progress: f32, direction: AnimationDirection, iteration_index: usize) -> f32 {
   match direction {
-    AnimationDirection::Normal => progress,
-    AnimationDirection::Reverse => 1.0 - progress,
-    AnimationDirection::Alternate => {
-      if iteration_index.is_multiple_of(2) {
-        progress
-      } else {
-        1.0 - progress
-      }
-    }
-    AnimationDirection::AlternateReverse => {
-      if iteration_index.is_multiple_of(2) {
-        1.0 - progress
-      } else {
-        progress
-      }
-    }
+    AnimationDirection::Normal => true,
+    AnimationDirection::Reverse => false,
+    AnimationDirection::Alternate => even,
+    AnimationDirection::AlternateReverse => !even,
   }
 }
 
@@ -573,8 +592,6 @@ impl ResolvedKeyframe {
   /// Approximate: a CSS-wide keyword in a keyframe keeps the base style's value, where Blink rolls
   /// `revert` back to the user-agent origin and resolves `inherit` and `unset` against the parent.
   fn apply(&mut self, keyframe: &KeyframeRule) {
-    self.timing_function = keyframe.timing_function().or(self.timing_function);
-
     for declaration in keyframe.declarations.iter() {
       declaration.apply_to_computed(&mut self.style);
       self.mask.extend(declaration.affected_longhands().iter());
@@ -582,7 +599,9 @@ impl ResolvedKeyframe {
   }
 }
 
-/// An animation's keyframes in offset order, those at one offset merged, each over the base style.
+/// An animation's keyframes in offset order, each over the base style, as Blink's
+/// `CreateKeyframeEffectModel` builds them: those at one offset with one timing function merged,
+/// and a longhand at an offset taken from the last keyframe that declares it there.
 #[derive(Debug)]
 struct ResolvedKeyframes {
   frames: Vec<ResolvedKeyframe>,
@@ -606,22 +625,35 @@ impl ResolvedKeyframes {
     let mut frames: Vec<ResolvedKeyframe> = Vec::with_capacity(points.len());
 
     for (offset, keyframe) in points {
-      if let Some(last) = frames.last_mut()
-        && (last.offset - offset).abs() <= f32::EPSILON
+      let timing_function = keyframe.timing_function();
+      let longhands = keyframe.longhands();
+      let mut matching = None;
+
+      for frame in frames
+        .iter_mut()
+        .rev()
+        .take_while(|frame| (frame.offset - offset).abs() <= f32::EPSILON)
       {
-        last.apply(keyframe);
-        continue;
+        frame.mask.difference(&longhands);
+        if matching.is_none() && frame.timing_function == timing_function {
+          matching = Some(frame);
+        }
       }
 
-      let mut frame = ResolvedKeyframe {
-        offset,
-        style: base_style.clone(),
-        mask: PropertyMask::new(),
-        timing_function: None,
-      };
+      match matching {
+        Some(frame) => frame.apply(keyframe),
+        None => {
+          let mut frame = ResolvedKeyframe {
+            offset,
+            style: base_style.clone(),
+            mask: PropertyMask::new(),
+            timing_function,
+          };
 
-      frame.apply(keyframe);
-      frames.push(frame);
+          frame.apply(keyframe);
+          frames.push(frame);
+        }
+      }
     }
 
     Self { frames }
@@ -780,7 +812,7 @@ mod tests {
   use crate::{
     style::{
       SizingContext,
-      animation::{sample_animation_progress, tailwind_animation_keyframes},
+      animation::{find_keyframes, sample_animation_progress, tailwind_animation_keyframes},
       *,
     },
     viewport::Viewport,
@@ -849,6 +881,44 @@ mod tests {
     assert_eq!(animated.svg_data.opacity.0, 0.5);
   }
 
+  /// A paused animation holds the frame at its start time, whatever the render's time.
+  #[test]
+  fn a_paused_animation_holds_its_start_time() {
+    let (style, stylesheet) = linear_animation("from { opacity: 0 } to { opacity: 1 }");
+    let paused = |delay: &str| {
+      let mut style = style.clone();
+      let animation = Rc::make_mut(&mut style.misc1_data);
+
+      animation.animation_play_state = AnimationPlayStates::from_css_str("paused").unwrap();
+      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animate(style, &stylesheet, 500).svg_data.opacity.0
+    };
+
+    assert_eq!(paused("0ms"), 0.0);
+    assert_eq!(paused("-250ms"), 0.25);
+  }
+
+  /// A step easing takes its lower step on the side the iteration's direction plays away from:
+  /// before the start played forwards, after the end played in reverse.
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-transformed-progress>
+  #[test]
+  fn a_reversed_step_takes_its_limit_from_the_playback_direction() {
+    let (style, stylesheet) = linear_animation("from { opacity: 0 } to { opacity: 1 }");
+    let reversed = |timing: &str, delay: &str, fill: &str, time| {
+      let mut style = style.clone();
+      let animation = Rc::make_mut(&mut style.misc1_data);
+
+      animation.animation_timing_function = AnimationTimingFunctions::from_css_str(timing).unwrap();
+      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animation.animation_fill_mode = AnimationFillModes::from_css_str(fill).unwrap();
+      animation.animation_direction = AnimationDirections::from_css_str("reverse").unwrap();
+      animate(style, &stylesheet, time).svg_data.opacity.0
+    };
+
+    assert_eq!(reversed("steps(2, start)", "0ms", "forwards", 1500), 0.0);
+    assert_eq!(reversed("steps(2)", "500ms", "backwards", 0), 1.0);
+  }
+
   /// A linear 1000ms animation of `keyframes` on a default style.
   fn linear_animation(keyframes: &str) -> (ComputedStyle, StyleSheet) {
     let stylesheet = StyleSheet::parse(&format!("@keyframes k {{ {keyframes} }}")).unwrap();
@@ -890,6 +960,19 @@ mod tests {
 
     assert_eq!(at(250), 0.0);
     assert_eq!(at(750), 0.75);
+  }
+
+  /// Keyframes at one offset with different timing functions stay apart, so each eases only the
+  /// longhands it declares.
+  #[test]
+  fn a_keyframe_timing_function_eases_only_its_own_declarations() {
+    let (style, stylesheet) = linear_animation(
+      "0% { opacity: 0 } 0% { rotate: 0deg; animation-timing-function: steps(1, end) } 100% { opacity: 1; rotate: 90deg }",
+    );
+    let animated = animate(style, &stylesheet, 500);
+
+    assert_eq!(animated.svg_data.opacity.0, 0.5);
+    assert_eq!(animated.misc3_data.rotate, Some(Angle::new(0.0)));
   }
 
   /// `style` with every animation it runs at `time` applied.
@@ -1418,6 +1501,25 @@ mod tests {
     assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
   }
 
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-simple-iteration-progress>
+  #[test]
+  fn a_zero_iteration_animation_fills_forwards_with_its_start() {
+    let sample = |direction| {
+      sample_animation_progress(
+        500.0,
+        1000.0,
+        0.0,
+        AnimationIterationCount::Number(0.0),
+        direction,
+        AnimationFillMode::Forwards,
+      )
+      .map(|sample| sample.progress)
+    };
+
+    assert_eq!(sample(AnimationDirection::Normal), Some(0.0));
+    assert_eq!(sample(AnimationDirection::Reverse), Some(1.0));
+  }
+
   #[test]
   fn a_zero_duration_animation_fills_only_forwards() {
     let sample = |fill_mode| {
@@ -1436,6 +1538,17 @@ mod tests {
     assert_eq!(sample(AnimationFillMode::Backwards), None);
     assert_eq!(sample(AnimationFillMode::Forwards), Some(1.0));
     assert_eq!(sample(AnimationFillMode::Both), Some(1.0));
+  }
+
+  /// Blink's `StyleResolver::FindKeyframesRule` matches a keyframes name exactly.
+  #[test]
+  fn a_keyframes_name_matches_case_sensitively() {
+    let stylesheet = StyleSheet::parse("@keyframes Fade { from { opacity: 0 } }").unwrap();
+    let viewport = sizing().viewport;
+
+    assert!(find_keyframes(&stylesheet, "Fade", viewport).is_some());
+    assert!(find_keyframes(&stylesheet, "fade", viewport).is_none());
+    assert!(find_keyframes(&stylesheet, "Spin", viewport).is_none());
   }
 
   #[test]

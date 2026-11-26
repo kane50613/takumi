@@ -5,7 +5,7 @@ packages:
 
 # JSX writes boolean attributes as React DOM does
 
-`aria-*` and `data-*` props, `draggable`, `contentEditable`, and `spellCheck` keep `false` as the text `"false"` and write `true` as `"true"`, so attribute selectors match them as in the browser. `htmlFor` is written as `for`.
+`aria-*` and `data-*` props, `draggable`, `contentEditable`, and `spellCheck` keep `false` as the text `"false"` and write `true` as `"true"`, so attribute selectors match them as in the browser. `htmlFor`, `acceptCharset`, and `httpEquiv` are written as `for`, `accept-charset`, and `http-equiv`.
 
 ```tsx
 <div aria-hidden={false} draggable />
