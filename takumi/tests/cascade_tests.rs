@@ -1136,6 +1136,27 @@ fn paragraph(css: &str) -> (f32, f32) {
   )
 }
 
+/// A layer's own rules outrank its sublayers, as Blink's `ComputeLayerOrder` numbers a layer after
+/// them, so `revert-layer` outside every layer reaches the layer's own rules.
+#[test]
+fn a_layer_outranks_its_sublayers() {
+  assert_eq!(
+    paragraph("@layer a { .box { width: 10px } } @layer a.b { .box { width: 20px } }").0,
+    10.0
+  );
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { width: 10px } } @layer a.b { .box { width: 20px } } p.box { width: revert-layer }"
+    )
+    .0,
+    10.0
+  );
+  assert_eq!(
+    paragraph("@layer a { .box { width: revert-layer } } @layer a.b { .box { width: 20px } }").0,
+    20.0
+  );
+}
+
 /// `revert`, `revert-layer`, and `revert-rule` roll a property back to a weaker declaration, as
 /// Blink's `StyleCascade` resolves them, or to `unset` without one.
 #[test]

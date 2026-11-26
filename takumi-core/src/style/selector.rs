@@ -73,6 +73,40 @@ impl LayerName {
 
 pub(crate) type LayerPath = Vec<LayerName>;
 
+/// The cascade layers under one layer, each with its own sublayers, in the order they first
+/// appear, as Blink's `CascadeLayer` holds its direct sublayers.
+#[derive(Default)]
+struct LayerTree(Vec<(LayerName, LayerTree)>);
+
+impl LayerTree {
+  /// Adds the layer at `path` and each layer above it that is not yet in the tree.
+  fn insert(&mut self, path: &[LayerName]) {
+    let Some((name, rest)) = path.split_first() else {
+      return;
+    };
+    let index = match self.0.iter().position(|(sublayer, _)| sublayer == name) {
+      Some(index) => index,
+      None => {
+        self.0.push((name.clone(), Self::default()));
+        self.0.len() - 1
+      }
+    };
+
+    self.0[index].1.insert(rest);
+  }
+
+  /// Numbers each layer under `path` after its own sublayers, from `orders.len()`, as Blink's
+  /// `ComputeLayerOrder` walks the tree.
+  fn number(&self, path: &mut LayerPath, orders: &mut HashMap<LayerPath, usize>) {
+    for (name, sublayers) in &self.0 {
+      path.push(name.clone());
+      sublayers.number(path, orders);
+      orders.insert(path.clone(), orders.len());
+      path.pop();
+    }
+  }
+}
+
 /// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Ident(String);
@@ -1212,12 +1246,14 @@ impl NestingContext<'_> {
           return Ok(StyleSheetFragment::default());
         };
         let nested_layer = extend_layer_name(self.layer, layer_name);
-
-        NestingContext {
+        let mut fragment = NestingContext {
           layer: Some(&nested_layer),
           ..self
         }
-        .parse_group_rule_block(parent_selectors, input)
+        .parse_group_rule_block(parent_selectors, input)?;
+
+        fragment.declared_layers.insert(0, nested_layer);
+        Ok(fragment)
       }
       AtRulePrelude::Media(media_query) => {
         let mut media_queries = self.media_queries.to_vec();
@@ -2138,16 +2174,18 @@ impl StyleSheet {
       rules = preflight_rules;
     }
 
-    let mut layer_order = HashMap::<LayerPath, usize>::new();
-    let used_layers = rules.iter().filter_map(|rule| rule.layer.clone());
+    let mut layers = LayerTree::default();
+    let used_layers = rules.iter().filter_map(|rule| rule.layer.as_ref());
     #[cfg(feature = "font-face")]
-    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.clone()));
-    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.clone()));
+    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.as_ref()));
+    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.as_ref()));
 
-    for layer_name in declared_layers.into_iter().chain(used_layers) {
-      let next_order = layer_order.len();
-      layer_order.entry(layer_name).or_insert(next_order);
+    for layer_name in declared_layers.iter().chain(used_layers) {
+      layers.insert(layer_name);
     }
+    let mut layer_order = HashMap::new();
+
+    layers.number(&mut Vec::new(), &mut layer_order);
 
     for rule in &mut rules {
       rule.layer_order = rule
@@ -3522,6 +3560,36 @@ mod tests {
     };
 
     assert!(first < second);
+  }
+
+  /// Layers order as Blink's `ComputeLayerOrder` walks their tree: a layer after its sublayers, and
+  /// the sublayers of one layer together.
+  #[test]
+  fn a_layer_orders_after_its_sublayers() {
+    let sheet = parse_stylesheet("@layer a { .x { width: 1px } } @layer a.b { .x { width: 2px } }");
+    let [a, a_b] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(a_b < a);
+
+    let sheet = parse_stylesheet(
+      "@layer a.b; @layer c; @layer a.d;
+       @layer c { .x { width: 1px } } @layer a.d { .x { width: 2px } } @layer a.b { .x { width: 3px } }",
+    );
+    let [c, a_d, a_b] = rule_layer_orders(&sheet)[..] else {
+      panic!("three rules");
+    };
+
+    assert!(a_b < a_d && a_d < c);
+
+    let sheet =
+      parse_stylesheet(".x { @layer b { width: 1px } } @layer c { .x { width: 2px } }");
+    let [b, c] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(b < c);
   }
 
   /// An invalid layer name drops its block; it does not fall back to an
