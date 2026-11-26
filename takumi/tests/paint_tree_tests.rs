@@ -871,9 +871,9 @@ fn a_conic_gradient_from_a_huge_angle_spans_a_full_turn() {
       Drawable::Fill { paint, .. } => Some(paint),
       _ => None,
     })
-    .filter_map(|paint| match paint {
-      Paint::Pattern { tile, .. } => Some(tile.as_ref()),
-      paint => Some(paint),
+    .map(|paint| match paint {
+      Paint::Pattern { tile, .. } => tile.as_ref(),
+      paint => paint,
     })
     .filter_map(|paint| match paint {
       Paint::ConicGradient {
