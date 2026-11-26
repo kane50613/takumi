@@ -177,6 +177,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "JSXImage",
+    image: "https://jsximage.com/examples/hero.png",
+    url: "https://jsximage.com/?utm_source=takumi&utm_medium=showcase",
+    width: 1200,
+    height: 630,
+   },
 ];
 
 export const showcaseTemplates: Template[] = [
