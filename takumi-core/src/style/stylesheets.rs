@@ -3032,6 +3032,8 @@ fn apply_winning_declarations(
       .apply_with_parent(style, parent);
   }
 
+  // Approximate: the declared `direction` maps the logical longhands, where Blink applies an
+  // animated `direction` first and maps them with it.
   let rtl = style.inherited_data.direction == Direction::Rtl;
   let phase = |longhand: LonghandId| match longhand {
     longhand if HIGH_PRIORITY[0].contains(&longhand) => 0,
