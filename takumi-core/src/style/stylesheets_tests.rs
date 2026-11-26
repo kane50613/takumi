@@ -2268,3 +2268,20 @@ fn clip_path_with_incomplete_path_data_is_invalid() {
     "path('M0 0 L 10 10')"
   ));
 }
+
+#[test]
+fn declared_text_align_stops_at_a_later_var() {
+  let declared =
+    |css: &str| Style::from(StyleDeclarationBlock::parse_loosy(css)).declared_text_align();
+
+  assert_eq!(declared("text-align: center"), Some(TextAlign::Center));
+  assert_eq!(
+    declared("text-align: center; color: var(--ink)"),
+    Some(TextAlign::Center)
+  );
+  assert_eq!(
+    declared("text-align: center; text-align: var(--align, left)"),
+    None
+  );
+  assert_eq!(declared("text-align: center; text-align: inherit"), None);
+}
