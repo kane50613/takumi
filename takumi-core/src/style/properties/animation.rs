@@ -37,7 +37,6 @@ impl<'i> FromCss<'i> for AnimationTime {
         "s" => Ok(Self::from_milliseconds(*value * 1000.0)),
         _ => Err(unexpected_token!(token)),
       },
-      Token::Number { value, .. } if *value == 0.0 => Ok(Self::from_milliseconds(0.0)),
       _ => Err(unexpected_token!(token)),
     }
   }
@@ -690,6 +689,30 @@ mod tests {
     assert_eq!(
       AnimationTime::from_css_str("2s"),
       Ok(AnimationTime::from_milliseconds(2000.0))
+    );
+  }
+
+  /// Blink's `ConsumeTime` takes a dimension alone, so a unitless `0` is an iteration count.
+  #[test]
+  fn a_unitless_zero_is_no_animation_time() {
+    assert!(AnimationTime::from_css_str("0").is_err());
+    assert_eq!(
+      Animations::from_css_str("fade 1s 0"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        iteration_count: AnimationIterationCount::Number(0.0),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
+    );
+    assert_eq!(
+      Animations::from_css_str("fade 0 1s"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        iteration_count: AnimationIterationCount::Number(0.0),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
     );
   }
 
