@@ -2,7 +2,6 @@
 
 use std::{cell::OnceCell, collections::HashMap, fmt, iter::successors, ops::Deref, sync::Arc};
 
-use cssparser::match_ignore_ascii_case;
 use rustc_hash::FxHashMap;
 use selectors::{
   Element, OpaqueElement, SelectorImpl as SelectorImplTrait,
@@ -860,8 +859,12 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
         Component::Class(class) => keep(SelectorKey::Class(class.to_string())),
         Component::AttributeInNoNamespaceExists {
           local_name_lower, ..
-        } => keep(attribute_key(local_name_lower)),
-        Component::AttributeInNoNamespace { local_name, .. } => keep(attribute_key(local_name)),
+        } => keep(SelectorKey::Attribute(
+          local_name_lower.to_ascii_lowercase(),
+        )),
+        Component::AttributeInNoNamespace { local_name, .. } => {
+          keep(SelectorKey::Attribute(local_name.to_ascii_lowercase()))
+        }
         Component::LocalName(name) => {
           keep(SelectorKey::Tag(name.lower_name.to_ascii_lowercase()));
         }
@@ -872,14 +875,6 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
     if iter.next_sequence() != Some(Combinator::PseudoElement) {
       return key;
     }
-  }
-}
-
-/// `id`, `class`, and `lang` live outside a node's attribute map, so they key no bucket.
-fn attribute_key(name: &str) -> SelectorKey {
-  match_ignore_ascii_case! { name,
-    "id" | "class" | "lang" => SelectorKey::Any,
-    _ => SelectorKey::Attribute(name.to_ascii_lowercase()),
   }
 }
 
@@ -1735,7 +1730,8 @@ mod tests {
     let css = "[DATA-X] { color: red } [data-y='1'] { color: red } [id] { color: red }";
     let node = Node::container([]).with_attributes(BTreeMap::from([("data-X".into(), "".into())]));
 
-    assert_eq!(candidates(css, &node), [0, 2]);
-    assert_eq!(candidates(css, &Node::container([])), [2]);
+    assert_eq!(candidates(css, &node), [0]);
+    assert_eq!(candidates(css, &Node::container([]).with_id("x")), [2]);
+    assert_eq!(candidates(css, &Node::container([])), [0; 0]);
   }
 }

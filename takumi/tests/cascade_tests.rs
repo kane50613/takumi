@@ -1596,3 +1596,54 @@ fn a_query_container_keeps_its_children_margins() {
 
   assert_eq!(measured.children[0].height, 24.0);
 }
+
+/// The attributes a node holds in its own fields match attribute selectors as the rest do.
+#[test]
+fn attributes_held_in_fields_match_attribute_selectors() {
+  let width = |html: &str, css: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), css).children[0].width
+  };
+
+  assert_eq!(
+    width(
+      r#"<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/%3E">"#,
+      r#"img[src^="data:image/svg"] { width: 30px }"#,
+    ),
+    30.0
+  );
+  for (attribute, selector) in [
+    (r#"dir="rtl""#, r#"[dir="rtl"]"#),
+    (r#"lang="en-US""#, r#"[lang|="en"]"#),
+    (r#"class="a b""#, "[class~=b]"),
+    (r#"id="x""#, "[id]"),
+  ] {
+    assert_eq!(
+      width(
+        &format!("<div {attribute}></div>"),
+        &format!("div{selector} {{ width: 30px }}"),
+      ),
+      30.0,
+      "{selector}"
+    );
+  }
+}
+
+#[test]
+fn generated_content_reads_attributes_held_in_fields() {
+  for attribute in ["dir", "lang"] {
+    let html = format!(
+      r#"<div {attribute}="{}"></div>"#,
+      if attribute == "dir" { "rtl" } else { "en" }
+    );
+    let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parses");
+    let css =
+      format!("div {{ display: inline-block }} div::before {{ content: attr({attribute}) }}");
+
+    assert!(
+      measure_with_css(Node::container([node]), &css).children[0].width > 0.0,
+      "attr({attribute})"
+    );
+  }
+}
