@@ -362,7 +362,7 @@ impl KeyframesRule {
   }
 }
 
-/// Tailwind's theme `@keyframes`, which it emits once a utility reads their `--animate-*` variable.
+/// Tailwind's theme `@keyframes`, which it emits once a utility's `animation` names them.
 /// <https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/theme.css>
 ///
 /// Approximate: Tailwind's `spin` is one `to { transform: rotate(360deg) }`. An [`Angle`] keeps

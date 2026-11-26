@@ -3,6 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
+  ptr,
   sync::{
     Arc, LazyLock,
     atomic::{AtomicUsize, Ordering},
@@ -429,6 +430,8 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 struct StyleSheetFragment {
   rules: Vec<CssRule>,
   keyframes: Vec<KeyframesRule>,
+  /// The theme `@keyframes` its `@apply` rules read, which rank below every `@keyframes` rule.
+  theme_keyframes: Vec<&'static KeyframesRule>,
   property_rules: Vec<PropertyRule>,
   #[cfg(feature = "font-face")]
   font_faces: Vec<FontFaceRule>,
@@ -451,6 +454,15 @@ impl StyleSheetFragment {
   fn extend(&mut self, other: Self) {
     self.rules.extend(other.rules);
     self.keyframes.extend(other.keyframes);
+    for rule in other.theme_keyframes {
+      if !self
+        .theme_keyframes
+        .iter()
+        .any(|known| ptr::eq(*known, rule))
+      {
+        self.theme_keyframes.push(rule);
+      }
+    }
     self.property_rules.extend(other.property_rules);
     #[cfg(feature = "font-face")]
     self.font_faces.extend(other.font_faces);
@@ -701,7 +713,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
   ) -> Result<Self::AtRule, ()> {
     match prelude {
       // A rule on the parent's selectors, so declarations around `@apply` keep their order.
-      AtRulePrelude::Apply(block) => {
+      AtRulePrelude::Apply(block, theme_keyframes) => {
         let (normal, important) = block.split_importance();
 
         Ok(StyleRuleBodyItem::Rules(StyleSheetFragment {
@@ -709,6 +721,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
             self.parent_selectors.clone(),
             RuleDeclarations { normal, important },
           )],
+          theme_keyframes,
           ..StyleSheetFragment::default()
         }))
       }
@@ -882,8 +895,9 @@ enum AtRulePrelude {
   TailwindImport {
     preflight: bool,
   },
-  /// `@apply`, already expanded into the declarations its utilities stand for.
-  Apply(Box<StyleDeclarationBlock>),
+  /// `@apply`, already expanded into the declarations its utilities stand for and the theme
+  /// `@keyframes` they read.
+  Apply(Box<StyleDeclarationBlock>, Vec<&'static KeyframesRule>),
   /// `@scope`, its root and limit selectors.
   Scope(Scope),
   /// `@container`, its query.
@@ -1349,7 +1363,7 @@ impl NestingContext<'_> {
       | AtRulePrelude::Page(_)
       | AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::StyleOwner(_)
-      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+      | AtRulePrelude::Apply(..) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
     }
@@ -1485,10 +1499,10 @@ fn parse_at_rule_prelude<'i>(
     }
     source.push_str(input.slice_from(start));
 
-    let block = expand_apply(&source)
+    let (block, theme_keyframes) = expand_apply(&source)
       .ok_or_else(|| ParseError::custom(StyleSheetParseErrorKind::InvalidApplyUtility))?;
 
-    return Ok(AtRulePrelude::Apply(Box::new(block)));
+    return Ok(AtRulePrelude::Apply(Box::new(block), theme_keyframes));
   }
 
   if name.eq_ignore_ascii_case("theme") {
@@ -1665,7 +1679,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
       AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::StyleOwner(_)
-      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+      | AtRulePrelude::Apply(..) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
       AtRulePrelude::Media(media_query) => {
@@ -2198,6 +2212,7 @@ impl StyleSheet {
     let StyleSheetFragment {
       mut rules,
       keyframes,
+      theme_keyframes,
       property_rules,
       #[cfg(feature = "font-face")]
       mut font_faces,
@@ -2269,7 +2284,11 @@ impl StyleSheet {
       breakpoints: collect_breakpoints(&rules),
       rule_index: Arc::new(RuleIndex::build(&rules)),
       rules: rules.into(),
-      keyframes,
+      keyframes: theme_keyframes
+        .into_iter()
+        .cloned()
+        .chain(keyframes)
+        .collect(),
       property_rules,
       #[cfg(feature = "font-face")]
       font_faces,

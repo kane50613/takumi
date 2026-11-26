@@ -923,7 +923,10 @@ impl Node {
     cache: &TailwindCache,
     keyframes: &mut Vec<&'static KeyframesRule>,
   ) {
-    for rule in self.tw_rules(cache).filter_map(|rule| rule.theme_keyframes) {
+    for rule in self
+      .tw_rules(cache)
+      .flat_map(|rule| rule.theme_keyframes.iter().copied())
+    {
       if !keyframes.iter().any(|known| ptr::eq(*known, rule)) {
         keyframes.push(rule);
       }

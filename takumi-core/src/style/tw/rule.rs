@@ -3,7 +3,10 @@
 //! sorts them.
 
 use crate::sort_key::sort_by_key;
-use std::cmp::{Ordering, Reverse};
+use std::{
+  cmp::{Ordering, Reverse},
+  mem::take,
+};
 
 use selectors::parser::Selector;
 use smallvec::SmallVec;
@@ -147,7 +150,7 @@ pub(crate) struct TwRule {
   /// A digest of the utility's token, which names the rule among the ones a box matched.
   pub(crate) id: u64,
   /// The theme `@keyframes` Tailwind emits once the utility is used.
-  pub(crate) theme_keyframes: Option<&'static KeyframesRule>,
+  pub(crate) theme_keyframes: Box<[&'static KeyframesRule]>,
 }
 
 impl TwRule {
@@ -171,7 +174,7 @@ impl TwRule {
 
     utility::emit(token, &mut builder)?;
 
-    let theme_keyframes = builder.theme_keyframes;
+    let theme_keyframes = take(&mut builder.theme_keyframes).into_boxed_slice();
 
     Self::new(
       source,
@@ -188,7 +191,7 @@ impl TwRule {
     declarations: StyleDeclarationBlock,
     important: bool,
     variants: Variants,
-    theme_keyframes: Option<&'static KeyframesRule>,
+    theme_keyframes: Box<[&'static KeyframesRule]>,
   ) -> Option<Self> {
     const CLASS_SPECIFICITY: u32 = 1 << 10;
 

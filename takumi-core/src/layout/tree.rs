@@ -3929,43 +3929,66 @@ mod tests {
     result.unwrap_or_default()
   }
 
-  /// Tailwind emits its theme `@keyframes` once a `tw` utility in the document reads them, so a
-  /// stylesheet's `animation: pulse` runs only beside an `animate-pulse`.
+  /// The opacity of each child of a root holding `children`, one second into their animations
+  /// under `css`.
+  fn opacities_after_one_second(css: &str, children: Vec<Node>) -> Vec<f32> {
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(parse_stylesheet(css)))
+      .time_ms(1000)
+      .build();
+    let tree = RenderNode::from_node(&context, Node::container(children));
+
+    tree
+      .children
+      .as_deref()
+      .expect("block children")
+      .iter()
+      .map(|child| child.context.style.svg_data.opacity.0)
+      .collect()
+  }
+
+  /// Tailwind emits its theme `@keyframes` once a `tw` utility in the document names them, so a
+  /// stylesheet's `animation: pulse` runs only beside an `animate-pulse` or `animate-[pulse…]`.
   #[test]
   fn theme_keyframes_run_only_once_a_tw_utility_reads_them() {
-    let opacities = |with_tw: bool| {
-      let context = RenderContext::builder()
-        .fonts(Fonts::default().snapshot())
-        .sizing(
-          SizingContext::builder()
-            .viewport(Viewport::default())
-            .build(),
-        )
-        .stylesheet(Arc::new(parse_stylesheet(
-          ".plain { animation: pulse 2s linear }",
-        )))
-        .time_ms(1000)
-        .build();
-      let mut children = vec![Node::container([]).with_class_name("plain")];
+    let css = ".plain { animation: pulse 2s linear }";
+    let plain = || Node::container([]).with_class_name("plain");
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
 
-      if with_tw {
-        children
-          .push(Node::container([]).with_tw(TailwindValues::from_str("animate-pulse").unwrap()));
-      }
+    assert_eq!(opacities_after_one_second(css, vec![plain()]), [1.0]);
+    assert_eq!(
+      opacities_after_one_second(css, vec![plain(), tw("animate-pulse")]),
+      [0.5, 0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second("", vec![tw("animate-[pulse_2s_linear]")]),
+      [0.5]
+    );
+  }
 
-      let tree = RenderNode::from_node(&context, Node::container(children));
+  /// Tailwind keeps the theme `@keyframes` an `@apply`'d utility reads, below the stylesheet's own.
+  #[test]
+  fn theme_keyframes_run_for_an_applied_utility() {
+    let applied = || vec![Node::container([]).with_class_name("a")];
 
-      tree
-        .children
-        .as_deref()
-        .expect("block children")
-        .iter()
-        .map(|child| child.context.style.svg_data.opacity.0)
-        .collect::<Vec<_>>()
-    };
-
-    assert_eq!(opacities(false), [1.0]);
-    assert_eq!(opacities(true), [0.5, 0.5]);
+    assert_eq!(
+      opacities_after_one_second(".a { @apply animate-pulse; }", applied()),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@keyframes pulse { from, to { opacity: 0.25 } } .a { @apply animate-pulse; }",
+        applied()
+      ),
+      [0.25]
+    );
   }
 
   /// A style every row repeats stays shared while the rows' other styles come and go.

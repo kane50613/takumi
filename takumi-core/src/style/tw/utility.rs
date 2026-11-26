@@ -1,7 +1,7 @@
 //! The utilities, keyed by root as Tailwind's [`Utilities`](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/src/utilities.ts)
 //! registers them: a root alone, as `border` is, or a root and a value, as `border-2` is.
 
-use std::sync::Arc;
+use std::{mem::take, sync::Arc};
 
 use phf::phf_map;
 
@@ -129,7 +129,7 @@ impl Utility {
         ValueMatch::Emitted => {}
       }
 
-      builder.theme_keyframes = builtin.theme_keyframes;
+      builder.theme_keyframes = take(&mut builtin.theme_keyframes);
 
       let declarations = builtin.finish().declarations;
 
@@ -1005,11 +1005,15 @@ fn animation(animation: TwAnimation, builder: &mut TailwindDeclarationBuilder) {
   let TwAnimation { animations, token } = animation;
 
   let Some(token) = token else {
+    builder.theme_keyframes = animations
+      .iter()
+      .filter_map(|animation| tailwind_theme_keyframes(animation.name.as_deref()?))
+      .collect();
     builder.push_all(StyleDeclaration::expand_animation(animations));
     return;
   };
 
-  builder.theme_keyframes = tailwind_theme_keyframes(&token);
+  builder.theme_keyframes = tailwind_theme_keyframes(&token).into_iter().collect();
 
   let fallback = animation_shorthand_css(&animations);
   let specified_value = if fallback.is_empty() {
