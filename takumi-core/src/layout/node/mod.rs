@@ -562,12 +562,8 @@ impl Node {
     if let Some(class_name) = &self.metadata.class_name {
       attrs.push(format!("class=\"{}\"", escape_attr(class_name)));
     }
-    if let Some(dir) = &self.metadata.dir {
-      let dir_str = match dir {
-        Direction::Rtl => "rtl",
-        Direction::Ltr => "ltr",
-      };
-      attrs.push(format!("dir=\"{}\"", dir_str));
+    if let Some(dir) = self.metadata.dir {
+      attrs.push(format!("dir=\"{}\"", dir.as_str()));
     }
     if let Some(lang) = &self.metadata.lang
       && !self

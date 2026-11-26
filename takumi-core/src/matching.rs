@@ -653,11 +653,7 @@ impl Element for ArenaElement<'_> {
     let range = match pc {
       PseudoClass::Lang(range) => range,
       PseudoClass::Dir(direction) => {
-        return *direction
-          == match self.directionality() {
-            Direction::Ltr => "ltr",
-            Direction::Rtl => "rtl",
-          };
+        return *direction == self.directionality().as_str();
       }
       PseudoClass::FormState(state) => return self.matches_form_state(*state),
       PseudoClass::Other(_) => return false,
