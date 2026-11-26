@@ -783,6 +783,15 @@ describe("fromJsx", () => {
     } satisfies ContainerNode);
   });
 
+  test("writes a number id and lang as text", async () => {
+    const { node } = await fromJsx({
+      type: "div",
+      props: { id: 5, lang: 5, children: "a" },
+    });
+
+    expect(node).toMatchObject({ id: "5", lang: "5" });
+  });
+
   test("extracts style tag contents into css", async () => {
     const { node, css } = await fromJsx(
       <div>

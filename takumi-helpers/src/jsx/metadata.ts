@@ -52,9 +52,9 @@ export class NodeMetadataReader {
     return {
       tagName,
       className,
-      id: props.id,
+      id: textValue(props.id),
       dir,
-      lang: props.lang,
+      lang: textValue(props.lang),
       attributes: this.attributes(tagName, props, dir !== undefined),
       tw: typeof tw === "string" ? tw : undefined,
       style,
@@ -95,6 +95,13 @@ export class NodeMetadataReader {
 
     return attributes;
   }
+}
+
+/** The text of a string, number, or bigint prop. */
+function textValue(value: unknown): string | undefined {
+  return typeof value === "string" || typeof value === "number" || typeof value === "bigint"
+    ? String(value)
+    : undefined;
 }
 
 /** The `dir` field a `dir` attribute sets, which only the lowercase `ltr` and `rtl` do, so any other spelling stays an attribute. */
