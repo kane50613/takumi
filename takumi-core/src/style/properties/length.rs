@@ -294,6 +294,16 @@ impl Length {
   /// Whether the length is authored as a negative value. A `calc()` result is
   /// not known before it resolves, so it counts as non-negative here.
   pub(crate) fn is_negative(self) -> bool {
+    self.authored_number().is_some_and(|value| value < 0.0)
+  }
+
+  /// Whether the length is authored as zero. A `calc()` result counts as non-zero here.
+  pub(crate) fn is_zero(self) -> bool {
+    self.authored_number().is_some_and(|value| value == 0.0)
+  }
+
+  /// The number the length is authored with, none for `auto` or a `calc()`.
+  fn authored_number(self) -> Option<f32> {
     match self {
       Self::Percentage(value)
       | Self::Rem(value)
@@ -316,8 +326,8 @@ impl Length {
       | Self::Q(value)
       | Self::Pt(value)
       | Self::Pc(value)
-      | Self::Px(value) => value < 0.0,
-      Self::Auto | Self::Calc(_) | Self::Math(_) => false,
+      | Self::Px(value) => Some(value),
+      Self::Auto | Self::Calc(_) | Self::Math(_) => None,
     }
   }
 

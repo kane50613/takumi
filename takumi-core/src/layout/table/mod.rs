@@ -23,6 +23,7 @@ pub(crate) use self::{
   constraint_space_data::TablePartSpace,
   fragment::HiddenParts,
   layout::{TableLayoutAlgorithm, TableStructure},
+  parts::TABLE_CELL_TAGS,
 };
 pub use self::{fragment::TableFragment, parts::TableSectionKind};
 

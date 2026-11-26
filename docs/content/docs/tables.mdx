@@ -33,6 +33,7 @@ Takumi lays out tables with a port of [Chromium's table layout](https://source.c
 ## Columns and spans
 
 - `colspan` and `rowspan` work on `<td>` and `<th>`. The JSX props are `colSpan` and `rowSpan`.
+- The `width` and `height` attributes of `<td>` and `<th>` size the cell in pixels or percent, and `nowrap` keeps its text on one line. CSS wins over all three.
 - A `rowspan` stops at the end of its row group.
 - `<col>` and `<colgroup>` widths size their columns. `span` covers several columns.
 - Columns share the table's width by their content.

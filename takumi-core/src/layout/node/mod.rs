@@ -1,6 +1,8 @@
 mod container;
+mod html_dimension;
 mod image;
 mod input;
+mod table_cell;
 
 use std::{cell::RefCell, collections::BTreeMap, mem::take, sync::Arc};
 
@@ -669,6 +671,10 @@ impl Node {
 
     self.push_image_size_preset(&mut preset);
 
+    let mut presentation = self.metadata.presentation.take();
+
+    self.push_table_cell_presentation(&mut presentation);
+
     let mut inline = self.metadata.style.take();
 
     if let Some(inline) = &mut inline {
@@ -677,7 +683,7 @@ impl Node {
 
     NodeStyleLayers {
       preset,
-      presentation: self.metadata.presentation.take(),
+      presentation,
       inline,
       dir: self.metadata.dir.take(),
       lang: self.metadata.lang.take(),

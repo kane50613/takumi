@@ -8,6 +8,9 @@ use crate::{
   style::{BorderCollapse, ComputedStyle, Display},
 };
 
+/// The tags of Blink's `HTMLTableCellElement`.
+pub(crate) const TABLE_CELL_TAGS: [&str; 2] = ["td", "th"];
+
 /// Blink's `kMaxColSpan` (`core/html/table_constants.h`).
 const MAX_COLSPAN: u32 = 1000;
 
@@ -243,14 +246,14 @@ impl RenderNode {
   /// 1000.
   pub fn table_cell_colspan(&self) -> usize {
     self
-      .span_attribute(&["td", "th"], "colspan", 1, MAX_COLSPAN)
+      .span_attribute(&TABLE_CELL_TAGS, "colspan", 1, MAX_COLSPAN)
       .map_or(1, |span| span as usize)
   }
 
   /// Blink's `LayoutTableCell::ComputedRowSpan`: a `td` or `th` element's `rowspan` attribute up
   /// to 65534, a zero spanning every row left.
   pub fn table_cell_rowspan(&self) -> usize {
-    match self.span_attribute(&["td", "th"], "rowspan", 0, MAX_ROWSPAN) {
+    match self.span_attribute(&TABLE_CELL_TAGS, "rowspan", 0, MAX_ROWSPAN) {
       Some(0) => MAX_ROWSPAN as usize,
       Some(span) => span as usize,
       None => 1,
