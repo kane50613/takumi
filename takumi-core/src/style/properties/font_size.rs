@@ -30,19 +30,37 @@ pub enum FontSizeKeyword {
   XXXLarge,
 }
 
+/// Blink's `kStrictFontSizeTable`, the keyword sizes of each `medium` size from 9px to 16px.
+const FONT_SIZE_TABLE: [[u8; 8]; 8] = [
+  [9, 9, 9, 9, 11, 14, 18, 27],
+  [9, 9, 9, 10, 12, 15, 20, 30],
+  [9, 9, 10, 11, 13, 17, 22, 33],
+  [9, 9, 10, 12, 14, 18, 24, 36],
+  [9, 10, 12, 13, 16, 20, 26, 39],
+  [9, 10, 12, 14, 17, 21, 28, 42],
+  [9, 10, 13, 15, 18, 23, 30, 45],
+  [9, 10, 13, 16, 18, 24, 32, 48],
+];
+
+/// Blink's `kFontSizeFactors`, the keyword sizes as multiples of a `medium` size the table lacks.
+const FONT_SIZE_FACTORS: [f32; 8] = [0.6, 0.75, 0.89, 1.0, 1.2, 1.5, 2.0, 3.0];
+
 impl FontSizeKeyword {
-  /// Resolves the keyword to its root-relative CSS length.
-  pub(crate) const fn to_length(self) -> Length {
-    match self {
-      Self::XXSmall => Length::Rem(0.6),
-      Self::XSmall => Length::Rem(0.75),
-      Self::Small => Length::Rem(8.0 / 9.0),
-      Self::Medium => Length::Rem(1.0),
-      Self::Large => Length::Rem(1.2),
-      Self::XLarge => Length::Rem(1.5),
-      Self::XXLarge => Length::Rem(2.0),
-      Self::XXXLarge => Length::Rem(3.0),
+  /// The keyword's CSS length when `medium` is `medium_size` CSS pixels, as Blink's
+  /// `FontSizeFunctions::FontSizeForKeyword` sizes it in standards mode.
+  ///
+  /// Approximate: `medium` is the viewport's font size for every family, where Blink takes the
+  /// smaller default fixed font size, 13px, for the generic `monospace` family, and a size outside
+  /// the table is not raised to Blink's minimum logical font size.
+  pub(crate) fn to_length(self, medium_size: f32) -> Length {
+    let column = self as usize;
+    let row = medium_size as usize;
+
+    if medium_size.fract() == 0.0 && (9..=16).contains(&row) {
+      return Length::Px(f32::from(FONT_SIZE_TABLE[row - 9][column]));
     }
+
+    Length::Px(FONT_SIZE_FACTORS[column] * medium_size)
   }
 }
 
@@ -79,7 +97,9 @@ impl FontSize {
   /// Resolves to pixels against the inherited font size.
   pub fn to_px(self, sizing: &SizingContext, inherited_font_size: f32) -> f32 {
     match self {
-      Self::Keyword(keyword) => keyword.to_length().to_px(sizing, inherited_font_size),
+      Self::Keyword(keyword) => keyword
+        .to_length(sizing.viewport.font_size)
+        .to_px(sizing, inherited_font_size),
       Self::Length(length) => length.to_px(sizing, inherited_font_size),
       Self::Larger => inherited_font_size * RELATIVE_SIZE_RATIO,
       Self::Smaller => inherited_font_size / RELATIVE_SIZE_RATIO,
@@ -87,9 +107,9 @@ impl FontSize {
   }
 
   /// The length this size animates as; `larger`/`smaller` scale `1em`.
-  fn to_length(self) -> Length {
+  fn to_length(self, sizing: &SizingContext) -> Length {
     match self {
-      Self::Keyword(keyword) => keyword.to_length(),
+      Self::Keyword(keyword) => keyword.to_length(sizing.viewport.font_size),
       Self::Length(length) => length,
       Self::Larger => Length::Em(RELATIVE_SIZE_RATIO),
       Self::Smaller => Length::Em(1.0 / RELATIVE_SIZE_RATIO),
@@ -170,8 +190,8 @@ impl Animatable for FontSize {
     current_color: Color,
   ) {
     *self = Self::Length(Length::interpolated(
-      &from.to_length(),
-      &to.to_length(),
+      &from.to_length(sizing),
+      &to.to_length(sizing),
       progress,
       sizing,
       current_color,
@@ -234,6 +254,24 @@ mod tests {
       .build();
 
     assert_eq!(FontSize::default().to_px(&sizing, sizing.font_size), 16.0);
+  }
+
+  /// <https://drafts.csswg.org/css-fonts-4/#absolute-size-mapping>
+  #[test]
+  fn keywords_size_from_the_default_font_size_not_the_root() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(20.0)
+      .root_font_size(Some(20.0))
+      .line_height(0.0)
+      .ch(10.0)
+      .ex(10.0)
+      .build();
+    let px = |css| FontSize::from_css_str(css).unwrap().to_px(&sizing, 20.0);
+
+    assert_eq!(px("medium"), 16.0);
+    assert_eq!(px("small"), 13.0);
+    assert_eq!(px("xx-large"), 32.0);
   }
 
   #[test]
