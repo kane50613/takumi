@@ -244,6 +244,30 @@ describe("prepare", () => {
     }
   });
 
+  test("removes its fallback listener once each task settles", async () => {
+    const any = Object.getOwnPropertyDescriptor(AbortSignal, "any");
+    const { signal } = new AbortController();
+    const added = spyOn(signal, "addEventListener");
+    const removed = spyOn(signal, "removeEventListener");
+
+    Reflect.deleteProperty(AbortSignal, "any");
+
+    try {
+      await renderer.render("<p>hi</p>", { width: 8, height: 8, signal });
+      await renderer.renderSvg("<p>hi</p>", { width: 8, height: 8, signal });
+      await renderer.measure("<p>hi</p>", { width: 8, height: 8, signal });
+
+      expect(added).toHaveBeenCalledTimes(3);
+      expect(removed.mock.calls.map(([, listener]) => listener)).toEqual(
+        added.mock.calls.map(([, listener]) => listener),
+      );
+    } finally {
+      if (any) {
+        Object.defineProperty(AbortSignal, "any", any);
+      }
+    }
+  });
+
   test("leaves a render without font subsets to read nothing ahead", async () => {
     const needs = spyOn(RendererInternal.prototype, "needs");
 

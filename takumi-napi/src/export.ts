@@ -109,7 +109,9 @@ export class Renderer {
     const native = toNativeSource(source);
 
     return prepareSource(this.fonts, native, layout, extras, (request) =>
-      this.inner.needs(native, ...needsArgs(layout, request), taskSignal(extras.signal)),
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.needs(native, ...needsArgs(layout, request), signal),
+      ),
     );
   }
 
@@ -123,7 +125,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.render(native, opts, taskSignal(signal)),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.render(native, opts, task)),
     );
   }
 
@@ -137,7 +140,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.renderSvg(native, opts, taskSignal(signal)),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.renderSvg(native, opts, task)),
     );
   }
 
@@ -151,7 +155,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.measure(native, opts, taskSignal(signal)),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.measure(native, opts, task)),
     );
   }
 
@@ -172,7 +177,9 @@ export class Renderer {
       source instanceof Prepared ? source : await this.readPdf(source, options, readSource),
       source instanceof Prepared ? options : { signal: options.signal },
       (native, opts, signal) =>
-        this.inner.renderPdf(native, opts satisfies PdfBindingOptions, taskSignal(signal)),
+        withTaskSignal(signal, (task) =>
+          this.inner.renderPdf(native, opts satisfies PdfBindingOptions, task),
+        ),
     );
   }
 
@@ -185,11 +192,8 @@ export class Renderer {
     return collectPdf(this.fonts, source, options, collect, (native, layout, request, signal) => {
       const [needsOptions, fonts] = needsArgs(layout, request);
 
-      return this.inner.pdfNeeds(
-        native,
-        needsOptions satisfies PdfBindingOptions,
-        fonts,
-        taskSignal(signal),
+      return withTaskSignal(signal, (task) =>
+        this.inner.pdfNeeds(native, needsOptions satisfies PdfBindingOptions, fonts, task),
       );
     });
   }
@@ -203,7 +207,9 @@ export class Renderer {
     const native = toNativeSource(source);
 
     return readSource(this.fonts, native, layout, extras, (request) =>
-      this.inner.needs(native, ...needsArgs(layout, request), taskSignal(extras.signal)),
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.needs(native, ...needsArgs(layout, request), signal),
+      ),
     );
   }
 
@@ -228,7 +234,8 @@ export class Renderer {
       this.fonts,
       prepared,
       { signal: source instanceof Prepared ? options.signal : source.signal },
-      (scenes, opts, signal) => this.inner.renderAnimation({ ...opts, scenes }, taskSignal(signal)),
+      (scenes, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.renderAnimation({ ...opts, scenes }, task)),
     );
   }
 
@@ -244,9 +251,8 @@ export class Renderer {
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
 
     return collect(this.fonts, sources, layout, extras, (request) =>
-      this.inner.animationNeeds(
-        ...needsArgs({ ...layout, scenes: sources }, request),
-        taskSignal(extras.signal),
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.animationNeeds(...needsArgs({ ...layout, scenes: sources }, request), signal),
       ),
     );
   }
@@ -275,24 +281,32 @@ export class Renderer {
   }
 }
 
-/** A fresh signal following `signal` for one native task, since napi-rs replaces its `onabort` and stops cancelling at the first finished task sharing it. */
-function taskSignal(signal: AbortSignal | undefined): AbortSignal | undefined {
+/** Runs `task` with a fresh signal following `signal`, since napi-rs replaces its `onabort` and stops cancelling at the first finished task sharing it. */
+async function withTaskSignal<T>(
+  signal: AbortSignal | undefined,
+  task: (signal: AbortSignal | undefined) => Promise<T>,
+): Promise<T> {
   if (!signal) {
-    return undefined;
+    return task(undefined);
   }
 
   // https://nodejs.org/api/globals.html#static-method-abortsignalanysignals arrived in Node 18.17.
   if (typeof AbortSignal.any === "function") {
-    return AbortSignal.any([signal]);
+    return task(AbortSignal.any([signal]));
   }
 
   const controller = new AbortController();
+  const abort = () => controller.abort(signal.reason);
 
   if (signal.aborted) {
-    controller.abort(signal.reason);
+    abort();
   } else {
-    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+    signal.addEventListener("abort", abort, { once: true });
   }
 
-  return controller.signal;
+  try {
+    return await task(controller.signal);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
 }
