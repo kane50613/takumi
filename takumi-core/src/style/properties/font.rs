@@ -182,7 +182,14 @@ mod tests {
   #[test]
   fn an_unquoted_css_wide_keyword_is_no_family() {
     assert!(FontShorthand::from_css_str("16px inherit").is_err());
-    assert!(FontShorthand::from_css_str("16px Foo default").is_err());
+    assert!(FontShorthand::from_css_str("16px default").is_err());
+    // Blink's `ConcatenateFamilyName` rejects a keyword only as the whole name.
+    assert_eq!(
+      FontShorthand::from_css_str("16px Foo default")
+        .expect("parses")
+        .family,
+      FontFamily::from_css_str("\"Foo default\"").expect("family")
+    );
     assert_eq!(
       FontShorthand::from_css_str("16px \"inherit\"")
         .expect("parses")

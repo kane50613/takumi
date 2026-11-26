@@ -143,7 +143,7 @@ impl<'i> FromCss<'i> for FontFamilyToken {
     let first = input.expect_ident_cloned()?;
     let mut family_name = first.to_string();
 
-    while let Ok(ident) = input.try_parse(|input| input.expect_ident_cloned()) {
+    while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       family_name.push(' ');
       family_name.push_str(&ident);
     }
