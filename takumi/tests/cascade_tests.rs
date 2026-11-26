@@ -2158,3 +2158,22 @@ fn a_scope_start_in_a_scope_body_is_relative_to_its_root() {
     [1200.0, 30.0, 30.0]
   );
 }
+
+/// Declarations directly in a top-level `@scope` apply to its root at no specificity, and the rule
+/// after them still parses, as Blink's `ConsumeBlockContents` makes them nested declarations on
+/// `:where(:scope)`.
+#[test]
+fn declarations_in_a_scope_body_apply_to_its_root() {
+  assert_eq!(
+    card_widths("@scope (.card) { width: 100px; p { width: 30px } }"),
+    [100.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths(".card { width: 200px } @scope (.card) { width: 100px }")[0],
+    200.0
+  );
+  assert_eq!(
+    card_widths("* { width: 200px } @scope (.card) { width: 100px }")[0],
+    100.0
+  );
+}

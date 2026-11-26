@@ -532,6 +532,21 @@ struct NestedStyleRuleParser<'a> {
   context: NestingContext<'a>,
 }
 
+/// One declaration of a rule body, which a style sheet wrote.
+fn parse_body_declaration<'i>(
+  name: CowRcStr<'i>,
+  input: &mut Parser<'i>,
+  state: &ParserState,
+) -> Result<StyleRuleBodyItem, ParseError<StyleSheetParseError>> {
+  let mut parser = StyleDeclarationParser {
+    origin: DeclarationOrigin::StyleSheet,
+  };
+  parser
+    .parse_value(name, input, state)
+    .map(Box::new)
+    .map(StyleRuleBodyItem::Declarations)
+}
+
 impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
   type Declaration = StyleRuleBodyItem;
   type Error = StyleSheetParseError;
@@ -542,13 +557,7 @@ impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
     input: &mut Parser<'i>,
     state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<Self::Error>> {
-    let mut parser = StyleDeclarationParser {
-      origin: DeclarationOrigin::StyleSheet,
-    };
-    parser
-      .parse_value(name, input, state)
-      .map(Box::new)
-      .map(StyleRuleBodyItem::Declarations)
+    parse_body_declaration(name, input, state)
   }
 }
 
@@ -1122,19 +1131,27 @@ impl NestingContext<'_> {
     selectors: SelectorList<SelectorImpl>,
     input: &mut Parser<'i>,
   ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
-    let mut declarations = RuleDeclarations::default();
-    let mut fragment = StyleSheetFragment::default();
     let mut parser = NestedStyleRuleParser {
       parent_selectors: selectors.clone(),
       context: self,
     };
+
+    self.parse_rule_body(selectors, input, &mut parser)
+  }
+
+  /// The rules a body `parser` reads gives: each run of its declarations a rule on `selectors`, in
+  /// order with the rules nested in it.
+  fn parse_rule_body<'i>(
+    self,
+    selectors: SelectorList<SelectorImpl>,
+    input: &mut Parser<'i>,
+    parser: &mut impl RuleBodyItemParser<'i, StyleRuleBodyItem, StyleSheetParseError>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
+    let mut declarations = RuleDeclarations::default();
+    let mut fragment = StyleSheetFragment::default();
     let mut ignored = Vec::new();
 
-    for item in recover(
-      RuleBodyParser::new(input, &mut parser),
-      self.lossy,
-      &mut ignored,
-    ) {
+    for item in recover(RuleBodyParser::new(input, parser), self.lossy, &mut ignored) {
       match item? {
         StyleRuleBodyItem::Declarations(block) => declarations.push(*block),
         StyleRuleBodyItem::Rules(nested_rules) => {
@@ -1214,18 +1231,12 @@ impl NestingContext<'_> {
           owner,
           parent: self.scope.cloned(),
         });
-        let root = SelectorList::parse(
-          &TakumiSelectorParser,
-          &mut Parser::new(":where(:scope)"),
-          ParseRelative::No,
-        )?;
-
         NestingContext {
           scope: Some(&scope),
           scope_body: true,
           ..self
         }
-        .parse_style_rule_block(root, input)
+        .parse_style_rule_block(scope_root_selectors()?, input)
       }
       AtRulePrelude::Unknown(at_rule) => {
         skip_block(input);
@@ -1589,11 +1600,14 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Scope(scope) => {
         let owner = scope.start.is_none().then_some(self.style_owner).flatten();
         let scope = Arc::new(Scope { owner, ..scope });
-        let mut fragment = Self {
+        let mut body = ScopeBodyParser(Self {
           scoped: true,
           ..self.nested(self.current_layer.clone())
-        }
-        .parse_fragment(input)?;
+        });
+        let mut fragment =
+          self
+            .context()
+            .parse_rule_body(scope_root_selectors()?, input, &mut body)?;
 
         for rule in &mut fragment.rules {
           rule.scope = Some(match &rule.scope {
@@ -1663,6 +1677,102 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Unknown(at_rule) => Ok(StyleSheetFragment::ignoring(*at_rule)),
       _ => Err(()),
     }
+  }
+}
+
+/// The selectors of the declarations directly in an `@scope`, which apply to its root with no
+/// specificity. <https://drafts.csswg.org/css-cascade-6/#scoped-declarations>
+fn scope_root_selectors() -> Result<SelectorList<SelectorImpl>, ParseError<StyleSheetParseError>> {
+  SelectorList::parse(
+    &TakumiSelectorParser,
+    &mut Parser::new(":where(:scope)"),
+    ParseRelative::No,
+  )
+  .map_err(ParseError::into)
+}
+
+/// The direct body of a top-level `@scope`, which takes the rules a style sheet does and, as
+/// Blink's `ConsumeBlockContents` reads it, declarations.
+struct ScopeBodyParser(RuleParser);
+
+impl<'i> DeclarationParser<'i> for ScopeBodyParser {
+  type Declaration = StyleRuleBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_value(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i>,
+    state: &ParserState,
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
+    parse_body_declaration(name, input, state)
+  }
+}
+
+impl<'i> QualifiedRuleParser<'i> for ScopeBodyParser {
+  type Prelude = SelectorList<SelectorImpl>;
+  type QualifiedRule = StyleRuleBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_prelude(
+    &mut self,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
+    QualifiedRuleParser::parse_prelude(&mut self.0, input)
+  }
+
+  fn parse_block(
+    &mut self,
+    selectors: Self::Prelude,
+    location: &ParserState,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
+    QualifiedRuleParser::parse_block(&mut self.0, selectors, location, input)
+      .map(StyleRuleBodyItem::Rules)
+  }
+}
+
+impl<'i> AtRuleParser<'i> for ScopeBodyParser {
+  type Prelude = AtRulePrelude;
+  type AtRule = StyleRuleBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_prelude(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
+    AtRuleParser::parse_prelude(&mut self.0, name, input)
+  }
+
+  fn parse_block(
+    &mut self,
+    prelude: Self::Prelude,
+    location: &ParserState,
+    input: &mut Parser<'i>,
+  ) -> Result<Self::AtRule, ParseError<Self::Error>> {
+    AtRuleParser::parse_block(&mut self.0, prelude, location, input).map(StyleRuleBodyItem::Rules)
+  }
+
+  fn rule_without_block(
+    &mut self,
+    prelude: Self::Prelude,
+    start: &ParserState,
+  ) -> Result<Self::AtRule, ()> {
+    self
+      .0
+      .rule_without_block(prelude, start)
+      .map(StyleRuleBodyItem::Rules)
+  }
+}
+
+impl<'i> RuleBodyItemParser<'i, StyleRuleBodyItem, StyleSheetParseError> for ScopeBodyParser {
+  fn parse_qualified(&self) -> bool {
+    true
+  }
+
+  fn parse_declarations(&self) -> bool {
+    true
   }
 }
 
