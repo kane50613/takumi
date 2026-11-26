@@ -236,6 +236,16 @@ pub(crate) fn find_keyframes<'a>(
 }
 
 impl KeyframeRule {
+  /// The longhands its declarations set.
+  fn longhands(&self) -> PropertyMask {
+    let mut longhands = PropertyMask::new();
+
+    for declaration in self.declarations.iter() {
+      longhands.union(&declaration.affected_longhands());
+    }
+    longhands
+  }
+
   /// The `animation-timing-function` it declares, which eases the interval it starts.
   /// <https://drafts.csswg.org/css-animations-1/#keyframes>
   fn timing_function(&self) -> Option<AnimationTimingFunction> {
@@ -319,12 +329,8 @@ impl KeyframesRule {
   fn longhands(&self) -> PropertyMask {
     let mut longhands = PropertyMask::new();
 
-    for declaration in self
-      .keyframes
-      .iter()
-      .flat_map(|keyframe| keyframe.declarations.iter())
-    {
-      longhands.union(&declaration.affected_longhands());
+    for keyframe in &self.keyframes {
+      longhands.union(&keyframe.longhands());
     }
     longhands
   }
@@ -583,8 +589,6 @@ impl ResolvedKeyframe {
   /// Approximate: a CSS-wide keyword in a keyframe keeps the base style's value, where Blink rolls
   /// `revert` back to the user-agent origin and resolves `inherit` and `unset` against the parent.
   fn apply(&mut self, keyframe: &KeyframeRule) {
-    self.timing_function = keyframe.timing_function().or(self.timing_function);
-
     for declaration in keyframe.declarations.iter() {
       declaration.apply_to_computed(&mut self.style);
       self.mask.extend(declaration.affected_longhands().iter());
@@ -592,7 +596,9 @@ impl ResolvedKeyframe {
   }
 }
 
-/// An animation's keyframes in offset order, those at one offset merged, each over the base style.
+/// An animation's keyframes in offset order, each over the base style, as Blink's
+/// `CreateKeyframeEffectModel` builds them: those at one offset with one timing function merged,
+/// and a longhand at an offset taken from the last keyframe that declares it there.
 #[derive(Debug)]
 struct ResolvedKeyframes {
   frames: Vec<ResolvedKeyframe>,
@@ -616,22 +622,35 @@ impl ResolvedKeyframes {
     let mut frames: Vec<ResolvedKeyframe> = Vec::with_capacity(points.len());
 
     for (offset, keyframe) in points {
-      if let Some(last) = frames.last_mut()
-        && (last.offset - offset).abs() <= f32::EPSILON
+      let timing_function = keyframe.timing_function();
+      let longhands = keyframe.longhands();
+      let mut matching = None;
+
+      for frame in frames
+        .iter_mut()
+        .rev()
+        .take_while(|frame| (frame.offset - offset).abs() <= f32::EPSILON)
       {
-        last.apply(keyframe);
-        continue;
+        frame.mask.difference(&longhands);
+        if matching.is_none() && frame.timing_function == timing_function {
+          matching = Some(frame);
+        }
       }
 
-      let mut frame = ResolvedKeyframe {
-        offset,
-        style: base_style.clone(),
-        mask: PropertyMask::new(),
-        timing_function: None,
-      };
+      match matching {
+        Some(frame) => frame.apply(keyframe),
+        None => {
+          let mut frame = ResolvedKeyframe {
+            offset,
+            style: base_style.clone(),
+            mask: PropertyMask::new(),
+            timing_function,
+          };
 
-      frame.apply(keyframe);
-      frames.push(frame);
+          frame.apply(keyframe);
+          frames.push(frame);
+        }
+      }
     }
 
     Self { frames }
@@ -938,6 +957,19 @@ mod tests {
 
     assert_eq!(at(250), 0.0);
     assert_eq!(at(750), 0.75);
+  }
+
+  /// Keyframes at one offset with different timing functions stay apart, so each eases only the
+  /// longhands it declares.
+  #[test]
+  fn a_keyframe_timing_function_eases_only_its_own_declarations() {
+    let (style, stylesheet) = linear_animation(
+      "0% { opacity: 0 } 0% { rotate: 0deg; animation-timing-function: steps(1, end) } 100% { opacity: 1; rotate: 90deg }",
+    );
+    let animated = animate(style, &stylesheet, 500);
+
+    assert_eq!(animated.svg_data.opacity.0, 0.5);
+    assert_eq!(animated.misc3_data.rotate, Some(Angle::new(0.0)));
   }
 
   /// `style` with every animation it runs at `time` applied.
