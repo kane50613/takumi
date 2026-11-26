@@ -9,7 +9,9 @@ A declaration in a `@keyframes` rule that ends in `!important` is invalid, so th
 
 ```css
 @keyframes fade {
-  to { opacity: 0 !important; }
+  to {
+    opacity: 0 !important;
+  }
 }
 /* Before: the element fades out */
 /* After: the element stays opaque */

@@ -12,9 +12,17 @@ packages:
 
 ```css
 @keyframes grow {
-  0% { width: 0; opacity: 0 }
-  50% { opacity: 1 }
-  100% { width: 100px; opacity: 0 }
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    width: 100px;
+    opacity: 0;
+  }
 }
 /* At 25%, before: width eases toward the element's own width */
 /* At 25%, after: width is 25px */
