@@ -1,6 +1,9 @@
 //! Selector matching over the [`Node`] tree, keeping the `selectors` crate out of the public API.
 
-use std::{cell::OnceCell, collections::HashMap, fmt, iter::successors, ops::Deref, sync::Arc};
+use std::{
+  borrow::Borrow, cell::OnceCell, collections::HashMap, fmt, iter::successors, ops::Deref,
+  sync::Arc,
+};
 
 use rustc_hash::FxHashMap;
 use selectors::{
@@ -1146,10 +1149,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
         // A container query asks the element's ancestors, and a pseudo-element's its originating
         // element and up, as Blink's `ContainerQueryEvaluator` starts from each.
         let holds = |start: Option<ArenaElement<'_>>| {
-          rule
-            .container_queries
-            .iter()
-            .all(|query| container_query_holds(query, start, containers, viewport))
+          container_queries_hold(&rule.container_queries, start, containers, viewport)
         };
         let element_holds = holds(element.parent_element());
         let pseudo_holds = rule.container_queries.is_empty() || holds(Some(element));
@@ -1240,10 +1240,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
       };
       let applies = (!is_replaced || target == SelectorTarget::Element)
         && rule.is_active(viewport, breakpoints)
-        && rule
-          .container
-          .iter()
-          .all(|query| container_query_holds(query, container_start, containers, viewport))
+        && container_queries_hold(&rule.container, container_start, containers, viewport)
         && rule
           .condition
           .as_ref()
@@ -1348,6 +1345,18 @@ impl QueryFont {
 
 /// The query containers of a tree, by their place in its pre-order.
 pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
+
+/// Whether every one of `queries` holds, as [`container_query_holds`] decides.
+fn container_queries_hold<Q: Borrow<ContainerQuery>>(
+  queries: &[Q],
+  start: Option<ArenaElement<'_>>,
+  containers: Option<&QueryContainers>,
+  viewport: Viewport,
+) -> bool {
+  queries
+    .iter()
+    .all(|query| container_query_holds(query.borrow(), start, containers, viewport))
+}
 
 /// Whether a condition of `query` holds of its query container: the nearest of `start` and its
 /// ancestors that the condition names, if it names one, and whose `container-type` contains each
