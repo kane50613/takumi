@@ -3203,7 +3203,13 @@ impl PendingRenderNode {
     render_node.is_text_run = self.is_text_run;
 
     if let Some(ordinal) = self.marker_ordinal
-      && let Some(marker) = list_marker(&render_node.context, ordinal)
+      && let Some(marker) = list_marker(
+        self
+          .container_context
+          .as_ref()
+          .unwrap_or(&render_node.context),
+        ordinal,
+      )
     {
       render_node.attach_marker(marker);
     }
