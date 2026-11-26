@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The source text and the node tree object a wasm renderer read last, so a render after `needs`
-/// reads each once.
+/// reads each once. Reading the last tree object again returns its earlier parse, so it must not change.
 #[derive(Default)]
 pub struct JsSourceCache {
   texts: SourceCache,
