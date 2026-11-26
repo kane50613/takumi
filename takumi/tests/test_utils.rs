@@ -171,11 +171,20 @@ pub fn rasterize_svg(svg: String, width: u32, height: u32) -> Bitmap {
 }
 
 pub fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
+  measure_with_stylesheet(node, StyleSheet::parse_loosy(css))
+}
+
+/// Measures `node` with `stylesheets`, each parsed on its own.
+pub fn measure_with_stylesheets(node: Node, stylesheets: Vec<String>) -> MeasuredNode {
+  measure_with_stylesheet(node, StyleSheet::parse_owned_list_loosy(stylesheets))
+}
+
+fn measure_with_stylesheet(node: Node, stylesheet: StyleSheet) -> MeasuredNode {
   measure(
     RenderOptions::builder()
       .viewport(create_test_viewport())
       .node(node)
-      .stylesheet(StyleSheet::parse_loosy(css).into())
+      .stylesheet(stylesheet.into())
       .fonts(&CONTEXT)
       .build(),
   )

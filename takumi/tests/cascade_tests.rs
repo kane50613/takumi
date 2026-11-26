@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use takumi::prelude::*;
 
-use crate::test_utils::{block, create_test_viewport, measure_with_css};
+use crate::test_utils::{block, create_test_viewport, measure_with_css, measure_with_stylesheets};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -1559,6 +1559,30 @@ fn a_style_element_owner_ends_with_its_css() {
     parsed.css.concat()
   );
   let measured = measure_with_css(parsed.node, &css);
+
+  assert_ne!(measured.children[0].children[0].width, 20.0);
+  assert_eq!(measured.children[1].width, 20.0);
+}
+
+/// An unclosed comment or block ends with its `<style>` element, as Blink parses each sheet on its
+/// own, so it neither swallows nor gates the next sheet, nor roots that sheet's implicit `@scope`.
+#[test]
+fn each_style_element_parses_on_its_own() {
+  let parsed = takumi::parse_html(
+    r#"<div><style>/* x</style><style>p { width: 5px }</style><p>a</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_stylesheets(parsed.node, parsed.css);
+
+  assert_eq!(measured.children[0].width, 5.0);
+
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@media (width > 1px) { @scope {</style><p>a</p></div><style>@scope { :scope > p { width: 20px } }</style><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_stylesheets(parsed.node, parsed.css);
 
   assert_ne!(measured.children[0].children[0].width, 20.0);
   assert_eq!(measured.children[1].width, 20.0);
