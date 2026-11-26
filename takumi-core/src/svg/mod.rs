@@ -68,7 +68,9 @@ pub(crate) enum SvgHost<'a> {
     /// What the layout keeps, [`Cache::shared`] when none is given.
     cache: Option<&'a Cache>,
   },
-  /// An inline `svg` element. Approximate: selectors do not match across its HTML ancestors.
+  /// An inline `svg` element. Approximate: selectors do not match across its HTML ancestors, and
+  /// `:lang()` reads the host's parsed language, so an ancestor's malformed `lang="en_US"` matches
+  /// `:lang(en)`, where Blink's `ComputeInheritedLanguage` reads the text and matches nothing.
   Inline(&'a RenderContext),
 }
 
