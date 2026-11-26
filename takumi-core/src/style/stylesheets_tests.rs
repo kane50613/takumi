@@ -148,6 +148,21 @@ fn a_unitless_length_is_px_only_in_a_style_object_or_an_svg_property()
   Ok(())
 }
 
+fn computed_from_text(css: &str) -> ComputedStyle {
+  style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+    .inherit(&ComputedStyle::default())
+}
+
+#[test]
+fn an_invalid_unitless_length_drops_the_whole_declaration() {
+  let margins = computed_from_text("margin-inline: 1px 2px; margin-inline: 10px 20").box_data;
+
+  assert_eq!(
+    (margins.margin_left, margins.margin_right),
+    (Length::Px(1.0), Length::Px(2.0))
+  );
+}
+
 /// The JSX presets ship these as a camel-case style object.
 #[test]
 fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
