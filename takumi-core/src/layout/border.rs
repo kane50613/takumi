@@ -483,7 +483,9 @@ impl BorderProperties {
   pub(crate) fn background_bleed_inset(&self) -> Option<Rect<f32>> {
     let sides = self.sides();
     // Blink's `BoxDecorationData::BorderObscuresBackgroundEdge`, which counts a side without a
-    // border as present, and its `ComputedStyle::HasBorder`, without which no border paints.
+    // border as present, and its `ComputedStyle::HasBorder`, without which no border paints. A
+    // collapsed table's cell paints no border of its own, as `BoxDecorationData` skips one whose
+    // fragment `HasCollapsedBorders`.
     let obscures_edge = sides.iter().all(|side| {
       side.color.0[3] == u8::MAX
         && !matches!(
@@ -495,7 +497,7 @@ impl BorderProperties {
       side.width > 0.0 && !matches!(side.style, BorderStyle::None | BorderStyle::Hidden)
     });
 
-    if self.is_zero() || !obscures_edge || !has_border {
+    if self.collapsed || self.is_zero() || !obscures_edge || !has_border {
       return None;
     }
 
@@ -1124,6 +1126,16 @@ mod tests {
       opaque_border(0.0, BorderStyle::None, SpacePair::from_single(10.0)).background_bleed_inset(),
       None
     );
+  }
+
+  #[test]
+  fn a_collapsed_border_leaves_the_background_unshrunk() {
+    let border = BorderProperties {
+      collapsed: true,
+      ..opaque_border(8.0, BorderStyle::Solid, SpacePair::from_single(10.0))
+    };
+
+    assert_eq!(border.background_bleed_inset(), None);
   }
 
   #[test]
