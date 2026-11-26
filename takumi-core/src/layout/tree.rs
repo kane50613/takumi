@@ -3556,6 +3556,9 @@ impl RenderContext {
     is_document_root: bool,
   ) -> (ComputedStyle, SizingContext, Color) {
     let lang = layers.lang;
+    // What reads the container through the parent's sizing while the child resolves is the
+    // child's read.
+    let parent_read = self.sizing.container_read.take();
 
     let (declarations, sources) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
@@ -3579,7 +3582,11 @@ impl RenderContext {
       None => base,
     };
     let sizing = self.child_sizing(&style, &self.sizing, is_document_root);
+
     style.make_computed(&sizing);
+    if self.sizing.container_read.replace(parent_read) {
+      sizing.container_read.set(true);
+    }
     let current_color = style.inherited_data.color.resolve(self.current_color);
 
     // Blink's `Color::ApplyValue`: `currentColor` in a colour function of `color` is the parent's
@@ -4022,6 +4029,31 @@ mod tests {
     assert!(reads(&format!(
       "{container} .box {{ background-image: radial-gradient(10cqw 5cqw, red, blue) }}"
     )));
+  }
+
+  /// A container read belongs to the box whose length read it, not to its descendants.
+  #[test]
+  fn a_container_read_stays_on_the_box_that_reads() {
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((Some(800), Some(600))))
+          .build(),
+      )
+      .stylesheet(Arc::new(parse_stylesheet(
+        ".container { container-type: inline-size; width: 400px } .box { width: 10cqw; font-size: 5cqw }",
+      )))
+      .build();
+    let root = Node::container([Node::container([Node::container([])]).with_class_name("box")])
+      .with_class_name("container");
+    let tree = RenderNode::from_node(&context, root);
+    let reader = &tree.children.as_deref().expect("has the box")[0];
+    let inside = &reader.children.as_deref().expect("has a child")[0];
+
+    assert!(!tree.context.sizing.container_read.get());
+    assert!(reader.context.sizing.container_read.get());
+    assert!(!inside.context.sizing.container_read.get());
   }
 
   #[test]
