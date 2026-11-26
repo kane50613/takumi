@@ -287,10 +287,10 @@ opt-level = "z"
 # scalers.
 [patch.crates-io]
 png = { git = "https://github.com/kane50613/image-png", rev = "666af62f375c853e3890f8f41075804ca2ee3597" }
-skrifa = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
-read-fonts = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
-font-types = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
-write-fonts = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
+skrifa = { git = "https://github.com/kane50613/fontations", rev = "053322cc407b291a1041b294841b61850de3f38f" }
+read-fonts = { git = "https://github.com/kane50613/fontations", rev = "053322cc407b291a1041b294841b61850de3f38f" }
+font-types = { git = "https://github.com/kane50613/fontations", rev = "053322cc407b291a1041b294841b61850de3f38f" }
+write-fonts = { git = "https://github.com/kane50613/fontations", rev = "053322cc407b291a1041b294841b61850de3f38f" }
 # The fork gates the AAT tables (`morx`, `mort`, `kerx`, `ankr`, `trak`) behind `aat`
 # and synthesized legacy Arabic lookups behind `arabic_fallback`, both off in takumi.
 harfrust = { git = "https://github.com/kane50613/harfrust", rev = "c3fcdcf000613e4bf6bd0e6858b3e0721c82c897" }
