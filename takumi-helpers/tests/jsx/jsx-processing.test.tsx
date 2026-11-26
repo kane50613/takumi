@@ -824,9 +824,9 @@ describe("fromJsx", () => {
     expect(renderToStaticMarkup(form)).toBe('<form accept-charset="utf-8"></form>');
     expect(renderToStaticMarkup(meta)).toBe('<meta http-equiv="refresh"/>');
     expect((await fromJsx(form)).node).toMatchObject({ attributes: { "accept-charset": "utf-8" } });
-    expect(
-      (await fromJsx({ type: "div", props: { httpEquiv: "refresh" } })).node,
-    ).toMatchObject({ attributes: { "http-equiv": "refresh" } });
+    expect((await fromJsx({ type: "div", props: { httpEquiv: "refresh" } })).node).toMatchObject({
+      attributes: { "http-equiv": "refresh" },
+    });
   });
 
   test("writes a number id and lang as text", async () => {
