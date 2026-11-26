@@ -364,9 +364,7 @@ impl ParsedHtml {
     for index in 0..=self.css.len() {
       while let Some(link) = links.next_if(|link| link.css_index == index) {
         if let Some(text) = fetch(link) {
-          let css_text = in_media(link.media.as_deref(), text.clone());
-
-          css.push(owned_css(link.owner, &text, css_text));
+          css.push(sheet_css(link.owner, link.media.as_deref(), &text));
         }
       }
 
@@ -395,17 +393,14 @@ impl StyleElement {
   /// The text, inside an `@media` rule when the element has a `media` attribute, between the
   /// owner it names and the end of that owner when it may hold an `@scope` rule.
   pub fn css(&self) -> String {
-    owned_css(
-      self.owner,
-      &self.text,
-      in_media(self.media.as_deref(), self.text.clone()),
-    )
+    sheet_css(self.owner, self.media.as_deref(), &self.text)
   }
 }
 
-/// `css`, the CSS of a sheet whose source is `text`, between the owner it names and the end of
-/// that owner when it may hold an `@scope` rule.
-fn owned_css(owner: Option<u32>, text: &str, css: String) -> String {
+/// `text` inside an `@media` rule for `media`, owned by `owner` when it may hold an `@scope` rule.
+fn sheet_css(owner: Option<u32>, media: Option<&str>, text: &str) -> String {
+  let css = in_media(media, text.to_owned());
+
   match owner {
     // An at-keyword starts with a literal `@`, however its name is escaped.
     Some(owner) if text.contains('@') => {
