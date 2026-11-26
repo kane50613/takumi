@@ -23,7 +23,7 @@ When animations stack on one property, a keyframe an animation leaves out takes 
 
 The keyframes behind `animate-spin`, `animate-ping`, `animate-pulse`, and `animate-bounce` now follow Tailwind's theme. `bounce` eases each half as Tailwind does, and `spin` and `ping` animate `transform`.
 
-These keyframes exist once an `animate-*` class, an arbitrary `animate-[…]` value, or an `@apply` in the render names them, and then any `animation` in the render can use them. A plain `animation: spin 1s` stays still, as in Chrome, when nothing in the render names `spin` and the stylesheet has no `@keyframes spin`. Your own `@keyframes` with the same name still wins.
+These keyframes exist once an `animate-*` class, an arbitrary `animate-[…]` value, or an `@apply` in the render names them, directly or through the `--animate-*` theme value it reads, and then any `animation` in the render can use them. So `animate-soft` with `@theme { --animate-soft: pulse 2s }` runs `pulse`. A plain `animation: spin 1s` stays still, as in Chrome, when nothing in the render names `spin` and the stylesheet has no `@keyframes spin`. Your own `@keyframes` with the same name still wins.
 
 #### Migration
 

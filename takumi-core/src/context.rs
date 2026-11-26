@@ -269,6 +269,7 @@ impl RenderContext {
   pub(crate) fn note_theme_keyframes(&self, node: &Node) {
     node.collect_tw_theme_keyframes(
       self.cache().tailwind(),
+      &self.stylesheet().animate_theme,
       &mut self.shared.theme_keyframes.borrow_mut(),
     );
   }

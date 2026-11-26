@@ -33,9 +33,7 @@ pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
 /// Expands an `@apply` list into declarations and the theme `@keyframes` they read, `None` for an
 /// unknown token or a variant.
-pub(crate) fn expand_apply(
-  source: &str,
-) -> Option<(StyleDeclarationBlock, Vec<&'static KeyframesRule>)> {
+pub(crate) fn expand_apply(source: &str) -> Option<(StyleDeclarationBlock, ThemeKeyframes)> {
   let rules = source
     .split_whitespace()
     .map(TwRule::parse)
@@ -51,10 +49,11 @@ pub(crate) fn expand_apply(
     return None;
   }
 
-  let theme_keyframes = rules
-    .iter()
-    .flat_map(|rule| rule.theme_keyframes.iter().copied())
-    .collect();
+  let mut theme_keyframes = ThemeKeyframes::default();
+
+  for rule in &rules {
+    theme_keyframes.extend(&rule.theme_keyframes);
+  }
 
   Some((cascaded_block(&rules), theme_keyframes))
 }

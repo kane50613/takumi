@@ -4,6 +4,7 @@
 use std::{mem::take, sync::Arc};
 
 use phf::phf_map;
+use thin_vec::thin_vec;
 
 use super::{
   Namespace, TW_VAR_SPACING, TailwindPropertyParser, builder::TailwindDeclarationBuilder,
@@ -1001,15 +1002,12 @@ fn border_style(style: BorderStyle, builder: &mut TailwindDeclarationBuilder) {
   builder.push(StyleDeclaration::border_left_style(style));
 }
 
-/// Emits an `animate-*` utility and the theme `@keyframes` it names. Approximate: Tailwind also
-/// keeps the `@keyframes` a used `--animate-*` theme variable's value names, where this keeps only
-/// the ones named after the utility's token, so `animate-soft` over `--animate-soft: pulse 2s`
-/// finds no `pulse` unless another utility names it.
+/// Emits an `animate-*` utility and the theme `@keyframes` it names.
 fn animation(animation: TwAnimation, builder: &mut TailwindDeclarationBuilder) {
   let TwAnimation { animations, token } = animation;
 
   let Some(token) = token else {
-    builder.theme_keyframes = animations
+    builder.theme_keyframes.named = animations
       .iter()
       .filter_map(|animation| tailwind_theme_keyframes(animation.name.as_deref()?))
       .collect();
@@ -1017,7 +1015,7 @@ fn animation(animation: TwAnimation, builder: &mut TailwindDeclarationBuilder) {
     return;
   };
 
-  builder.theme_keyframes = tailwind_theme_keyframes(&token).into_iter().collect();
+  builder.theme_keyframes.animate_tokens = thin_vec![Arc::clone(&token)];
 
   let fallback = animation_shorthand_css(&animations);
   let specified_value = if fallback.is_empty() {

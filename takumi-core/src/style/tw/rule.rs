@@ -21,8 +21,8 @@ use super::{
 };
 use crate::{
   style::{
-    ContentItem, ContentValue, KeyframesRule, PropertyMask, StyleDeclaration,
-    StyleDeclarationBlock,
+    ContentItem, ContentValue, PropertyMask, StyleDeclaration, StyleDeclarationBlock,
+    ThemeKeyframes,
     media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl},
   },
@@ -150,7 +150,7 @@ pub(crate) struct TwRule {
   /// A digest of the utility's token, which names the rule among the ones a box matched.
   pub(crate) id: u64,
   /// The theme `@keyframes` Tailwind emits once the utility is used.
-  pub(crate) theme_keyframes: Box<[&'static KeyframesRule]>,
+  pub(crate) theme_keyframes: ThemeKeyframes,
 }
 
 impl TwRule {
@@ -174,7 +174,7 @@ impl TwRule {
 
     utility::emit(token, &mut builder)?;
 
-    let theme_keyframes = take(&mut builder.theme_keyframes).into_boxed_slice();
+    let theme_keyframes = take(&mut builder.theme_keyframes);
 
     Self::new(
       source,
@@ -191,7 +191,7 @@ impl TwRule {
     declarations: StyleDeclarationBlock,
     important: bool,
     variants: Variants,
-    theme_keyframes: Box<[&'static KeyframesRule]>,
+    theme_keyframes: ThemeKeyframes,
   ) -> Option<Self> {
     const CLASS_SPECIFICITY: u32 = 1 << 10;
 

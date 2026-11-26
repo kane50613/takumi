@@ -3991,6 +3991,38 @@ mod tests {
     );
   }
 
+  /// Tailwind keeps the theme `@keyframes` a used `--animate-*` variable's theme value names, so
+  /// `animate-soft` over `--animate-soft: pulse 2s` runs `pulse`, and overriding
+  /// `--animate-pulse` drops `pulse`.
+  #[test]
+  fn theme_keyframes_run_for_an_animate_variable_value() {
+    let theme = "@theme { --animate-soft: pulse 2s linear; }";
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
+
+    assert_eq!(
+      opacities_after_one_second(theme, vec![tw("animate-soft")]),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        &format!("{theme} .a {{ @apply animate-soft; }}"),
+        vec![Node::container([]).with_class_name("a")]
+      ),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-pulse: spin 1s linear; } .plain { animation: pulse 2s linear }",
+        vec![
+          Node::container([]).with_class_name("plain"),
+          tw("animate-pulse")
+        ]
+      ),
+      [1.0, 1.0]
+    );
+  }
+
   /// A style every row repeats stays shared while the rows' other styles come and go.
   #[test]
   fn a_style_repeated_among_many_others_stays_shared() {

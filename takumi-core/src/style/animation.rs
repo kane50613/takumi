@@ -1,6 +1,11 @@
-use std::sync::LazyLock;
+use std::{
+  collections::HashMap,
+  ptr,
+  sync::{Arc, LazyLock},
+};
 
 use serde::Deserialize;
+use thin_vec::ThinVec;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -405,6 +410,55 @@ pub(crate) fn tailwind_theme_keyframes(token: &str) -> Option<&'static Keyframes
     LazyLock::new(|| StyleSheet::parse_loosy(TAILWIND_THEME_KEYFRAMES).keyframes);
 
   KEYFRAMES.iter().find(|rule| rule.name == token)
+}
+
+/// The Tailwind theme `@keyframes` used utilities keep, as Tailwind's `optimizeAst` keeps the ones
+/// an emitted `animation` or a used `--animate-*` theme variable's value names.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct ThemeKeyframes {
+  /// The keyframes the utilities' own `animation` declarations name.
+  pub(crate) named: ThinVec<&'static KeyframesRule>,
+  /// The tokens of the `--animate-*` variables the utilities read.
+  pub(crate) animate_tokens: ThinVec<Arc<str>>,
+}
+
+impl ThemeKeyframes {
+  pub(crate) fn extend(&mut self, other: &Self) {
+    for rule in &other.named {
+      if !self.named.iter().any(|known| ptr::eq(*known, *rule)) {
+        self.named.push(rule);
+      }
+    }
+    for token in &other.animate_tokens {
+      if !self.animate_tokens.contains(token) {
+        self.animate_tokens.push(Arc::clone(token));
+      }
+    }
+  }
+
+  /// Pushes the keyframes kept to `keyframes`, each once, with `animate_theme` the `--animate-*`
+  /// values the stylesheet's theme overrides, keyed by token.
+  pub(crate) fn resolve_into(
+    &self,
+    animate_theme: &HashMap<String, String>,
+    keyframes: &mut Vec<&'static KeyframesRule>,
+  ) {
+    // Tailwind's default theme sets `--animate-<token>` to a value naming `<token>`.
+    let theme_values = self.animate_tokens.iter().map(|token| {
+      animate_theme
+        .get(token.as_ref())
+        .map_or(token.as_ref(), String::as_str)
+    });
+    let named_by_theme = theme_values
+      .flat_map(|value| value.split(|char: char| char.is_whitespace() || char == ','))
+      .filter_map(tailwind_theme_keyframes);
+
+    for rule in self.named.iter().copied().chain(named_by_theme) {
+      if !keyframes.iter().any(|known| ptr::eq(*known, rule)) {
+        keyframes.push(rule);
+      }
+    }
+  }
 }
 
 /// One sampled point on an animation's timeline.
