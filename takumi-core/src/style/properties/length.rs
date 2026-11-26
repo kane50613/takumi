@@ -159,6 +159,29 @@ impl Length {
   }
 }
 
+impl Length {
+  /// Tailwind's default `--container-*` width `token` names, which `max-w-*` and the `@` container
+  /// variants read.
+  pub(crate) fn container_width(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "3xs" => Some(Length::Rem(16.0)),
+      "2xs" => Some(Length::Rem(18.0)),
+      "xs" => Some(Length::Rem(20.0)),
+      "sm" => Some(Length::Rem(24.0)),
+      "md" => Some(Length::Rem(28.0)),
+      "lg" => Some(Length::Rem(32.0)),
+      "xl" => Some(Length::Rem(36.0)),
+      "2xl" => Some(Length::Rem(42.0)),
+      "3xl" => Some(Length::Rem(48.0)),
+      "4xl" => Some(Length::Rem(56.0)),
+      "5xl" => Some(Length::Rem(64.0)),
+      "6xl" => Some(Length::Rem(72.0)),
+      "7xl" => Some(Length::Rem(80.0)),
+      _ => None,
+    }
+  }
+}
+
 impl TailwindPropertyParser for Length {
   const NAMESPACES: &'static [Namespace] = &[Namespace::Spacing];
 
@@ -171,6 +194,10 @@ impl TailwindPropertyParser for Length {
       Ok(AspectRatio::Ratio(ratio)) => return Some(Length::Percentage(ratio * 100.0)),
       Ok(AspectRatio::Auto) => return Some(Length::Auto),
       _ => {}
+    }
+
+    if let Some(width) = Self::container_width(token) {
+      return Some(width);
     }
 
     match_ignore_ascii_case! {token,
@@ -193,19 +220,6 @@ impl TailwindPropertyParser for Length {
       "cqmax" => Some(Length::CqMax(100.0)),
       "px" => Some(Length::Px(1.0)),
       "full" => Some(Length::Percentage(100.0)),
-      "3xs" => Some(Length::Rem(16.0)),
-      "2xs" => Some(Length::Rem(18.0)),
-      "xs" => Some(Length::Rem(20.0)),
-      "sm" => Some(Length::Rem(24.0)),
-      "md" => Some(Length::Rem(28.0)),
-      "lg" => Some(Length::Rem(32.0)),
-      "xl" => Some(Length::Rem(36.0)),
-      "2xl" => Some(Length::Rem(42.0)),
-      "3xl" => Some(Length::Rem(48.0)),
-      "4xl" => Some(Length::Rem(56.0)),
-      "5xl" => Some(Length::Rem(64.0)),
-      "6xl" => Some(Length::Rem(72.0)),
-      "7xl" => Some(Length::Rem(80.0)),
       _ => None,
     }
   }

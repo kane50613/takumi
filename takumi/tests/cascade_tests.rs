@@ -1952,3 +1952,97 @@ fn a_tel_input_is_ltr_and_dir_keeps_its_text() {
 
   assert!(width("RTL") > width("rtl"));
 }
+
+/// Tailwind's `@` variants ask the nearest inline-size container, or the one a `/name` modifier
+/// names, as the `@container` rules Tailwind compiles them to do.
+#[test]
+fn tailwind_container_variants_ask_their_container() {
+  let child = |html: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+    let measured = measure_with_css(Node::container([node]), "");
+    let child = &measured.children[0].children[0];
+
+    (child.width, child.height)
+  };
+  let item = r#"<p tw="w-10 h-4 @sm:w-20 @max-md:h-5">x</p>"#;
+
+  assert_eq!(
+    child(&format!(r#"<div tw="@container w-[300px]">{item}</div>"#)),
+    (40.0, 20.0)
+  );
+  assert_eq!(
+    child(&format!(r#"<div tw="@container w-[500px]">{item}</div>"#)),
+    (80.0, 16.0)
+  );
+  // Without a container, a container variant does not apply.
+  assert_eq!(
+    child(&format!(r#"<div tw="w-[500px]">{item}</div>"#)),
+    (40.0, 16.0)
+  );
+
+  let nested = |variant: &str| {
+    let node = Node::from_html(
+      &format!(
+        r#"<div tw="@container/side w-[500px]"><div tw="@container w-[200px]"><p tw="w-10 {variant}:w-20">x</p></div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parses");
+
+    measure_with_css(Node::container([node]), "").children[0].children[0].children[0].width
+  };
+
+  assert_eq!(nested("@sm/side"), 80.0);
+  assert_eq!(nested("@sm"), 40.0);
+
+  // Container variants compound into a range, and a `/` inside brackets is part of the width.
+  for (width, expected) in [(400, 80.0), (500, 40.0)] {
+    assert_eq!(
+      child(&format!(
+        r#"<div tw="@container w-[{width}px]"><p tw="w-10 @sm:@max-md:w-20">x</p></div>"#
+      ))
+      .0,
+      expected,
+      "{width}"
+    );
+  }
+  assert_eq!(
+    child(r#"<div tw="@container w-[400px]"><p tw="w-10 @[calc(600px/2)]:w-20">x</p></div>"#).0,
+    80.0
+  );
+}
+
+/// Tailwind's `rtl:` and `ltr:` compile to `:where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)`, which
+/// also matches under an `rtl` ancestor through a `dir="ltr"` one.
+#[test]
+fn tailwind_direction_variants_read_dir() {
+  let width = |html: &str| {
+    let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(Node::container([node]), "").children[0].children[0].width
+  };
+
+  assert_eq!(
+    width(r#"<div dir="rtl"><p tw="w-10 rtl:w-20">x</p></div>"#),
+    80.0
+  );
+  assert_eq!(
+    width(r#"<div><p tw="w-10 rtl:w-20 ltr:w-30">x</p></div>"#),
+    120.0
+  );
+  assert_eq!(
+    width(r#"<div dir="rtl"><p dir="ltr" tw="w-10 rtl:w-20">x</p></div>"#),
+    80.0
+  );
+  // `:dir()` reads the directionality `dir="auto"` takes from the text.
+  let node = Node::from_html(
+    r#"<div dir="auto">مرحبا<p tw="w-10 rtl:w-20">x</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+
+  assert_eq!(
+    measure_with_css(Node::container([node]), "").children[0].children[1].width,
+    80.0
+  );
+}

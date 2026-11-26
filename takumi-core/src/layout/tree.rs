@@ -2460,7 +2460,9 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
-    if !parent_context.stylesheet().has_container_queries() {
+    if !parent_context.stylesheet().has_container_queries()
+      && !node.has_tw_container_queries(parent_context.cache().tailwind())
+    {
       return Self::build_in_containers(parent_context, node, blockifies_children, None);
     }
 

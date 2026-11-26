@@ -178,6 +178,10 @@ impl Utility {
 
 /// Emits the declarations a utility token compiles to, or `None` when no utility reads it.
 pub(super) fn emit(token: &str, builder: &mut TailwindDeclarationBuilder) -> Option<()> {
+  if let Some(container) = token.strip_prefix("@container") {
+    return emit_container(container, builder);
+  }
+
   if let Some(emit) = UTILITIES.get(token).and_then(|utility| utility.bare) {
     emit(builder);
     return Some(());
@@ -201,6 +205,32 @@ pub(super) fn emit(token: &str, builder: &mut TailwindDeclarationBuilder) -> Opt
   }
 
   None
+}
+
+/// Tailwind's `@container` utility after its name: `container-type` from its value, `inline-size`
+/// without one, and `container-name` from a `/name` modifier.
+fn emit_container(rest: &str, builder: &mut TailwindDeclarationBuilder) -> Option<()> {
+  let (value, name) = match rest.split_once('/') {
+    Some((value, name)) => (value, Some(name)),
+    None => (rest, None),
+  };
+  let container_type = match value.strip_prefix('-') {
+    None if value.is_empty() => ContainerType::InlineSize,
+    Some("normal") => ContainerType::Normal,
+    Some("size") => ContainerType::Size,
+    Some(arbitrary) => ContainerType::from_css_str(&extract_arbitrary_value(arbitrary)?).ok()?,
+    None => return None,
+  };
+
+  builder.push(StyleDeclaration::container_type(container_type));
+
+  if let Some(name) = name {
+    builder.push(StyleDeclaration::container_name(
+      ContainerName::from_css_str(name).ok()?,
+    ));
+  }
+
+  Some(())
 }
 
 fn var_ref(

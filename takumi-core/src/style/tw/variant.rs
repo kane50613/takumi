@@ -1,15 +1,16 @@
 //! Tailwind's variants, such as `md:`, `first:`, and `before:`: the conditions a utility applies
 //! under, and where they sort it.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use selectors::parser::{ParseRelative, Selector, SelectorList};
 
-use super::is_ident;
+use super::{extract_arbitrary_value, is_ident};
 use crate::{
   style::{
-    Length,
+    Length, ToCss,
+    media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl, TakumiSelectorParser},
   },
   viewport::Viewport,
@@ -81,10 +82,145 @@ impl Breakpoint {
   }
 }
 
+/// A container query variant, `@md:` or `@max-[400px]/sidebar:`, which applies while the nearest
+/// inline-size container, or the one it names, meets a width. Approximate: a named width is
+/// Tailwind's default, which a stylesheet's `--container-*` does not re-size.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContainerVariant {
+  pub(crate) query: ContainerQuery,
+  order: ContainerOrder,
+}
+
+/// Where a container variant sorts: `@max-*` first, then `@` and `@min-*`, each by its width as
+/// Tailwind's `compareBreakpoints` compares them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ContainerOrder {
+  at_least: bool,
+  width: Box<str>,
+}
+
+impl Ord for ContainerOrder {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self
+      .at_least
+      .cmp(&other.at_least)
+      .then_with(|| compare_breakpoints(&self.width, &other.width, self.at_least))
+  }
+}
+
+impl PartialOrd for ContainerOrder {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+/// Tailwind's `compareBreakpoints`: by unit, or by function name for a CSS function, then by the
+/// number the width starts with, then by text when no number decides.
+fn compare_breakpoints(a: &str, z: &str, ascending: bool) -> Ordering {
+  if a == z {
+    return Ordering::Equal;
+  }
+
+  let bucket = |width: &str| match width.find('(') {
+    Some(function) => width[..function].to_owned(),
+    None => width
+      .chars()
+      .filter(|character| !character.is_ascii_digit() && *character != '.')
+      .collect(),
+  };
+
+  bucket(a)
+    .cmp(&bucket(z))
+    .then_with(|| match leading_number(a).partial_cmp(&leading_number(z)) {
+      Some(order) if ascending => order,
+      Some(order) => order.reverse(),
+      None => a.cmp(z),
+    })
+}
+
+/// JavaScript's `parseFloat`: the number `text` starts with, `NaN` without one.
+fn leading_number(text: &str) -> f64 {
+  let end = text
+    .char_indices()
+    .find(|&(index, character)| {
+      !(character.is_ascii_digit()
+        || character == '.'
+        || (index == 0 && matches!(character, '-' | '+')))
+    })
+    .map_or(text.len(), |(index, _)| index);
+
+  text[..end].parse().unwrap_or(f64::NAN)
+}
+
+impl ContainerVariant {
+  /// The container variant `token` names, `@` then an optional `min-` or `max-`, a width, and an
+  /// optional `/name`.
+  fn parse(token: &str) -> Option<Self> {
+    let rest = token.strip_prefix('@')?;
+    let (rest, name) = match split_top_level(rest, b'/') {
+      Some((_, name)) if split_top_level(name, b'/').is_some() => return None,
+      Some(split) => split,
+      None => (rest, ""),
+    };
+    let (at_least, value) = match rest.strip_prefix("max-") {
+      Some(value) => (false, value),
+      None => (true, rest.strip_prefix("min-").unwrap_or(rest)),
+    };
+    let width = match extract_arbitrary_value(value) {
+      Some(arbitrary) if arbitrary.contains("var(") => return None,
+      Some(arbitrary) => arbitrary.into_owned(),
+      None => Length::container_width(value)?.to_css_string(),
+    };
+    let operator = if at_least { ">=" } else { "<" };
+    let text = format!("{name} (width {operator} {width})");
+    let query = ContainerQuery::parse(&mut Parser::new(&text)).ok()?;
+
+    Some(Self {
+      query,
+      order: ContainerOrder {
+        at_least,
+        width: width.into(),
+      },
+    })
+  }
+}
+
+/// A variant Tailwind registers after its container queries: a media query the viewport meets,
+/// or a selector the element matches.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum LateCondition {
+  Media(&'static str),
+  PseudoClass(&'static str),
+}
+
+/// The late variants in the order Tailwind registers them.
+const LATE: [(&str, LateCondition); 6] = [
+  ("portrait", LateCondition::Media("(orientation: portrait)")),
+  (
+    "landscape",
+    LateCondition::Media("(orientation: landscape)"),
+  ),
+  (
+    "ltr",
+    LateCondition::PseudoClass(r#":where(:dir(ltr), [dir="ltr"], [dir="ltr"] *)"#),
+  ),
+  (
+    "rtl",
+    LateCondition::PseudoClass(r#":where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)"#),
+  ),
+  ("dark", LateCondition::Media("(prefers-color-scheme: dark)")),
+  ("print", LateCondition::Media("print")),
+];
+
 /// One variant of a utility, as Tailwind's `parseVariant` reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Variant {
   Breakpoint(Breakpoint),
+  Container(ContainerVariant),
+  Late {
+    condition: LateCondition,
+    rank: u8,
+  },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
@@ -122,6 +258,17 @@ impl Variant {
       _ => {}
     }
 
+    if let Some(rank) = LATE.iter().position(|(name, _)| *name == token) {
+      return Some(Self::Late {
+        condition: LATE[rank].1,
+        rank: rank as u8,
+      });
+    }
+
+    if token.starts_with('@') {
+      return ContainerVariant::parse(token).map(Self::Container);
+    }
+
     if let Some(pseudo_class) = pseudo_class(token) {
       return Some(Self::Structural {
         rank: structural_rank(token),
@@ -156,10 +303,16 @@ fn structural_rank(token: &str) -> u8 {
 #[derive(Debug, Default)]
 pub(super) struct Variants {
   pub(super) breakpoint: Option<Breakpoint>,
+  /// The container queries `@` variants ask, every one of which must hold.
+  pub(super) container: Vec<ContainerVariant>,
+  /// The media queries the late variants require of the viewport.
+  pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
   /// A bit per variant rank, so comparing two sorts them as Tailwind's variant bit sets do.
   ranks: u32,
+  /// A bit per late variant, which outranks every other variant.
+  late: u8,
 }
 
 impl Variants {
@@ -183,6 +336,16 @@ impl Variants {
         if self.breakpoint.replace(breakpoint).is_some() {
           return None;
         }
+      }
+      Variant::Container(container) => self.container.push(container),
+      Variant::Late { condition, rank } => {
+        match condition {
+          LateCondition::Media(query) => self
+            .media
+            .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?),
+          LateCondition::PseudoClass(pseudo_class) => self.pseudo_classes.push_str(pseudo_class),
+        }
+        self.late |= 1 << rank;
       }
       Variant::Structural { pseudo_class, rank } => {
         self.pseudo_classes.push_str(&pseudo_class);
@@ -214,10 +377,21 @@ impl Variants {
     condition(&self.pseudo_classes).map(Some)
   }
 
-  /// The variants' sort key: the breakpoint dominates, as Tailwind registers breakpoints after
-  /// every structural variant, then the variant bits.
+  /// The variants' sort key, the latest Tailwind registers first: the late variants, a container
+  /// query, a breakpoint, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
+      late: self.late,
+      container: {
+        let mut orders: Vec<ContainerOrder> = self
+          .container
+          .iter()
+          .map(|container| container.order.clone())
+          .collect();
+
+        orders.sort_unstable_by(|left, right| right.cmp(left));
+        orders
+      },
       breakpoint: self.breakpoint.as_ref().map(Breakpoint::order),
       ranks: self.ranks,
     }
@@ -227,6 +401,10 @@ impl Variants {
 /// Tailwind's variant order for one utility.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VariantOrder {
+  late: u8,
+  /// Approximate: several container variants sort by their latest first, where Tailwind's variant
+  /// bit set gives each group one bit.
+  container: Vec<ContainerOrder>,
   breakpoint: Option<(u32, Arc<str>)>,
   ranks: u32,
 }
@@ -327,10 +505,14 @@ fn condition(pseudo_classes: &str) -> Option<Selector<SelectorImpl>> {
     .then(|| selector.clone())
 }
 
-/// Splits a token at the first top-level variant `:`, mirroring Tailwind's
-/// `segment`: a `:` nested in brackets, quotes, or escaped by `\` is not a
-/// separator, so `url('https://…')` stays intact.
+/// Splits a token at the first top-level variant `:`.
 fn split_variant(token: &str) -> Option<(&str, &str)> {
+  split_top_level(token, b':')
+}
+
+/// Splits `token` at the first top-level `separator`, mirroring Tailwind's `segment`: one nested
+/// in brackets, quotes, or escaped by `\` is not a separator, so `url('https://…')` stays intact.
+fn split_top_level(token: &str, separator: u8) -> Option<(&str, &str)> {
   let bytes = token.as_bytes();
   let mut stack: Vec<u8> = Vec::new();
   let mut index = 0;
@@ -351,7 +533,9 @@ fn split_variant(token: &str) -> Option<(&str, &str)> {
           stack.pop();
         }
       }
-      b':' if stack.is_empty() => return Some((&token[..index], &token[index + 1..])),
+      byte if byte == separator && stack.is_empty() => {
+        return Some((&token[..index], &token[index + 1..]));
+      }
       _ => {}
     }
     index += 1;
@@ -433,6 +617,18 @@ mod tests {
       "[&:nth-child(4)]",
       "sm",
       "md",
+      "@max-[100px]",
+      "@max-lg",
+      "@max-sm",
+      "@[10em]",
+      "@[400px]",
+      "@sm",
+      "@min-md",
+      "portrait",
+      "ltr",
+      "rtl",
+      "dark",
+      "print",
     ];
     let order = |token: &str| {
       let mut variants = Variants::default();
@@ -444,6 +640,7 @@ mod tests {
     for pair in ordered.windows(2) {
       assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
     }
+    assert_eq!(order("@md/sidebar"), order("@min-md"));
   }
 
   #[test]

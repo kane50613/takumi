@@ -1241,11 +1241,18 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
         Some(PseudoElement::Before) => SelectorTarget::Before,
         Some(_) => SelectorTarget::After,
       };
+      // A container query asks from the element's parent, or a pseudo-element's originating
+      // element, as for a stylesheet rule.
+      let container_start = match target {
+        SelectorTarget::Element => element.parent_element(),
+        _ => Some(element),
+      };
       let applies = (!is_replaced || target == SelectorTarget::Element)
+        && rule.is_active(viewport, breakpoints)
         && rule
-          .breakpoint
-          .as_ref()
-          .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+          .container
+          .iter()
+          .all(|query| container_query_holds(query, container_start, containers, viewport))
         && rule
           .condition
           .as_ref()
