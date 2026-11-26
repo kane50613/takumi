@@ -709,6 +709,8 @@ impl RenderNode {
 
 #[cfg(test)]
 mod tests {
+  use std::collections::BTreeMap;
+
   use crate::{
     fonts::shaping::testing::GEIST,
     layout::{
@@ -846,6 +848,20 @@ mod tests {
     );
 
     assert_eq!(collect(&tree).0, "\u{130}STANBUL");
+  }
+
+  /// An empty `lang` stops the inherited language, as Blink's `Element::ComputeInheritedLanguage`
+  /// stops at the nearest `lang` attribute whatever its value.
+  #[test]
+  fn an_empty_lang_drops_the_inherited_language() {
+    let turkish = Lang::parse("tr").expect("a language tag");
+    let unset = span("istanbul").with_attributes(BTreeMap::from([("lang".into(), "".into())]));
+    let tree = render_tree(
+      block([unset]).with_lang(turkish),
+      ".block { text-transform: uppercase }",
+    );
+
+    assert_eq!(collect(&tree).0, "ISTANBUL");
   }
 
   /// Georgian keeps its Mkhedruli letters, which fonts have, when uppercased.

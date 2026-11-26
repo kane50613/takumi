@@ -3602,7 +3602,7 @@ impl RenderContext {
     base: ComputedStyle,
     animations: &ElementAnimations<'_>,
     inherited_parent: &ComputedStyle,
-    (lang, is_document_root): (Option<Lang>, bool),
+    (lang, is_document_root): (Option<Option<Lang>>, bool),
   ) -> ComputedStyle {
     // The cascade decides which animated longhands an important declaration hides; the preview
     // that samples the custom properties leaves out the ones any does.

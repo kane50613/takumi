@@ -695,7 +695,7 @@ impl Node {
       presentation: self.metadata.presentation.take(),
       inline,
       direction: self.direction_style(),
-      lang: self.metadata.lang,
+      lang: self.attribute("lang").map(|_| self.metadata.lang),
     }
   }
 
@@ -822,7 +822,8 @@ pub(crate) struct NodeStyleLayers {
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) direction: DirectionStyle,
-  pub(crate) lang: Option<Lang>,
+  /// The language of the element's `lang` attribute, `Some(None)` for one naming no valid tag.
+  pub(crate) lang: Option<Option<Lang>>,
 }
 
 impl NodeStyleLayers {
