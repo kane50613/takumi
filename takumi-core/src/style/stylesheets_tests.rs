@@ -1906,6 +1906,21 @@ fn a_var_that_substitutes_to_nothing_unsets_the_property() {
 }
 
 #[test]
+fn a_css_wide_keyword_a_var_substitutes_into_a_custom_property_applies() {
+  let parent = inherited_style_from_pairs([("--a", "red")], &ComputedStyle::default());
+
+  for (value, expected) in [
+    ("var(--none, inherit)", Some("red")),
+    ("var(--none, initial)", None),
+    ("var(--none, unset)", Some("red")),
+  ] {
+    let style = inherited_style_from_pairs([("--a", value)], &parent);
+
+    assert_eq!(style.custom_properties.get("--a"), expected, "{value}");
+  }
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [
