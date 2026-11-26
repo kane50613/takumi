@@ -2392,6 +2392,31 @@ fn test_not_negates_at_rule_variants() {
 }
 
 #[test]
+fn test_not_breakpoints_match_an_unknown_viewport_width() {
+  let active = |token: &str| {
+    TwRule::parse(token)
+      .unwrap_or_else(|| panic!("{token} compiles"))
+      .is_active(Viewport::new((None, 100)), &Default::default())
+  };
+
+  assert!(!active("sm:w-4"));
+  assert!(!active("max-sm:w-4"));
+  assert!(active("not-sm:w-4"));
+  assert!(active("not-max-sm:w-4"));
+  assert!(!active("not-not-sm:w-4"));
+}
+
+#[test]
+fn test_not_variants_sort_in_the_not_group() {
+  let order = |token: &str| TwRule::parse(token).unwrap().order;
+
+  assert!(order("not-md:w-4") < order("not-lg:w-4"));
+  assert!(order("not-max-lg:w-4") < order("not-max-md:w-4"));
+  assert!(order("not-not-dark:w-4") < order("md:w-4"));
+  assert!(order("not-not-md:w-4") < order("sm:w-4"));
+}
+
+#[test]
 fn test_a_long_not_chain_parses_by_parity() {
   let chain = |count: usize, variant: &str| format!("{}{variant}:w-4", "not-".repeat(count));
 

@@ -29,8 +29,10 @@ pub(crate) struct Breakpoint {
   pub token: Arc<str>,
   /// Whether the variant applies below its width, as `max-*` does.
   below: bool,
-  /// Whether a `not-` variant flipped `below`, so the breakpoint sorts as Tailwind's `not` does.
+  /// Whether a `not-` run flipped `below`.
   negated: bool,
+  /// Whether a `not-` run wraps it, so it sorts in Tailwind's `not` group.
+  in_not: bool,
 }
 
 impl Breakpoint {
@@ -56,6 +58,7 @@ impl Breakpoint {
         token: value.into(),
         below,
         negated: false,
+        in_not: false,
       });
     }
 
@@ -77,15 +80,17 @@ impl Breakpoint {
       token: value.into(),
       below,
       negated: false,
+      in_not: false,
     })
   }
 
-  /// The breakpoint `not-` makes of this one: Tailwind's `@media not (width >= …)` holds exactly
-  /// where the opposite `max-*` or `min-*` breakpoint does.
-  fn negated(self) -> Self {
+  /// The breakpoint a `not-` run makes of this one: Tailwind's `@media not (width >= …)` holds
+  /// exactly where the opposite `max-*` or `min-*` breakpoint does.
+  fn under_not(self, negated: bool) -> Self {
     Self {
-      below: !self.below,
-      negated: !self.negated,
+      below: self.below != negated,
+      negated,
+      in_not: true,
       ..self
     }
   }
@@ -93,7 +98,7 @@ impl Breakpoint {
   /// Check if the breakpoint matches the viewport width.
   pub fn matches(&self, viewport: Viewport, overrides: &BreakpointOverrides) -> bool {
     let Some(viewport_width) = viewport.size.width else {
-      return false;
+      return self.negated;
     };
     let Some(width) = overrides.get(&*self.token).copied().or(self.width) else {
       return false;
@@ -114,10 +119,10 @@ impl Breakpoint {
   }
 
   /// Where the breakpoint sorts among others: `max-*` first, then the rest, each by its built-in
-  /// width as Tailwind's `compareBreakpoints` compares it, then its token. Approximate: Tailwind
-  /// compares the widths a theme gives.
+  /// width as Tailwind's `compareBreakpoints` compares it, then its token, all as written under
+  /// any `not-`. Approximate: Tailwind compares the widths a theme gives.
   fn order(&self) -> BreakpointOrder {
-    let at_least = !self.below;
+    let at_least = self.below == self.negated;
     let width = self
       .width
       .map(|width| width.to_css_string().into())
@@ -306,7 +311,7 @@ pub(crate) enum Variant {
     rank: u8,
   },
   /// A media query variant under `not-`, `not-dark:` or `not-print:`, which Tailwind's `not`
-  /// compiles to `@media not …`.
+  /// compiles to `@media not …`, or to the query itself when a run of `not-` cancels out.
   NotMedia(String),
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
@@ -398,29 +403,29 @@ impl Variant {
     let (base, negated) = strip_negations(token);
 
     if base.len() != token.len() {
-      let variant = Self::parse(base)?;
-
-      return if negated {
-        variant.negated()
-      } else {
-        Some(variant)
-      };
+      return Self::parse(base)?.under_not(negated);
     }
 
     Breakpoint::parse(token).map(Self::Breakpoint)
   }
 
-  /// The variant `not-` makes of this at-rule variant, or `None` for one Tailwind's `not` does
-  /// not negate here. Approximate: Tailwind also negates a container query and `ltr:` and `rtl:`.
-  fn negated(self) -> Option<Self> {
+  /// The variant a `not-` run makes of this at-rule variant, negating it when `negated`, or
+  /// `None` for one Tailwind's `not` does not negate here. Approximate: Tailwind also negates a
+  /// container query and `ltr:` and `rtl:`, and sorts every variant under `not-` in its group.
+  fn under_not(self, negated: bool) -> Option<Self> {
     match self {
-      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.negated())),
+      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.under_not(negated))),
       Self::Late {
         condition: LateCondition::Media(query),
         ..
       }
-      | Self::Preference { query, .. } => Some(Self::NotMedia(format!("not {query}"))),
-      _ => None,
+      | Self::Preference { query, .. } => Some(Self::NotMedia(if negated {
+        format!("not {query}")
+      } else {
+        query.to_owned()
+      })),
+      _ if negated => None,
+      variant => Some(variant),
     }
   }
 }
@@ -483,7 +488,7 @@ impl Variants {
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
       Variant::Breakpoint(breakpoint) => {
-        if breakpoint.negated {
+        if breakpoint.in_not {
           self.ranks |= 1 << NOT_RANK;
         }
         self.breakpoint.push(breakpoint);
@@ -545,7 +550,8 @@ impl Variants {
   }
 
   /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
-  /// query, a breakpoint, the preference variants, then the structural variant bits.
+  /// query, a breakpoint, the preference variants, the structural variant bits, then the
+  /// breakpoints under `not-`.
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
       arbitrary: descending(self.arbitrary.iter().cloned()),
@@ -560,11 +566,18 @@ impl Variants {
         self
           .breakpoint
           .iter()
-          .filter(|breakpoint| !breakpoint.negated)
+          .filter(|breakpoint| !breakpoint.in_not)
           .map(Breakpoint::order),
       ),
       preference: self.preference,
       ranks: self.ranks,
+      not_breakpoint: descending(
+        self
+          .breakpoint
+          .iter()
+          .filter(|breakpoint| breakpoint.in_not)
+          .map(Breakpoint::order),
+      ),
     }
   }
 }
@@ -590,6 +603,8 @@ pub(crate) struct VariantOrder {
   breakpoint: Vec<BreakpointOrder>,
   preference: u8,
   ranks: u32,
+  /// The breakpoints under `not-`, which Tailwind orders within its `not` group, the lowest bits.
+  not_breakpoint: Vec<BreakpointOrder>,
 }
 
 /// The variant under a run of `not-` prefixes, and whether the run negates it: Tailwind's `not`
