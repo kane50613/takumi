@@ -412,6 +412,8 @@ impl StyleElement {
 }
 
 /// The owner of a `<style>` element, its parent's `NodeRef` id.
+/// Approximate: an owner is unique only within one parse, so trees and CSS composed from separate
+/// parses can share an owner.
 fn style_owner(parent: NodeRef<'_>) -> Option<u32> {
   u32::try_from(parent.id()).ok()
 }
