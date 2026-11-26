@@ -14,6 +14,7 @@ import { Renderer as RendererInternal } from "../index";
 export { setGlyphCacheMaxBytes } from "../index";
 
 import {
+  collectPdf,
   FontRegistry,
   Prepared,
   prepareSource,
@@ -30,8 +31,14 @@ import type {
   BackendPrepareOptions,
   BackendRenderOptions,
   BackendSvgOptions,
+  DocumentInput,
   FontLoader,
   JsonSource,
+  PdfBindingOptions,
+  PdfPreparedRenderOptions,
+  PdfPrepareOptions,
+  PdfRenderOptions,
+  PreparedPdf,
   RegisteredFamilyLike,
 } from "@takumi-rs/bindings-js";
 
@@ -43,6 +50,27 @@ export type {
   FallbackFontsLoader,
   OutputFormatOptions,
   PrepareImagesInput,
+  ArchivalAttachment,
+  Attachment,
+  BandInput,
+  Dimensions,
+  DocumentInput,
+  PageMargin,
+  PageMarginSide,
+  PageOverrideInput,
+  PageRange,
+  PageRulesInput,
+  PageSize,
+  PageSizeName,
+  PdfMetadata,
+  PdfPreparedRenderOptions,
+  PdfPrepareOptions,
+  PdfRenderOptions,
+  PreparedPdf,
+  UncoveredText,
+  ViewportInput,
+  XmpProperty,
+  XmpSchema,
 } from "@takumi-rs/bindings-js";
 export { Prepared } from "@takumi-rs/bindings-js";
 
@@ -81,7 +109,9 @@ export class Renderer {
     const native = toNativeSource(source);
 
     return prepareSource(this.fonts, native, layout, extras, (request) =>
-      this.inner.needs(native, ...needsArgs(layout, request), extras.signal),
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.needs(native, ...needsArgs(layout, request), signal),
+      ),
     );
   }
 
@@ -95,7 +125,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.render(native, opts, signal),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.render(native, opts, task)),
     );
   }
 
@@ -109,7 +140,8 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.renderSvg(native, opts, signal),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.renderSvg(native, opts, task)),
     );
   }
 
@@ -123,8 +155,47 @@ export class Renderer {
       this.fonts,
       source instanceof Prepared ? source : await this.read(source, options),
       source instanceof Prepared ? options : { signal: options.signal },
-      (native, opts, signal) => this.inner.measure(native, opts, signal),
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.measure(native, opts, task)),
     );
+  }
+
+  /** Reads what a PDF document and its bands need under `options`, then loads their font subsets and fetches their images. */
+  preparePdf(source: DocumentInput, options: PdfPrepareOptions = {}): Promise<PreparedPdf> {
+    return this.readPdf(source, options, prepareSource);
+  }
+
+  /** Renders a node tree, JSX, an HTML string, or a prepared document to PDF bytes. */
+  renderPdf(source: PreparedPdf, options?: PdfPreparedRenderOptions): Promise<Buffer<ArrayBuffer>>;
+  renderPdf(source: DocumentInput, options?: PdfRenderOptions): Promise<Buffer<ArrayBuffer>>;
+  async renderPdf(
+    source: PreparedPdf | DocumentInput,
+    options: PdfRenderOptions = {},
+  ): Promise<Buffer<ArrayBuffer>> {
+    return renderPrepared(
+      this.fonts,
+      source instanceof Prepared ? source : await this.readPdf(source, options, readSource),
+      source instanceof Prepared ? options : { signal: options.signal },
+      (native, opts, signal) =>
+        withTaskSignal(signal, (task) =>
+          this.inner.renderPdf(native, opts satisfies PdfBindingOptions, task),
+        ),
+    );
+  }
+
+  /** A PDF document and its bands read under `options` with `collect`, which fetches their images when it prepares them. */
+  private readPdf(
+    source: DocumentInput,
+    options: PdfPrepareOptions | PdfRenderOptions,
+    collect: typeof prepareSource,
+  ): Promise<PreparedPdf> {
+    return collectPdf(this.fonts, source, options, collect, (native, layout, request, signal) => {
+      const [needsOptions, fonts] = needsArgs(layout, request);
+
+      return withTaskSignal(signal, (task) =>
+        this.inner.pdfNeeds(native, needsOptions satisfies PdfBindingOptions, fonts, task),
+      );
+    });
   }
 
   /** `source` read under `options` without fetching, for {@link render} and its siblings. */
@@ -136,7 +207,9 @@ export class Renderer {
     const native = toNativeSource(source);
 
     return readSource(this.fonts, native, layout, extras, (request) =>
-      this.inner.needs(native, ...needsArgs(layout, request), extras.signal),
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.needs(native, ...needsArgs(layout, request), signal),
+      ),
     );
   }
 
@@ -161,7 +234,8 @@ export class Renderer {
       this.fonts,
       prepared,
       { signal: source instanceof Prepared ? options.signal : source.signal },
-      (scenes, opts, signal) => this.inner.renderAnimation({ ...opts, scenes }, signal),
+      (scenes, opts, signal) =>
+        withTaskSignal(signal, (task) => this.inner.renderAnimation({ ...opts, scenes }, task)),
     );
   }
 
@@ -177,9 +251,8 @@ export class Renderer {
     const sources = scenes.map((scene) => ({ ...scene, node: toNativeSource(scene.node) }));
 
     return collect(this.fonts, sources, layout, extras, (request) =>
-      this.inner.animationNeeds(
-        ...needsArgs({ ...layout, scenes: sources }, request),
-        extras.signal,
+      withTaskSignal(extras.signal, (signal) =>
+        this.inner.animationNeeds(...needsArgs({ ...layout, scenes: sources }, request), signal),
       ),
     );
   }
@@ -205,5 +278,35 @@ export class Renderer {
   /** Removes every registered font, leaving the bundled fallback font. */
   clearFonts(): void {
     this.inner.clearFonts();
+  }
+}
+
+/** Runs `task` with a fresh signal following `signal`, since napi-rs replaces its `onabort` and stops cancelling at the first finished task sharing it. */
+async function withTaskSignal<T>(
+  signal: AbortSignal | undefined,
+  task: (signal: AbortSignal | undefined) => Promise<T>,
+): Promise<T> {
+  if (!signal) {
+    return task(undefined);
+  }
+
+  // https://nodejs.org/api/globals.html#static-method-abortsignalanysignals arrived in Node 18.17.
+  if (typeof AbortSignal.any === "function") {
+    return task(AbortSignal.any([signal]));
+  }
+
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal.reason);
+
+  if (signal.aborted) {
+    abort();
+  } else {
+    signal.addEventListener("abort", abort, { once: true });
+  }
+
+  try {
+    return await task(controller.signal);
+  } finally {
+    signal.removeEventListener("abort", abort);
   }
 }

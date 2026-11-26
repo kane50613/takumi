@@ -3,3 +3,4 @@ export * from "./node-source";
 export * from "./prepared";
 export * from "./renderer";
 export * from "./wasm-renderer";
+export * from "./pdf";

@@ -7,12 +7,12 @@ use takumi_pdf::{
   Attachment, AttachmentRelationship, PdfMetadata, PdfStandard, Tagging, XmpProperty, XmpSchema,
 };
 
-use crate::date::parse_date;
+use super::date::parse_date;
 
 /// A file attached to the document.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AttachmentInput {
+pub(super) struct AttachmentInput {
   name: String,
   data: AttachmentData,
   mime_type: Option<String>,
@@ -54,7 +54,7 @@ impl From<RelationshipInput> for AttachmentRelationship {
 }
 
 impl TryFrom<AttachmentInput> for Attachment {
-  type Error = js_sys::Error;
+  type Error = String;
 
   fn try_from(input: AttachmentInput) -> Result<Self, Self::Error> {
     let modification_date = input
@@ -62,7 +62,7 @@ impl TryFrom<AttachmentInput> for Attachment {
       .as_deref()
       .map(|value| {
         parse_date(value).ok_or_else(|| {
-          js_sys::Error::new("invalid modificationDate: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS")
+          "invalid modificationDate: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS".to_owned()
         })
       })
       .transpose()?;
@@ -84,7 +84,7 @@ impl TryFrom<AttachmentInput> for Attachment {
 /// `tagged` values accepted from JS.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(untagged)]
-pub(crate) enum TaggedInput {
+pub(super) enum TaggedInput {
   Enabled(bool),
   Accessibility(AccessibilityInput),
 }
@@ -92,7 +92,7 @@ pub(crate) enum TaggedInput {
 /// The accessibility standard names accepted from JS.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum AccessibilityInput {
+pub(super) enum AccessibilityInput {
   Ua1,
   Ua2,
 }
@@ -110,7 +110,7 @@ impl From<TaggedInput> for Tagging {
 
 /// PDF/A conformance level names accepted from JS.
 #[derive(Deserialize, Clone, Copy)]
-pub(crate) enum PdfaInput {
+pub(super) enum PdfaInput {
   #[serde(rename = "2a")]
   A2a,
   #[serde(rename = "3a")]
@@ -147,7 +147,7 @@ impl From<PdfaInput> for PdfStandard {
 /// Document metadata fields.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MetadataInput {
+pub(super) struct MetadataInput {
   title: Option<String>,
   description: Option<String>,
   authors: Option<Vec<String>>,
@@ -161,7 +161,7 @@ pub(crate) struct MetadataInput {
 
 /// A custom XMP namespace and the properties written under it.
 #[derive(Deserialize)]
-pub(crate) struct XmpSchemaInput {
+pub(super) struct XmpSchemaInput {
   name: String,
   prefix: String,
   namespace: String,
@@ -170,7 +170,7 @@ pub(crate) struct XmpSchemaInput {
 
 /// A property of an [`XmpSchemaInput`].
 #[derive(Deserialize)]
-pub(crate) struct XmpPropertyInput {
+pub(super) struct XmpPropertyInput {
   name: String,
   value: String,
   description: String,
@@ -198,7 +198,7 @@ impl From<XmpPropertyInput> for XmpProperty {
 }
 
 impl TryFrom<MetadataInput> for PdfMetadata {
-  type Error = js_sys::Error;
+  type Error = String;
 
   fn try_from(input: MetadataInput) -> Result<Self, Self::Error> {
     let creation_date = input
@@ -206,7 +206,7 @@ impl TryFrom<MetadataInput> for PdfMetadata {
       .as_deref()
       .map(|value| {
         parse_date(value).ok_or_else(|| {
-          js_sys::Error::new("invalid creationDate: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS")
+          "invalid creationDate: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS".to_owned()
         })
       })
       .transpose()?;

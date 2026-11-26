@@ -79,6 +79,9 @@ export interface FontDetails {
 
 export type Font = FontDetails | ByteBuf;
 
+/** The options `renderPdf` and `pdfNeeds` read, which the `Renderer` wrapper types in full. */
+type PdfBindingOptions = Record<string, unknown>;
+
 /** A font of a render's `fonts` list, described before its bytes arrive. */
 type ListedFont = Pick<FontDetails, "name" | "weight" | "style" | "unicodeRange"> & { key: string };
 

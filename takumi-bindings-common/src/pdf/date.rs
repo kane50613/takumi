@@ -14,7 +14,7 @@ fn parse_field<T: FromStr>(part: Option<&str>, width: usize) -> Option<T> {
   part.parse().ok()
 }
 
-pub(crate) fn parse_date(value: &str) -> Option<PdfDate> {
+pub(super) fn parse_date(value: &str) -> Option<PdfDate> {
   let (date, time) = match value.split_once('T') {
     Some((date, time)) => (date, Some(time.strip_suffix('Z').unwrap_or(time))),
     None => (value, None),

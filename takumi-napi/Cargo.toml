@@ -34,6 +34,11 @@ features = ["svg", "rayon"]
 [dependencies.takumi-svg]
 path = "../takumi-svg"
 
+[features]
+default = ["pdf"]
+# `Renderer.renderPdf`, through takumi-pdf.
+pdf = ["takumi-bindings-common/pdf"]
+
 [build-dependencies]
 napi-build.workspace = true
 

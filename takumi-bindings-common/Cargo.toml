@@ -27,6 +27,10 @@ optional = true
 path = "../takumi-svg"
 optional = true
 
+[dependencies.takumi-pdf]
+path = "../takumi-pdf"
+optional = true
+
 [dependencies.js-sys]
 workspace = true
 optional = true
@@ -59,6 +63,8 @@ wasm = [
 ]
 # Options for the bindings that render images.
 raster = ["dep:takumi-raster", "dep:takumi-svg"]
+# Options for the bindings that write PDFs.
+pdf = ["dep:takumi-pdf"]
 
 [dev-dependencies.wuff]
 workspace = true
