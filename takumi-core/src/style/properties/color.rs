@@ -1078,9 +1078,14 @@ fn parse_color_mix_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32
 impl<'i> FromCss<'i> for ColorMixValue {
   /// Blink's `ConsumeColorMixFunction`, inside the function's block.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let interpolation = ColorInterpolationMethod::from_css(input)?;
-
-    input.expect_comma()?;
+    // Only an explicit `in <space>` is followed by a comma.
+    let interpolation = match input.try_parse(ColorInterpolationMethod::from_css) {
+      Ok(interpolation) => {
+        input.expect_comma()?;
+        interpolation
+      }
+      Err(_) => ColorInterpolationMethod::default(),
+    };
     let (color1, percentage1) = parse_color_mix_operand(input)?;
     input.expect_comma()?;
     let (color2, percentage2) = parse_color_mix_operand(input)?;
@@ -1112,8 +1117,12 @@ impl ToCss for ColorMixValue {
     };
 
     dest.write_str("color-mix(")?;
-    self.interpolation.to_css(dest)?;
-    dest.write_str(", ")?;
+
+    if self.interpolation != ColorInterpolationMethod::default() {
+      self.interpolation.to_css(dest)?;
+      dest.write_str(", ")?;
+    }
+
     write_operand(dest, &self.color1, self.percentage1)?;
     dest.write_str(", ")?;
     write_operand(dest, &self.color2, self.percentage2)?;
@@ -1684,7 +1693,7 @@ mod tests {
       "light-dark(rgb(255, 0, 0), currentColor)",
       "color-mix(in srgb, currentColor 25%, rgb(255, 255, 255))",
       "color-mix(in lch longer hue, rgb(255, 0, 0), rgb(0, 0, 255) 40%)",
-      "color-mix(in oklab, light-dark(rgb(255, 255, 255), rgb(0, 0, 0)), rgb(255, 0, 0))",
+      "color-mix(light-dark(rgb(255, 255, 255), rgb(0, 0, 0)), rgb(255, 0, 0))",
       "rgb(from currentColor b g r / alpha)",
       "hsl(from light-dark(rgb(255, 0, 0), rgb(0, 0, 255)) 120deg s 50%)",
       "oklch(from rgb(255, 0, 0) l c none / 0.5)",
@@ -1785,6 +1794,15 @@ mod tests {
       computed("color-mix(in srgb, red, blue)"),
       Some(ColorInput::Value(Color([128, 0, 128, 255])))
     );
+  }
+
+  #[test]
+  fn test_parse_color_mix_defaults_to_oklab() {
+    assert_eq!(
+      computed("color-mix(red, blue)"),
+      computed("color-mix(in oklab, red, blue)")
+    );
+    assert!(computed("color-mix(red, blue)").is_some());
   }
 
   #[test]
