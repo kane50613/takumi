@@ -1129,9 +1129,10 @@ fn blit_background_tiles(
   }
 }
 
-/// Approximate: a clip with fractional edges, which a bleed inset gives, shrinks to the whole pixels
-/// inside it, where Blink clips the layers to the fractional edges. The pixels it drops lie under the
-/// opaque border the inset is for.
+/// Approximate: a clip a bleed inset leaves with fractional edges shrinks to the whole pixels
+/// inside it, where Blink clips the layers to the fractional edges. Only an opaque border's inset
+/// gives one, and the pixels it drops lie under that border. A padding or content box clip has
+/// whole-pixel edges and keeps them.
 fn draw_clipped_background(
   clip: ClipBox,
   offset: Point<f32>,
@@ -1139,15 +1140,15 @@ fn draw_clipped_background(
   context: &RenderContext,
   canvas: &mut Canvas,
 ) -> Result<()> {
-  let start = offset + clip.offset;
-  let at = Point {
-    x: start.x.ceil(),
-    y: start.y.ceil(),
+  let start = Point {
+    x: clip.offset.x.ceil(),
+    y: clip.offset.y.ceil(),
   };
   let size = Size {
-    width: (start.x + clip.size.width).floor() - at.x,
-    height: (start.y + clip.size.height).floor() - at.y,
+    width: (clip.offset.x + clip.size.width).floor() - start.x,
+    height: (clip.offset.y + clip.size.height).floor() - start.y,
   };
+  let at = offset + start;
 
   if size.width <= 0.0 || size.height <= 0.0 {
     return Ok(());
