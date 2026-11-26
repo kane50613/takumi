@@ -1574,9 +1574,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         Ok(fragment)
       }
       AtRulePrelude::Scope(scope) => {
-        let owner = (scope.start.is_none() && !self.scoped)
-          .then_some(self.style_owner)
-          .flatten();
+        let owner = scope.start.is_none().then_some(self.style_owner).flatten();
         let scope = Arc::new(Scope { owner, ..scope });
         let mut fragment = Self {
           scoped: true,
