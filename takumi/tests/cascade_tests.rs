@@ -1473,6 +1473,34 @@ fn container_and_scope_rules_nest_in_style_rules() {
   );
 }
 
+/// A nested `@scope` start is relative to the rule around it, as Blink's `StyleScope::Consume`
+/// parses it with the rule's nesting type.
+#[test]
+fn a_nested_scope_start_is_relative_to_its_rule() {
+  let parsed = takumi::parse_html(
+    r#"<section class="outer"><div class="card"><p>a</p></div></section><div class="card"><p>b</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measure = |css: &str| {
+    let measured = measure_with_css(parsed.node.clone(), css);
+
+    [
+      measured.children[0].children[0].children[0].width,
+      measured.children[1].children[0].width,
+    ]
+  };
+
+  assert_eq!(
+    measure(".outer { @scope (.card) { p { width: 30px } } }"),
+    [30.0, 1200.0]
+  );
+  assert_eq!(
+    measure(".outer { @scope (& > .card) { p { width: 30px } } }"),
+    [30.0, 1200.0]
+  );
+}
+
 /// `inherit` on a registered property that does not inherit takes the parent's computed value, as
 /// Blink's `ApplyInherit` copies it.
 #[test]

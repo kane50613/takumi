@@ -585,7 +585,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::ForNesting)
   }
 
   fn parse_block(
@@ -973,7 +973,7 @@ impl<'i> AtRuleParser<'i> for ThemeBlockParser<'_> {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::No)
   }
 
   fn parse_block(
@@ -1246,9 +1246,11 @@ fn tailwind_entry_preflight(target: &str) -> Option<bool> {
 /// parser then gives each `@scope` rule without a start.
 pub(crate) const STYLE_OWNER_RULE: &str = "-takumi-style-owner";
 
+/// Parses an at-rule's prelude, an `@scope` start `scope_start` relative to the rule around it.
 fn parse_at_rule_prelude<'i>(
   name: CowRcStr<'i>,
   input: &mut Parser<'i>,
+  scope_start: ParseRelative,
 ) -> Result<AtRulePrelude, ParseError<StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
     if input.is_exhausted() {
@@ -1283,7 +1285,7 @@ fn parse_at_rule_prelude<'i>(
     let start = input
       .try_parse(|input| {
         input.expect_parenthesis_block()?;
-        selectors(input, ParseRelative::No)
+        selectors(input, scope_start)
       })
       .ok();
     let end = input
@@ -1489,7 +1491,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
     name: CowRcStr<'i>,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    parse_at_rule_prelude(name, input)
+    parse_at_rule_prelude(name, input, ParseRelative::No)
   }
 
   fn parse_block(
