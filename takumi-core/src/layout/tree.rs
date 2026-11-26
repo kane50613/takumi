@@ -869,7 +869,7 @@ fn registered_custom_property_parent_style<'a>(
 
   adjusted_parent
     .custom_properties
-    .register_in_scope(registrations, &parent_style.custom_properties);
+    .register_in_scope(registrations);
   Cow::Owned(adjusted_parent)
 }
 

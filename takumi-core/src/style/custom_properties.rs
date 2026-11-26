@@ -6,6 +6,7 @@ use std::{
   sync::Arc,
 };
 
+use super::hash_trie::HashTrie;
 use crate::style::{
   CssWideKeyword, FromCssStr, PropertySyntax, SizingContext, contains_var_references,
   selector::PropertyRule,
@@ -14,11 +15,17 @@ use crate::style::{
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
 
-/// The custom properties an element resolves `var()` against, with the
-/// `@property` registrations that decide how each one inherits.
+/// The custom properties an element resolves `var()` against, with the `@property` registrations
+/// that decide how each one inherits. As Blink's `StyleInheritedVariables` and
+/// `StyleNonInheritedVariables`, the values a child inherits sit apart from the ones that stop here,
+/// so a child shares the first and starts the second empty, each in a trie a change copies only a
+/// path of. A registered property without a value
+/// takes its initial value, as Blink's `StyleInitialData` gives it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CustomProperties {
-  values: Arc<HashMap<String, String>>,
+  inherited: HashTrie<String, String>,
+  /// Registered properties that do not inherit, and the element state below.
+  non_inherited: HashTrie<String, String>,
   registrations: Arc<HashMap<String, PropertyRule>>,
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
@@ -28,20 +35,44 @@ pub struct CustomProperties {
 impl CustomProperties {
   /// The specified value of `name`, before `var()` substitution.
   pub fn get(&self, name: &str) -> Option<&str> {
-    self.values.get(name).map(String::as_str)
+    self
+      .own(name)
+      .or_else(|| self.registration(name)?.initial_value.as_deref())
+  }
+
+  /// The value this element holds for `name`, not a registered initial value.
+  fn own(&self, name: &str) -> Option<&str> {
+    self.values_of(name).get(name).map(String::as_str)
   }
 
   /// Whether `name` has a specified value.
   pub fn contains(&self, name: &str) -> bool {
-    self.values.contains_key(name)
+    self.get(name).is_some()
   }
 
   pub(crate) fn set(&mut self, name: String, value: String) {
-    Arc::make_mut(&mut self.values).insert(name, value);
+    self.values_of_mut(&name).insert(name, value);
   }
 
-  pub(crate) fn values(&self) -> &HashMap<String, String> {
-    &self.values
+  /// Whether `name`'s value stops at this element instead of reaching its children.
+  fn stops_here(&self, name: &str) -> bool {
+    self.element_state.contains(name) || self.registration(name).is_some_and(|rule| !rule.inherits)
+  }
+
+  fn values_of(&self, name: &str) -> &HashTrie<String, String> {
+    if self.stops_here(name) {
+      &self.non_inherited
+    } else {
+      &self.inherited
+    }
+  }
+
+  fn values_of_mut(&mut self, name: &str) -> &mut HashTrie<String, String> {
+    if self.stops_here(name) {
+      &mut self.non_inherited
+    } else {
+      &mut self.inherited
+    }
   }
 
   /// Sets `name` as a declaration specifies it. A CSS-wide keyword resolves here, as the cascade
@@ -74,7 +105,9 @@ impl CustomProperties {
   }
 
   pub(crate) fn remove(&mut self, name: &str) {
-    Arc::make_mut(&mut self.values).remove(name);
+    if self.own(name).is_some() {
+      self.values_of_mut(name).remove(name);
+    }
   }
 
   /// The `@property` rule governing `name`, if one registered it.
@@ -92,23 +125,14 @@ impl CustomProperties {
     Arc::ptr_eq(&self.registrations, registrations) || self.registrations == *registrations
   }
 
-  /// Puts `registrations` in scope, leaving the value each rule puts there: the parent's when it
-  /// inherits, the rule's initial value otherwise.
-  pub(crate) fn register_in_scope(&mut self, registrations: &Registrations, parent: &Self) {
+  /// Puts `registrations` in scope. A registered property reads the value already here when it
+  /// inherits, and its initial value otherwise.
+  pub(crate) fn register_in_scope(&mut self, registrations: &Registrations) {
     self.registrations = Arc::clone(registrations);
-
-    for rule in registrations.values() {
-      let inherited = rule.inherits.then(|| parent.get(&rule.name)).flatten();
-
-      match inherited.or(rule.initial_value.as_deref()) {
-        Some(value) => self.set(rule.name.clone(), value.to_owned()),
-        None => self.remove(&rule.name),
-      }
-    }
   }
 
-  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>`
-  /// to px, an `<angle>` to deg, a `<color>` to its color, and so on.
+  /// A copy with each value a child inherits of a registered property computed against `sizing`,
+  /// if any changes: a `<length>` to px, an `<angle>` to deg, a `<color>` to its color, and so on.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
   pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
     let mut computed: Option<Self> = None;
@@ -116,7 +140,7 @@ impl CustomProperties {
     for rule in self
       .registrations
       .values()
-      .filter(|rule| rule.syntax != PropertySyntax::Universal)
+      .filter(|rule| rule.inherits && rule.syntax != PropertySyntax::Universal)
     {
       let Some(value) = self.get(&rule.name) else {
         continue;
@@ -146,7 +170,7 @@ impl CustomProperties {
       let Some(rule) = registrations.get(name) else {
         continue;
       };
-      let value = self.get(name);
+      let value = self.own(name);
 
       if value.is_some_and(contains_var_references) {
         continue;
@@ -170,54 +194,24 @@ impl CustomProperties {
 
   /// Records state a utility engine wrote for this element alone, as Tailwind's `@property` does.
   pub(crate) fn register_element_state(&mut self, name: &str) {
-    if self.registration(name).is_some() {
+    if self.registration(name).is_some() || self.element_state.contains(name) {
       return;
     }
 
+    let inherited = self.inherited.remove(name);
+
     Arc::make_mut(&mut self.element_state).insert(name.to_owned());
-  }
-
-  /// What a child starts `name` from.
-  fn inherited_value<'v>(&'v self, name: &str, value: &'v str) -> Option<&'v str> {
-    if self.element_state.contains(name) {
-      return None;
-    }
-
-    match self.registration(name) {
-      Some(rule) if !rule.inherits => rule.initial_value.as_deref(),
-      _ => Some(value),
+    if let Some(value) = inherited {
+      self.set(name.to_owned(), value);
     }
   }
 
-  /// Whether a child needs a map of its own. Conservative: a non-inheriting
-  /// property already holding its initial value still answers yes.
-  fn needs_its_own_values(&self) -> bool {
-    !self.element_state.is_empty()
-      || self
-        .registrations
-        .values()
-        .any(|rule| !rule.inherits && self.values.contains_key(&rule.name))
-  }
-
-  /// The properties a child starts from: the registrations as they are, and the
-  /// values each rule leaves in reach.
+  /// The properties a child starts from: the values that inherit, shared, and none of the ones
+  /// that stop here.
   pub(crate) fn inherited(&self) -> Self {
-    let values = if self.needs_its_own_values() {
-      Arc::new(
-        self
-          .values
-          .iter()
-          .filter_map(|(name, value)| {
-            Some((name.clone(), self.inherited_value(name, value)?.to_owned()))
-          })
-          .collect(),
-      )
-    } else {
-      self.values.clone()
-    };
-
     Self {
-      values,
+      inherited: self.inherited.clone(),
+      non_inherited: Default::default(),
       registrations: self.registrations.clone(),
       element_state: Default::default(),
     }

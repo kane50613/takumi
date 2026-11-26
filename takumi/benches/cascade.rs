@@ -60,6 +60,80 @@ fn bench_cascade(c: &mut Criterion) {
     );
   }
 
+  // Tailwind v4 registers its utility variables with `@property`, and none of them inherit.
+  let registered: String = (0..40)
+    .map(|index| {
+      format!(
+        "@property --tw-{index} {{ syntax: '<length>'; inherits: false; initial-value: 0px; }}\n"
+      )
+    })
+    .collect();
+  let registered = StyleSheet::parse(&registered).expect("valid stylesheet");
+  // Each element sets one of them to a value of its own, which no other element's style shares.
+  let node = Node::container(
+    (0..400)
+      .map(|node| {
+        let name = format!("--tw-{}", node % 40);
+
+        Node::container([]).with_tw(
+          format!("[{name}:{node}px] w-[var({name})] h-1")
+            .parse()
+            .expect("valid classes"),
+        )
+      })
+      .collect::<Vec<_>>(),
+  );
+
+  group.bench_function(BenchmarkId::from_parameter("400x_registered"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(registered.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
+  // A design system's tokens on the root, which every element inherits and sets one of.
+  let tokens: String = (0..100)
+    .map(|index| format!("--token-{index}: {index}px;"))
+    .collect();
+  let variables = StyleSheet::parse(&format!(":root, .root {{ {tokens} }}")).expect("valid");
+  let node = Node::container(
+    (0..400)
+      .map(|node| {
+        Node::container([]).with_tw(
+          format!("[--own:{node}px] w-[var(--token-{})] h-1", node % 100)
+            .parse()
+            .expect("valid classes"),
+        )
+      })
+      .collect::<Vec<_>>(),
+  )
+  .with_class_name("root");
+
+  group.bench_function(BenchmarkId::from_parameter("400x_variables"), |b| {
+    b.iter(|| {
+      black_box(
+        render(
+          RenderOptions::builder()
+            .viewport(Viewport::new((64, 64)))
+            .node(node.clone())
+            .fonts(&fonts)
+            .stylesheet(variables.clone().into())
+            .build(),
+        )
+        .expect("renders"),
+      )
+    })
+  });
+
   // The reset most stylesheets open with, which matches every element's `::before` and `::after`.
   let reset = StyleSheet::parse(
     "*, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }",

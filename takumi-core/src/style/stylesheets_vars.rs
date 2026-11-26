@@ -189,13 +189,12 @@ const FONT_LONGHANDS: [(&str, &[&str], &[&str]); 2] = [
 /// property with font-relative units reads.
 #[derive(Clone, Copy)]
 struct FontDependencies<'a> {
-  properties: &'a CustomProperties,
   values: [Option<&'a str>; 2],
   is_document_root: bool,
 }
 
 struct Resolver<'a> {
-  specified: &'a HashMap<String, String>,
+  specified: &'a CustomProperties,
   resolved: HashMap<String, Resolution>,
   cycles: CycleResolver,
   budget: usize,
@@ -207,7 +206,7 @@ struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-  fn new(specified: &'a HashMap<String, String>) -> Self {
+  fn new(specified: &'a CustomProperties) -> Self {
     Self {
       specified,
       resolved: HashMap::new(),
@@ -226,8 +225,8 @@ impl<'a> Resolver<'a> {
       return;
     };
 
-    if fonts
-      .properties
+    if self
+      .specified
       .registration(name)
       .is_none_or(|rule| rule.syntax == PropertySyntax::Universal)
     {
@@ -449,7 +448,9 @@ fn charge(budget: &mut usize, bytes: usize) -> Result<(), ()> {
 }
 
 /// Resolves `var()` in the custom properties an element declares, `declared`, as Blink applies
-/// them: the values it inherits resolved already. Returns which of `font-size` and `line-height`,
+/// them: the values it inherits resolved already. Blink's `ApplyMatchResult` applies every one it
+/// declares, and resolves one sooner only when a property applied first reads it, so resolving them
+/// all first gives its values; the cycles that order finds are the font ones walked below. Returns which of `font-size` and `line-height`,
 /// whose `var()` values `fonts` holds, a cycle through a registered property's font-relative units
 /// reaches. A registered property in a cycle takes its `unset` value, as Blink's `ApplyUnset` gives
 /// it, and the others read it there.
@@ -479,10 +480,9 @@ pub(crate) fn resolve_declared_custom_properties(
     .map(|name| (name.clone(), properties.get(name).map(str::to_owned)))
     .collect();
   let (resolved, font_cycles, cycle_names) = {
-    let mut resolver = Resolver::new(properties.values());
+    let mut resolver = Resolver::new(properties);
 
     resolver.fonts = Some(FontDependencies {
-      properties,
       values: fonts,
       is_document_root,
     });
@@ -515,7 +515,7 @@ pub(crate) fn resolve_declared_custom_properties(
       })
       .collect();
     let resolved: Vec<Option<String>> = {
-      let mut resolver = Resolver::new(properties.values());
+      let mut resolver = Resolver::new(properties);
 
       others
         .iter()
@@ -615,7 +615,7 @@ pub(crate) fn resolve_var_references(
   specified_value: &str,
   custom_properties: &CustomProperties,
 ) -> Option<String> {
-  let mut resolver = Resolver::new(custom_properties.values());
+  let mut resolver = Resolver::new(custom_properties);
   resolver.resolve_value(specified_value, 0)
 }
 
