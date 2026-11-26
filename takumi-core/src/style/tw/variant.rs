@@ -228,7 +228,7 @@ pub(crate) enum LateCondition {
 }
 
 /// The late variants in the order Tailwind registers them.
-const LATE: [(&str, LateCondition); 6] = [
+const LATE: [(&str, LateCondition); 8] = [
   ("portrait", LateCondition::Media("(orientation: portrait)")),
   (
     "landscape",
@@ -244,6 +244,33 @@ const LATE: [(&str, LateCondition); 6] = [
   ),
   ("dark", LateCondition::Media("(prefers-color-scheme: dark)")),
   ("print", LateCondition::Media("print")),
+  (
+    "forced-colors",
+    LateCondition::Media("(forced-colors: active)"),
+  ),
+  (
+    "inverted-colors",
+    LateCondition::Media("(inverted-colors: inverted)"),
+  ),
+];
+
+/// The preference variants in the order Tailwind registers them, ahead of its breakpoints.
+const PREFERENCES: [(&str, &str); 4] = [
+  ("motion-safe", "(prefers-reduced-motion: no-preference)"),
+  ("motion-reduce", "(prefers-reduced-motion: reduce)"),
+  ("contrast-more", "(prefers-contrast: more)"),
+  ("contrast-less", "(prefers-contrast: less)"),
+];
+
+/// The states of an element no static render is in, whose `not-` variants always apply.
+const UNREACHED_STATES: [&str; 7] = [
+  "focus-within",
+  "hover",
+  "focus",
+  "focus-visible",
+  "active",
+  "visited",
+  "target",
 ];
 
 /// One variant of a utility, as Tailwind's `parseVariant` reads it.
@@ -253,6 +280,11 @@ pub(crate) enum Variant {
   Container(ContainerVariant),
   Late {
     condition: LateCondition,
+    rank: u8,
+  },
+  /// A preference media query, `motion-safe:` or `contrast-more:`.
+  Preference {
+    query: &'static str,
     rank: u8,
   },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
@@ -297,6 +329,13 @@ impl Variant {
     if let Some(rank) = LATE.iter().position(|(name, _)| *name == token) {
       return Some(Self::Late {
         condition: LATE[rank].1,
+        rank: rank as u8,
+      });
+    }
+
+    if let Some(rank) = PREFERENCES.iter().position(|(name, _)| *name == token) {
+      return Some(Self::Preference {
+        query: PREFERENCES[rank].1,
         rank: rank as u8,
       });
     }
@@ -346,7 +385,7 @@ pub(super) struct Variants {
   pub(super) breakpoint: Vec<Breakpoint>,
   /// The container queries `@` variants ask, every one of which must hold.
   pub(super) container: Vec<ContainerVariant>,
-  /// The media queries the late variants require of the viewport.
+  /// The media queries the late and preference variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
@@ -356,6 +395,8 @@ pub(super) struct Variants {
   ranks: u32,
   /// A bit per late variant, which outranks every other variant.
   late: u8,
+  /// A bit per preference variant, which outranks the structural ones but no breakpoint.
+  preference: u8,
 }
 
 impl Variants {
@@ -385,6 +426,12 @@ impl Variants {
           LateCondition::PseudoClass(pseudo_class) => self.pseudo_classes.push_str(pseudo_class),
         }
         self.late |= 1 << rank;
+      }
+      Variant::Preference { query, rank } => {
+        self
+          .media
+          .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?);
+        self.preference |= 1 << rank;
       }
       Variant::Structural { pseudo_class, rank } => {
         self.pseudo_classes.push_str(&pseudo_class);
@@ -421,7 +468,7 @@ impl Variants {
   }
 
   /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
-  /// query, a breakpoint, then the structural variant bits.
+  /// query, a breakpoint, the preference variants, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
     let mut arbitrary = self.arbitrary.clone();
 
@@ -447,6 +494,7 @@ impl Variants {
         orders.sort_unstable_by(|left, right| right.cmp(left));
         orders
       },
+      preference: self.preference,
       ranks: self.ranks,
     }
   }
@@ -463,6 +511,7 @@ pub(crate) struct VariantOrder {
   /// bit set gives each group one bit.
   container: Vec<WidthOrder>,
   breakpoint: Vec<BreakpointOrder>,
+  preference: u8,
   ranks: u32,
 }
 
@@ -486,6 +535,10 @@ fn pseudo_class(variant: &str) -> Option<String> {
   }
 
   if let Some(negated) = variant.strip_prefix("not-") {
+    if UNREACHED_STATES.contains(&negated) {
+      return Some(format!(":not(:{negated})"));
+    }
+
     return Some(format!(":not({})", pseudo_class(negated)?));
   }
 
@@ -627,6 +680,9 @@ mod tests {
       ("nth-last-of-type-2", Some(":nth-last-of-type(2)")),
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
+      ("not-hover", Some(":not(:hover)")),
+      ("not-focus-within", Some(":not(:focus-within)")),
+      ("not-enabled", None),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
       ("[&.active]", Some(".active")),
       ("[&[data-x]]", Some("[data-x]")),
@@ -699,6 +755,10 @@ mod tests {
       "empty",
       "nth-3",
       "nth-last-of-type-2",
+      "motion-safe",
+      "motion-reduce",
+      "contrast-more",
+      "contrast-less",
       "sm",
       "md",
       "@max-[100px]",
@@ -713,6 +773,8 @@ mod tests {
       "rtl",
       "dark",
       "print",
+      "forced-colors",
+      "inverted-colors",
       "[&:nth-child(4)]",
       "[&:nth-child(5)]",
     ];

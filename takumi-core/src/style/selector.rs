@@ -2612,6 +2612,39 @@ mod tests {
   }
 
   #[test]
+  fn user_preferences_hold_their_defaults() {
+    let viewport = Viewport::new((800, 600));
+
+    for (query, expected) in [
+      ("(prefers-reduced-motion: no-preference)", true),
+      ("(prefers-reduced-motion: reduce)", false),
+      ("(prefers-reduced-motion)", false),
+      ("(prefers-contrast: no-preference)", true),
+      ("(prefers-contrast: more)", false),
+      ("(prefers-contrast: less)", false),
+      ("(forced-colors: none)", true),
+      ("(forced-colors: active)", false),
+      ("(forced-colors)", false),
+      ("not (inverted-colors: inverted)", true),
+      ("(inverted-colors: none)", true),
+      ("(prefers-contrast: bogus)", false),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .a {{ width: 1px; }} }}"));
+
+      assert_eq!(
+        sheet.rules.first().is_some_and(|rule| {
+          rule
+            .media_queries
+            .first()
+            .is_some_and(|media| media.matches(viewport))
+        }),
+        expected,
+        "{query}"
+      );
+    }
+  }
+
+  #[test]
   fn test_parse_media_rule_with_viewport_features() {
     let sheet = parse_stylesheet(
       r#"

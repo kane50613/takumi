@@ -2083,6 +2083,12 @@ fn media_variants_follow_the_viewport() {
   assert!(active("landscape:w-4", print));
   assert!(active("print:w-4", print));
   assert!(!active("print:w-4", dark));
+  assert!(active("motion-safe:w-4", dark));
+  assert!(!active("motion-reduce:w-4", dark));
+  assert!(!active("contrast-more:w-4", dark));
+  assert!(!active("contrast-less:w-4", dark));
+  assert!(!active("forced-colors:w-4", dark));
+  assert!(!active("inverted-colors:w-4", dark));
   assert!(expand_apply("dark:w-4").is_none());
   assert!(expand_apply("@sm:w-4").is_none());
   assert!(expand_apply("rtl:w-4").is_none());

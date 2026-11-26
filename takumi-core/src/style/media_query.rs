@@ -44,6 +44,51 @@ enum MediaOrientation {
   Landscape,
 }
 
+/// A media feature about the user's settings, which no render sets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MediaPreference {
+  ReducedMotion,
+  Contrast,
+  ForcedColors,
+  InvertedColors,
+}
+
+impl MediaPreference {
+  const NAMES: [(&'static str, Self); 4] = [
+    ("prefers-reduced-motion", Self::ReducedMotion),
+    ("prefers-contrast", Self::Contrast),
+    ("forced-colors", Self::ForcedColors),
+    ("inverted-colors", Self::InvertedColors),
+  ];
+
+  fn from_name(name: &str) -> Option<Self> {
+    Self::NAMES
+      .iter()
+      .find(|(preference_name, _)| preference_name.eq_ignore_ascii_case(name))
+      .map(|&(_, preference)| preference)
+  }
+
+  /// The values it takes, the first being what a default render has.
+  /// <https://drafts.csswg.org/mediaqueries-5/#mf-user-preferences>
+  fn values(self) -> &'static [&'static str] {
+    match self {
+      Self::ReducedMotion => &["no-preference", "reduce"],
+      Self::Contrast => &["no-preference", "more", "less", "custom"],
+      Self::ForcedColors => &["none", "active"],
+      Self::InvertedColors => &["none", "inverted"],
+    }
+  }
+
+  /// The value `value` names, in the form `values` lists it.
+  fn value(self, value: &str) -> Option<&'static str> {
+    self
+      .values()
+      .iter()
+      .copied()
+      .find(|known| known.eq_ignore_ascii_case(value))
+  }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum MediaFeature {
   Width(MediaFeatureComparison, Length),
@@ -57,6 +102,8 @@ enum MediaFeature {
   Orientation(MediaOrientation),
   /// The scheme to match, or none for the boolean context, which every scheme matches.
   PrefersColorScheme(Option<ColorScheme>),
+  /// A user preference, which a render answers with its default, or the boolean context for none.
+  Preference(MediaPreference, Option<&'static str>),
   /// A `<general-enclosed>`: a feature or condition this parser does not know, which never holds.
   Unknown,
 }
@@ -216,6 +263,10 @@ impl MediaFeature {
   fn boolean(name: &str) -> Option<Self> {
     let comparison = MediaFeatureComparison::GreaterThan;
 
+    if let Some(preference) = MediaPreference::from_name(name) {
+      return Some(Self::Preference(preference, None));
+    }
+
     match_ignore_ascii_case! { name,
       "resolution" => Some(Self::Resolution(comparison, 0.0)),
       "prefers-color-scheme" => Some(Self::PrefersColorScheme(None)),
@@ -293,6 +344,15 @@ impl MediaFeature {
           CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken),
         ),
       };
+    }
+
+    if let Some(preference) = MediaPreference::from_name(&feature_name) {
+      let value = input.expect_ident_cloned()?;
+
+      return preference
+        .value(&value)
+        .map(|value| Self::Preference(preference, Some(value)))
+        .ok_or_else(|| CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken));
     }
 
     if feature_name.eq_ignore_ascii_case("orientation") {
@@ -397,6 +457,11 @@ impl MediaFeature {
       }
       Self::PrefersColorScheme(scheme) => {
         scheme.is_none_or(|scheme| viewport.color_scheme == scheme)
+      }
+      Self::Preference(preference, value) => {
+        let default = preference.values()[0];
+
+        value.is_some_and(|value| value == default)
       }
       Self::Unknown => false,
     }
@@ -690,6 +755,7 @@ impl ContainerCondition {
           feature,
           MediaFeature::Resolution(..)
             | MediaFeature::PrefersColorScheme(..)
+            | MediaFeature::Preference(..)
             | MediaFeature::Unknown
         )
       });
