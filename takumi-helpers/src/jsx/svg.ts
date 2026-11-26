@@ -23,45 +23,57 @@ const cssClosingBrackets = new Map([
   ["{", "}"],
 ]);
 
+/** The prefixes of the attribute names a serialized subtree writes. */
+type Prefixes = Set<string>;
+
 export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
   const { xmlns, ...props } = element.props;
+  const prefixes: Prefixes = new Set();
+  const markup = serializeNode(
+    xmlns != null
+      ? element
+      : { ...element, props: { ...props, xmlns: "http://www.w3.org/2000/svg" } },
+    prefixes,
+  );
 
-  if (xmlns != null) return serializeNode(element);
+  if (!prefixes.has("xlink") || "xmlnsXlink" in props || "xmlns:xlink" in props) {
+    return markup;
+  }
 
-  return serializeNode({ ...element, props: { ...props, xmlns: "http://www.w3.org/2000/svg" } });
+  return `<svg xmlns:xlink="http://www.w3.org/1999/xlink"${markup.slice("<svg".length)}`;
 }
 
-function serializeNode(node: unknown): string {
+function serializeNode(node: unknown, prefixes: Prefixes): string {
   if (typeof node === "string" || typeof node === "number") return escapeXml(String(node));
 
-  if (Array.isArray(node)) return node.map((child) => serializeNode(child)).join("");
+  if (Array.isArray(node)) return node.map((child) => serializeNode(child, prefixes)).join("");
 
-  return isValidElement(node) ? serializeElement(node) : "";
+  return isValidElement(node) ? serializeElement(node, prefixes) : "";
 }
 
-function serializeElement(element: ReactElementLike): string {
+function serializeElement(element: ReactElementLike, prefixes: Prefixes): string {
   const { type } = element;
   const props = (element.props as Record<string, unknown>) || {};
 
   const render = componentRenderer(type);
 
-  if (render) return serializeNode(render(element.props));
+  if (render) return serializeNode(render(element.props), prefixes);
 
   // Fragments and other symbol types have no tag of their own; emit their children in place.
-  if (typeof type === "symbol") return serializeNode(props.children);
+  if (typeof type === "symbol") return serializeNode(props.children, prefixes);
 
-  if (isReactForwardRef(type)) return serializeNode(type.render(element.props, null));
+  if (isReactForwardRef(type)) return serializeNode(type.render(element.props, null), prefixes);
 
-  if (isReactMemo(type)) return serializeElement({ ...element, type: type.type });
+  if (isReactMemo(type)) return serializeElement({ ...element, type: type.type }, prefixes);
 
   if (typeof type !== "string") return "";
 
   assertXmlName(type, "element");
 
-  return `<${type}${serializeAttributes(props)}>${serializeNode(props.children)}</${type}>`;
+  return `<${type}${serializeAttributes(props, prefixes)}>${serializeNode(props.children, prefixes)}</${type}>`;
 }
 
-function serializeAttributes(props: Record<string, unknown>): string {
+function serializeAttributes(props: Record<string, unknown>, prefixes: Prefixes): string {
   let attributes = "";
 
   for (const [key, value] of Object.entries(props)) {
@@ -70,6 +82,12 @@ function serializeAttributes(props: Record<string, unknown>): string {
     const name = attributeName(key);
 
     assertXmlName(name, "attribute");
+
+    const separator = name.indexOf(":");
+
+    if (separator !== -1) {
+      prefixes.add(name.slice(0, separator));
+    }
 
     const text =
       key === "style" && typeof value === "object" ? serializeStyle(value) : String(value);
