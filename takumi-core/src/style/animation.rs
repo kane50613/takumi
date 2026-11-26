@@ -456,11 +456,8 @@ fn sample_animation_progress(
     };
   }
 
-  if duration_ms <= 0.0 {
-    return Some(AnimationSample::active(end_progress(direction, 0)));
-  }
-
   let total_active_duration = match iteration_count {
+    _ if duration_ms <= 0.0 => 0.0,
     AnimationIterationCount::Infinite => f32::INFINITY,
     AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
   };
@@ -1378,6 +1375,26 @@ mod tests {
     );
 
     assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
+  }
+
+  #[test]
+  fn a_zero_duration_animation_fills_only_forwards() {
+    let sample = |fill_mode| {
+      sample_animation_progress(
+        0.0,
+        0.0,
+        0.0,
+        AnimationIterationCount::Number(1.0),
+        AnimationDirection::Normal,
+        fill_mode,
+      )
+      .map(|sample| sample.progress)
+    };
+
+    assert_eq!(sample(AnimationFillMode::None), None);
+    assert_eq!(sample(AnimationFillMode::Backwards), None);
+    assert_eq!(sample(AnimationFillMode::Forwards), Some(1.0));
+    assert_eq!(sample(AnimationFillMode::Both), Some(1.0));
   }
 
   #[test]
