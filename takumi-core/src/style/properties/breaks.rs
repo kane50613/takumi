@@ -5,7 +5,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser, serialize_identifier};
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  impl_css_enum, lerp,
 };
 
 /// A `break-before` or `break-after` value, Blink's `EBreakBetween`.
@@ -134,7 +135,7 @@ impl Animatable for MinLines {
 }
 
 impl<'i> FromCss<'i> for MinLines {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
 
     if value < 1 {
@@ -201,7 +202,7 @@ impl MakeComputed for PageName {}
 impl Animatable for PageName {}
 
 impl<'i> FromCss<'i> for PageName {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let name = input.expect_ident()?;
 
     if name.eq_ignore_ascii_case("auto") {

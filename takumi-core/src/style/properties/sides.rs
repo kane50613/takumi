@@ -5,7 +5,7 @@ use cssparser::Parser;
 use crate::{
   geometry::Rect,
   style::{
-    Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, ParseResult,
+    Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, ParseMode, ParseResult,
     SizingContext, ToCss,
   },
 };
@@ -37,15 +37,15 @@ impl<T: Copy> Sides<T> {
 }
 
 impl<'i, T: Clone + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let top = T::from_css(input)?;
-    let Ok(right) = input.try_parse(T::from_css) else {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let top = T::from_css_in(input, mode)?;
+    let Ok(right) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides::from(top));
     };
-    let Ok(bottom) = input.try_parse(T::from_css) else {
+    let Ok(bottom) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides([top.clone(), right.clone(), top, right]));
     };
-    let Ok(left) = input.try_parse(T::from_css) else {
+    let Ok(left) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides([top, right.clone(), bottom, right]));
     };
 
@@ -133,17 +133,9 @@ mod tests {
   use crate::style::{FromCssStr, Length};
 
   #[test]
-  fn deserialize_single_number() {
+  fn deserialize_axis_pair_lengths() {
     assert_eq!(
-      Sides::<Length>::from_css_str("5"),
-      Ok(Sides([Length::Px(5.0); 4]))
-    );
-  }
-
-  #[test]
-  fn deserialize_axis_pair_numbers() {
-    assert_eq!(
-      Sides::<Length>::from_css_str("10 20"),
+      Sides::<Length>::from_css_str("10px 20px"),
       Ok(Sides([
         Length::Px(10.0),
         Length::Px(20.0),

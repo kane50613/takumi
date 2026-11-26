@@ -209,12 +209,27 @@ impl CssExpectedMessage {
   }
 }
 
+/// Blink's `CSSParserMode`, whose `kSVGAttributeMode` passes `ShouldAcceptUnitlessLength`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ParseMode {
+  Css,
+  SvgAttribute,
+}
+
 /// Trait for types that can be parsed from CSS.
 pub(crate) trait FromCss<'i> {
-  /// Parses the type from a [`Parser`] instance.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
+  /// Parses the type in `mode`, Blink's `CSSParserMode`.
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self>
   where
     Self: Sized;
+
+  /// Parses the type as a style sheet writes it.
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
+  where
+    Self: Sized,
+  {
+    Self::from_css_in(input, ParseMode::Css)
+  }
 
   /// The keywords this type accepts, and the `<syntax>` of each other value it takes, for
   /// parse errors.
@@ -230,7 +245,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let start = input.state();
 
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
@@ -243,7 +258,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
       // `none, ...` starts a list whose first item is `none`, as `background-image: none, none`.
       input.reset(&start);
 
-      if let Ok(value) = input.try_parse(T::from_css) {
+      if let Ok(value) = input.try_parse(|input| T::from_css_in(input, mode)) {
         return Ok(Some(value));
       }
 
@@ -252,14 +267,14 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
       return Ok(None);
     }
 
-    T::from_css(input).map(Some)
+    T::from_css_in(input, mode).map(Some)
   }
 }
 
 impl<'i> FromCss<'i> for String {
   const VALID_TOKENS: &'static [&'static str] = &["<string>", "<custom-ident>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     Ok(input.expect_ident_or_string()?.to_string())
   }
 }
@@ -655,7 +670,7 @@ impl Animatable for u32 {}
 impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [&'static str] = &["<integer>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
     if value < 0 {
       return Err(CssParseError::from_basic_kind(
@@ -691,9 +706,14 @@ macro_rules! impl_comma_list_from_css {
   };
   ($list:ty, $elem:ty, $valid:expr) => {
     impl<'i> $crate::style::FromCss<'i> for $list {
-      fn from_css(input: &mut cssparser::Parser<'i>) -> $crate::style::ParseResult<'i, Self> {
+      fn from_css_in(
+        input: &mut cssparser::Parser<'i>,
+        mode: $crate::style::ParseMode,
+      ) -> $crate::style::ParseResult<'i, Self> {
         input
-          .parse_comma_separated(<$elem as $crate::style::FromCss>::from_css)
+          .parse_comma_separated(|input| {
+            <$elem as $crate::style::FromCss>::from_css_in(input, mode)
+          })
           .map(Vec::into_boxed_slice)
       }
 
@@ -775,7 +795,7 @@ macro_rules! impl_css_enum {
         ),*
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css_in(input: &mut cssparser::Parser<'i>, _mode: $crate::style::ParseMode) -> crate::style::ParseResult<'i, Self> {
         let index = $parser(
           input,
           Self::VALID_TOKENS,
@@ -829,7 +849,7 @@ macro_rules! declare_box_alignment_enum_impl {
         "unsafe",
       ];
 
-      fn from_css(input: &mut cssparser::Parser<'i>) -> crate::style::ParseResult<'i, Self> {
+      fn from_css_in(input: &mut cssparser::Parser<'i>, _mode: $crate::style::ParseMode) -> crate::style::ParseResult<'i, Self> {
         let mut overflow_position = None;
 
         loop {

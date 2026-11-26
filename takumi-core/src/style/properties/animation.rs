@@ -7,8 +7,9 @@ use cssparser::{
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  FromCss, FromCssStr, LinearEasing, MakeComputed, ParseResult, ToCss, impl_comma_list_from_css,
-  impl_css_enum, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
+  FromCss, FromCssStr, LinearEasing, MakeComputed, ParseMode, ParseResult, ToCss,
+  impl_comma_list_from_css, impl_css_enum, next_is_comma, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Represents a CSS animation time value stored in milliseconds.
@@ -28,7 +29,7 @@ impl AnimationTime {
 impl MakeComputed for AnimationTime {}
 
 impl<'i> FromCss<'i> for AnimationTime {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -108,7 +109,7 @@ pub enum StepPosition {
 }
 
 impl<'i> FromCss<'i> for AnimationTimingFunction {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(function) = input.try_parse(parse_timing_keyword) {
       return Ok(function);
     }
@@ -182,7 +183,7 @@ impl Default for AnimationIterationCount {
 impl MakeComputed for AnimationIterationCount {}
 
 impl<'i> FromCss<'i> for AnimationIterationCount {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|parser| parser.expect_ident_matching("infinite"))
       .is_ok()
@@ -313,7 +314,7 @@ pub struct Animation {
 impl MakeComputed for Animation {}
 
 impl<'i> FromCss<'i> for Animation {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut animation = Self::default();
     let mut time_count = 0;
 

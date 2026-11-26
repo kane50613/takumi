@@ -2,7 +2,9 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, parse_integer_value};
+use crate::style::{
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, parse_integer_value,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 /// Represents the CSS `order` value used for flex/grid item ordering.
@@ -12,7 +14,7 @@ impl MakeComputed for Order {}
 impl Animatable for Order {}
 
 impl<'i> FromCss<'i> for Order {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     Ok(Self(parse_integer_value(input)?))
   }
 

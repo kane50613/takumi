@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::style::{AlignItems, FromCss, JustifyContent, ParseResult, unexpected_token};
+use crate::style::{AlignItems, FromCss, JustifyContent, ParseMode, ParseResult, unexpected_token};
 
 /// Represents the `place-items` shorthand.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -14,7 +14,7 @@ pub struct PlaceItems {
 impl<'i> FromCss<'i> for PlaceItems {
   const VALID_TOKENS: &'static [&'static str] = AlignItems::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }
@@ -31,7 +31,7 @@ pub struct PlaceContent {
 impl<'i> FromCss<'i> for PlaceContent {
   const VALID_TOKENS: &'static [&'static str] = JustifyContent::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }
@@ -48,7 +48,7 @@ pub struct PlaceSelf {
 impl<'i> FromCss<'i> for PlaceSelf {
   const VALID_TOKENS: &'static [&'static str] = AlignItems::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }

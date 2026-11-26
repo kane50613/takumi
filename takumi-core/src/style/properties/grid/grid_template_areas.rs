@@ -4,7 +4,7 @@ use cssparser::{Parser, Token};
 use rustc_hash::FxHashMap;
 
 use super::{at_value_end, write_space_separated};
-use crate::style::{FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token};
 
 /// Represents a `grid-template-areas` value: each row's area names, `.` for a cell no area holds.
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -112,7 +112,7 @@ fn is_name_code_point(character: char) -> bool {
 }
 
 impl<'i> FromCss<'i> for GridTemplateAreas {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       if ident.as_ref() == "none" {
         return Ok(GridTemplateAreas(Vec::new()));

@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, merge_token_lists,
+  FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, merge_token_lists,
   merged_token_len, unexpected_token,
 };
 
@@ -22,8 +22,8 @@ pub enum GridLength {
 }
 
 impl<'i> FromCss<'i> for GridLength {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(unit) = input.try_parse(Length::from_css) {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(unit) = input.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(GridLength::Unit(unit));
     }
     if input

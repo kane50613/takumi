@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
   impl_css_enum, unexpected_token,
 };
 
@@ -94,13 +94,13 @@ pub enum FontSize {
 }
 
 impl FontSize {
-  /// Resolves to pixels against the inherited font size.
+  /// Resolves to pixels against the inherited font size, a negative calculation clamped to zero.
   pub fn to_px(self, sizing: &SizingContext, inherited_font_size: f32) -> f32 {
     match self {
       Self::Keyword(keyword) => keyword
         .to_length(sizing.viewport.font_size)
         .to_px(sizing, inherited_font_size),
-      Self::Length(length) => length.to_px(sizing, inherited_font_size),
+      Self::Length(length) => length.to_px(sizing, inherited_font_size).max(0.0),
       Self::Larger => inherited_font_size * RELATIVE_SIZE_RATIO,
       Self::Smaller => inherited_font_size / RELATIVE_SIZE_RATIO,
     }
@@ -154,22 +154,12 @@ impl From<FontSizeKeyword> for FontSize {
 }
 
 impl<'i> FromCss<'i> for FontSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     input
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
       .or_else(|_| input.try_parse(Self::parse_relative))
-      .or_else(|_| {
-        let state = input.state();
-        let token = input.next()?.clone();
-
-        if matches!(&token, Token::Ident(ident) if ident.eq_ignore_ascii_case("auto")) {
-          return Err(unexpected_token!(&token));
-        }
-
-        input.reset(&state);
-        Length::from_css(input).map(Self::Length)
-      })
+      .or_else(|_| Length::parse_length_percentage(input, mode).map(Self::Length))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &[
@@ -248,6 +238,21 @@ mod tests {
     assert_eq!(FontSize::from_css_str("smaller"), Ok(FontSize::Smaller));
     assert_eq!(FontSize::Larger.to_px(&sizing, 20.0), 24.0);
     assert_eq!(FontSize::Smaller.to_px(&sizing, 20.0), 20.0 / 1.2);
+  }
+
+  #[test]
+  fn negative_calc_clamps_to_zero() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(20.0)
+      .line_height(0.0)
+      .ch(10.0)
+      .ex(10.0)
+      .build();
+    let px = |css| FontSize::from_css_str(css).unwrap().to_px(&sizing, 20.0);
+
+    assert_eq!(px("calc(10px - 2em)"), 0.0);
+    assert_eq!(px("calc(50% - 20px)"), 0.0);
   }
 
   #[test]

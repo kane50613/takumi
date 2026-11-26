@@ -8,9 +8,9 @@ use crate::{
   geometry::{PathCommand, Point},
   path_data::PathData,
   style::{
-    Animatable, Color, ColorInput, FromCss, Length, MakeComputed, ParseResult, SizingContext,
-    ToCss, ValueError, discrete, impl_css_enum, lerp, properties::interpolate_repeated_list,
-    unexpected_token,
+    Animatable, Color, ColorInput, FromCss, Length, MakeComputed, ParseMode, ParseResult,
+    SizingContext, ToCss, ValueError, discrete, impl_css_enum, lerp,
+    properties::interpolate_repeated_list, unexpected_token,
   },
 };
 
@@ -46,7 +46,7 @@ impl MakeComputed for SvgResource {}
 impl Animatable for SvgResource {}
 
 impl<'i> FromCss<'i> for SvgResource {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -117,7 +117,7 @@ impl Animatable for SvgPaint {
 
 impl<'i> FromCss<'i> for SvgPaint {
   /// Blink's `css_parsing_utils::ParsePaintStroke`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(resource) = input.try_parse(SvgResource::from_css) {
       let fallback = input
         .try_parse(|input| {
@@ -186,7 +186,7 @@ impl StrokeDasharray {
   }
 
   fn item<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Length> {
-    let length = Length::from_css(input)?;
+    let length = Length::from_css_in(input, ParseMode::SvgAttribute)?;
 
     if matches!(length, Length::Auto) || length.is_negative() {
       return Err(ValueError::invalid("a dash must be a non-negative length"));
@@ -220,7 +220,8 @@ impl Animatable for StrokeDasharray {
 }
 
 impl<'i> FromCss<'i> for StrokeDasharray {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  /// Parses in Blink's `kSVGAttributeMode` in any mode, as `StrokeDasharray::ParseSingleValue`.
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut lengths = vec![Self::item(input)?];
 
     while let Ok(length) = input.try_parse(|input| {
@@ -281,7 +282,7 @@ impl Animatable for StrokeMiterlimit {
 }
 
 impl<'i> FromCss<'i> for StrokeMiterlimit {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let limit = input.expect_number()?;
 
     if limit < 0.0 {
@@ -405,7 +406,7 @@ impl Animatable for PaintOrder {}
 
 impl<'i> FromCss<'i> for PaintOrder {
   /// Blink's `PaintOrder::ParseSingleValue`: the phases not named follow in natural order.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if accepts_keyword(input, "normal") {
       return Ok(Self::Normal);
     }
@@ -739,7 +740,8 @@ impl Animatable for BaselineShift {
 }
 
 impl<'i> FromCss<'i> for BaselineShift {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  /// Parses in Blink's `kSVGAttributeMode` in any mode, as `BaselineShift::ParseSingleValue`.
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     for (keyword, shift) in [
       ("baseline", Self::default()),
       ("sub", Self::Sub),
@@ -750,7 +752,7 @@ impl<'i> FromCss<'i> for BaselineShift {
       }
     }
 
-    let length = Length::from_css(input)?;
+    let length = Length::from_css_in(input, ParseMode::SvgAttribute)?;
 
     if matches!(length, Length::Auto) {
       return Err(ValueError::invalid("baseline-shift takes no `auto`"));
@@ -858,7 +860,7 @@ impl Animatable for SvgPath {
 impl<'i> FromCss<'i> for SvgPath {
   /// Blink's `ConsumePathOrNone`: `none`, or a `path()` of complete path data, where an empty
   /// string is `none`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if accepts_keyword(input, "none") {
       return Ok(Self::default());
     }
@@ -920,5 +922,23 @@ impl ToCss for SvgPath {
     }
 
     dest.write_str("\")")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn svg_length_values_take_a_bare_number_in_css_text() {
+    assert_eq!(
+      StrokeDasharray::from_css_str("5 3"),
+      Ok(StrokeDasharray::new([Length::Px(5.0), Length::Px(3.0)]))
+    );
+    assert_eq!(
+      BaselineShift::from_css_str("5"),
+      Ok(BaselineShift::Length(Length::Px(5.0)))
+    );
   }
 }

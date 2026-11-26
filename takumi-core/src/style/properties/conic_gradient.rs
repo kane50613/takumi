@@ -13,7 +13,7 @@ use crate::{
   geometry::Size,
   math,
   style::{
-    Angle, Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed,
+    Angle, Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseMode,
     ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss,
     unexpected_token,
   },
@@ -310,7 +310,7 @@ impl GradientOverlayTile for ConicGradientTile {
 }
 
 impl ConicGradient {
-  /// Parses a conic gradient stop position: a percentage/number (fraction of a turn) or an angle.
+  /// Parses a conic gradient stop position: a percentage, an angle, or a unitless zero.
   fn parse_stop_position<'i>(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
     let token = input.next()?;
 
@@ -318,9 +318,7 @@ impl ConicGradient {
       Token::Percentage { unit_value, .. } => {
         Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
       }
-      Token::Number { value, .. } if (0.0..=1.0).contains(value) => {
-        Ok(StopPosition(Length::Percentage(*value * 100.0)))
-      }
+      Token::Number { value, .. } if *value == 0.0 => Ok(StopPosition(Length::Percentage(0.0))),
       Token::Dimension { value, unit, .. } => {
         let degrees = match_ignore_ascii_case! { unit,
           "deg" => *value,
@@ -359,7 +357,7 @@ impl ConicGradient {
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, ConicGradient> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, ConicGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
@@ -374,7 +372,7 @@ impl<'i> FromCss<'i> for ConicGradient {
         }
 
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-          center = Some(PositionValue::from_css(input)?);
+          center = Some(PositionValue::from_css_in(input, mode)?);
           continue;
         }
 

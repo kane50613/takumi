@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, serialize_identifier, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, Direction, FromCss, ListStyleType, MakeComputed, ParseResult,
-  SizingContext, ToCss, properties::counter::counter_name, tw::TailwindPropertyParser,
+  Animatable, BackgroundImage, Direction, FromCss, ListStyleType, MakeComputed, ParseMode,
+  ParseResult, SizingContext, ToCss, properties::counter::counter_name, tw::TailwindPropertyParser,
   unexpected_token,
 };
 
@@ -148,7 +148,7 @@ impl TailwindPropertyParser for ContentValue {
 }
 
 impl<'i> FromCss<'i> for ContentValue {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -165,7 +165,7 @@ impl<'i> FromCss<'i> for ContentValue {
 
     let mut items = Vec::new();
     while !input.is_exhausted() {
-      items.push(ContentItem::from_css(input)?);
+      items.push(ContentItem::from_css_in(input, mode)?);
     }
 
     if items.is_empty() {
@@ -179,9 +179,9 @@ impl<'i> FromCss<'i> for ContentValue {
 }
 
 impl<'i> FromCss<'i> for ContentItem {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let start = input.state();
-    if let Ok(image) = input.try_parse(BackgroundImage::from_css) {
+    if let Ok(image) = input.try_parse(|input| BackgroundImage::from_css_in(input, mode)) {
       if !matches!(image, BackgroundImage::None) {
         return Ok(ContentItem::Image(Box::new(image)));
       }
@@ -210,7 +210,7 @@ impl<'i> FromCss<'i> for ContentItem {
 }
 
 impl<'i> FromCss<'i> for AttrRef {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let name: Arc<str> = input.expect_ident()?.as_ref().into();
     let fallback: Arc<str> = if input.try_parse(Parser::expect_comma).is_ok() {
       input.expect_string()?.as_ref().into()

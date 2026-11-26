@@ -18,7 +18,7 @@ use super::gradient_utils::interpolate_rgba_premultiplied;
 use crate::{
   resources::image_buffer::premultiply_pixel,
   style::{
-    Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
+    Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseMode, ParseResult,
     SizingContext, ToCss, impl_css_enum,
     math::mul_div_255,
     parse_percentage_value, significant,
@@ -77,7 +77,7 @@ impl ColorInterpolationMethod {
 }
 
 impl<'i> FromCss<'i> for ColorInterpolationMethod {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     input.expect_ident_matching("in")?;
 
     let token = input.next()?;
@@ -959,7 +959,7 @@ impl LightDarkValuePair {
 
 impl<'i> FromCss<'i> for LightDarkValuePair {
   /// Blink's `ConsumeLightDark`, inside the function's block.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let first = ColorInput::from_css(input)?;
 
     input.expect_comma()?;
@@ -1081,7 +1081,7 @@ fn parse_color_mix_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32
 
 impl<'i> FromCss<'i> for ColorMixValue {
   /// Blink's `ConsumeColorMixFunction`, inside the function's block.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     // Only an explicit `in <space>` is followed by a comma.
     let interpolation = match input.try_parse(ColorInterpolationMethod::from_css) {
       Ok(interpolation) => {
@@ -1381,7 +1381,7 @@ impl ToCss for RelativeColorValue {
 
 impl<'i> FromCss<'i> for ColorInput {
   /// Blink's `ConsumeColor`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let position = input.position();
     let token = input.next()?;
 
@@ -1447,7 +1447,7 @@ impl<'i> FromCss<'i> for Color {
   /// A `<color>` that resolves without a current colour, in the light color scheme.
   // Unlike Blink's `ConsumeAbsoluteColor`, which rejects them, `light-dark()` and system colours
   // take their light colour.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let start = input.state();
 
     match ColorInput::from_css(input)?.resolve_color_value(ColorScheme::Light) {

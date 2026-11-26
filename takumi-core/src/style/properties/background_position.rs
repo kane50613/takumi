@@ -5,8 +5,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use crate::context::RenderContext;
 use crate::style::calc::CalcTerms;
 use crate::style::{
-  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
-  SizingContext, SpacePair, ToCss, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
+  ParseResult, SizingContext, SpacePair, ToCss, parse_comma_list, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Horizontal keywords for `background-position`.
@@ -217,27 +218,33 @@ pub(crate) enum PositionSyntax {
 }
 
 impl PositionValue {
-  /// A position of `syntax`, after Blink's `ConsumePosition`.
+  /// A position of `syntax` in `mode`, after Blink's `ConsumePosition`.
   /// <https://drafts.csswg.org/css-values-4/#position>
-  pub(crate) fn parse<'i>(input: &mut Parser<'i>, syntax: PositionSyntax) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(
+    input: &mut Parser<'i>,
+    syntax: PositionSyntax,
+    mode: ParseMode,
+  ) -> ParseResult<'i, Self> {
     let mut edges = Edges::default();
-    let first = edges.component(input)?;
+    let first = edges.component(input, mode)?;
 
     if first.keyword().is_none() {
       edges.horizontal = true;
     }
     if syntax == PositionSyntax::OneOrTwo
       && edges.vertical
-      && input.try_parse(Length::from_css).is_ok()
+      && input
+        .try_parse(|input| Length::from_css_in(input, mode))
+        .is_ok()
     {
       return Err(input.new_error_for_next_token());
     }
 
     let after_first = input.state();
-    let Ok(second) = input.try_parse(|input| edges.component(input)) else {
+    let Ok(second) = input.try_parse(|input| edges.component(input, mode)) else {
       // A second side keyword of the first one's axis names no position.
       if input
-        .try_parse(PositionComponent::from_css)
+        .try_parse(|input| PositionComponent::from_css_in(input, mode))
         .is_ok_and(|component| component.keyword().is_some())
       {
         return Err(input.new_error_for_next_token());
@@ -255,11 +262,11 @@ impl PositionValue {
       .keyword()
       .filter(|_| second.keyword().is_some() != next_is_ident(input))
       .filter(|_| !second.keyword().unwrap_or(first).is_center())
-      .and_then(|_| input.try_parse(|input| edges.component(input)).ok());
+      .and_then(|_| input.try_parse(|input| edges.component(input, mode)).ok());
     let fourth = third
       .and_then(PositionComponent::keyword)
       .filter(|keyword| !keyword.is_center() && !next_is_ident(input))
-      .and_then(|_| input.try_parse(|input| edges.component(input)).ok());
+      .and_then(|_| input.try_parse(|input| edges.component(input, mode)).ok());
 
     if let Some(third) = third
       && (fourth.is_some() || syntax == PositionSyntax::Background)
@@ -279,8 +286,8 @@ impl PositionValue {
   }
 
   /// A `transform-origin`, of one or two values.
-  pub(crate) fn parse_origin<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(input, PositionSyntax::OneOrTwo)
+  pub(crate) fn parse_origin<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    Self::parse(input, PositionSyntax::OneOrTwo, mode)
   }
 
   /// Blink's `PositionFromOneValue`.
@@ -373,8 +380,12 @@ struct Edges {
 }
 
 impl Edges {
-  fn component<'i>(&mut self, input: &mut Parser<'i>) -> ParseResult<'i, PositionComponent> {
-    let component = PositionComponent::from_css(input)?;
+  fn component<'i>(
+    &mut self,
+    input: &mut Parser<'i>,
+    mode: ParseMode,
+  ) -> ParseResult<'i, PositionComponent> {
+    let component = PositionComponent::from_css_in(input, mode)?;
     let seen = if component.is_horizontal_side() {
       &mut self.horizontal
     } else if component.is_vertical_side() {
@@ -402,8 +413,8 @@ fn next_is_ident(input: &mut Parser<'_>) -> bool {
 }
 
 impl<'i> FromCss<'i> for PositionValue {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    Self::parse(input, PositionSyntax::Position)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    Self::parse(input, PositionSyntax::Position, mode)
   }
 
   const VALID_TOKENS: &'static [&'static str] = PositionComponent::VALID_TOKENS;
@@ -434,8 +445,8 @@ impl PositionComponent {
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(v) = input.try_parse(Length::from_css) {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(v) = input.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(v.into());
     }
 
@@ -463,9 +474,9 @@ impl<'i> FromCss<'i> for PositionComponent {
 pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     parse_comma_list(input, |input| {
-      PositionValue::parse(input, PositionSyntax::Background)
+      PositionValue::parse(input, PositionSyntax::Background, mode)
     })
   }
 
@@ -539,7 +550,7 @@ mod tests {
   /// A whole declaration value parsed as a position, as a declaration list parses one.
   fn entire(css: &str, syntax: PositionSyntax) -> Option<String> {
     Parser::new(css)
-      .parse_entirely(|input| PositionValue::parse(input, syntax))
+      .parse_entirely(|input| PositionValue::parse(input, syntax, ParseMode::Css))
       .ok()
       .map(|position| position.to_css_string())
   }

@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token};
 
-use crate::style::{FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token};
 
 /// A 4-byte OpenType tag (for example `wght`, `liga`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -76,7 +76,7 @@ pub(crate) type FontFeatureSettings = Arc<[FontFeature]>;
 impl MakeComputed for FontFeatureSettings {}
 
 impl<'i> FromCss<'i> for FontFeatureSettings {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()

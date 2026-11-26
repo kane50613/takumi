@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, parse_calc_number_expression,
-  tw::Namespace, tw::TailwindPropertyParser,
+  FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 /// Represents a line height value.
@@ -48,7 +48,7 @@ impl TailwindPropertyParser for LineHeight {
 }
 
 impl<'i> FromCss<'i> for LineHeight {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -67,7 +67,7 @@ impl<'i> FromCss<'i> for LineHeight {
     }
 
     let Ok(number) = input.try_parse(Parser::expect_number) else {
-      return Length::from_css(input).map(Into::into);
+      return Length::from_css_in(input, mode).map(Into::into);
     };
 
     Ok(LineHeight::Unitless(number))
@@ -77,6 +77,16 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
+  /// Whether the line height is authored as a negative number or length, which Blink's
+  /// `ConsumeLineHeight` rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    match self {
+      Self::Normal => false,
+      Self::Unitless(value) => value < 0.0,
+      Self::Length(length) => length.is_negative(),
+    }
+  }
+
   /// Resolves to pixels, using `normal_basis` for `normal`, a negative calculation clamped to zero.
   pub fn to_px(self, sizing: &SizingContext, normal_basis: f32) -> f32 {
     match self {
@@ -89,14 +99,10 @@ impl LineHeight {
 
 impl MakeComputed for LineHeight {
   fn make_computed(&mut self, sizing: &SizingContext) {
-    match self {
-      Self::Length(Length::Percentage(value)) => {
-        let font_size = sizing.to_css(sizing.font_size);
-
-        *self = Self::Length(Length::Px((*value / 100.0) * font_size));
-      }
-      Self::Length(length) => length.make_computed(sizing),
-      Self::Normal | Self::Unitless(_) => {}
+    // Blink's `StyleBuilderConverter::ConvertLineHeight` computes a length, a percentage, or a
+    // calculation to pixels against the element's own font size.
+    if let Self::Length(length) = self {
+      *length = Length::Px(sizing.to_css(length.to_px(sizing, sizing.font_size).max(0.0)));
     }
   }
 }
@@ -113,7 +119,12 @@ impl ToCss for LineHeight {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCssStr, Length, LineHeight, tw::TailwindPropertyParser};
+  use crate::{
+    style::{
+      FromCssStr, Length, LineHeight, MakeComputed, SizingContext, tw::TailwindPropertyParser,
+    },
+    viewport::Viewport,
+  };
 
   #[test]
   fn parses_unitless_calc_expression() {
@@ -129,6 +140,21 @@ mod tests {
       LineHeight::from_css_str("90%"),
       Ok(LineHeight::Length(Length::Percentage(90.0)))
     );
+  }
+
+  #[test]
+  fn computes_a_percentage_calculation_against_the_font_size() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(20.0)
+      .line_height(0.0)
+      .ch(10.0)
+      .ex(10.0)
+      .build();
+    let mut line_height = LineHeight::from_css_str("calc(100% + 4px)").unwrap();
+
+    line_height.make_computed(&sizing);
+    assert_eq!(line_height, LineHeight::Length(Length::Px(24.0)));
   }
 
   #[test]

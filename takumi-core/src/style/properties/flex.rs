@@ -6,7 +6,8 @@ use cssparser::{
 
 use crate::style::{
   Animatable, AspectRatio, Color, FlexDirection, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, Size, SizingContext, ToCss, discrete, merge_token_lists, merged_token_len,
+  ParseMode, ParseResult, Size, SizingContext, ToCss, discrete, merge_token_lists,
+  merged_token_len,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -92,7 +93,7 @@ const FLEX_BASIS_TOKENS: [&str; merged_token_len(FLEX_BASIS_TOKEN_LISTS)] =
 impl<'i> FromCss<'i> for FlexBasis {
   const VALID_TOKENS: &'static [&'static str] = &FLEX_BASIS_TOKENS;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("content"))
       .is_ok()
@@ -100,7 +101,7 @@ impl<'i> FromCss<'i> for FlexBasis {
       return Ok(Self::Content);
     }
 
-    Size::from_css(input).map(Self::Size)
+    Size::from_css_in(input, mode).map(Self::Size)
   }
 }
 
@@ -151,7 +152,7 @@ impl<'i> FromCss<'i> for FlexWrap {
 
   // `[ nowrap | wrap | wrap-reverse ] || balance`, per CSS Flexbox Level 2.
   // <https://drafts.csswg.org/css-flexbox-2/#balance-values>
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut wrap = None;
     let mut balance = false;
 
@@ -234,7 +235,7 @@ impl Animatable for FlexLineCount {}
 impl<'i> FromCss<'i> for FlexLineCount {
   const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let count = input.expect_integer()?;
 
     if count < 1 {
@@ -339,7 +340,7 @@ impl<'i> FromCss<'i> for FlexFlow {
     "wrap-reverse",
   ];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut direction = None;
     let mut wrap = None;
 
@@ -369,7 +370,7 @@ impl<'i> FromCss<'i> for FlexFlow {
 }
 
 impl<'i> FromCss<'i> for Flex {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     // https://developer.mozilla.org/en-US/docs/Web/CSS/flex#values
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
@@ -400,7 +401,7 @@ impl<'i> FromCss<'i> for Flex {
       }
 
       if basis.is_none()
-        && let Ok(val) = input.try_parse(FlexBasis::from_css)
+        && let Ok(val) = input.try_parse(|input| FlexBasis::from_css_in(input, mode))
       {
         basis = Some(val);
         continue;
