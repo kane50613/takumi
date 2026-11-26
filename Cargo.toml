@@ -282,15 +282,15 @@ opt-level = "z"
 # skrifa's TrueType hinting interpreter, autohinter, and HarfBuzz-style scaler
 # are dead code for us (every draw is unhinted and FreeType-style) but survive
 # dead-code elimination through runtime branches. The fork gates them behind
-# the `hinting` and `harfbuzz_path_style` cargo features, and erases the pen in
-# `OutlineGlyph::draw` so every pen type shares one instantiation of the
+# `hinting`, `harfbuzz_path_style`, and `type1` (in read-fonts), and erases the
+# pen in `OutlineGlyph::draw` so every pen type shares one instantiation of the
 # scalers.
 [patch.crates-io]
 png = { git = "https://github.com/kane50613/image-png", rev = "666af62f375c853e3890f8f41075804ca2ee3597" }
-skrifa = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
-read-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
-font-types = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
-write-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
-# The fork gates the AAT tables (`morx`, `mort`, `kerx`, `ankr`, `trak`) behind an `aat` feature,
-# which takumi leaves off: web fonts shape by their OpenType tables.
-harfrust = { git = "https://github.com/kane50613/harfrust", rev = "de393280a638ef3de24fad5eae26bb9454b44681" }
+skrifa = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
+read-fonts = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
+font-types = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
+write-fonts = { git = "https://github.com/kane50613/fontations", rev = "53bb032b0ea43fcc999481fde9e0052656a1fd14" }
+# The fork gates the AAT tables (`morx`, `mort`, `kerx`, `ankr`, `trak`) behind `aat`
+# and synthesized legacy Arabic lookups behind `arabic_fallback`, both off in takumi.
+harfrust = { git = "https://github.com/kane50613/harfrust", rev = "c3fcdcf000613e4bf6bd0e6858b3e0721c82c897" }
