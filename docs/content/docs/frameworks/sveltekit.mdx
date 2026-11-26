@@ -131,10 +131,10 @@ Content longer than a page flows onto the next one. See [Pagination](/docs/pdf/p
 Failed to load url ./takumi_wasm_bg.js (resolved id: ./takumi_wasm_bg.js) in .../@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm. Does the file exist?
 ```
 
-Pin the adapter to 8.0.2 until a later release loads `.wasm` imports again. [Issue #2645](https://github.com/kane50613/takumi/issues/2645) tracks the fix.
+Versions 8.0.4 and 9.0.1 load `.wasm` imports again ([sveltejs/kit#17823](https://github.com/sveltejs/kit/pull/17823)). Install 9.0.1 or later, or 8.0.4 or later if you stay on version 8.
 
 ```npm
-npm i -D @sveltejs/adapter-cloudflare@8.0.2
+npm i -D @sveltejs/adapter-cloudflare@latest
 ```
 
 ## Next steps
