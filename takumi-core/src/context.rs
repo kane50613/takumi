@@ -157,7 +157,7 @@ pub struct RenderContext {
   pub style: Rc<ComputedStyle>,
   /// The decorations the box's text paints, from it and the boxes around it.
   pub(crate) text_decorations: AppliedTextDecorations,
-  /// Whether this box is a cell of a table that collapses its borders.
+  /// Whether this box is a table that collapses its borders, or one of its cells.
   pub(crate) collapsed_borders: bool,
   /// Whether an SVG drawn in this context is an `svg` element's content, which inherits the box's
   /// `color` as an inline `svg` does.

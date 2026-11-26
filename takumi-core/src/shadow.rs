@@ -52,6 +52,15 @@ impl SizedShadow {
     }
   }
 
+  /// Whether a box shadow lies wholly under its box, with no offset, blur, or spread, as Blink's
+  /// `ShadowIsFullyObscured`.
+  pub(crate) fn is_fully_obscured(&self) -> bool {
+    self.offset_x == 0.0
+      && self.offset_y == 0.0
+      && self.blur_radius == 0.0
+      && self.spread_radius == 0.0
+  }
+
   /// The shadow drawn through a transform that scales by `scale`, as Skia's
   /// `kShadowRespectsTransforms` scales it.
   pub(crate) fn scaled(self, scale: f32) -> Self {

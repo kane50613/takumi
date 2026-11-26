@@ -126,7 +126,8 @@ impl SizingContext {
       && self.color_scheme == other.color_scheme
   }
 
-  /// A copy with its font and line-height metrics replaced, keeping its viewport and container.
+  /// A copy with its font and line-height metrics replaced, keeping its viewport and container but
+  /// none of its container reads.
   pub(crate) fn with_font_metrics(
     &self,
     font_size: f32,
@@ -142,6 +143,7 @@ impl SizingContext {
       root_line_height,
       ch: units.ch,
       ex: units.ex,
+      container_read: Cell::new(false),
       ..self.clone()
     }
   }

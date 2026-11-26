@@ -74,7 +74,7 @@ impl RenderNode {
   /// `children` of a table part, each in a parent that accepts it, as Blink's
   /// `LayoutBlock::AddChild` wraps them; `None` for any other display.
   pub(in crate::layout) fn fix_up_table_children(
-    context: &RenderContext,
+    context: &mut RenderContext,
     children: Vec<RenderNode>,
   ) -> Option<Vec<RenderNode>> {
     let role = TableRole::of(context.style.base_data.display)?;
@@ -112,6 +112,7 @@ impl RenderNode {
           }
         }
       }
+      context.collapsed_borders = true;
     }
 
     Some(fixed)

@@ -142,7 +142,7 @@ impl TableDecorations {
             x: 0.0,
             y: grid_offset,
           },
-          paints_border: fragment.borders.is_none(),
+          paints_border: !node.context.collapsed_borders,
           columns: column_backgrounds(node, node_id, fragment_index, results, fragment)?,
         }
       }

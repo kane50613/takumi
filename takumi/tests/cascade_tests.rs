@@ -1136,6 +1136,27 @@ fn paragraph(css: &str) -> (f32, f32) {
   )
 }
 
+/// A layer's own rules outrank its sublayers, as Blink's `ComputeLayerOrder` numbers a layer after
+/// them, so `revert-layer` outside every layer reaches the layer's own rules.
+#[test]
+fn a_layer_outranks_its_sublayers() {
+  assert_eq!(
+    paragraph("@layer a { .box { width: 10px } } @layer a.b { .box { width: 20px } }").0,
+    10.0
+  );
+  assert_eq!(
+    paragraph(
+      "@layer a { .box { width: 10px } } @layer a.b { .box { width: 20px } } p.box { width: revert-layer }"
+    )
+    .0,
+    10.0
+  );
+  assert_eq!(
+    paragraph("@layer a { .box { width: revert-layer } } @layer a.b { .box { width: 20px } }").0,
+    20.0
+  );
+}
+
 /// `revert`, `revert-layer`, and `revert-rule` roll a property back to a weaker declaration, as
 /// Blink's `StyleCascade` resolves them, or to `unset` without one.
 #[test]
@@ -2171,6 +2192,63 @@ fn an_inherited_container_unit_resolves_where_it_is_declared() {
     container.children[1].children[0].transform[4],
     measured.children[0].children[1].children[0].transform[4]
   );
+}
+
+/// A registered property of universal syntax left without a value is guaranteed-invalid, so
+/// neither its parent's nor its initial value shows, as Blink's `CustomProperty::ApplyValue` stores
+/// none for it.
+#[test]
+fn a_universal_registered_property_without_a_value_is_guaranteed_invalid() {
+  let width = |css: &str| {
+    let node = Node::from_html(
+      r#"<div class="p"><div class="c"><div class="d"></div></div></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parses");
+    let measured = measure_with_css(
+      Node::container([node]),
+      &format!(".c, .d {{ width: var(--x, 30px); height: 1px }} {css}"),
+    );
+    let c = &measured.children[0].children[0];
+
+    (c.width, c.children[0].width)
+  };
+
+  assert_eq!(
+    width("@property --x { syntax: '*'; inherits: true } .p { --x: 10px } .c { --x: initial }"),
+    (30.0, 30.0)
+  );
+  assert_eq!(
+    width(
+      "@property --x { syntax: '*'; inherits: true; initial-value: 10px } .c { --x: var(--missing) }"
+    ),
+    (30.0, 30.0)
+  );
+  assert_eq!(
+    width(
+      "@property --x { syntax: '*'; inherits: true; initial-value: 10px } .c { --x: var(--y); --y: var(--x) }"
+    ),
+    (30.0, 30.0)
+  );
+}
+
+/// A keyframe that mixes a container unit with another unit reads the container, so the tree
+/// builds again against it, as Blink interpolates the two computed lengths.
+#[test]
+fn an_animated_container_unit_reads_its_container() {
+  let node = Node::from_html(
+    r#"<div class="container"><div class="grow"></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    "@keyframes grow { from { width: 10px } to { width: 50cqw } }
+     .container { container-type: inline-size; width: 200px }
+     .grow { height: 1px; animation: grow 2s linear -1s }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 55.0);
 }
 
 /// A `container-type` on a box size containment does not apply to, a non-atomic inline or a table,

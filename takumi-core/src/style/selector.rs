@@ -1,9 +1,12 @@
 use std::{
-  collections::HashMap,
+  collections::{HashMap, hash_map::Entry},
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  sync::{Arc, LazyLock},
+  sync::{
+    Arc, LazyLock,
+    atomic::{AtomicUsize, Ordering},
+  },
 };
 
 use cssparser::*;
@@ -54,11 +57,89 @@ pub struct PropertyRule {
 pub(crate) enum LayerName {
   /// An explicitly named layer.
   Named(String),
-  /// An anonymous layer.
-  Anonymous,
+  /// An anonymous layer, which no other `@layer` names, as Blink's anonymous `CascadeLayer`s are
+  /// all distinct.
+  Anonymous(usize),
+}
+
+impl LayerName {
+  /// A new anonymous layer.
+  fn anonymous() -> Self {
+    static NEXT_ANONYMOUS: AtomicUsize = AtomicUsize::new(0);
+
+    Self::Anonymous(NEXT_ANONYMOUS.fetch_add(1, Ordering::Relaxed))
+  }
 }
 
 pub(crate) type LayerPath = Vec<LayerName>;
+
+/// Approximate: a cascade layer path nests at most this many layers deep, and an `@layer` rule
+/// naming a deeper layer is invalid, where Blink has no limit.
+const MAX_LAYER_DEPTH: usize = 64;
+
+/// The cascade layer tree, each layer's direct sublayers in the order they first appear, as Blink's
+/// `CascadeLayer` holds them. Layer 0 is the implicit outer layer.
+struct LayerTree {
+  sublayers: Vec<Vec<usize>>,
+  /// The sublayer of a layer by its name.
+  by_name: HashMap<(usize, LayerName), usize>,
+}
+
+impl Default for LayerTree {
+  fn default() -> Self {
+    Self {
+      sublayers: vec![Vec::new()],
+      by_name: HashMap::new(),
+    }
+  }
+}
+
+impl LayerTree {
+  /// Adds the layer at `path` and each layer above it that is not yet in the tree, and returns it.
+  fn insert(&mut self, path: &[LayerName]) -> usize {
+    let mut layer = 0;
+
+    for name in path {
+      layer = match self.by_name.entry((layer, name.clone())) {
+        Entry::Occupied(entry) => *entry.get(),
+        Entry::Vacant(entry) => {
+          let sublayer = self.sublayers.len();
+
+          entry.insert(sublayer);
+          self.sublayers[layer].push(sublayer);
+          self.sublayers.push(Vec::new());
+          sublayer
+        }
+      };
+    }
+    layer
+  }
+
+  /// Each layer's order, after its sublayers', as Blink's `ComputeLayerOrder` numbers the tree.
+  /// The outer layer's is the count of the others.
+  fn orders(&self) -> Vec<usize> {
+    let mut orders = vec![0; self.sublayers.len()];
+    let mut next = 0;
+    let mut stack = vec![(0, 0)];
+
+    while let Some(top) = stack.last_mut() {
+      let (layer, child) = *top;
+
+      match self.sublayers[layer].get(child) {
+        Some(&sublayer) => {
+          top.1 += 1;
+          stack.push((sublayer, 0));
+        }
+        None => {
+          orders[layer] = next;
+          next += 1;
+          stack.pop();
+        }
+      }
+    }
+    orders
+  }
+}
 
 /// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -758,7 +839,10 @@ impl RuleParser {
   }
 
   /// The layers `layer_names` declare, as paths under the current layer.
-  fn declared_layers(&self, layer_names: &[LayerPath]) -> Vec<LayerPath> {
+  fn declared_layers(
+    &self,
+    layer_names: &[LayerPath],
+  ) -> Result<Vec<LayerPath>, ParseError<StyleSheetParseError>> {
     layer_names
       .iter()
       .map(|layer_name| extend_layer_name(self.current_layer.as_ref(), layer_name))
@@ -1198,13 +1282,15 @@ impl NestingContext<'_> {
         let Some(layer_name) = layer_names.first() else {
           return Ok(StyleSheetFragment::default());
         };
-        let nested_layer = extend_layer_name(self.layer, layer_name);
-
-        NestingContext {
+        let nested_layer = extend_layer_name(self.layer, layer_name)?;
+        let mut fragment = NestingContext {
           layer: Some(&nested_layer),
           ..self
         }
-        .parse_group_rule_block(parent_selectors, input)
+        .parse_group_rule_block(parent_selectors, input)?;
+
+        fragment.declared_layers.insert(0, nested_layer);
+        Ok(fragment)
       }
       AtRulePrelude::Media(media_query) => {
         let mut media_queries = self.media_queries.to_vec();
@@ -1292,7 +1378,7 @@ fn parse_at_rule_prelude<'i>(
 ) -> Result<AtRulePrelude, ParseError<StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
     if input.is_exhausted() {
-      return Ok(AtRulePrelude::Layer(vec![vec![LayerName::Anonymous]]));
+      return Ok(AtRulePrelude::Layer(vec![vec![LayerName::anonymous()]]));
     }
     return Ok(AtRulePrelude::Layer(
       input.parse_comma_separated(parse_layer_name)?,
@@ -1463,6 +1549,9 @@ pub(crate) fn parse_layer_name<'i>(
       _ => return Err(ParseError::unexpected_token()),
     };
     segments.push(LayerName::Named(segment));
+    if segments.len() > MAX_LAYER_DEPTH {
+      return Err(ParseError::unexpected_token());
+    }
 
     if input.try_parse(|input| input.expect_delim('.')).is_err() {
       break;
@@ -1480,11 +1569,17 @@ fn skip_block(input: &mut Parser<'_>) -> StyleSheetFragment {
   StyleSheetFragment::default()
 }
 
-fn extend_layer_name(current_layer: Option<&LayerPath>, layer_name: &[LayerName]) -> LayerPath {
+fn extend_layer_name(
+  current_layer: Option<&LayerPath>,
+  layer_name: &[LayerName],
+) -> Result<LayerPath, ParseError<StyleSheetParseError>> {
+  if current_layer.map_or(0, Vec::len) + layer_name.len() > MAX_LAYER_DEPTH {
+    return Err(ParseError::unexpected_token());
+  }
   let mut combined = current_layer.cloned().unwrap_or_default();
 
   combined.extend(layer_name.iter().cloned());
-  combined
+  Ok(combined)
 }
 
 fn ensure_single_layer_name(
@@ -1554,7 +1649,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
     match prelude {
       AtRulePrelude::Layer(layer_names) => {
         ensure_single_layer_name(&layer_names)?;
-        let declared_layers = self.declared_layers(&layer_names);
+        let declared_layers = self.declared_layers(&layer_names)?;
         let Some(nested_layer) = declared_layers.first().cloned() else {
           return Ok(StyleSheetFragment {
             declared_layers,
@@ -1668,7 +1763,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
   ) -> Result<Self::AtRule, ()> {
     match prelude {
       AtRulePrelude::Layer(layer_names) => Ok(StyleSheetFragment {
-        declared_layers: self.declared_layers(&layer_names),
+        declared_layers: self.declared_layers(&layer_names).map_err(|_| ())?,
         ..StyleSheetFragment::default()
       }),
       AtRulePrelude::StyleOwner(owner) if self.top_level => {
@@ -2125,16 +2220,23 @@ impl StyleSheet {
       rules = preflight_rules;
     }
 
-    let mut layer_order = HashMap::<LayerPath, usize>::new();
-    let used_layers = rules.iter().filter_map(|rule| rule.layer.clone());
+    let mut layers = LayerTree::default();
+    let mut layer_ids = HashMap::<&LayerPath, usize>::new();
+    let used_layers = rules.iter().filter_map(|rule| rule.layer.as_ref());
     #[cfg(feature = "font-face")]
-    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.clone()));
-    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.clone()));
+    let used_layers = used_layers.chain(font_faces.iter().filter_map(|rule| rule.layer.as_ref()));
+    let used_layers = used_layers.chain(page_rules.iter().filter_map(|rule| rule.layer.as_ref()));
 
-    for layer_name in declared_layers.into_iter().chain(used_layers) {
-      let next_order = layer_order.len();
-      layer_order.entry(layer_name).or_insert(next_order);
+    for layer_name in declared_layers.iter().chain(used_layers) {
+      if !layer_ids.contains_key(layer_name) {
+        layer_ids.insert(layer_name, layers.insert(layer_name));
+      }
     }
+    let orders = layers.orders();
+    let layer_order: HashMap<LayerPath, usize> = layer_ids
+      .into_iter()
+      .map(|(layer_name, layer)| (layer_name.clone(), orders[layer]))
+      .collect();
 
     for rule in &mut rules {
       rule.layer_order = rule
@@ -3479,14 +3581,94 @@ mod tests {
       sheet.rules[0].layer.as_ref(),
       Some(&vec![LayerName::Named("theme".to_owned())])
     );
-    assert_eq!(
-      sheet.rules[1].layer.as_ref(),
-      Some(&vec![
-        LayerName::Named("theme".to_owned()),
-        LayerName::Anonymous,
-      ])
-    );
+    assert!(matches!(
+      sheet.rules[1].layer.as_deref(),
+      Some([LayerName::Named(theme), LayerName::Anonymous(_)]) if theme == "theme"
+    ));
     assert_ne!(sheet.rules[0].layer_order, sheet.rules[1].layer_order);
+  }
+
+  /// The layer order of each rule in `sheet`, in source order.
+  fn rule_layer_orders(sheet: &StyleSheet) -> Vec<Option<usize>> {
+    sheet.rules.iter().map(|rule| rule.layer_order).collect()
+  }
+
+  /// Each anonymous `@layer` block is a layer of its own, in each sheet of a list too, as Blink's
+  /// `CascadeLayer::FindDirectSubLayer` finds no anonymous layer.
+  #[test]
+  fn each_anonymous_layer_is_its_own_layer() {
+    let sheet = parse_stylesheet("@layer { .a { width: 1px } } @layer { .b { width: 2px } }");
+    let [first, second] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(first < second);
+
+    let sheet = StyleSheet::parse_list([
+      "@layer { .a { width: 1px } }",
+      "@layer { .b { width: 2px } }",
+    ])
+    .expect("parses");
+    let [first, second] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(first < second);
+  }
+
+  /// Layers order as Blink's `ComputeLayerOrder` walks their tree: a layer after its sublayers, and
+  /// the sublayers of one layer together.
+  #[test]
+  fn a_layer_orders_after_its_sublayers() {
+    let sheet = parse_stylesheet("@layer a { .x { width: 1px } } @layer a.b { .x { width: 2px } }");
+    let [a, a_b] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(a_b < a);
+
+    let sheet = parse_stylesheet(
+      "@layer a.b; @layer c; @layer a.d;
+       @layer c { .x { width: 1px } } @layer a.d { .x { width: 2px } } @layer a.b { .x { width: 3px } }",
+    );
+    let [c, a_d, a_b] = rule_layer_orders(&sheet)[..] else {
+      panic!("three rules");
+    };
+
+    assert!(a_b < a_d && a_d < c);
+
+    let sheet = parse_stylesheet(".x { @layer b { width: 1px } } @layer c { .x { width: 2px } }");
+    let [b, c] = rule_layer_orders(&sheet)[..] else {
+      panic!("two rules");
+    };
+
+    assert!(b < c);
+  }
+
+  /// A layer path deeper than [`MAX_LAYER_DEPTH`] drops its rule, so a long dotted name or deeply
+  /// nested blocks neither overflow the stack nor take quadratic time.
+  #[test]
+  fn a_too_deep_layer_path_drops_its_rule() {
+    let name = vec!["a"; 100_000].join(".");
+    let sheet = parse_stylesheet_loosy(&format!(
+      "@layer {name} {{ .x {{ width: 1px }} }} @layer {name}; .y {{ width: 2px }}"
+    ));
+
+    assert_eq!(rule_layer_orders(&sheet), [None]);
+
+    let depth = 10_000;
+    let sheet = parse_stylesheet_loosy(&format!(
+      "{}.x {{ width: 1px }}{}",
+      "@layer a { ".repeat(depth),
+      "}".repeat(depth)
+    ));
+
+    assert!(sheet.rules.is_empty());
+
+    let at_limit = vec!["a"; MAX_LAYER_DEPTH].join(".");
+    let sheet = parse_stylesheet(&format!("@layer {at_limit} {{ .x {{ width: 1px }} }}"));
+
+    assert_eq!(rule_layer_orders(&sheet), [Some(0)]);
   }
 
   /// An invalid layer name drops its block; it does not fall back to an
