@@ -840,3 +840,15 @@ fn a_collapsed_table_background_fills_its_rounded_border_box() {
 
   assert_eq!(image.as_raw()[offset..offset + 4], [255, 0, 0, 255]);
 }
+
+/// A shadow with no offset, blur, or spread hides entirely under its box, so it paints nothing, as
+/// Blink's `ResolveShadowColor` skips one `ShadowIsFullyObscured`.
+#[test]
+fn a_fully_obscured_shadow_paints_nothing() {
+  let document = build_with(
+    Node::container([]).with_id("box"),
+    "#box { width: 40px; height: 40px; border-radius: 8px; box-shadow: 0 0 red, inset 0 0 0 blue }",
+  );
+
+  assert!(!roles(find(&document, "box")).contains(&Role::BoxShadow));
+}

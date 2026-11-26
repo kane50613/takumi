@@ -497,7 +497,7 @@ impl<'c> BoxPainter<'c> {
         self.layout.size,
       )
     };
-    let visible = |shadow: &SizedShadow| shadow.color.0[3] != 0;
+    let visible = |shadow: &SizedShadow| shadow.color.0[3] != 0 && !shadow.is_fully_obscured();
 
     BoxShadows {
       inset: shadows
