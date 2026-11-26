@@ -138,7 +138,12 @@ describe("Painter.paint", () => {
     expect(card?.drawables[0]).toMatchObject({
       type: "fill",
       paint: { type: "color", color: [247, 243, 236, 255] },
-      shape: { type: "rounded-rect", radii: { topLeft: { x: 12, y: 12 } } },
+      // The background stops halfway into the opaque border, as Blink's bleed avoidance has it.
+      shape: {
+        type: "rounded-rect",
+        rect: { x: 2, y: 2 },
+        radii: { topLeft: { x: 10, y: 10 } },
+      },
     });
 
     const [run] = runs(tree);
