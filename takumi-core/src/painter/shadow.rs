@@ -89,17 +89,17 @@ impl BoxPainter<'_> {
       origin: None,
     };
 
-    let opaque_background = self
+    // Blink's `ClipToBorderEdge`: under an opaque background the clip shrinks by a pixel, so that
+    // no antialiased gap shows between the shadow and the box.
+    let clip_out = if self
       .context
       .style
       .background_data
       .background_color
       .resolve(self.context.current_color)
       .0[3]
-      == u8::MAX;
-    // Blink's `ClipToBorderEdge`: under an opaque background the clip shrinks by a pixel, so that
-    // no antialiased gap shows between the shadow and the box.
-    let clip_out = if opaque_background {
+      == u8::MAX
+    {
       border_box.outset(-1.0)
     } else {
       border_box
