@@ -6,10 +6,11 @@ use std::{collections::HashMap, sync::Arc};
 use cssparser::{Parser, match_ignore_ascii_case};
 use selectors::parser::{ParseRelative, Selector, SelectorList};
 
-use super::is_ident;
+use super::{extract_arbitrary_value, is_ident};
 use crate::{
   style::{
-    Length,
+    FromCssStr, Length, ToCss,
+    media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl, TakumiSelectorParser},
   },
   viewport::Viewport,
@@ -81,10 +82,99 @@ impl Breakpoint {
   }
 }
 
+/// A container query variant, `@md:` or `@max-[400px]/sidebar:`, which applies while the nearest
+/// inline-size container, or the one it names, meets a width. Approximate: a named width is
+/// Tailwind's default, which a stylesheet's `--container-*` does not re-size.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContainerVariant {
+  pub(crate) query: ContainerQuery,
+  order: ContainerOrder,
+}
+
+/// Where a container variant sorts: `@max-*` first, widest first, then `@` and `@min-*`, narrowest
+/// first, a width that is not a length first in its group, as Tailwind's
+/// `compareBreakpointVariants` puts it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ContainerOrder {
+  at_least: bool,
+  width: u32,
+  name: Box<str>,
+}
+
+impl ContainerVariant {
+  /// The container variant `token` names, `@` then an optional `min-` or `max-`, a width, and an
+  /// optional `/name`.
+  fn parse(token: &str) -> Option<Self> {
+    let rest = token.strip_prefix('@')?;
+    let (rest, name) = rest.split_once('/').unwrap_or((rest, ""));
+    let (at_least, value) = match rest.strip_prefix("max-") {
+      Some(value) => (false, value),
+      None => (true, rest.strip_prefix("min-").unwrap_or(rest)),
+    };
+    let width = match extract_arbitrary_value(value) {
+      Some(arbitrary) if arbitrary.contains("var(") => return None,
+      Some(arbitrary) => arbitrary.into_owned(),
+      None => Length::container_width(value)?.to_css_string(),
+    };
+    let operator = if at_least { ">=" } else { "<" };
+    let text = format!("{name} (width {operator} {width})");
+    let query = ContainerQuery::parse(&mut Parser::new(&text)).ok()?;
+    let rem = match Length::from_css_str(&width) {
+      Ok(Length::Rem(rem)) => Some(rem),
+      Ok(Length::Px(px)) => Some(px / 16.0),
+      _ => None,
+    };
+    let width = match (rem, at_least) {
+      (Some(rem), true) => rem.to_bits().saturating_add(1),
+      (Some(rem), false) => u32::MAX - 1 - rem.to_bits(),
+      (None, true) => 0,
+      (None, false) => u32::MAX,
+    };
+
+    Some(Self {
+      query,
+      order: ContainerOrder {
+        at_least,
+        width,
+        name: name.into(),
+      },
+    })
+  }
+}
+
+/// A variant Tailwind registers after its container queries: a media query the viewport meets,
+/// or a selector the element matches.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum LateCondition {
+  Media(&'static str),
+  PseudoClass(&'static str),
+}
+
+/// The late variants in the order Tailwind registers them.
+const LATE: [(&str, LateCondition); 6] = [
+  ("portrait", LateCondition::Media("(orientation: portrait)")),
+  ("landscape", LateCondition::Media("(orientation: landscape)")),
+  (
+    "ltr",
+    LateCondition::PseudoClass(r#":where(:dir(ltr), [dir="ltr"], [dir="ltr"] *)"#),
+  ),
+  (
+    "rtl",
+    LateCondition::PseudoClass(r#":where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)"#),
+  ),
+  ("dark", LateCondition::Media("(prefers-color-scheme: dark)")),
+  ("print", LateCondition::Media("print")),
+];
+
 /// One variant of a utility, as Tailwind's `parseVariant` reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Variant {
   Breakpoint(Breakpoint),
+  Container(ContainerVariant),
+  Late {
+    condition: LateCondition,
+    rank: u8,
+  },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
@@ -122,6 +212,17 @@ impl Variant {
       _ => {}
     }
 
+    if let Some(rank) = LATE.iter().position(|(name, _)| *name == token) {
+      return Some(Self::Late {
+        condition: LATE[rank].1,
+        rank: rank as u8,
+      });
+    }
+
+    if token.starts_with('@') {
+      return ContainerVariant::parse(token).map(Self::Container);
+    }
+
     if let Some(pseudo_class) = pseudo_class(token) {
       return Some(Self::Structural {
         rank: structural_rank(token),
@@ -156,10 +257,15 @@ fn structural_rank(token: &str) -> u8 {
 #[derive(Debug, Default)]
 pub(super) struct Variants {
   pub(super) breakpoint: Option<Breakpoint>,
+  pub(super) container: Option<ContainerVariant>,
+  /// The media queries the late variants require of the viewport.
+  pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
   /// A bit per variant rank, so comparing two sorts them as Tailwind's variant bit sets do.
   ranks: u32,
+  /// A bit per late variant, which outranks every other variant.
+  late: u8,
 }
 
 impl Variants {
@@ -176,13 +282,27 @@ impl Variants {
     Some((variants, token))
   }
 
-  /// Adds `variant`, or `None` for a second breakpoint or pseudo-element.
+  /// Adds `variant`, or `None` for a second breakpoint, container query, or pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
       Variant::Breakpoint(breakpoint) => {
         if self.breakpoint.replace(breakpoint).is_some() {
           return None;
         }
+      }
+      Variant::Container(container) => {
+        if self.container.replace(container).is_some() {
+          return None;
+        }
+      }
+      Variant::Late { condition, rank } => {
+        match condition {
+          LateCondition::Media(query) => self
+            .media
+            .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?),
+          LateCondition::PseudoClass(pseudo_class) => self.pseudo_classes.push_str(pseudo_class),
+        }
+        self.late |= 1 << rank;
       }
       Variant::Structural { pseudo_class, rank } => {
         self.pseudo_classes.push_str(&pseudo_class);
@@ -214,10 +334,12 @@ impl Variants {
     condition(&self.pseudo_classes).map(Some)
   }
 
-  /// The variants' sort key: the breakpoint dominates, as Tailwind registers breakpoints after
-  /// every structural variant, then the variant bits.
+  /// The variants' sort key, the latest Tailwind registers first: the late variants, a container
+  /// query, a breakpoint, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
+      late: self.late,
+      container: self.container.as_ref().map(|container| container.order.clone()),
       breakpoint: self.breakpoint.as_ref().map(Breakpoint::order),
       ranks: self.ranks,
     }
@@ -227,6 +349,8 @@ impl Variants {
 /// Tailwind's variant order for one utility.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VariantOrder {
+  late: u8,
+  container: Option<ContainerOrder>,
   breakpoint: Option<(u32, Arc<str>)>,
   ranks: u32,
 }
@@ -433,6 +557,18 @@ mod tests {
       "[&:nth-child(4)]",
       "sm",
       "md",
+      "@max-lg",
+      "@max-sm",
+      "@max-[100px]",
+      "@[10em]",
+      "@sm",
+      "@min-md",
+      "@md/sidebar",
+      "portrait",
+      "ltr",
+      "rtl",
+      "dark",
+      "print",
     ];
     let order = |token: &str| {
       let mut variants = Variants::default();

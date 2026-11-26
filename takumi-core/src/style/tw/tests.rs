@@ -4,6 +4,7 @@ use super::{builder::TailwindDeclarationBuilder, parser::*, *};
 use crate::{
   Cache,
   style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage},
+  viewport::{ColorScheme, MediaTarget},
 };
 
 /// The declarations a utility emits with no variable defined, which is what these assertions are
@@ -2032,3 +2033,51 @@ fn structural_variants_cascade_as_tailwind_registers_them() {
 
   assert_eq!(last, TwRule::parse("odd:mt-2").unwrap().id);
 }
+
+#[test]
+fn the_container_utility_sets_container_type_and_name() {
+  assert_eq!(
+    parse_property("@container"),
+    Some(vec![StyleDeclaration::container_type(ContainerType::InlineSize)])
+  );
+  assert_eq!(
+    parse_property("@container-size/sidebar"),
+    Some(vec![
+      StyleDeclaration::container_type(ContainerType::Size),
+      StyleDeclaration::container_name(ContainerName::from_css_str("sidebar").unwrap()),
+    ])
+  );
+  assert_eq!(
+    parse_property("@container-[size]"),
+    Some(vec![StyleDeclaration::container_type(ContainerType::Size)])
+  );
+  assert_eq!(parse_property("@container-foo"), None);
+}
+
+#[test]
+fn media_variants_follow_the_viewport() {
+  let active = |token: &str, viewport: Viewport| {
+    TwRule::parse(token)
+      .expect("compiles")
+      .is_active(viewport, &Default::default())
+  };
+  let dark = Viewport {
+    color_scheme: ColorScheme::Dark,
+    ..Viewport::new((100, 200))
+  };
+  let print = Viewport {
+    media_target: MediaTarget::Print,
+    ..Viewport::new((200, 100))
+  };
+
+  assert!(active("dark:w-4", dark));
+  assert!(!active("dark:w-4", Viewport::new((100, 200))));
+  assert!(active("portrait:w-4", dark));
+  assert!(!active("portrait:w-4", print));
+  assert!(active("landscape:w-4", print));
+  assert!(active("print:w-4", print));
+  assert!(!active("print:w-4", dark));
+  assert!(expand_apply("dark:w-4").is_none());
+  assert!(expand_apply("@sm:w-4").is_none());
+}
+

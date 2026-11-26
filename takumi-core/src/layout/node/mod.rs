@@ -899,6 +899,16 @@ impl Node {
       .iter()
       .flat_map(move |tw| tw.rules(Some(cache)).iter())
   }
+
+  /// Whether a `tw` utility in the subtree asks a container query.
+  pub(crate) fn has_tw_container_queries(&self, cache: &TailwindCache) -> bool {
+    self.tw_rules(cache).any(|rule| rule.container.is_some())
+      || self.children().is_some_and(|children| {
+        children
+          .iter()
+          .any(|child| child.has_tw_container_queries(cache))
+      })
+  }
 }
 
 #[cfg(test)]

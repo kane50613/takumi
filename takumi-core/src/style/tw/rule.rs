@@ -19,6 +19,7 @@ use super::{
 use crate::{
   style::{
     ContentItem, ContentValue, PropertyMask, StyleDeclaration, StyleDeclarationBlock,
+    media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl},
   },
   viewport::Viewport,
@@ -68,7 +69,11 @@ pub(crate) struct TwRule {
   pub(crate) declarations: StyleDeclarationBlock,
   pub(crate) important: bool,
   pub(crate) breakpoint: Option<Breakpoint>,
-  /// The pseudo-classes the utility's structural variants require of the element.
+  /// The container query an `@` variant asks of the element's containers.
+  pub(crate) container: Option<ContainerQuery>,
+  /// The media queries the late variants require of the viewport.
+  pub(crate) media: Vec<MediaQueryList>,
+  /// The pseudo-classes the utility's structural and direction variants require of the element.
   pub(crate) condition: Option<Selector<SelectorImpl>>,
   pub(crate) pseudo_element: Option<PseudoElement>,
   /// A class's specificity with its variants', as Tailwind's selector for the utility has.
@@ -121,6 +126,8 @@ impl TwRule {
       declarations,
       important,
       breakpoint: variants.breakpoint,
+      container: variants.container.map(|container| container.query),
+      media: variants.media,
       condition,
       pseudo_element: variants.pseudo_element,
       specificity,
@@ -128,11 +135,12 @@ impl TwRule {
     })
   }
 
-  /// Whether the rule's breakpoint, if any, admits the viewport.
-  pub(super) fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
+  /// Whether the rule's breakpoint and media queries, if any, admit the viewport.
+  pub(crate) fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
     self
       .breakpoint
       .as_ref()
       .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+      && self.media.iter().all(|media| media.matches(viewport))
   }
 }
