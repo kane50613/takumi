@@ -36,7 +36,12 @@ export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">
     prefixes,
   );
 
-  if (!prefixes.has("xlink") || "xmlnsXlink" in props || "xmlns:xlink" in props) {
+  if (
+    !prefixes.has("xlink") ||
+    Object.entries(props).some(
+      ([key, value]) => value != null && attributeName(key) === "xmlns:xlink",
+    )
+  ) {
     return markup;
   }
 

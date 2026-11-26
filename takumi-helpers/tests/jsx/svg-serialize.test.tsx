@@ -192,4 +192,7 @@ test("serializeSvg declares the XLink namespace its attributes use", () => {
       {image}
     </svg>,
   );
+  expect(serializeSvg(<svg xmlnsXlink={undefined}>{image}</svg>)).toBe(
+    '<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg"><image xlink:href="a.png"></image></svg>',
+  );
 });
