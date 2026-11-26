@@ -482,7 +482,10 @@ fn sample_animation_progress(
   let (phase, active_time) = if local_active_time < 0.0 {
     (AnimationPhase::Before, fills_backwards.then_some(0.0)?)
   } else if local_active_time >= active_duration {
-    (AnimationPhase::After, fills_forwards.then_some(active_duration)?)
+    (
+      AnimationPhase::After,
+      fills_forwards.then_some(active_duration)?,
+    )
   } else {
     (AnimationPhase::Active, local_active_time)
   };
