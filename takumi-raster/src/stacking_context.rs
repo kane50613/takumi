@@ -340,9 +340,6 @@ fn placed<'r>(
   let layout = scene.enter(paint)?;
   let mut context = node.context.clone();
 
-  context
-    .sizing
-    .set_container_size(paint.container_size.width, paint.container_size.height);
   context.transform = paint.transform;
 
   Ok((node, layout, context))

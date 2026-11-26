@@ -399,9 +399,6 @@ impl TableBoxStyle {
 pub(crate) struct LayoutNodeState {
   /// The style it lays out with, shared with recent nodes whose style came out equal.
   pub(crate) layout_style: Rc<LayoutStyle>,
-  /// Whether the styles are the same whatever query container they resolve against, so repeated
-  /// layouts can reuse them.
-  pub(crate) container_independent: bool,
   pub(crate) cache: LayoutCache,
   /// Blink's `LayoutBox::layout_results_`: where each of its fragments went, by fragment index.
   pub(crate) fragments: Fragments,
@@ -665,13 +662,11 @@ impl<T: PartialEq> RecentStyles<T> {
 impl LayoutNodeState {
   fn new(
     layout_style: Rc<LayoutStyle>,
-    container_independent: bool,
     is_inline_children: bool,
     claims: ContainingBlockClaims,
   ) -> Self {
     Self {
       layout_style,
-      container_independent,
       cache: LayoutCache::default(),
       fragments: SmallVec::from_buf([BoxFragment::default()]),
       is_inline_children,
@@ -1306,20 +1301,10 @@ impl<'r> LayoutTree<'r> {
       };
       render_nodes.push(render_node);
 
-      let (layout_style, container_independent) = {
-        let sizing = &render_node.context.sizing;
-
-        // Whether resolution read the container is exact, where comparing resolved sizes is not.
-        sizing.container_read.set(false);
-        let layout_style = render_node.layout_box_style(sizing);
-        let independent = !sizing.container_read.get();
-
-        (layout_style, independent)
-      };
+      let layout_style = render_node.layout_box_style(&render_node.context.sizing);
 
       nodes.push(LayoutNodeState::new(
         recent_styles.share(layout_style),
-        container_independent,
         is_inline_children,
         ContainingBlockClaims::of(&render_node.context.style),
       ));
@@ -1632,31 +1617,6 @@ impl<'r> LayoutTree<'r> {
 
   pub(crate) fn node_state_mut(&mut self, node: NodeId) -> &mut LayoutNodeState {
     &mut self.nodes[usize::from(node)]
-  }
-
-  /// Resolves `node`'s styles again against a query container of `container_size`, unless they
-  /// read no query container.
-  pub(crate) fn restyle_for_container(
-    &mut self,
-    node: NodeId,
-    container_size: Size<Option<LayoutUnit>>,
-  ) {
-    let index = usize::from(node);
-    let render_node = self.render_nodes[index];
-    let state = &mut self.nodes[index];
-
-    if state.container_independent {
-      return;
-    }
-
-    let mut sizing = render_node.context.sizing.clone();
-
-    sizing.container_size = container_size.map(|size| size.map(LayoutUnit::to_float));
-
-    let mut layout_style = render_node.layout_box_style(&sizing);
-
-    state.table_box.apply(&mut layout_style);
-    state.layout_style = Rc::new(layout_style);
   }
 
   /// Blink's `LayoutBox::SetLayoutResult`: keeps `fragment` as `node`'s fragment
@@ -2460,28 +2420,34 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
+    let mut tree =
+      Self::build_in_containers(parent_context, node.clone(), blockifies_children, None);
+
     if !parent_context.stylesheet().has_container_queries()
       && !node.has_tw_container_queries(parent_context.cache().tailwind())
+      && !tree.holds_query_container()
     {
-      return Self::build_in_containers(parent_context, node, blockifies_children, None);
+      return tree;
     }
 
-    // `@container` rules read the sizes a layout gives their containers, as Blink lays a container
-    // out before it styles the boxes in it. Size containment keeps a container's size from its
-    // contents, so it follows only from the queries of the containers around it: each build settles
-    // one more level of them, and the sizes settle within a build more than the most containers a
-    // build found.
+    // `@container` rules and container units read the sizes a layout gives their containers, as
+    // Blink lays a container out before it styles the boxes in it. Size containment keeps a
+    // container's size from its contents, so it follows only from the queries of the containers
+    // around it: each build settles one more level of them, and the sizes settle within a build
+    // more than the most containers a build found.
     let mut containers: Option<QueryContainers> = None;
     let mut pass = 0;
     let mut budget = 0;
 
     loop {
-      let tree = Self::build_in_containers(
-        parent_context,
-        node.clone(),
-        blockifies_children,
-        containers.as_ref(),
-      );
+      if pass > 0 {
+        tree = Self::build_in_containers(
+          parent_context,
+          node.clone(),
+          blockifies_children,
+          containers.as_ref(),
+        );
+      }
       let sizes = tree.query_containers();
 
       budget = budget.max(sizes.len());
@@ -2516,6 +2482,7 @@ impl RenderNode {
         parent_context,
         node.clone(),
         &matched_styles,
+        containers,
         blockifies_children,
         &mut list_item_counts,
       );
@@ -2525,6 +2492,7 @@ impl RenderNode {
       parent_context,
       node,
       &matched_styles,
+      containers,
       blockifies_children,
       &mut list_item_counts,
     );
@@ -2536,6 +2504,16 @@ impl RenderNode {
       }
     }
     tree
+  }
+
+  /// Whether a box in it is a query container.
+  fn holds_query_container(&self) -> bool {
+    self.context.style.misc_data.container_type != ContainerType::Normal
+      || self
+        .children
+        .iter()
+        .flatten()
+        .any(RenderNode::holds_query_container)
   }
 
   /// The query containers among its boxes, sized by laying it out in its viewport, which a renderer
@@ -2602,11 +2580,13 @@ impl RenderNode {
     parent_context: &RenderContext,
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
+    containers: Option<&QueryContainers>,
     root_blockifies_children: bool,
     list_item_counts: &mut ListItemCounts,
   ) -> Self {
     let mut walk = TreeWalk {
       matched_declarations,
+      containers,
       source_cursor: 0,
       counters: CountersAttachmentContext::default(),
       list_item_counts,
@@ -2633,7 +2613,10 @@ impl RenderNode {
       if let Some(child) = current.pending_children.next() {
         let display = current.context.style.base_data.display;
         let mut child_pending = PendingRenderNode::build(
-          &current.context,
+          current
+            .container_context
+            .as_ref()
+            .unwrap_or(&current.context),
           child,
           &mut walk,
           &mut current.list_ordinals,
@@ -2958,10 +2941,11 @@ fn drop_collapsible_boundary_whitespace(
 }
 
 /// What building a render tree carries from node to node in document order: each node's matched
-/// declarations by source order, the next source order, the counters in scope, and the item count
-/// of each list that numbers its items from it.
+/// declarations by source order, the query containers by source order, the next source order, the
+/// counters in scope, and the item count of each list that numbers its items from it.
 struct TreeWalk<'a, 'm> {
   matched_declarations: &'a [NodeMatchedDeclarations<'m>],
+  containers: Option<&'a QueryContainers>,
   source_cursor: usize,
   counters: CountersAttachmentContext,
   list_item_counts: &'a mut ListItemCounts,
@@ -3000,6 +2984,9 @@ impl PendingPseudo {
 /// A node whose context is resolved while its children are still being built.
 struct PendingRenderNode {
   context: RenderContext,
+  /// The context its children resolve under when it is a query container, whose container units
+  /// read it.
+  container_context: Option<RenderContext>,
   node: Node,
   source_order: usize,
   children_is_some: bool,
@@ -3059,6 +3046,16 @@ impl PendingRenderNode {
       context.style_mut().base_data_mut().display = Display::None;
     }
 
+    let container_context = walk
+      .containers
+      .and_then(|containers| containers.get(&source_order))
+      .map(|container| {
+        let mut container_context = context.clone();
+
+        container_context.sizing.container_size =
+          container.size_within(context.sizing.container_size);
+        container_context
+      });
     let display = context.style.base_data.display;
     let marker_ordinal =
       (display == Display::ListItem).then(|| enclosing_ordinals.next_value(&node, &context.style));
@@ -3083,13 +3080,14 @@ impl PendingRenderNode {
       .is_some()
       .then(|| walk.matched_declarations.get(source_order))
       .flatten();
+    let pseudo_parent = container_context.as_ref().unwrap_or(&context);
     let pseudo_before = element_matched
       .and_then(|m| m.before())
-      .and_then(|m| PendingPseudo::resolve(&context, m))
+      .and_then(|m| PendingPseudo::resolve(pseudo_parent, m))
       .map(|pseudo| RenderNode::from_pseudo(pseudo, &node, &mut walk.counters));
     let pseudo_after = element_matched
       .and_then(|m| m.after())
-      .and_then(|m| PendingPseudo::resolve(&context, m));
+      .and_then(|m| PendingPseudo::resolve(pseudo_parent, m));
     let pseudo_before_present = pseudo_before.is_some();
 
     let has_generated_children =
@@ -3120,6 +3118,7 @@ impl PendingRenderNode {
       blockifies,
       is_text_run,
       context,
+      container_context,
       node,
       rendered_children,
       pending_children: children.into_iter(),

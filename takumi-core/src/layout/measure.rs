@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::{
   Error, Result,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Size},
+  geometry::{ComputedLayout as Layout, NodeId},
   layout::tree::{ContainingBlocks, LayoutResults, RenderNode},
   painter::OwnContent,
   style::{Affine, Display},
@@ -45,18 +45,12 @@ pub struct MeasuredNode {
 }
 
 impl MeasuredNode {
-  /// Measures every node of `root`, laid out in `layout_results`, with percentages on the root
-  /// resolving against `container_size`.
-  pub fn of(
-    root: &mut RenderNode,
-    layout_results: &LayoutResults,
-    container_size: Size<Option<f32>>,
-  ) -> Result<Self> {
+  /// Measures every node of `root`, laid out in `layout_results`.
+  pub fn of(root: &RenderNode, layout_results: &LayoutResults) -> Result<Self> {
     let mut visits = vec![TraversalVisit::Enter(TraversalEnter {
       path: Vec::new(),
       node_id: NodeId::ROOT,
       transform: Affine::IDENTITY,
-      container_size,
     })];
     let mut measured_by_node_id: FxHashMap<usize, MeasuredNode> = FxHashMap::default();
     let mut containing_blocks = ContainingBlocks::default();
@@ -67,16 +61,11 @@ impl MeasuredNode {
           path,
           node_id,
           mut transform,
-          container_size,
         }) => {
-          let Some(current) = root.node_at_path_mut(&path) else {
+          let Some(current) = root.node_at_path(&path) else {
             return Err(Error::InvalidLayoutNode(node_id.into()));
           };
           let layout = layout_results.layout(node_id)?;
-          current
-            .context
-            .sizing
-            .set_container_size(container_size.width, container_size.height);
 
           transform *= Affine::translation(layout.location.x, layout.location.y);
           let mut local_transform = transform;
@@ -144,12 +133,6 @@ impl MeasuredNode {
             continue;
           }
 
-          let child_container_size = Size {
-            width: Some(layout.content_box_width()),
-            height: Some(layout.content_box_height()),
-          };
-          containing_blocks.record_content_box(node_id, child_container_size);
-
           visits.push(TraversalVisit::Exit(MeasureExit {
             node_id,
             layout,
@@ -162,13 +145,14 @@ impl MeasuredNode {
           for child in layout_children.iter().rev() {
             let mut child_path = path.clone();
             child.extend_path(&mut child_path);
-            let (base_transform, base_container) =
-              containing_blocks.base_for(child.hoisted_cb, local_transform, child_container_size);
+            let base_transform = containing_blocks
+              .recorded_placement_for(child.hoisted_cb, local_transform)
+              .unwrap_or(local_transform);
+
             visits.push(TraversalVisit::Enter(TraversalEnter {
               path: child_path,
               node_id: child.node_id,
               transform: base_transform,
-              container_size: base_container,
             }));
           }
         }
@@ -223,7 +207,6 @@ struct TraversalEnter {
   path: Vec<usize>,
   node_id: NodeId,
   transform: Affine,
-  container_size: Size<Option<f32>>,
 }
 
 enum TraversalVisit {

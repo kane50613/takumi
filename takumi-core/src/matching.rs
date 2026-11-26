@@ -1292,6 +1292,17 @@ pub(crate) struct QueryContainer {
 }
 
 impl QueryContainer {
+  /// The sizes container units read inside it: its own on the axes it contains, `outer`'s on the
+  /// others.
+  pub(crate) fn size_within(&self, outer: Size<Option<f32>>) -> Size<Option<f32>> {
+    let contained = self.contained_size();
+
+    Size {
+      width: contained.width.or(outer.width),
+      height: contained.height.or(outer.height),
+    }
+  }
+
   /// Its size on the axes its `container-type` contains, the others unknown.
   fn contained_size(&self) -> Size<Option<f32>> {
     Size {

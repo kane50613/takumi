@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use takumi::prelude::*;
 
-use crate::test_utils::{block, measure_with_css};
+use crate::test_utils::{block, create_test_viewport, measure_with_css};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -2044,5 +2044,34 @@ fn tailwind_direction_variants_read_dir() {
   assert_eq!(
     measure_with_css(Node::container([node]), "").children[0].children[1].width,
     80.0
+  );
+}
+
+/// A container unit reads the nearest query container, not the box's parent, and the viewport
+/// without one, as Blink's `CSSToLengthConversionData::ContainerSizes` finds it.
+#[test]
+fn container_units_read_the_nearest_query_container() {
+  let node = Node::from_html(
+    r#"<div class="container"><div class="padded"><p class="target">x</p></div></div><div class="loose"><p class="free">x</p></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".container { container-type: inline-size; width: 400px }
+     .padded { padding: 0 100px }
+     .target { width: 50cqw; margin: 0 }
+     .loose { padding: 50px }
+     .free { width: 10cqw; margin: 0 }",
+  );
+  let viewport_width = create_test_viewport().size.width.expect("has a width") as f32;
+
+  assert_eq!(
+    measured.children[0].children[0].children[0].children[0].width,
+    200.0
+  );
+  assert_eq!(
+    measured.children[0].children[1].children[0].width,
+    viewport_width / 10.0
   );
 }

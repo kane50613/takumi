@@ -302,14 +302,6 @@ impl<'r> LayoutTree<'r> {
     space: &ConstraintSpace,
     input: &FragmentationLayoutInput,
   ) -> Rc<LayoutResult> {
-    self.restyle_for_container(
-      node,
-      Size {
-        width: space.available_inline_size,
-        height: space.available_block_size,
-      },
-    );
-
     if let Some(result) = self.node_state(node).cache.get(space, input)
       && !self.ends_nothing_it_placed(space, &result)
     {
@@ -402,15 +394,12 @@ impl<'r> LayoutTree<'r> {
   /// A measure of `node` that gives the box the border box `space` lays it out at, which serves a
   /// layout whose fragments nothing places, as Blink's `CachedLayoutResult` serves a first layout
   /// from the measures.
-  ///
-  /// Approximate: a measure keeps no record of the style it resolved, so a box whose style reads
-  /// its query container never reuses one, where Blink reuses it while the style is unchanged.
   pub(crate) fn measure_for_layout(
     &mut self,
     node: NodeId,
     space: &ConstraintSpace,
   ) -> Option<Rc<LayoutResult>> {
-    if space.table_part.is_some() || !self.node_state(node).container_independent {
+    if space.table_part.is_some() {
       return None;
     }
 
