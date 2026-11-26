@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cssparser::{Parser, Token, TokenSerializationType};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CustomProperties, PropertySyntax};
+use crate::style::{ComputedStyle, CssWideKeyword, CustomProperties, FromCssStr, PropertySyntax};
 
 const MAX_VAR_DEPTH: u32 = 100;
 const MAX_VAR_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -195,6 +195,8 @@ struct FontDependencies<'a> {
 
 struct Resolver<'a> {
   specified: &'a CustomProperties,
+  /// The inherited custom properties a substituted CSS-wide keyword reads, if it resolves.
+  parent: Option<&'a CustomProperties>,
   resolved: HashMap<String, Resolution>,
   cycles: CycleResolver,
   budget: usize,
@@ -206,9 +208,10 @@ struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-  fn new(specified: &'a CustomProperties) -> Self {
+  fn new(specified: &'a CustomProperties, parent: Option<&'a CustomProperties>) -> Self {
     Self {
       specified,
+      parent,
       resolved: HashMap::new(),
       cycles: CycleResolver::default(),
       budget: MAX_VAR_OUTPUT_BYTES,
@@ -269,7 +272,15 @@ impl<'a> Resolver<'a> {
 
     self.cycles.push(name);
     let saved_budget = std::mem::replace(&mut self.budget, MAX_VAR_OUTPUT_BYTES);
-    let value = self.resolve_value(specified, depth + 1);
+    let value =
+      self.resolve_value(specified, depth + 1).and_then(
+        |value| match CssWideKeyword::from_css_str(&value) {
+          Ok(keyword) if !keyword.reverts() && self.parent.is_some() => {
+            self.specified.keyword_value(name, keyword, self.parent)
+          }
+          _ => Some(value),
+        },
+      );
 
     if let Some(value) = &value {
       self.follow_font_longhands(name, value, depth + 1);
@@ -480,7 +491,7 @@ pub(crate) fn resolve_declared_custom_properties(
     .map(|name| (name.clone(), properties.get(name).map(str::to_owned)))
     .collect();
   let (resolved, font_cycles, cycle_names) = {
-    let mut resolver = Resolver::new(properties);
+    let mut resolver = Resolver::new(properties, Some(&parent.custom_properties));
 
     resolver.fonts = Some(FontDependencies {
       values: fonts,
@@ -515,7 +526,7 @@ pub(crate) fn resolve_declared_custom_properties(
       })
       .collect();
     let resolved: Vec<Option<String>> = {
-      let mut resolver = Resolver::new(properties);
+      let mut resolver = Resolver::new(properties, Some(&parent.custom_properties));
 
       others
         .iter()
@@ -624,7 +635,7 @@ pub(crate) fn resolve_var_references(
   specified_value: &str,
   custom_properties: &CustomProperties,
 ) -> Option<String> {
-  let mut resolver = Resolver::new(custom_properties);
+  let mut resolver = Resolver::new(custom_properties, None);
   resolver.resolve_value(specified_value, 0)
 }
 

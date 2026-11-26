@@ -1921,6 +1921,23 @@ fn a_css_wide_keyword_a_var_substitutes_into_a_custom_property_applies() {
 }
 
 #[test]
+fn a_property_reading_a_substituted_keyword_reads_what_it_resolves_to() {
+  let parent = inherited_style_from_pairs([("--a", "1"), ("--b", "2")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs(
+    [
+      ("--a", "var(--x, inherit)"),
+      ("--b", "var(--a)"),
+      ("--c", "x var(--a) y"),
+    ],
+    &parent,
+  );
+
+  assert_eq!(style.custom_properties.get("--a"), Some("1"));
+  assert_eq!(style.custom_properties.get("--b"), Some("1"));
+  assert_eq!(style.custom_properties.get("--c"), Some("x 1 y"));
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [

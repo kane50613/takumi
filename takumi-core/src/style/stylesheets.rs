@@ -2911,8 +2911,8 @@ fn rollback_value(
   )
 }
 
-/// The custom properties whose winning declaration's `var()` substituted a CSS-wide keyword, each
-/// with the value it applies as: a revert keyword's rollback, or any other keyword itself.
+/// The custom properties whose winning declaration's `var()` substituted a revert keyword, each
+/// with the value it rolls back to. Another CSS-wide keyword resolves with the property.
 /// Approximate: each rolls back once after every property
 /// resolves, so a property whose `var()` reads a reverting one keeps the keyword, where Blink's
 /// `ResolveRevertTo` resolves each target as it reaches it.
@@ -2927,20 +2927,19 @@ fn substituted_rollbacks(
     if !seen.insert(name) || !contains_var_references(value) {
       continue;
     }
-    let Some((resolved, keyword)) = style
+    let Some(keyword) = style
       .custom_properties
       .get(name)
-      .and_then(|resolved| Some((resolved, CssWideKeyword::from_css_str(resolved).ok()?)))
+      .and_then(|resolved| CssWideKeyword::from_css_str(resolved).ok())
+      .filter(|keyword| keyword.reverts())
     else {
       continue;
     };
-    let value = if keyword.reverts() {
-      rollback_value(declarations, index, Some(keyword))
-    } else {
-      resolved.to_owned()
-    };
 
-    rolled_back.push((name.clone(), value));
+    rolled_back.push((
+      name.clone(),
+      rollback_value(declarations, index, Some(keyword)),
+    ));
   }
   rolled_back
 }
