@@ -98,8 +98,9 @@ impl<'s> ElementAnimations<'s> {
 
       animated.intersect(longhands);
       for interval in keyframes.intervals(&animated, animation.sample.progress) {
-        let eased_progress = animation
-          .timing_function
+        let eased_progress = keyframes
+          .timing_function(interval.from)
+          .unwrap_or(animation.timing_function)
           .apply(interval.progress, animation.sample.before);
 
         style.apply_interpolated_properties(
@@ -128,7 +129,7 @@ impl<'s> ElementAnimations<'s> {
 
     for animation in &self.animations {
       for name in animation.keyframes.custom_property_names() {
-        let (from, to, progress) = animation.keyframes.custom_property_segment(
+        let (from, to, progress, timing_function) = animation.keyframes.custom_property_segment(
           name,
           style.custom_properties.get(name),
           animation.sample.progress,
@@ -140,8 +141,8 @@ impl<'s> ElementAnimations<'s> {
           })
         };
         let (from, to) = (resolve(from), resolve(to));
-        let progress = animation
-          .timing_function
+        let progress = timing_function
+          .unwrap_or(animation.timing_function)
           .apply(progress, animation.sample.before);
         let interpolated = from.as_deref().zip(to.as_deref()).and_then(|(from, to)| {
           style
@@ -228,6 +229,23 @@ pub(crate) fn find_keyframes<'a>(
     .or_else(|| tailwind_animation_keyframes(name).map(Cow::Owned))
 }
 
+impl KeyframeRule {
+  /// The `animation-timing-function` it declares, which eases the interval it starts.
+  /// <https://drafts.csswg.org/css-animations-1/#keyframes>
+  fn timing_function(&self) -> Option<AnimationTimingFunction> {
+    self
+      .declarations
+      .iter()
+      .rev()
+      .find_map(|declaration| match declaration {
+        StyleDeclaration::AnimationTimingFunction(timing_functions) => {
+          Some(repeated_list_value(timing_functions, 0))
+        }
+        _ => None,
+      })
+  }
+}
+
 impl KeyframesRule {
   /// The names of the custom properties its keyframes declare, each once.
   fn custom_property_names(&self) -> Vec<&str> {
@@ -239,16 +257,21 @@ impl KeyframesRule {
       .collect()
   }
 
-  /// The keyframes on either side of `progress` that declare the custom property `name`, the
-  /// `underlying` value standing in for an offset of 0 or 1 none declares, and the progress
-  /// between them, as Blink samples each property's keyframes apart from the others.
+  /// The values on either side of `progress` of the keyframes that declare the custom property
+  /// `name`, the `underlying` value standing in for an offset of 0 or 1 none declares, the
+  /// progress between them, and the timing function the earlier keyframe declares.
   fn custom_property_segment<'k>(
     &'k self,
     name: &str,
     underlying: Option<&'k str>,
     progress: f32,
-  ) -> (Option<&'k str>, Option<&'k str>, f32) {
-    let mut points: Vec<(f32, Option<&str>)> = self
+  ) -> (
+    Option<&'k str>,
+    Option<&'k str>,
+    f32,
+    Option<AnimationTimingFunction>,
+  ) {
+    let mut points: Vec<(f32, Option<(&str, &KeyframeRule)>)> = self
       .keyframes
       .iter()
       .filter_map(|keyframe| {
@@ -268,7 +291,7 @@ impl KeyframesRule {
           keyframe
             .offsets
             .iter()
-            .map(move |&offset| (offset, Some(value))),
+            .map(move |&offset| (offset, Some((value, keyframe)))),
         )
       })
       .flatten()
@@ -278,7 +301,12 @@ impl KeyframesRule {
 
     let (from, to, local) = property_interval(points, progress);
 
-    (from.or(underlying), to.or(underlying), local)
+    (
+      from.map(|(value, _)| value).or(underlying),
+      to.map(|(value, _)| value).or(underlying),
+      local,
+      from.and_then(|(_, keyframe)| keyframe.timing_function()),
+    )
   }
 
   /// The longhands its keyframes declare.
@@ -538,12 +566,15 @@ struct ResolvedKeyframe {
   offset: f32,
   style: ComputedStyle,
   mask: PropertyMask,
+  timing_function: Option<AnimationTimingFunction>,
 }
 
 impl ResolvedKeyframe {
   /// Approximate: a CSS-wide keyword in a keyframe keeps the base style's value, where Blink rolls
   /// `revert` back to the user-agent origin and resolves `inherit` and `unset` against the parent.
   fn apply(&mut self, keyframe: &KeyframeRule) {
+    self.timing_function = keyframe.timing_function().or(self.timing_function);
+
     for declaration in keyframe.declarations.iter() {
       declaration.apply_to_computed(&mut self.style);
       self.mask.extend(declaration.affected_longhands().iter());
@@ -586,6 +617,7 @@ impl ResolvedKeyframes {
         offset,
         style: base_style.clone(),
         mask: PropertyMask::new(),
+        timing_function: None,
       };
 
       frame.apply(keyframe);
@@ -626,6 +658,11 @@ impl ResolvedKeyframes {
     }
 
     intervals
+  }
+
+  /// The timing function the keyframe at `index` declares, which an implicit keyframe has none of.
+  fn timing_function(&self, index: Option<usize>) -> Option<AnimationTimingFunction> {
+    index.and_then(|index| self.frames[index].timing_function)
   }
 
   /// The style of the keyframe at `index`, or `base_style` for an implicit keyframe.
@@ -840,6 +877,19 @@ mod tests {
 
     assert_eq!(animated.svg_data.opacity.0, 0.25);
     assert_eq!(animated.misc3_data.rotate, Some(Angle::new(45.0)));
+  }
+
+  /// A keyframe's `animation-timing-function` eases the interval it starts.
+  /// <https://drafts.csswg.org/css-animations-1/#keyframes>
+  #[test]
+  fn a_keyframe_timing_function_eases_the_interval_it_starts() {
+    let (style, stylesheet) = linear_animation(
+      "from { opacity: 0; animation-timing-function: steps(1, end) } 50% { opacity: 0.5 } to { opacity: 1 }",
+    );
+    let at = |time| animate(style.clone(), &stylesheet, time).svg_data.opacity.0;
+
+    assert_eq!(at(250), 0.0);
+    assert_eq!(at(750), 0.75);
   }
 
   /// `style` with every animation it runs at `time` applied.
