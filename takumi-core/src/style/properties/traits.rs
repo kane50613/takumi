@@ -209,12 +209,27 @@ impl CssExpectedMessage {
   }
 }
 
+/// Blink's `CSSParserMode`, whose `kSVGAttributeMode` passes `ShouldAcceptUnitlessLength`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ParseMode {
+  Css,
+  SvgAttribute,
+}
+
 /// Trait for types that can be parsed from CSS.
 pub(crate) trait FromCss<'i> {
   /// Parses the type from a [`Parser`] instance.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self>
   where
     Self: Sized;
+
+  /// Parses the type in `mode`, which only a type holding a length reads.
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self>
+  where
+    Self: Sized,
+  {
+    Self::from_css(input)
+  }
 
   /// The keywords this type accepts, and the `<syntax>` of each other value it takes, for
   /// parse errors.
@@ -231,6 +246,10 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let start = input.state();
 
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
@@ -243,7 +262,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
       // `none, ...` starts a list whose first item is `none`, as `background-image: none, none`.
       input.reset(&start);
 
-      if let Ok(value) = input.try_parse(T::from_css) {
+      if let Ok(value) = input.try_parse(|input| T::from_css_in(input, mode)) {
         return Ok(Some(value));
       }
 
@@ -252,7 +271,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
       return Ok(None);
     }
 
-    T::from_css(input).map(Some)
+    T::from_css_in(input, mode).map(Some)
   }
 }
 
@@ -692,8 +711,17 @@ macro_rules! impl_comma_list_from_css {
   ($list:ty, $elem:ty, $valid:expr) => {
     impl<'i> $crate::style::FromCss<'i> for $list {
       fn from_css(input: &mut cssparser::Parser<'i>) -> $crate::style::ParseResult<'i, Self> {
+        Self::from_css_in(input, $crate::style::ParseMode::Css)
+      }
+
+      fn from_css_in(
+        input: &mut cssparser::Parser<'i>,
+        mode: $crate::style::ParseMode,
+      ) -> $crate::style::ParseResult<'i, Self> {
         input
-          .parse_comma_separated(<$elem as $crate::style::FromCss>::from_css)
+          .parse_comma_separated(|input| {
+            <$elem as $crate::style::FromCss>::from_css_in(input, mode)
+          })
           .map(Vec::into_boxed_slice)
       }
 

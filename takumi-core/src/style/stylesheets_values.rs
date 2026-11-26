@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use super::{CssInputParseError, ParsedDeclarations, PropertyId};
-use crate::style::{CssInput, CssNumber};
+use crate::style::{CssInput, CssNumber, ParseMode};
 
 /// The CSS values one node tree's styles parsed, reused where its nodes repeat them.
 #[derive(Default)]
@@ -42,7 +42,7 @@ impl ParsedValues {
       CssInput::Number(number) => Some(ValueKey::Number(NumberKey::from(*number))),
       CssInput::Unexpected(_) => None,
     };
-    let declarations = property.parse_css_input_declarations(input)?;
+    let declarations = property.parse_css_input_declarations(input, ParseMode::Css)?;
 
     if let Some(key) = key {
       self

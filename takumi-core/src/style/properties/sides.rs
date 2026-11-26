@@ -5,7 +5,7 @@ use cssparser::Parser;
 use crate::{
   geometry::Rect,
   style::{
-    Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, ParseResult,
+    Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, ParseMode, ParseResult,
     SizingContext, ToCss,
   },
 };
@@ -38,14 +38,18 @@ impl<T: Copy> Sides<T> {
 
 impl<'i, T: Clone + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let top = T::from_css(input)?;
-    let Ok(right) = input.try_parse(T::from_css) else {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let top = T::from_css_in(input, mode)?;
+    let Ok(right) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides::from(top));
     };
-    let Ok(bottom) = input.try_parse(T::from_css) else {
+    let Ok(bottom) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides([top.clone(), right.clone(), top, right]));
     };
-    let Ok(left) = input.try_parse(T::from_css) else {
+    let Ok(left) = input.try_parse(|input| T::from_css_in(input, mode)) else {
       return Ok(Sides([top, right.clone(), bottom, right]));
     };
 

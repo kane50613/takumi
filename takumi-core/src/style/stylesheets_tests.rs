@@ -2217,7 +2217,7 @@ fn stroke_dasharray_takes_commas_and_spaces_but_no_negatives() {
   assert!(parse_declarations_is_err("stroke-dasharray", "-1"));
   assert!(
     PropertyId::from_kebab_case("stroke-dasharray")
-      .parse_css_input_declarations(CssInput::Str("1,".into()))
+      .parse_css_input_declarations(CssInput::Str("1,".into()), ParseMode::Css)
       .is_err()
   );
   assert!(parse_declarations_is_err("stroke-width", "-1"));

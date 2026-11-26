@@ -8,9 +8,9 @@ use crate::{
   geometry::{PathCommand, Point},
   path_data::PathData,
   style::{
-    Animatable, Color, ColorInput, FromCss, Length, MakeComputed, ParseResult, SizingContext,
-    ToCss, ValueError, discrete, impl_css_enum, lerp, properties::interpolate_repeated_list,
-    unexpected_token,
+    Animatable, Color, ColorInput, FromCss, Length, MakeComputed, ParseMode, ParseResult,
+    SizingContext, ToCss, ValueError, discrete, impl_css_enum, lerp,
+    properties::interpolate_repeated_list, unexpected_token,
   },
 };
 
@@ -185,8 +185,8 @@ impl StrokeDasharray {
     &self.0
   }
 
-  fn item<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Length> {
-    let length = Length::from_css(input)?;
+  fn item<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Length> {
+    let length = Length::from_css_in(input, mode)?;
 
     if matches!(length, Length::Auto) || length.is_negative() {
       return Err(ValueError::invalid("a dash must be a non-negative length"));
@@ -221,12 +221,16 @@ impl Animatable for StrokeDasharray {
 
 impl<'i> FromCss<'i> for StrokeDasharray {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let mut lengths = vec![Self::item(input)?];
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let mut lengths = vec![Self::item(input, mode)?];
 
     while let Ok(length) = input.try_parse(|input| {
       let _ = input.try_parse(Parser::expect_comma);
 
-      Self::item(input)
+      Self::item(input, mode)
     }) {
       lengths.push(length);
     }
@@ -740,6 +744,10 @@ impl Animatable for BaselineShift {
 
 impl<'i> FromCss<'i> for BaselineShift {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     for (keyword, shift) in [
       ("baseline", Self::default()),
       ("sub", Self::Sub),
@@ -750,7 +758,7 @@ impl<'i> FromCss<'i> for BaselineShift {
       }
     }
 
-    let length = Length::from_css(input)?;
+    let length = Length::from_css_in(input, mode)?;
 
     if matches!(length, Length::Auto) {
       return Err(ValueError::invalid("baseline-shift takes no `auto`"));

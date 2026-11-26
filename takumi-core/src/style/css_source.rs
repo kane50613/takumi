@@ -12,7 +12,7 @@ use serde::{
 
 use crate::error::StyleSheetParseError;
 use crate::style::{
-  CssInput, CssUnexpected, CssValueSeed, PropertyId,
+  CssInput, CssUnexpected, CssValueSeed, ParseMode, PropertyId,
   media_query::MediaQueryList,
   selector::{SelectorImpl, TakumiSelectorParser, parse_layer_name},
   supports::parse_supports_condition,
@@ -368,7 +368,7 @@ impl Declaration {
 
     if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
       property
-        .parse_css_input_declarations(CssInput::Str(self.value.as_str().into()))
+        .parse_css_input_declarations(CssInput::Str(self.value.as_str().into()), ParseMode::Css)
         .map_err(|_| CssSourceError::Declaration {
           name: self.name.clone(),
           value: self.value.clone(),

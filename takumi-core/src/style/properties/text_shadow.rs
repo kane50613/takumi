@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
   Animatable, Color, ColorInput, FromCss, Length, ListInterpolationStrategy, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_comma_list_from_css, next_is_comma,
+  ParseMode, ParseResult, SizingContext, ToCss, impl_comma_list_from_css, next_is_comma,
   tw::TailwindPropertyParser,
 };
 
@@ -46,12 +46,16 @@ impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, TextShadow> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, TextShadow> {
     let mut color = None;
     let mut lengths = None;
 
     while !input.is_exhausted() && !next_is_comma(input) {
       if lengths.is_none()
-        && let Ok(value) = input.try_parse(parse_offsets_blur)
+        && let Ok(value) = input.try_parse(|input| parse_offsets_blur(input, mode))
       {
         lengths = Some(value);
         continue;

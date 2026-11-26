@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
-  unexpected_token,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  discrete, unexpected_token,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
@@ -79,7 +79,8 @@ impl<'i> FromCss<'i> for TextIndent {
 
     while !input.is_exhausted() {
       if amount.is_none()
-        && let Ok(length) = input.try_parse(Length::parse_length_percentage)
+        && let Ok(length) =
+          input.try_parse(|input| Length::parse_length_percentage(input, ParseMode::Css))
       {
         amount = Some(length);
         continue;

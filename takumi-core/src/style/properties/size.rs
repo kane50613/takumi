@@ -1,7 +1,8 @@
 use std::fmt;
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -106,11 +107,15 @@ impl<'i> FromCss<'i> for Size {
   ];
 
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(parse_sizing_keyword) {
       return Ok(keyword);
     }
 
-    Length::from_css(input).map(Self::Length)
+    Length::from_css_in(input, mode).map(Self::Length)
   }
 }
 

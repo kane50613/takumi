@@ -152,7 +152,7 @@ impl DeferredDeclaration {
 
     self
       .property
-      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
+      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)), ParseMode::Css)
       .ok()
   }
 
@@ -441,7 +441,11 @@ macro_rules! define_style {
   }};
   // `where parse = path` parses the property with `path` instead of its type's `FromCss`.
   (@parse $ty:ty, $parse:path) => { $parse };
-  (@parse $ty:ty) => { <$ty as FromCss>::from_css };
+  (@parse $ty:ty) => { <$ty as FromCss>::from_css_in };
+  // `where mode = SvgAttribute` parses the property in that mode wherever it is written, as
+  // Blink's `ParserModeOverridingScope`.
+  (@mode $mode:ident, $forced:ident) => { ParseMode::$forced };
+  (@mode $mode:ident) => { $mode };
   (@builder $name:ident, $ty:ty, manual) => {};
   (@builder $name:ident, $ty:ty) => {
     paste! {
@@ -463,6 +467,7 @@ macro_rules! define_style {
               $(where builder = $longhand_builder:ident)?
               $(where non_negative = $longhand_non_negative:literal)?
               $(where parse = $longhand_parse:path)?
+              $(where mode = $longhand_mode:ident)?
               $(= $longhand_default:expr)?,
           )*
         }
@@ -625,6 +630,7 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           input: &mut cssparser::Parser<'i>,
+          mode: ParseMode,
         ) -> ParseResult<'i, ParsedDeclarations> {
           let state = input.state();
           let keyword = input.try_parse(CssWideKeyword::parse_whole_value).ok();
@@ -637,12 +643,15 @@ macro_rules! define_style {
           let declaration = match self {
             $($(
               Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
-                define_style!(@parse $longhand_ty $(, $longhand_parse)?)(input)?,
+                define_style!(@parse $longhand_ty $(, $longhand_parse)?)(
+                  input,
+                  define_style!(@mode mode $(, $longhand_mode)?),
+                )?,
               ),
             )*)*
             $(
               Self::[<$transient:camel>] => StyleDeclaration::[<$transient:camel>](
-                <$transient_ty as FromCss>::from_css(input)?,
+                <$transient_ty as FromCss>::from_css_in(input, mode)?,
               ),
             )*
           };
@@ -664,11 +673,12 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           input: &mut cssparser::Parser<'i>,
+          mode: ParseMode,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
               Self::[<$shorthand:camel>] => reject_negative(StyleDeclaration::[<expand_ $shorthand>](
-                <$shorthand_ty as FromCss>::from_css(input)?,
+                <$shorthand_ty as FromCss>::from_css_in(input, mode)?,
               )),
             )*
           }
@@ -770,16 +780,17 @@ macro_rules! define_style {
               }
 
               input.reset(&state);
-              property.parse_declarations(input)
+              property.parse_declarations(input, ParseMode::Css)
             }
             Self::All => Ok(self.expand_keyword(CssWideKeyword::parse_whole_value(input)?)),
-            Self::Longhand(property) => property.parse_declarations(input),
+            Self::Longhand(property) => property.parse_declarations(input, ParseMode::Css),
           }
         }
 
         pub(crate) fn parse_css_input_declarations<'de>(
           self,
           css_input: CssInput<'de>,
+          mode: ParseMode,
         ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
           debug_assert!(
             !matches!(self, Self::Custom),
@@ -825,8 +836,8 @@ macro_rules! define_style {
             // `parse_entirely`, because a declaration list drops a value with
             // anything left over and a lone value has no `;` to stop at.
             parser.parse_entirely(|parser| match self {
-              Self::Shorthand(property) => property.parse_declarations(parser),
-              Self::Longhand(property) => property.parse_declarations(parser),
+              Self::Shorthand(property) => property.parse_declarations(parser, mode),
+              Self::Longhand(property) => property.parse_declarations(parser, mode),
               Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(parser)?)),
               Self::Ignored | Self::Custom => unreachable!(),
             })
@@ -853,7 +864,7 @@ macro_rules! define_style {
 
           if matches!(self, Self::Ignored | Self::Custom)
             || self
-              .parse_css_input_declarations(CssInput::Str(Cow::Borrowed(&number)))
+              .parse_css_input_declarations(CssInput::Str(Cow::Borrowed(&number)), ParseMode::Css)
               .is_ok()
           {
             return number;
@@ -1844,13 +1855,13 @@ define_style! {
     }
     /// Blink's `svg->geometry` field group: the lengths and path SVG shapes are laid out from.
     svg_geometry_data: StyleSvgGeometryData {
-      x: Length where parse = SvgAttributeMode::parse = Length::zero(),
-      y: Length where parse = SvgAttributeMode::parse = Length::zero(),
-      cx: Length where parse = SvgAttributeMode::parse = Length::zero(),
-      cy: Length where parse = SvgAttributeMode::parse = Length::zero(),
-      r: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::zero(),
-      rx: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::Auto,
-      ry: Length where non_negative = true where parse = SvgAttributeMode::parse = Length::Auto,
+      x: Length where mode = SvgAttribute = Length::zero(),
+      y: Length where mode = SvgAttribute = Length::zero(),
+      cx: Length where mode = SvgAttribute = Length::zero(),
+      cy: Length where mode = SvgAttribute = Length::zero(),
+      r: Length where non_negative = true where mode = SvgAttribute = Length::zero(),
+      rx: Length where non_negative = true where mode = SvgAttribute = Length::Auto,
+      ry: Length where non_negative = true where mode = SvgAttribute = Length::Auto,
       d: SvgPath,
     }
     /// Blink's `svg->stop` field group.
@@ -1860,7 +1871,7 @@ define_style! {
     }
     /// Blink's `svg->svgmisc` field group.
     svg_misc_data: StyleSvgMiscData {
-      baseline_shift: BaselineShift where parse = SvgAttributeMode::parse,
+      baseline_shift: BaselineShift where mode = SvgAttribute,
       flood_color: ColorInput = ColorInput::Value(Color::black()),
       flood_opacity: PercentageNumber,
       lighting_color: ColorInput = ColorInput::Value(Color::white()),
@@ -2044,10 +2055,10 @@ define_style! {
     /// Blink's `svginherited->stroke` field group, but for `stroke-linejoin`, which `misc_inherited_data` keeps.
     svg_stroke_data: StyleSvgStrokeData {
       stroke: SvgPaint where inherit = true = SvgPaint::None,
-      stroke_width: Length where inherit = true where non_negative = true where parse = SvgAttributeMode::parse = Length::Px(1.0),
+      stroke_width: Length where inherit = true where non_negative = true where mode = SvgAttribute = Length::Px(1.0),
       stroke_opacity: PercentageNumber where inherit = true,
-      stroke_dasharray: Option<StrokeDasharray> where inherit = true where parse = SvgAttributeMode::parse,
-      stroke_dashoffset: Length where inherit = true where parse = SvgAttributeMode::parse = Length::zero(),
+      stroke_dasharray: Option<StrokeDasharray> where inherit = true where mode = SvgAttribute,
+      stroke_dashoffset: Length where inherit = true where mode = SvgAttribute = Length::zero(),
       stroke_linecap: LineCap where inherit = true,
       stroke_miterlimit: StrokeMiterlimit where inherit = true,
     }
@@ -3212,7 +3223,7 @@ impl StyleDeclarationBlock {
       // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
       let parsed = match values {
         Some(values) => values.parse(property, css_input),
-        None => property.parse_css_input_declarations(css_input),
+        None => property.parse_css_input_declarations(css_input, ParseMode::Css),
       };
 
       match parsed {

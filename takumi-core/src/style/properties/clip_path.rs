@@ -6,8 +6,8 @@ use crate::{
   geometry::{Point, Size},
   path_data::PathData,
   style::{
-    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, SvgResource,
-    ToCss, ValueError, impl_css_enum, unexpected_token,
+    FromCss, Length, MakeComputed, ParseMode, ParseResult, Sides, SizingContext, SpacePair,
+    SvgResource, ToCss, ValueError, impl_css_enum, unexpected_token,
   },
 };
 
@@ -200,7 +200,11 @@ impl BasicShape {
 
 impl<'i> FromCss<'i> for ShapeRadius {
   fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(length) = parser.try_parse(Length::from_css) {
+    Self::from_css_in(parser, ParseMode::Css)
+  }
+
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(length) = parser.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(ShapeRadius::Length(length));
     }
 
@@ -217,12 +221,12 @@ impl<'i> FromCss<'i> for ShapeRadius {
 
 impl ShapePosition {
   /// Parses an optional `at <position>` clause, defaulting to the center.
-  fn parse_at<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn parse_at<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("at"))
       .is_ok()
     {
-      return Self::from_css(input);
+      return Self::from_css_in(input, mode);
     }
 
     Ok(Self::default())
@@ -244,9 +248,13 @@ impl FillRule {
 
 impl<'i> FromCss<'i> for ShapePosition {
   fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let first = Length::from_css(parser)?;
+    Self::from_css_in(parser, ParseMode::Css)
+  }
+
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let first = Length::from_css_in(parser, mode)?;
     let second = parser
-      .try_parse(Length::from_css)
+      .try_parse(|input| Length::from_css_in(input, mode))
       .unwrap_or(Length::Percentage(50.0));
 
     Ok(ShapePosition(SpacePair::from_pair(first, second)))
@@ -257,6 +265,10 @@ impl<'i> FromCss<'i> for ShapePosition {
 
 impl<'i> FromCss<'i> for BasicShape {
   fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(parser, ParseMode::Css)
+  }
+
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     match token {
@@ -267,9 +279,9 @@ impl<'i> FromCss<'i> for BasicShape {
             Ok(BasicShape::Url(SvgResource::new(input.expect_string()?.as_ref())))
           }),
           "inset" => parser.parse_nested_block(|input| {
-            let inset = Sides::from_css(input)?;
+            let inset = Sides::from_css_in(input, mode)?;
             let border_radius = if input.try_parse(|input| input.expect_ident_matching("round")).is_ok() {
-              Some(Sides::from_css(input)?)
+              Some(Sides::from_css_in(input, mode)?)
             } else {
               None
             };
@@ -280,17 +292,17 @@ impl<'i> FromCss<'i> for BasicShape {
             })))
           }),
           "circle" => parser.parse_nested_block(|input| {
-            let radius = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
+            let radius = input.try_parse(|input| ShapeRadius::from_css_in(input, mode)).unwrap_or_default();
 
-            let position = ShapePosition::parse_at(input)?;
+            let position = ShapePosition::parse_at(input, mode)?;
 
             Ok(BasicShape::Circle(Box::new(CircleShape { radius, position })))
           }),
           "ellipse" => parser.parse_nested_block(|input| {
-            let radius_x = ShapeRadius::from_css(input)?;
-            let radius_y = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
+            let radius_x = ShapeRadius::from_css_in(input, mode)?;
+            let radius_y = input.try_parse(|input| ShapeRadius::from_css_in(input, mode)).unwrap_or_default();
 
-            let position = ShapePosition::parse_at(input)?;
+            let position = ShapePosition::parse_at(input, mode)?;
 
             Ok(BasicShape::Ellipse(Box::new(EllipseShape { radius_x, radius_y, position })))
           }),
@@ -300,7 +312,7 @@ impl<'i> FromCss<'i> for BasicShape {
             Ok(BasicShape::Polygon(PolygonShape {
               fill_rule,
               coordinates: input
-                .parse_comma_separated(PolygonCoordinate::from_css)?
+                .parse_comma_separated(|input| PolygonCoordinate::from_css_in(input, mode))?
                 .into_boxed_slice(),
             }))
           }),

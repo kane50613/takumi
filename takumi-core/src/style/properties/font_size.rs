@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
   impl_css_enum, unexpected_token,
 };
 
@@ -155,11 +155,15 @@ impl From<FontSizeKeyword> for FontSize {
 
 impl<'i> FromCss<'i> for FontSize {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     input
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
       .or_else(|_| input.try_parse(Self::parse_relative))
-      .or_else(|_| Length::parse_length_percentage(input).map(Self::Length))
+      .or_else(|_| Length::parse_length_percentage(input, mode).map(Self::Length))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &[

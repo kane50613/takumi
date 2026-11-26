@@ -16,7 +16,7 @@ use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_c
 use crate::{
   layout::layout_style::LayoutLength,
   style::{
-    Length, ParseResult, SizingContext, SvgAttributeMode, ToCss,
+    Length, ParseMode, ParseResult, SizingContext, ToCss,
     calc::{CalcFormula, CalcUnit, CalcValue},
     interner::{self, Interner},
     length_from_dimension_unit,
@@ -233,14 +233,18 @@ const MATH_FUNCTIONS: [&str; 21] = [
   "acos", "atan", "atan2", "pow", "sqrt", "hypot", "log", "exp",
 ];
 
-/// The length the math function `name` reads from `input`: a linear one as `calc()` keeps it, a
+/// The length the math function `name` reads from `input` in `mode`: a linear one as `calc()` keeps it, a
 /// constant one as px, and any other as a tree.
-pub(crate) fn parse_length<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, Length> {
+pub(crate) fn parse_length<'i>(
+  name: &str,
+  input: &mut Parser<'i>,
+  mode: ParseMode,
+) -> ParseResult<'i, Length> {
   let node = input.parse_nested_block(|input| parse_function(name, input, 0))?;
 
   match node.kind() {
     Some(Kind::LENGTH) => {}
-    Some(Kind::NUMBER) if SvgAttributeMode::is_active() => {}
+    Some(Kind::NUMBER) if mode == ParseMode::SvgAttribute => {}
     _ => return Err(CssParseError::unexpected_token()),
   }
   if let Some(linear) = node.linear() {

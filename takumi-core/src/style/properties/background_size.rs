@@ -3,8 +3,9 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
+  ParseResult, SizingContext, ToCss, discrete, parse_comma_list, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Parsed `background-size` for one layer.
@@ -49,8 +50,14 @@ impl Default for BackgroundSize {
 
 impl<'i> FromCss<'i> for BackgroundSize {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(width) = input.try_parse(Length::from_css) {
-      let height = input.try_parse(Length::from_css).unwrap_or(Length::Auto);
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(width) = input.try_parse(|input| Length::from_css_in(input, mode)) {
+      let height = input
+        .try_parse(|input| Length::from_css_in(input, mode))
+        .unwrap_or(Length::Auto);
 
       return Ok(BackgroundSize::Explicit { width, height });
     }

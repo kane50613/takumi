@@ -1,4 +1,4 @@
-use std::{cell::Cell, fmt, ops::Neg};
+use std::{fmt, ops::Neg};
 
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
@@ -7,7 +7,8 @@ use crate::{
   layout::layout_style::LayoutLength,
   layout_unit::LayoutUnit,
   style::{
-    AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseResult, SizingContext, ToCss,
+    AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseMode, ParseResult,
+    SizingContext, ToCss,
     calc::{CalcFormula, CalcTerms, CalcUnit},
     is_math_function, parse_length,
     tw::Namespace,
@@ -16,41 +17,6 @@ use crate::{
   },
 };
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-
-thread_local! {
-  static SVG_ATTRIBUTE_MODE: Cell<bool> = const { Cell::new(false) };
-}
-
-/// Blink's `kSVGAttributeMode`, where a unitless number is a length in px. Elsewhere only a
-/// unitless zero is, as Blink's `ShouldAcceptUnitlessLength`.
-pub(crate) struct SvgAttributeMode;
-
-impl SvgAttributeMode {
-  /// Runs `parse` in the mode, as Blink's `ParserModeOverridingScope`.
-  pub(crate) fn scope<T>(parse: impl FnOnce() -> T) -> T {
-    struct Restore(bool);
-
-    impl Drop for Restore {
-      fn drop(&mut self) {
-        SVG_ATTRIBUTE_MODE.set(self.0);
-      }
-    }
-
-    let _restore = Restore(SVG_ATTRIBUTE_MODE.replace(true));
-
-    parse()
-  }
-
-  /// Parses `T` in the mode, for the properties Blink parses in it: the SVG geometry
-  /// properties, `stroke-width`, `stroke-dasharray`, `stroke-dashoffset`, and `baseline-shift`.
-  pub(crate) fn parse<'i, T: FromCss<'i>>(input: &mut Parser<'i>) -> ParseResult<'i, T> {
-    Self::scope(|| T::from_css(input))
-  }
-
-  pub(crate) fn is_active() -> bool {
-    SVG_ATTRIBUTE_MODE.get()
-  }
-}
 
 const CALC_ZERO_EPSILON: f32 = 1e-6;
 const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
@@ -410,6 +376,10 @@ impl From<f32> for Length {
 
 impl<'i> FromCss<'i> for Length {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -420,13 +390,13 @@ impl<'i> FromCss<'i> for Length {
       Token::Function(function) if is_math_function(function) => {
         let function = function.clone();
 
-        parse_length(&function, input)
+        parse_length(&function, input, mode)
       }
       Token::Dimension { value, unit, .. } => {
         length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
       }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
-      Token::Number { value, .. } if *value == 0.0 || SvgAttributeMode::is_active() => {
+      Token::Number { value, .. } if *value == 0.0 || mode == ParseMode::SvgAttribute => {
         Ok(Self::Px(*value))
       }
       _ => Err(unexpected_token!(token)),
@@ -438,7 +408,10 @@ impl<'i> FromCss<'i> for Length {
 
 impl Length {
   /// Blink's `ConsumeLengthOrPercent`: a `<length-percentage>`, which `auto` is not.
-  pub(crate) fn parse_length_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse_length_percentage<'i>(
+    input: &mut Parser<'i>,
+    mode: ParseMode,
+  ) -> ParseResult<'i, Self> {
     let state = input.state();
     let token = input.next()?.clone();
 
@@ -447,12 +420,15 @@ impl Length {
     }
 
     input.reset(&state);
-    Self::from_css(input)
+    Self::from_css_in(input, mode)
   }
 
   /// Blink's `ParseSpacing` for `letter-spacing` and `word-spacing`, with `normal` as the zero
   /// it computes to.
-  pub(crate) fn parse_spacing<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse_spacing<'i>(
+    input: &mut Parser<'i>,
+    mode: ParseMode,
+  ) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -460,7 +436,13 @@ impl Length {
       return Ok(Self::zero());
     }
 
-    Self::parse_length_percentage(input)
+    Self::parse_length_percentage(input, mode)
+  }
+
+  /// The length an SVG attribute writes, none when it is malformed.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
+    Self::from_css_in(&mut Parser::new(text), ParseMode::SvgAttribute).ok()
   }
 
   fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
@@ -725,6 +707,10 @@ mod tests {
   use super::*;
   use crate::{geometry::Size, viewport::Viewport};
 
+  fn svg_attribute_length(css: &str) -> ParseResult<'_, Length> {
+    Length::from_css_in(&mut Parser::new(css), ParseMode::SvgAttribute)
+  }
+
   fn sizing() -> SizingContext {
     SizingContext::builder()
       .viewport(Viewport {
@@ -799,11 +785,8 @@ mod tests {
     assert_eq!(Length::from_css_str("0"), Ok(Length::Px(0.0)));
     assert!(Length::from_css_str("5").is_err());
     assert!(Length::from_css_str("calc(1 + 2)").is_err());
-    SvgAttributeMode::scope(|| {
-      assert_eq!(Length::from_css_str("5"), Ok(Length::Px(5.0)));
-      assert_eq!(Length::from_css_str("calc(1 + 2)"), Ok(Length::Px(3.0)));
-    });
-    assert!(Length::from_css_str("5").is_err());
+    assert_eq!(svg_attribute_length("5"), Ok(Length::Px(5.0)));
+    assert_eq!(svg_attribute_length("calc(1 + 2)"), Ok(Length::Px(3.0)));
   }
 
   #[test]
@@ -1198,25 +1181,23 @@ mod tests {
   #[test]
   fn parse_calc_supports_constants() {
     // A constant is a number, which is a length only in SVG attribute mode.
-    SvgAttributeMode::scope(|| {
-      assert_eq!(
-        Length::from_css_str("calc(pi)").as_ref(),
-        Ok(&Length::Px(std::f32::consts::PI))
-      );
-      assert_eq!(
-        Length::from_css_str("calc(e)").as_ref(),
-        Ok(&Length::Px(std::f32::consts::E))
-      );
+    assert_eq!(
+      svg_attribute_length("calc(pi)").as_ref(),
+      Ok(&Length::Px(std::f32::consts::PI))
+    );
+    assert_eq!(
+      svg_attribute_length("calc(e)").as_ref(),
+      Ok(&Length::Px(std::f32::consts::E))
+    );
 
-      let inf = Length::from_css_str("calc(infinity)");
-      assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
+    let inf = svg_attribute_length("calc(infinity)");
+    assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
-      let neg_inf = Length::from_css_str("calc(-infinity)");
-      assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
+    let neg_inf = svg_attribute_length("calc(-infinity)");
+    assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
-      let nan = Length::from_css_str("calc(nan)");
-      assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
-    });
+    let nan = svg_attribute_length("calc(nan)");
+    assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
   }
 
   #[test]

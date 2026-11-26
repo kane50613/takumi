@@ -45,7 +45,7 @@ use crate::{
   resources::{font::FontsSnapshot, image::SvgOp, svg_size::ViewBox},
   style::{
     Affine, BackgroundImage, BasicShape, BlendMode, Color, ColorInput, ComputedStyle, Display,
-    FromCssStr, Isolation, Length, SizingContext, SvgAttributeMode, SvgResource,
+    Isolation, Length, SizingContext, SvgResource,
   },
 };
 
@@ -390,7 +390,7 @@ impl<'a> SvgLayout<'a> {
   }
 
   fn length_attribute(&self, index: usize, name: &str) -> Option<Length> {
-    SvgAttributeMode::scope(|| Length::from_css_str(self.attribute(index, name)?).ok())
+    Length::from_svg_attribute(self.attribute(index, name)?)
   }
 
   /// The numbers a list attribute holds, none unless every one parses, as Blink's

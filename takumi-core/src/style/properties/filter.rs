@@ -13,8 +13,9 @@ use crate::{
   scene::SceneBounds,
   style::{
     Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
-    ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-    SvgResource, TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
+    ListInterpolationStrategy, MakeComputed, ParseMode, ParseResult, PercentageNumber,
+    SizingContext, SvgResource, TextShadow, ToCss, discrete, tw::TailwindPropertyParser,
+    unexpected_token,
   },
 };
 
@@ -375,13 +376,17 @@ pub enum FilterCategory<'f> {
 
 impl<'i> FromCss<'i> for Filters {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Filters::default());
     }
 
     let mut filters = Vec::new();
     while !input.is_exhausted() {
-      filters.push(Filter::from_css(input)?);
+      filters.push(Filter::from_css_in(input, mode)?);
     }
 
     Ok(filters)
@@ -428,6 +433,10 @@ fn parse_amount<'i>(input: &mut Parser<'i>) -> ParseResult<'i, PercentageNumber>
 
 impl<'i> FromCss<'i> for Filter {
   fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(parser, ParseMode::Css)
+  }
+
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     if let Token::UnquotedUrl(url) = token {
@@ -487,9 +496,9 @@ impl<'i> FromCss<'i> for Filter {
         }
 
         input.reset(&start);
-        Length::from_css(input).map(Filter::Blur)
+        Length::from_css_in(input, mode).map(Filter::Blur)
       }),
-      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
+      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css_in(input, mode).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(token)),
     }
   }

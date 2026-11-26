@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, BoxDecorationBreak, Color, ColorInput, ComputedStyle, Float, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
+  Length, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
   tw::TailwindPropertyParser, unexpected_token, write_keywords,
 };
 
@@ -397,6 +397,10 @@ impl FromIterator<AppliedTextDecoration> for AppliedTextDecorations {
 
 impl<'i> FromCss<'i> for TextDecorationThickness {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("from-font"))
       .is_ok()
@@ -404,7 +408,7 @@ impl<'i> FromCss<'i> for TextDecorationThickness {
       return Ok(Self::FromFont);
     }
 
-    Ok(Self::Length(Length::from_css(input)?))
+    Ok(Self::Length(Length::from_css_in(input, mode)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["from-font", "<length>", "<percentage>"];
@@ -590,6 +594,10 @@ impl MakeComputed for TextDecoration {
 
 impl<'i> FromCss<'i> for TextDecoration {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut line = TextDecorationLines::empty();
     let mut style = None;
     let mut color = None;
@@ -611,7 +619,8 @@ impl<'i> FromCss<'i> for TextDecoration {
         continue;
       }
 
-      if let Ok(value) = input.try_parse(TextDecorationThickness::from_css) {
+      if let Ok(value) = input.try_parse(|input| TextDecorationThickness::from_css_in(input, mode))
+      {
         thickness = Some(value);
         continue;
       }

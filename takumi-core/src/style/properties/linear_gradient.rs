@@ -15,7 +15,7 @@ use super::gradient_utils::{
 use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
+  ParseMode, ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
   tw::TailwindPropertyParser, unexpected_token,
 };
 
@@ -477,6 +477,10 @@ pub struct ResolvedGradientStop {
 
 impl<'i> FromCss<'i> for StopPosition {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, StopPosition> {
     if let Ok(num) = input.try_parse(Parser::expect_number) {
       return Ok(StopPosition(Length::Percentage(
         num.clamp(0.0, 1.0) * 100.0,
@@ -487,7 +491,7 @@ impl<'i> FromCss<'i> for StopPosition {
       return Ok(StopPosition(Length::Percentage(unit_value * 100.0)));
     }
 
-    let Ok(length) = input.try_parse(Length::from_css) else {
+    let Ok(length) = input.try_parse(|input| Length::from_css_in(input, mode)) else {
       return Err(unexpected_token!(input.next()?,));
     };
 
@@ -748,6 +752,10 @@ impl LinearGradient {
 
 impl<'i> FromCss<'i> for LinearGradient {
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, LinearGradient> {
+    Self::from_css_in(input, ParseMode::Css)
+  }
+
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
@@ -776,7 +784,8 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       input.try_parse(Parser::expect_comma).ok();
 
-      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
+      let (stops, modern) =
+        parse_gradient_stops(input, |input| StopPosition::from_css_in(input, mode))?;
 
       Ok(LinearGradient {
         repeating,

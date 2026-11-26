@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use crate::{
   layout::node::Name,
   path_data::PathData,
-  style::{CssInput, PropertyId, Style, StyleDeclaration, SvgAttributeMode, SvgPath, Transforms},
+  style::{CssInput, ParseMode, PropertyId, Style, StyleDeclaration, SvgPath, Transforms},
 };
 
 /// The SVG elements takumi lays out, and the kinds of node it keeps in the tree for selectors.
@@ -193,10 +193,9 @@ impl SvgElementKind {
             _ => value,
           };
 
-          if let Ok(declarations) = SvgAttributeMode::scope(|| {
-            PropertyId::from_kebab_case(name)
-              .parse_css_input_declarations(CssInput::Str(value.into()))
-          }) {
+          if let Ok(declarations) = PropertyId::from_kebab_case(name)
+            .parse_css_input_declarations(CssInput::Str(value.into()), ParseMode::SvgAttribute)
+          {
             for declaration in declarations {
               style.push(declaration, false);
             }

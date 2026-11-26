@@ -5,7 +5,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, Color, ColorInput, FromCss, Length, ListInterpolationStrategy, MakeComputed,
-  ParseResult, SizingContext, ToCss, discrete, impl_comma_list_from_css, next_is_comma,
+  ParseMode, ParseResult, SizingContext, ToCss, discrete, impl_comma_list_from_css, next_is_comma,
   tw::TailwindPropertyParser,
 };
 
@@ -53,8 +53,11 @@ pub type BoxShadows = Box<[BoxShadow]>;
 impl_comma_list_from_css!(BoxShadows, BoxShadow);
 
 /// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
-fn parse_non_percentage_length<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Length> {
-  let length = Length::from_css(input)?;
+fn parse_non_percentage_length<'i>(
+  input: &mut Parser<'i>,
+  mode: ParseMode,
+) -> ParseResult<'i, Length> {
+  let length = Length::from_css_in(input, mode)?;
   if matches!(length, Length::Percentage(_)) {
     return Err(CssParseError::from_basic_kind(
       BasicParseErrorKind::QualifiedRuleInvalid,
@@ -65,11 +68,12 @@ fn parse_non_percentage_length<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Le
 
 pub(super) fn parse_offsets_blur<'i>(
   input: &mut Parser<'i>,
+  mode: ParseMode,
 ) -> ParseResult<'i, (Length, Length, Length)> {
-  let horizontal = Length::from_css(input)?;
-  let vertical = Length::from_css(input)?;
+  let horizontal = Length::from_css_in(input, mode)?;
+  let vertical = Length::from_css_in(input, mode)?;
   let blur = input
-    .try_parse(parse_non_percentage_length)
+    .try_parse(|input| parse_non_percentage_length(input, mode))
     .unwrap_or(Length::zero());
   Ok((horizontal, vertical, blur))
 }
@@ -92,9 +96,9 @@ impl<'i> FromCss<'i> for BoxShadow {
 
       if lengths.is_none()
         && let Ok(value) = input.try_parse(|input| -> ParseResult<'i, _> {
-          let (horizontal, vertical, blur) = parse_offsets_blur(input)?;
+          let (horizontal, vertical, blur) = parse_offsets_blur(input, ParseMode::Css)?;
           let spread = input
-            .try_parse(parse_non_percentage_length)
+            .try_parse(|input| parse_non_percentage_length(input, ParseMode::Css))
             .unwrap_or(Length::zero());
 
           Ok((horizontal, vertical, blur, spread))
