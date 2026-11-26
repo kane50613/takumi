@@ -805,8 +805,8 @@ enum AtRulePrelude {
   Scope(Scope),
   /// `@container`, its query.
   Container(ContainerQuery),
-  /// The owner [`STYLE_OWNER_RULE`] names.
-  StyleOwner(u32),
+  /// The owner [`STYLE_OWNER_RULE`] names, none for `none`.
+  StyleOwner(Option<u32>),
   /// An at-rule takumi does not implement, such as `@counter-style`, dropped
   /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
   Unknown(Box<IgnoredDeclaration>),
@@ -1259,7 +1259,7 @@ fn tailwind_entry_preflight(target: &str) -> Option<bool> {
 }
 
 /// The internal at-rule an HTML `<style>` element's CSS starts with to name its owner, which the
-/// parser then gives each `@scope` rule without a start.
+/// parser then gives each `@scope` rule without a start, and ends with as `none`.
 pub(crate) const STYLE_OWNER_RULE: &str = "-takumi-style-owner";
 
 /// Parses an at-rule's prelude, an `@scope` start `scope_start` relative to the rule around it.
@@ -1322,11 +1322,19 @@ fn parse_at_rule_prelude<'i>(
   }
 
   if name.eq_ignore_ascii_case(STYLE_OWNER_RULE) {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      input.expect_exhausted()?;
+      return Ok(AtRulePrelude::StyleOwner(None));
+    }
+
     let owner = input.expect_integer()?;
 
     input.expect_exhausted()?;
     return u32::try_from(owner)
-      .map(AtRulePrelude::StyleOwner)
+      .map(|owner| AtRulePrelude::StyleOwner(Some(owner)))
       .map_err(|_| ParseError::unexpected_token());
   }
 
@@ -1634,7 +1642,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         ..StyleSheetFragment::default()
       }),
       AtRulePrelude::StyleOwner(owner) if self.top_level => {
-        self.style_owner = Some(owner);
+        self.style_owner = owner;
         Ok(StyleSheetFragment::default())
       }
       AtRulePrelude::TailwindImport { preflight } => {

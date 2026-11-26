@@ -1545,6 +1545,25 @@ fn an_implicit_scope_inside_another_scope_roots_at_its_style_element_parent() {
   assert_ne!(measured.children[1].width, 30.0);
 }
 
+/// A `<style>` element's owner ends with its CSS, so an `@scope` without a start in a sheet after it
+/// roots at the tree's root.
+#[test]
+fn a_style_element_owner_ends_with_its_css() {
+  let parsed = takumi::parse_html(
+    r#"<div class="card"><style>@scope { .none { width: 1px } }</style><p>a</p></div><p>b</p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let css = format!(
+    "{}@scope {{ :scope > p {{ width: 20px }} }}",
+    parsed.css.concat()
+  );
+  let measured = measure_with_css(parsed.node, &css);
+
+  assert_ne!(measured.children[0].children[0].width, 20.0);
+  assert_eq!(measured.children[1].width, 20.0);
+}
+
 /// `inherit` on a registered property that does not inherit takes the parent's computed value, as
 /// Blink's `ApplyInherit` copies it.
 #[test]

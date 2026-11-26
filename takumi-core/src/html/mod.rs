@@ -396,13 +396,15 @@ pub struct StyleElement {
 }
 
 impl StyleElement {
-  /// The text, inside an `@media` rule when the element has a `media` attribute, after the owner
-  /// it names when it has an `@scope` rule.
+  /// The text, inside an `@media` rule when the element has a `media` attribute, between the
+  /// owner it names and the end of that owner when it has an `@scope` rule.
   pub fn css(&self) -> String {
     let css = in_media(self.media.as_deref(), self.text.clone());
 
     match self.owner {
-      Some(owner) if has_scope_rule(&self.text) => format!("@{STYLE_OWNER_RULE} {owner};{css}"),
+      Some(owner) if has_scope_rule(&self.text) => {
+        format!("@{STYLE_OWNER_RULE} {owner};{css}\n@{STYLE_OWNER_RULE} none;")
+      }
       _ => css,
     }
   }
