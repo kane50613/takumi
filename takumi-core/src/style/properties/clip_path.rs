@@ -300,7 +300,12 @@ impl<'i> FromCss<'i> for BasicShape {
             Ok(BasicShape::Polygon(PolygonShape {
               fill_rule,
               coordinates: input
-                .parse_comma_separated(|input| PolygonCoordinate::from_css_in(input, mode))?
+                .parse_comma_separated(|input| {
+                  Ok(PolygonCoordinate::from_pair(
+                    Length::from_css_in(input, mode)?,
+                    Length::from_css_in(input, mode)?,
+                  ))
+                })?
                 .into_boxed_slice(),
             }))
           }),

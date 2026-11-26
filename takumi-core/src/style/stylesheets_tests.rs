@@ -163,6 +163,23 @@ fn an_invalid_unitless_length_drops_the_whole_declaration() {
   );
 }
 
+#[test]
+fn a_polygon_vertex_takes_both_coordinates() {
+  for css in [
+    "clip-path: polygon(0 10, 100% 0, 0 100%)",
+    "clip-path: polygon(0, 100% 0, 0 100%)",
+  ] {
+    assert_eq!(computed_from_text(css).misc1_data.clip_path, None, "{css}");
+  }
+
+  assert_ne!(
+    computed_from_text("clip-path: polygon(0 10px, 100% 0, 0 100%)")
+      .misc1_data
+      .clip_path,
+    None
+  );
+}
+
 /// The JSX presets ship these as a camel-case style object.
 #[test]
 fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
