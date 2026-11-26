@@ -71,7 +71,7 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 
   Some((
     builtin_declarations(&rule.declarations),
-    rule.breakpoint.clone(),
+    rule.breakpoint.first().cloned(),
     rule.important,
   ))
 }
@@ -636,7 +636,11 @@ fn test_values_sorting() {
         })
         .collect::<Vec<_>>();
 
-      (declarations, rule.breakpoint.clone(), rule.important)
+      (
+        declarations,
+        rule.breakpoint.first().cloned(),
+        rule.important,
+      )
     })
     .collect::<Vec<_>>();
 
@@ -2108,4 +2112,25 @@ fn test_arbitrary_variants_on_the_element() {
   }
 
   assert!(TwRule::parse("[&_p]:p-2").is_none());
+}
+
+#[test]
+fn test_min_and_max_breakpoints_stack() {
+  let at = |width: u32, token: &str| {
+    TwRule::parse(token)
+      .unwrap()
+      .is_active(Viewport::new((width, 1000)), &Default::default())
+  };
+
+  assert!(at(700, "max-md:flex"));
+  assert!(!at(800, "max-md:flex"));
+  assert!(at(700, "max-[800px]:flex"));
+  assert!(!at(900, "max-[800px]:flex"));
+  assert!(at(700, "min-[600px]:flex"));
+  assert!(!at(500, "min-[600px]:flex"));
+  assert!(at(700, "min-sm:flex"));
+  assert!(!at(500, "min-sm:flex"));
+  assert!(at(700, "sm:max-md:flex"));
+  assert!(!at(500, "sm:max-md:flex"));
+  assert!(!at(800, "sm:max-md:flex"));
 }

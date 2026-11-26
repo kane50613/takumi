@@ -132,7 +132,7 @@ impl PartialOrd for NaturalName {
 pub(crate) struct TwRule {
   pub(crate) declarations: StyleDeclarationBlock,
   pub(crate) important: bool,
-  pub(crate) breakpoint: Option<Breakpoint>,
+  pub(crate) breakpoint: Vec<Breakpoint>,
   /// The container queries `@` variants ask of the element's containers.
   pub(crate) container: Vec<ContainerQuery>,
   /// The media queries the late variants require of the viewport.
@@ -207,8 +207,8 @@ impl TwRule {
   pub(crate) fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
     self
       .breakpoint
-      .as_ref()
-      .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+      .iter()
+      .all(|breakpoint| breakpoint.matches(viewport, breakpoints))
       && self.media.iter().all(|media| media.matches(viewport))
   }
 }
