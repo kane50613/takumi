@@ -56,7 +56,7 @@ describe("toNativeSource", () => {
     ["a function", { ...text("x"), tagName: () => "p" } as unknown as Node],
     ["a string past 64 KiB", image({ src: `data:image/png;base64,${"A".repeat(64 * 1024)}` })],
   ])("keeps a tree holding %s as the tree", (_, node) => {
-    expect(toNativeSource(node)).toBe(node);
+    expect(toNativeSource(node)).toEqual(node);
   });
 
   test("passes JSON only as deep as the native parser reads", async () => {
@@ -71,7 +71,7 @@ describe("toNativeSource", () => {
         await renderer.render(deepest, options),
       ),
     ).toBe(0);
-    expect(toNativeSource(deeper)).toBe(deeper);
+    expect(toNativeSource(deeper)).toEqual(deeper);
     await expect(renderer.render({ json: JSON.stringify(deeper) }, options)).rejects.toThrow(
       "recursion limit exceeded",
     );
@@ -81,7 +81,7 @@ describe("toNativeSource", () => {
     const node = container({ children: [] });
 
     node.children?.push(node);
-    expect(toNativeSource(node)).toBe(node);
+    expect(toNativeSource(node)).toEqual(node);
   });
 });
 

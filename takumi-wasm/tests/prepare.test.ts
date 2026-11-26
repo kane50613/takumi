@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { container, text } from "@takumi-rs/helpers";
 import { Renderer } from "../bundlers/node";
 
 const renderer = new Renderer();
@@ -30,5 +31,30 @@ describe("prepare", () => {
     expect(await renderer.measure(prepared)).toEqual(
       await renderer.measure("<p>hi</p>", { width: 40, height: 20 }),
     );
+  });
+
+  test("reads a tree past what JSON carries once per prepare and its render", async () => {
+    let reads = 0;
+    const counted = text("hi");
+
+    Object.defineProperty(counted, "style", {
+      enumerable: true,
+      get: () => {
+        reads++;
+
+        return { color: "red" };
+      },
+    });
+
+    const tree = container({
+      children: [text("x".repeat(64 * 1024 + 1), { display: "none" }), counted],
+    });
+    const read = async () => renderer.render(await renderer.prepare(tree, { width: 8, height: 8 }));
+
+    await read();
+    expect(reads).toBe(1);
+
+    await read();
+    expect(reads).toBe(2);
   });
 });

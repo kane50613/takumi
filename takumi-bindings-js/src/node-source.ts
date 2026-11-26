@@ -17,7 +17,8 @@ export type JsonSource = { json: string };
 
 /**
  * A node tree as {@link JsonSource} when JSON keeps every value in it within {@link MAX_DEPTH} and
- * every string within {@link MAX_JSON_STRING}, the tree itself otherwise, and HTML as is.
+ * every string within {@link MAX_JSON_STRING}, a copy of the tree's root otherwise, and HTML as is.
+ * The copy gives each read its own object, which a wasm renderer's source cache keys on.
  * @internal
  */
 export function toNativeSource(source: Node | string): Node | string | JsonSource {
@@ -48,7 +49,7 @@ export function toNativeSource(source: Node | string): Node | string | JsonSourc
       }),
     };
   } catch {
-    return source;
+    return { ...source };
   }
 }
 

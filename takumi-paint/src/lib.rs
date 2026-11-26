@@ -20,8 +20,7 @@ use takumi_bindings_common::{
   input::{ImageSource, ListedFonts, decode_images, retain_svg},
   registrations::Retention,
   renderer::RendererOptions,
-  source::read_source,
-  source_cache::SourceCache,
+  source::{JsSourceCache, read_source},
   stylesheet,
   warning::WarningLog,
 };
@@ -113,7 +112,7 @@ impl RenderOptions {
 pub struct Painter {
   fonts: FontStore,
   cache: Cache,
-  sources: SourceCache,
+  sources: JsSourceCache,
 }
 
 impl Painter {
@@ -177,7 +176,7 @@ impl Painter {
     Ok(Painter {
       fonts: FontStore::new(cache.clone()).map_err(map_error)?,
       cache,
-      sources: SourceCache::default(),
+      sources: JsSourceCache::default(),
     })
   }
 

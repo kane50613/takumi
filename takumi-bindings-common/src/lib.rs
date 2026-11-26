@@ -52,7 +52,7 @@ use renderer::CacheStats;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "wasm")]
 use serde_wasm_bindgen::{from_value, to_value};
-use source_cache::{ParsedSource, SourceCache};
+use source_cache::ParsedSource;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::{JsCast, JsValue};
 
@@ -468,16 +468,16 @@ pub struct Scenes {
 
 impl Scenes {
   /// `scenes` with each source parsed by `read`, styled by `css` and every scene's `<style>`.
-  pub fn read<S, E>(
+  pub fn read<S, C: Default, E>(
     scenes: impl IntoIterator<Item = (S, u32)>,
     css: Option<Vec<CssSource>>,
-    read: impl Fn(S, &SourceCache) -> Result<ParsedSource, E>,
+    read: impl Fn(S, &C) -> Result<ParsedSource, E>,
   ) -> Result<Self, E> {
     let mut document_css = Vec::new();
     let nodes = scenes
       .into_iter()
       .map(|(source, duration_ms)| {
-        let (node, css) = read(source, &SourceCache::default())?;
+        let (node, css) = read(source, &C::default())?;
 
         document_css.extend(css);
 
