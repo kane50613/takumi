@@ -19,7 +19,7 @@ use crate::{
     Length, ParseMode, ParseResult, SizingContext, ToCss,
     calc::{CalcFormula, CalcUnit, CalcValue},
     interner::{self, Interner},
-    length_from_dimension_unit,
+    length_from_dimension_unit, parse_comma_separated, parse_nested_block,
   },
 };
 
@@ -240,7 +240,7 @@ pub(crate) fn parse_length<'i>(
   input: &mut Parser<'i>,
   mode: ParseMode,
 ) -> ParseResult<'i, Length> {
-  let node = input.parse_nested_block(|input| parse_function(name, input, 0))?;
+  let node = parse_nested_block(input, |input| parse_function(name, input, 0))?;
 
   match node.kind() {
     Some(Kind::LENGTH) => {}
@@ -297,8 +297,7 @@ fn parse_constant<'i>(
   kind: Kind,
   length: &dyn Fn(&CalcFormula) -> Option<f32>,
 ) -> ParseResult<'i, f32> {
-  input
-    .parse_nested_block(|input| parse_function(name, input, 0))?
+  parse_nested_block(input, |input| parse_function(name, input, 0))?
     .eval(length)
     .filter(|value| value.kind == kind)
     .map(Value::finite)
@@ -313,7 +312,7 @@ fn parse_function<'i>(name: &str, input: &mut Parser<'i>, depth: u32) -> ParseRe
 
   let invalid = || CssParseError::unexpected_token();
   let args = |input: &mut Parser<'i>| -> ParseResult<'i, Vec<Node>> {
-    input.parse_comma_separated(|input| parse_sum(input, depth + 1))
+    parse_comma_separated(input, |input| parse_sum(input, depth + 1))
   };
   let one = |input: &mut Parser<'i>| parse_sum(input, depth + 1);
   let node = match_ignore_ascii_case! { name,
@@ -321,7 +320,7 @@ fn parse_function<'i>(name: &str, input: &mut Parser<'i>, depth: u32) -> ParseRe
     "min" => Node::Min(args(input)?.into()),
     "max" => Node::Max(args(input)?.into()),
     "clamp" => {
-      let bounds = input.parse_comma_separated(|input| {
+      let bounds = parse_comma_separated(input, |input| {
         if input.try_parse(|input| input.expect_ident_matching("none")).is_ok() {
           return Ok(None);
         }
@@ -557,9 +556,9 @@ fn parse_factor<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, Node>
         .ok_or_else(CssParseError::unexpected_token)
     }
     Token::Function(name) if is_math_function(&name) => {
-      input.parse_nested_block(|input| parse_function(&name, input, depth + 1))
+      parse_nested_block(input, |input| parse_function(&name, input, depth + 1))
     }
-    Token::ParenthesisBlock => input.parse_nested_block(|input| parse_sum(input, depth + 1)),
+    Token::ParenthesisBlock => parse_nested_block(input, |input| parse_sum(input, depth + 1)),
     Token::Ident(ident) => match_ignore_ascii_case! { ident.as_ref(),
       "e" => Ok(Node::Number(E)),
       "pi" => Ok(Node::Number(PI)),

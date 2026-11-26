@@ -16,7 +16,7 @@ use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
   ParseMode, ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
-  tw::TailwindPropertyParser, unexpected_token,
+  parse_nested_block, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -744,7 +744,7 @@ impl<'i> FromCss<'i> for LinearGradient {
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut direction = LinearGradientDirection::default();
       let mut interpolation = None;
       let mut saw_direction = false;

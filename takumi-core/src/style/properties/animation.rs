@@ -8,8 +8,8 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   FromCss, FromCssStr, LinearEasing, MakeComputed, ParseMode, ParseResult, ToCss,
-  impl_comma_list_from_css, impl_css_enum, next_is_comma, tw::TailwindPropertyParser,
-  unexpected_token,
+  impl_comma_list_from_css, impl_css_enum, next_is_comma, parse_nested_block,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a CSS animation time value stored in milliseconds.
@@ -120,13 +120,13 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 
     if let Ok(curve) = input.try_parse(|input| {
       input.expect_function_matching("linear")?;
-      input.parse_nested_block(LinearEasing::parse)
+      parse_nested_block(input, LinearEasing::parse)
     }) {
       return Ok(Self::LinearCurve(curve));
     }
 
     input.expect_function_matching("cubic-bezier")?;
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let x1 = expect_number(input)?;
       input.expect_comma()?;
       let y1 = expect_number(input)?;
@@ -482,7 +482,7 @@ fn parse_step_position<'i>(input: &mut Parser<'i>) -> ParseResult<'i, StepPositi
 
 fn parse_steps_function<'i>(input: &mut Parser<'i>) -> ParseResult<'i, AnimationTimingFunction> {
   input.expect_function_matching("steps")?;
-  input.parse_nested_block(|input| {
+  parse_nested_block(input, |input| {
     let count = input.expect_integer()?;
     if count <= 0 {
       return Err(CssParseError::from_basic_kind(

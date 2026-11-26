@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::style::{
   FromCss, GridLength, GridMinMaxSize, Length, MakeComputed, ParseMode, ParseResult, SizingContext,
-  ToCss, tw::TailwindPropertyParser,
+  ToCss, parse_nested_block, tw::TailwindPropertyParser,
 };
 use cssparser::{Parser, match_ignore_ascii_case};
 
@@ -52,7 +52,7 @@ impl<'i> FromCss<'i> for GridTrackSize {
       .try_parse(|input| input.expect_function_matching("minmax"))
       .is_ok()
     {
-      return input.parse_nested_block(|input| {
+      return parse_nested_block(input, |input| {
         let min = GridLength::from_css_in(input, mode)?;
 
         if matches!(min, GridLength::Fr(_)) {
@@ -67,7 +67,7 @@ impl<'i> FromCss<'i> for GridTrackSize {
       .try_parse(|input| input.expect_function_matching("fit-content"))
       .is_ok()
     {
-      return input.parse_nested_block(|input| {
+      return parse_nested_block(input, |input| {
         Ok(GridTrackSize::FitContent(Length::from_css_in(input, mode)?))
       });
     }

@@ -8,7 +8,8 @@ use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
   Angle, Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
-  ParseResult, PercentageNumber, SizingContext, ToCss, discrete, lerp, unexpected_token,
+  ParseResult, PercentageNumber, SizingContext, ToCss, discrete, lerp, parse_nested_block,
+  unexpected_token,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
@@ -703,7 +704,7 @@ impl Transform {
       _ => return Err(unexpected_token!(&Token::Function(function))),
     };
 
-    parser.parse_nested_block(|input| parse(input, mode))
+    parse_nested_block(parser, |input| parse(input, mode))
   }
 }
 

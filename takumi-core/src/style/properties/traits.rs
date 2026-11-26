@@ -710,11 +710,10 @@ macro_rules! impl_comma_list_from_css {
         input: &mut cssparser::Parser<'i>,
         mode: $crate::style::ParseMode,
       ) -> $crate::style::ParseResult<'i, Self> {
-        input
-          .parse_comma_separated(|input| {
-            <$elem as $crate::style::FromCss>::from_css_in(input, mode)
-          })
-          .map(Vec::into_boxed_slice)
+        $crate::style::parse_comma_separated(input, |input| {
+          <$elem as $crate::style::FromCss>::from_css_in(input, mode)
+        })
+        .map(Vec::into_boxed_slice)
       }
 
       const VALID_TOKENS: &'static [&'static str] = $valid;

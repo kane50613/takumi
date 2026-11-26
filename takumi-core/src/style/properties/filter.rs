@@ -14,8 +14,8 @@ use crate::{
   style::{
     Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
     ListInterpolationStrategy, MakeComputed, ParseMode, ParseResult, PercentageNumber,
-    SizingContext, SvgResource, TextShadow, ToCss, discrete, tw::TailwindPropertyParser,
-    unexpected_token,
+    SizingContext, SvgResource, TextShadow, ToCss, discrete, parse_nested_block,
+    tw::TailwindPropertyParser, unexpected_token,
   },
 };
 
@@ -440,7 +440,7 @@ impl<'i> FromCss<'i> for Filter {
     };
 
     if function.eq_ignore_ascii_case("url") {
-      return parser.parse_nested_block(|input| {
+      return parse_nested_block(parser, |input| {
         let url = input.expect_string()?.clone();
 
         parse_filter_url(&url)
@@ -448,11 +448,11 @@ impl<'i> FromCss<'i> for Filter {
     }
 
     match_ignore_ascii_case! {function,
-      "brightness" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Brightness)),
-      "opacity" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Opacity)),
-      "contrast" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Contrast)),
-      "grayscale" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Grayscale)),
-      "hue-rotate" => parser.parse_nested_block(|input| {
+      "brightness" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Brightness)),
+      "opacity" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Opacity)),
+      "contrast" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Contrast)),
+      "grayscale" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Grayscale)),
+      "hue-rotate" => parse_nested_block(parser, |input| {
         // hue-rotate() takes an angle, which only zero may write without a unit.
         if input.is_exhausted() {
           return Ok(Filter::HueRotate(Angle::zero()));
@@ -470,10 +470,10 @@ impl<'i> FromCss<'i> for Filter {
           }
         }
       }),
-      "invert" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Invert)),
-      "saturate" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Saturate)),
-      "sepia" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Sepia)),
-      "blur" => parser.parse_nested_block(|input| {
+      "invert" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Invert)),
+      "saturate" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Saturate)),
+      "sepia" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Sepia)),
+      "blur" => parse_nested_block(parser, |input| {
         // blur() radius is optional and defaults to 0; a present argument must be a valid length,
         // which takes no percentage.
         if input.is_exhausted() {
@@ -491,7 +491,7 @@ impl<'i> FromCss<'i> for Filter {
         // Blink's `ConsumeFilterFunction` parses the radius in `kHTMLStandardMode` in any mode.
         Length::from_css(input).map(Filter::Blur)
       }),
-      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css_in(input, mode).map(Filter::DropShadow)),
+      "drop-shadow" => parse_nested_block(parser, |input| TextShadow::from_css_in(input, mode).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(token)),
     }
   }

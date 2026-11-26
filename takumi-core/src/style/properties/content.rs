@@ -4,8 +4,8 @@ use cssparser::{Parser, Token, serialize_identifier, serialize_string};
 
 use crate::style::{
   Animatable, BackgroundImage, Direction, FromCss, ListStyleType, MakeComputed, ParseMode,
-  ParseResult, SizingContext, ToCss, properties::counter::counter_name, tw::TailwindPropertyParser,
-  unexpected_token,
+  ParseResult, SizingContext, ToCss, parse_nested_block, properties::counter::counter_name,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
@@ -193,15 +193,17 @@ impl<'i> FromCss<'i> for ContentItem {
     let token = input.next()?.clone();
     match token {
       Token::QuotedString(value) => Ok(ContentItem::Text(value.as_ref().into())),
-      Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => input
-        .parse_nested_block(AttrRef::from_css)
-        .map(ContentItem::Attr),
-      Token::Function(ref name) if name.eq_ignore_ascii_case("counter") => input
-        .parse_nested_block(|input| CounterFunction::parse(input, false))
-        .map(ContentItem::Counter),
-      Token::Function(ref name) if name.eq_ignore_ascii_case("counters") => input
-        .parse_nested_block(|input| CounterFunction::parse(input, true))
-        .map(ContentItem::Counter),
+      Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => {
+        parse_nested_block(input, AttrRef::from_css).map(ContentItem::Attr)
+      }
+      Token::Function(ref name) if name.eq_ignore_ascii_case("counter") => {
+        parse_nested_block(input, |input| CounterFunction::parse(input, false))
+          .map(ContentItem::Counter)
+      }
+      Token::Function(ref name) if name.eq_ignore_ascii_case("counters") => {
+        parse_nested_block(input, |input| CounterFunction::parse(input, true))
+          .map(ContentItem::Counter)
+      }
       other => Err(unexpected_token!(Self, &other)),
     }
   }

@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, lerp,
-  unexpected_token,
+  parse_nested_block, unexpected_token,
 };
 
 /// A `corner-shape` superellipse parameter `s`, convex when positive.
@@ -117,7 +117,7 @@ impl<'i> FromCss<'i> for Superellipse {
           return Err(unexpected_token!(token));
         }
 
-        input.parse_nested_block(|input| {
+        parse_nested_block(input, |input| {
           let token = input.next()?;
 
           match token {

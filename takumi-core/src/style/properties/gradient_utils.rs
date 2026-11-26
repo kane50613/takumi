@@ -10,7 +10,8 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
-    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::mul_div_255, unexpected_token,
+    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::mul_div_255,
+    parse_nested_block, unexpected_token,
   },
 };
 
@@ -104,8 +105,7 @@ fn peeks_modern_color_function(input: &mut Parser<'_>) -> bool {
         .iter()
         .any(|function| name.eq_ignore_ascii_case(function))
         // Relative syntax (`rgb(from ...)`) is modern whatever the function name.
-        || input
-          .parse_nested_block(|arguments| {
+        || parse_nested_block(input, |arguments| {
             let relative =
               matches!(arguments.next(), Ok(Token::Ident(ident)) if ident.eq_ignore_ascii_case("from"));
             while arguments.next().is_ok() {}

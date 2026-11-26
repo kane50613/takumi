@@ -5,7 +5,7 @@ use cssparser::Parser;
 use super::write_space_separated;
 use crate::style::{
   FromCss, GridRepeatTrack, GridRepetitionCount, GridRepetitionKeyword, GridTrackSize,
-  MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+  MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, parse_nested_block,
 };
 
 /// An ordered list of [`GridTemplateComponent`] values.
@@ -13,7 +13,7 @@ pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
 /// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.
 pub(crate) fn parse_line_names<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Vec<String>> {
-  input.parse_nested_block(|i| {
+  parse_nested_block(input, |i| {
     let mut names = Vec::new();
     while let Ok(name) = i.try_parse(Parser::expect_ident_cloned) {
       names.push(name.as_ref().to_owned());
@@ -63,7 +63,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
       .try_parse(|i| i.expect_function_matching("repeat"))
       .is_ok()
     {
-      return input.parse_nested_block(|input| {
+      return parse_nested_block(input, |input| {
         let repetition = GridRepetitionCount::from_css(input)?;
         input.expect_comma()?;
 
@@ -120,7 +120,7 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
 /// Blink's `ConsumeGridLineNamesRepeat` body: `[ <integer [1,∞]> | auto-fill ], <line-names>+`.
 fn parse_name_repeat<'i>(input: &mut Parser<'i>) -> ParseResult<'i, GridTemplateComponent> {
   input.expect_function_matching("repeat")?;
-  input.parse_nested_block(|input| {
+  parse_nested_block(input, |input| {
     let repetition = GridRepetitionCount::from_css(input)?;
 
     if matches!(
