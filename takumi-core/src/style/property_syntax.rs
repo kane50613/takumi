@@ -329,7 +329,7 @@ impl SyntaxComponent {
 
     items
       .iter()
-      .map(ToString::to_string)
+      .map(ToCss::to_css_string)
       .collect::<Vec<_>>()
       .join(separator)
   }
@@ -630,37 +630,37 @@ fn serialized_alpha(alpha: u8) -> f32 {
   }
 }
 
-impl Display for Item {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    let number = |f: &mut Formatter<'_>, value: f32, unit: &str| {
-      value.to_css(f)?;
-      f.write_str(unit)
+impl ToCss for Item {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let number = |dest: &mut W, value: f32, unit: &str| {
+      value.to_css(dest)?;
+      dest.write_str(unit)
     };
 
     match self {
-      Self::Length(px) => number(f, *px, "px"),
-      Self::LengthPercentage { px, percent } if *percent == 0.0 => number(f, *px, "px"),
-      Self::LengthPercentage { px, percent } if *px == 0.0 => number(f, *percent, "%"),
+      Self::Length(px) => number(dest, *px, "px"),
+      Self::LengthPercentage { px, percent } if *percent == 0.0 => number(dest, *px, "px"),
+      Self::LengthPercentage { px, percent } if *px == 0.0 => number(dest, *percent, "%"),
       Self::LengthPercentage { px, percent } => {
-        f.write_str("calc(")?;
-        number(f, *percent, "%")?;
-        f.write_str(if *px < 0.0 { " - " } else { " + " })?;
-        number(f, px.abs(), "px)")
+        dest.write_str("calc(")?;
+        number(dest, *percent, "%")?;
+        dest.write_str(if *px < 0.0 { " - " } else { " + " })?;
+        number(dest, px.abs(), "px)")
       }
-      Self::Number(value) | Self::Integer(value) => number(f, *value, ""),
-      Self::Percentage(value) => number(f, *value, "%"),
-      Self::Angle(degrees) => number(f, *degrees, "deg"),
-      Self::Time(seconds) => number(f, *seconds, "s"),
-      Self::Resolution(dppx) => number(f, *dppx, "dppx"),
-      Self::Color(ColorInput::CurrentColor) => f.write_str("currentcolor"),
-      Self::Color(ColorInput::Value(Color([r, g, b, 255]))) => write!(f, "rgb({r}, {g}, {b})"),
+      Self::Number(value) | Self::Integer(value) => number(dest, *value, ""),
+      Self::Percentage(value) => number(dest, *value, "%"),
+      Self::Angle(degrees) => number(dest, *degrees, "deg"),
+      Self::Time(seconds) => number(dest, *seconds, "s"),
+      Self::Resolution(dppx) => number(dest, *dppx, "dppx"),
+      Self::Color(ColorInput::CurrentColor) => dest.write_str("currentcolor"),
+      Self::Color(ColorInput::Value(Color([r, g, b, 255]))) => write!(dest, "rgb({r}, {g}, {b})"),
       Self::Color(ColorInput::Value(Color([r, g, b, alpha]))) => {
-        write!(f, "rgba({r}, {g}, {b}, ")?;
-        number(f, serialized_alpha(*alpha), ")")
+        write!(dest, "rgba({r}, {g}, {b}, ")?;
+        number(dest, serialized_alpha(*alpha), ")")
       }
-      Self::Color(color) => color.to_css(f),
-      Self::Transforms(transforms) => transforms.to_css(f),
-      Self::Specified(text) => f.write_str(text),
+      Self::Color(color) => color.to_css(dest),
+      Self::Transforms(transforms) => transforms.to_css(dest),
+      Self::Specified(text) => dest.write_str(text),
     }
   }
 }
