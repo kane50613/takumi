@@ -828,6 +828,56 @@ describe("fromJsx", () => {
     });
   });
 
+  test("renames SVG and HTML props through React DOM's aliases", async () => {
+    const video = (
+      <video
+        crossOrigin="anonymous"
+        autoFocus
+        suppressContentEditableWarning
+        suppressHydrationWarning
+      />
+    );
+
+    expect(renderToStaticMarkup(video)).toBe(
+      '<video crossorigin="anonymous" autofocus=""></video>',
+    );
+    expect((await fromJsx(video)).node.attributes).toEqual({
+      crossorigin: "anonymous",
+      autofocus: "",
+    });
+    expect(
+      (
+        await fromJsx({
+          type: "div",
+          props: { strokeWidth: 2, xlinkHref: "#a", xmlLang: "en" },
+        })
+      ).node.attributes,
+    ).toEqual({ "stroke-width": "2", "xlink:href": "#a", "xml:lang": "en" });
+  });
+
+  test("writes uncontrolled form values as React DOM's server renderer does", async () => {
+    const checkbox = <input type="checkbox" defaultChecked defaultValue="on" />;
+    const controlled = <input value="b" readOnly />;
+    const textarea = <textarea defaultValue="note" />;
+    const select = (
+      <select defaultValue="b">
+        <option value="b">b</option>
+      </select>
+    );
+
+    expect(renderToStaticMarkup(checkbox)).toBe('<input type="checkbox" checked="" value="on"/>');
+    expect(renderToStaticMarkup(controlled)).toBe('<input readOnly="" value="b"/>');
+    expect(renderToStaticMarkup(textarea)).toBe("<textarea>note</textarea>");
+    expect((await fromJsx(checkbox)).node).toMatchObject({
+      attributes: { type: "checkbox", checked: "", value: "on" },
+    });
+    expect((await fromJsx(controlled)).node).toMatchObject({
+      attributes: { readOnly: "", value: "b" },
+    });
+    expect((await fromJsx(textarea)).node).toMatchObject({ type: "text", text: "note" });
+    expect((await fromJsx(select)).node).not.toHaveProperty("attributes");
+  });
+
   test("writes a number id and lang as text", async () => {
     const { node } = await fromJsx({
       type: "div",

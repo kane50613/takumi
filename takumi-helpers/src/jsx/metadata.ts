@@ -21,17 +21,117 @@ const nonAttributeProps = new Set([
   "ref",
   "key",
   "dangerouslySetInnerHTML",
+  "defaultChecked",
+  "defaultValue",
+  "innerHTML",
+  "suppressContentEditableWarning",
   "suppressHydrationWarning",
 ]);
 
 /** The props React DOM writes `true` and `false` for, as it does any `aria-*` or `data-*` prop. */
-const booleanishProps = new Set(["contentEditable", "draggable", "spellCheck"]);
+const booleanishProps = new Set([
+  "contentEditable",
+  "draggable",
+  "spellCheck",
+  "value",
+  "autoReverse",
+  "externalResourcesRequired",
+  "focusable",
+  "preserveAlpha",
+]);
 
-/** The attribute names React DOM writes for props that spell them otherwise. */
-const attributeNames: Record<string, string> = {
+/** The attribute names React DOM's server renderer writes for props that spell them otherwise: its `aliases`, then the props it writes under a fixed name. */
+export const attributeNames: Record<string, string> = {
   acceptCharset: "accept-charset",
   htmlFor: "for",
   httpEquiv: "http-equiv",
+  crossOrigin: "crossorigin",
+  accentHeight: "accent-height",
+  alignmentBaseline: "alignment-baseline",
+  arabicForm: "arabic-form",
+  baselineShift: "baseline-shift",
+  capHeight: "cap-height",
+  clipPath: "clip-path",
+  clipRule: "clip-rule",
+  colorInterpolation: "color-interpolation",
+  colorInterpolationFilters: "color-interpolation-filters",
+  colorProfile: "color-profile",
+  colorRendering: "color-rendering",
+  dominantBaseline: "dominant-baseline",
+  enableBackground: "enable-background",
+  fillOpacity: "fill-opacity",
+  fillRule: "fill-rule",
+  floodColor: "flood-color",
+  floodOpacity: "flood-opacity",
+  fontFamily: "font-family",
+  fontSize: "font-size",
+  fontSizeAdjust: "font-size-adjust",
+  fontStretch: "font-stretch",
+  fontStyle: "font-style",
+  fontVariant: "font-variant",
+  fontWeight: "font-weight",
+  glyphName: "glyph-name",
+  glyphOrientationHorizontal: "glyph-orientation-horizontal",
+  glyphOrientationVertical: "glyph-orientation-vertical",
+  horizAdvX: "horiz-adv-x",
+  horizOriginX: "horiz-origin-x",
+  imageRendering: "image-rendering",
+  letterSpacing: "letter-spacing",
+  lightingColor: "lighting-color",
+  markerEnd: "marker-end",
+  markerMid: "marker-mid",
+  markerStart: "marker-start",
+  maskType: "mask-type",
+  overlinePosition: "overline-position",
+  overlineThickness: "overline-thickness",
+  paintOrder: "paint-order",
+  "panose-1": "panose-1",
+  pointerEvents: "pointer-events",
+  renderingIntent: "rendering-intent",
+  shapeRendering: "shape-rendering",
+  stopColor: "stop-color",
+  stopOpacity: "stop-opacity",
+  strikethroughPosition: "strikethrough-position",
+  strikethroughThickness: "strikethrough-thickness",
+  strokeDasharray: "stroke-dasharray",
+  strokeDashoffset: "stroke-dashoffset",
+  strokeLinecap: "stroke-linecap",
+  strokeLinejoin: "stroke-linejoin",
+  strokeMiterlimit: "stroke-miterlimit",
+  strokeOpacity: "stroke-opacity",
+  strokeWidth: "stroke-width",
+  textAnchor: "text-anchor",
+  textDecoration: "text-decoration",
+  textRendering: "text-rendering",
+  transformOrigin: "transform-origin",
+  underlinePosition: "underline-position",
+  underlineThickness: "underline-thickness",
+  unicodeBidi: "unicode-bidi",
+  unicodeRange: "unicode-range",
+  unitsPerEm: "units-per-em",
+  vAlphabetic: "v-alphabetic",
+  vHanging: "v-hanging",
+  vIdeographic: "v-ideographic",
+  vMathematical: "v-mathematical",
+  vectorEffect: "vector-effect",
+  vertAdvY: "vert-adv-y",
+  vertOriginX: "vert-origin-x",
+  vertOriginY: "vert-origin-y",
+  wordSpacing: "word-spacing",
+  writingMode: "writing-mode",
+  xmlnsXlink: "xmlns:xlink",
+  xHeight: "x-height",
+  autoFocus: "autofocus",
+  xlinkActuate: "xlink:actuate",
+  xlinkArcrole: "xlink:arcrole",
+  xlinkHref: "xlink:href",
+  xlinkRole: "xlink:role",
+  xlinkShow: "xlink:show",
+  xlinkTitle: "xlink:title",
+  xlinkType: "xlink:type",
+  xmlBase: "xml:base",
+  xmlLang: "xml:lang",
+  xmlSpace: "xml:space",
 };
 
 /** Reads node metadata from element props under one set of {@link FromJsxOptions}. */
@@ -84,7 +184,7 @@ export class NodeMetadataReader {
   ): Record<string, string> | undefined {
     let attributes: Record<string, string> | undefined;
 
-    for (const [name, value] of Object.entries(props)) {
+    for (const [name, value] of Object.entries(formControlProps(tagName, props))) {
       if (nonAttributeProps.has(name) || name === this.tailwindClassesProperty) {
         continue;
       }
@@ -109,6 +209,31 @@ export class NodeMetadataReader {
 
     return attributes;
   }
+}
+
+/** `props` as React DOM's server renderer writes a form control's: an `<input>` reads `checked` and `value` from `defaultChecked` and `defaultValue` when they are absent, and a `<select>` or `<textarea>` holds its value instead of writing it. */
+function formControlProps(tagName: string | undefined, props: HtmlProps): HtmlProps {
+  if (tagName === "input") {
+    return {
+      ...props,
+      checked: props.checked ?? props.defaultChecked,
+      value: props.value ?? props.defaultValue,
+    };
+  }
+
+  if (tagName === "select" || tagName === "textarea") {
+    return { ...props, value: undefined };
+  }
+
+  return props;
+}
+
+/** A `<textarea>`'s text: its `value`, else its `defaultValue`, as React DOM's server renderer writes it in place of the children. */
+export function textareaValue(props: {
+  value?: unknown;
+  defaultValue?: unknown;
+}): string | undefined {
+  return textValue(props.value ?? props.defaultValue);
 }
 
 /** The text React DOM writes for a prop `name` of `value`, `undefined` when it writes none. */

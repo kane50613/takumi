@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactElement } from "react";
+import { attributeNames } from "./metadata";
 import {
   camelToKebab,
   componentRenderer,
@@ -20,81 +21,6 @@ const cssClosingBrackets = new Map([
   ["(", ")"],
   ["[", "]"],
   ["{", "}"],
-]);
-
-const propertiesToKebabCase = new Set([
-  "stopColor",
-  "stopOpacity",
-  "strokeWidth",
-  "strokeDasharray",
-  "strokeDashoffset",
-  "strokeLinecap",
-  "strokeLinejoin",
-  "fillRule",
-  "clipRule",
-  "colorInterpolationFilters",
-  "floodColor",
-  "floodOpacity",
-  "accentHeight",
-  "alignmentBaseline",
-  "arabicForm",
-  "baselineShift",
-  "capHeight",
-  "clipPath",
-  "colorInterpolation",
-  "colorProfile",
-  "colorRendering",
-  "dominantBaseline",
-  "enableBackground",
-  "fillOpacity",
-  "fontFamily",
-  "fontSize",
-  "fontSizeAdjust",
-  "fontStretch",
-  "fontStyle",
-  "fontVariant",
-  "fontWeight",
-  "glyphName",
-  "glyphOrientationHorizontal",
-  "glyphOrientationVertical",
-  "horizAdvX",
-  "horizOriginX",
-  "imageRendering",
-  "letterSpacing",
-  "lightingColor",
-  "markerEnd",
-  "markerMid",
-  "markerStart",
-  "overlinePosition",
-  "overlineThickness",
-  "paintOrder",
-  "pointerEvents",
-  "renderingIntent",
-  "shapeRendering",
-  "strikethroughPosition",
-  "strikethroughThickness",
-  "strokeMiterlimit",
-  "strokeOpacity",
-  "textAnchor",
-  "textDecoration",
-  "textRendering",
-  "transformOrigin",
-  "underlinePosition",
-  "underlineThickness",
-  "unicodeBidi",
-  "unicodeRange",
-  "unitsPerEm",
-  "vectorEffect",
-  "vertAdvY",
-  "vertOriginX",
-  "vertOriginY",
-  "vAlphabetic",
-  "vHanging",
-  "vIdeographic",
-  "vMathematical",
-  "wordSpacing",
-  "writingMode",
-  "xHeight",
 ]);
 
 export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
@@ -157,7 +83,7 @@ function serializeAttributes(props: Record<string, unknown>): string {
 function attributeName(prop: string): string {
   if (prop === "className") return "class";
 
-  return propertiesToKebabCase.has(prop) ? camelToKebab(prop) : prop;
+  return attributeNames[prop] ?? prop;
 }
 
 function serializeStyle(style: object): string {

@@ -2,7 +2,7 @@ import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { container, image, text } from "../helpers";
 import { rootResult, type ConvertedNodes } from "../root";
 import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
-import { NodeMetadataReader, type HtmlProps } from "./metadata";
+import { NodeMetadataReader, textareaValue, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import type { defaultStylePresets } from "./style-presets";
@@ -176,7 +176,9 @@ class NodeBuilder implements RenderEnv {
       );
     }
 
-    const textChildren = foldedText(element);
+    const textChildren =
+      (isHtmlElement(element, "textarea") ? textareaValue(element.props) : undefined) ??
+      foldedText(element);
     if (textChildren !== undefined) {
       return nodeResult(text({ text: textChildren, ...metadata }));
     }
