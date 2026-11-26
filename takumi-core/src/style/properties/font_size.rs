@@ -159,17 +159,7 @@ impl<'i> FromCss<'i> for FontSize {
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
       .or_else(|_| input.try_parse(Self::parse_relative))
-      .or_else(|_| {
-        let state = input.state();
-        let token = input.next()?.clone();
-
-        if matches!(&token, Token::Ident(ident) if ident.eq_ignore_ascii_case("auto")) {
-          return Err(unexpected_token!(&token));
-        }
-
-        input.reset(&state);
-        Length::from_css(input).map(Self::Length)
-      })
+      .or_else(|_| Length::parse_length_percentage(input).map(Self::Length))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &[

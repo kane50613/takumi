@@ -400,6 +400,32 @@ impl<'i> FromCss<'i> for Length {
 }
 
 impl Length {
+  /// Blink's `ConsumeLengthOrPercent`: a `<length-percentage>`, which `auto` is not.
+  pub(crate) fn parse_length_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let state = input.state();
+    let token = input.next()?.clone();
+
+    if matches!(&token, Token::Ident(ident) if ident.eq_ignore_ascii_case("auto")) {
+      return Err(unexpected_token!(&token));
+    }
+
+    input.reset(&state);
+    Self::from_css(input)
+  }
+
+  /// Blink's `ParseSpacing` for `letter-spacing` and `word-spacing`, with `normal` as the zero
+  /// it computes to.
+  pub(crate) fn parse_spacing<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("normal"))
+      .is_ok()
+    {
+      return Ok(Self::zero());
+    }
+
+    Self::parse_length_percentage(input)
+  }
+
   fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,

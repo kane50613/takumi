@@ -1963,6 +1963,36 @@ fn font_size_rejects_a_negative_length_and_auto() {
 }
 
 #[test]
+fn spacing_takes_normal_as_zero_and_rejects_auto() {
+  let style = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations).inherit(&ComputedStyle::default())
+  };
+
+  for (css, spacing) in [
+    (
+      "letter-spacing: 2px; letter-spacing: normal; word-spacing: 2px; word-spacing: normal",
+      Length::zero(),
+    ),
+    (
+      "letter-spacing: 2px; letter-spacing: auto; word-spacing: 2px; word-spacing: auto",
+      Length::Px(2.0),
+    ),
+  ] {
+    let style = style(css);
+
+    assert_eq!(style.inherited_data.letter_spacing, spacing, "{css}");
+    assert_eq!(style.inherited_data.word_spacing, spacing, "{css}");
+  }
+  assert_eq!(
+    style("text-indent: 2px; text-indent: auto")
+      .misc_inherited1_data
+      .text_indent
+      .amount,
+    Length::Px(2.0)
+  );
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [

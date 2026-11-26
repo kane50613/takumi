@@ -79,7 +79,7 @@ impl<'i> FromCss<'i> for TextIndent {
 
     while !input.is_exhausted() {
       if amount.is_none()
-        && let Ok(length) = input.try_parse(Length::from_css)
+        && let Ok(length) = input.try_parse(Length::parse_length_percentage)
       {
         amount = Some(length);
         continue;
