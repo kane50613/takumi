@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Renderer } from "../src/export";
+import { type FontLoader, Renderer } from "../src/export";
 
 // The behaviour nuxt-og-image's renderer relies on:
 // https://github.com/nuxt-modules/og-image/blob/d56c0cfe1a433c9dab7e2212e6d9b4f2f8e53b82/src/runtime/server/og-image/takumi/renderer.ts
@@ -13,13 +13,14 @@ const html = `<p style="font-family: Downstream">Hi</p>`;
 const layout = { width: 40, height: 20, fontFamilies: ["Downstream"] };
 
 /** A face of the `Downstream` family covering `range`, loaded the way og-image loads it. */
-const loader = (range: [number, number], data: () => Promise<Uint8Array>) => ({
-  name: "Downstream",
-  data: mock(data),
-  weight: 400,
-  style: "normal" as const,
-  unicodeRange: [range],
-});
+const loader = (range: [number, number], data: () => Promise<Uint8Array>) =>
+  ({
+    name: "Downstream",
+    data: mock(data),
+    weight: 400,
+    style: "normal",
+    unicodeRange: [range],
+  }) satisfies FontLoader;
 
 describe("nuxt-og-image", () => {
   test("calls a font loader only for the text that needs it", async () => {

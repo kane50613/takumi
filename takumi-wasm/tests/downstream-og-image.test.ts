@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import init, { Renderer } from "@takumi-rs/wasm/no-bundler";
+import init, { type FontLoader, Renderer } from "@takumi-rs/wasm/no-bundler";
 
 // The behaviour nuxt-og-image relies on, initialized the way its WASM binding does:
 // https://github.com/nuxt-modules/og-image/blob/5f191b7dbed829a192cd66fffec7426c07fdc9c7/src/runtime/server/og-image/bindings/takumi/wasm.ts
@@ -20,13 +20,14 @@ const html = `<p style="font-family: Downstream">Hi</p>`;
 const layout = { width: 40, height: 20, fontFamilies: ["Downstream"] };
 
 /** A face of the `Downstream` family covering `range`, loaded the way og-image loads it. */
-const loader = (range: [number, number], data: () => Promise<Uint8Array>) => ({
-  name: "Downstream",
-  data: mock(data),
-  weight: 400,
-  style: "normal" as const,
-  unicodeRange: [range],
-});
+const loader = (range: [number, number], data: () => Promise<Uint8Array>) =>
+  ({
+    name: "Downstream",
+    data: mock(data),
+    weight: 400,
+    style: "normal",
+    unicodeRange: [range],
+  }) satisfies FontLoader;
 
 describe("nuxt-og-image", () => {
   test("calls a font loader only for the text that needs it", async () => {
