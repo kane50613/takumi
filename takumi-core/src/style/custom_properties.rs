@@ -27,7 +27,7 @@ pub struct CustomProperties {
   inherited: HashTrie<String, Option<String>>,
   /// Registered properties that do not inherit, and the element state below.
   non_inherited: HashTrie<String, Option<String>>,
-  registrations: Arc<HashMap<String, PropertyRule>>,
+  registrations: Registrations,
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
   element_state: Arc<HashSet<String>>,
