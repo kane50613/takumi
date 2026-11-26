@@ -323,16 +323,29 @@ Do not use one native micro-benchmark as the gate. Measure a WebAssembly change 
 
 Measure binary size through the shipped pipeline:
 
-- Build the release WebAssembly package. Its `wasm-pack` profile runs `wasm-opt`.
-- Compress the resulting `.wasm` file with `gzip -9`.
+- Build the release WebAssembly package. Its `build` script runs `wasm-opt`.
+- Compress the resulting `.wasm` file with `brotli -q 11`, the encoding that ships, and with `gzip -9`.
 - Report the size difference. Do not report only the absolute size.
 
 For `takumi-wasm`, use:
 
 ```bash
 bun run --filter ./takumi-wasm build
+brotli -q 11 -c takumi-wasm/pkg/takumi_wasm_bg.wasm | wc -c
 gzip -9 -c takumi-wasm/pkg/takumi_wasm_bg.wasm | wc -c
 ```
+
+Judge a size change by its brotli bytes. Raw and gzip sizes can shrink while brotli grows, and the reverse.
+
+CI's `Check wasm size` job reports these sizes for `@takumi-rs/wasm`, `takumi-pdf`, and `takumi-paint` against the base branch. For `@takumi-rs/wasm` it also lists the functions and generic families that changed, from a `twiggy` diff of builds that keep their names. A pull request fails the job when it grows a package's brotli size by more than the budget in `.github/wasm-size-budget.json`, 4 KB per package to start. When the growth is intended, add the `size-increase` label to the pull request and re-run the job, so the reviewer sees the cost was accepted on purpose. The label does not lift the gzip ceiling on `takumi-pdf`, which keeps room under the Cloudflare Workers limit.
+
+Most growth comes from generic code, because every instantiation is a separate copy. These habits keep it small:
+
+- Keep generic visitor bodies thin. Inside `visit_map`, `visit_seq`, or `deserialize`, read and store the values, then hand validation, defaults, and construction to a non-generic function.
+- Convert an `impl Into<String>` or `AsRef<str>` argument at the boundary and call a non-generic inner function.
+- Use one writer type per serialization trait. Write to a `String` or a `&mut dyn fmt::Write` instead of taking each caller's writer as a type parameter.
+- Take `&dyn` on cold paths such as error reporting, logging, serialization, and debugging. Keep generics where a measurement shows the path is hot.
+- Add `#[inline(never)]` only after a measurement shows it saves size.
 
 ## Documentation and changelogs
 
