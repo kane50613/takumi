@@ -1501,6 +1501,20 @@ fn a_nested_scope_start_is_relative_to_its_rule() {
   );
 }
 
+/// A style rule directly in a nested `@scope` is relative to the scope's root, as Blink parses
+/// the body of every `@scope` with the scope nesting type.
+#[test]
+fn a_nested_scope_body_is_relative_to_its_root() {
+  assert_eq!(
+    card_widths(".card { @scope (&) { :scope { width: 100px } } }")[0],
+    100.0
+  );
+  assert_eq!(
+    card_widths(".card { @scope (&) { > p { width: 30px } } }"),
+    [1200.0, 30.0, 1200.0]
+  );
+}
+
 /// `inherit` on a registered property that does not inherit takes the parent's computed value, as
 /// Blink's `ApplyInherit` copies it.
 #[test]

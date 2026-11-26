@@ -435,6 +435,8 @@ struct NestingContext<'a> {
   scope: Option<&'a Arc<Scope>>,
   /// The queries of `@container` rules nested in style rules around it.
   container_queries: &'a [Arc<ContainerQuery>],
+  /// In the direct body of a nested `@scope`, where a selector is relative to the scope's root.
+  scope_body: bool,
   lossy: bool,
 }
 
@@ -557,7 +559,13 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
     &mut self,
     input: &mut Parser<'i>,
   ) -> Result<Self::Prelude, ParseError<Self::Error>> {
-    SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::ForNesting)
+    let relative = if self.context.scope_body {
+      ParseRelative::ForScope
+    } else {
+      ParseRelative::ForNesting
+    };
+
+    SelectorList::parse(&TakumiSelectorParser, input, relative)
   }
 
   fn parse_block(
@@ -568,10 +576,12 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
   ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     let selectors = nested_selectors.replace_parent_selector(&self.parent_selectors);
 
-    self
-      .context
-      .parse_style_rule_block(selectors, input)
-      .map(StyleRuleBodyItem::Rules)
+    NestingContext {
+      scope_body: false,
+      ..self.context
+    }
+    .parse_style_rule_block(selectors, input)
+    .map(StyleRuleBodyItem::Rules)
   }
 }
 
@@ -740,6 +750,7 @@ impl RuleParser {
       layer: self.current_layer.as_ref(),
       scope: None,
       container_queries: &[],
+      scope_body: false,
       lossy: self.lossy,
     }
   }
@@ -1207,6 +1218,7 @@ impl NestingContext<'_> {
 
         NestingContext {
           scope: Some(&scope),
+          scope_body: true,
           ..self
         }
         .parse_style_rule_block(root, input)
