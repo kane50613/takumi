@@ -10,20 +10,16 @@ use crate::{
     ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, NodeMetadata,
     TextData,
   },
-  style::{Lang, ParsedValues, Style},
+  style::{Lang, ParsedValues, Style, StyleSeed},
 };
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    let names = Names::default();
-
-    ParsedValues::scope(|| {
-      NodeSeed {
-        depth: 0,
-        names: &names,
-      }
-      .deserialize(deserializer)
-    })
+    NodeSeed {
+      depth: 0,
+      tree: &TreeInput::default(),
+    }
+    .deserialize(deserializer)
   }
 }
 
@@ -33,16 +29,25 @@ impl<'de> Deserialize<'de> for NodeKind {
       .deserialize_map(NodeVisitor {
         reads_metadata: false,
         depth: 0,
-        names: &Names::default(),
+        tree: &TreeInput::default(),
       })
       .map(|(_, kind)| kind)
   }
 }
 
+/// What a node tree's nodes share as they are read.
+#[derive(Default)]
+struct TreeInput {
+  /// The element and attribute names read so far.
+  names: Names,
+  /// The CSS values its styles parsed so far.
+  values: ParsedValues,
+}
+
 /// A node `depth` levels below the root, refused past [`MAXIMUM_DOM_TREE_DEPTH`].
 struct NodeSeed<'n> {
   depth: usize,
-  names: &'n Names,
+  tree: &'n TreeInput,
 }
 
 impl<'de> DeserializeSeed<'de> for NodeSeed<'_> {
@@ -58,7 +63,7 @@ impl<'de> DeserializeSeed<'de> for NodeSeed<'_> {
     let (metadata, kind) = deserializer.deserialize_map(NodeVisitor {
       reads_metadata: true,
       depth: self.depth,
-      names: self.names,
+      tree: self.tree,
     })?;
 
     Ok(Node { metadata, kind })
@@ -68,7 +73,7 @@ impl<'de> DeserializeSeed<'de> for NodeSeed<'_> {
 /// A container's children, one level below it: absent, `null`, or a list.
 struct Children<'n> {
   depth: usize,
-  names: &'n Names,
+  tree: &'n TreeInput,
 }
 
 impl<'de> DeserializeSeed<'de> for Children<'_> {
@@ -103,12 +108,43 @@ impl<'de> Visitor<'de> for Children<'_> {
 
     while let Some(child) = seq.next_element_seed(NodeSeed {
       depth: self.depth,
-      names: self.names,
+      tree: self.tree,
     })? {
       children.push(child);
     }
 
     Ok(Some(children))
+  }
+}
+
+/// A node's `style` or `preset`: absent, `null`, or a style object.
+struct OptionalStyle<'v>(&'v ParsedValues);
+
+impl<'de> DeserializeSeed<'de> for OptionalStyle<'_> {
+  type Value = Option<Style>;
+
+  fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+    deserializer.deserialize_option(self)
+  }
+}
+
+impl<'de> Visitor<'de> for OptionalStyle<'_> {
+  type Value = Option<Style>;
+
+  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    formatter.write_str("a style object")
+  }
+
+  fn visit_none<E: Error>(self) -> Result<Self::Value, E> {
+    Ok(None)
+  }
+
+  fn visit_unit<E: Error>(self) -> Result<Self::Value, E> {
+    Ok(None)
+  }
+
+  fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+    StyleSeed(self.0).deserialize(deserializer).map(Some)
   }
 }
 
@@ -166,7 +202,7 @@ struct NodeVisitor<'n> {
   /// How many levels below the root the node sits.
   depth: usize,
   /// The tree's element and attribute names read so far.
-  names: &'n Names,
+  tree: &'n TreeInput,
 }
 
 impl<'de> Visitor<'de> for NodeVisitor<'_> {
@@ -191,7 +227,7 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
         NodeField::Children if owns(NodeType::Container) => {
           fields.children = map.next_value_seed(Children {
             depth: self.depth + 1,
-            names: self.names,
+            tree: self.tree,
           })?;
         }
         NodeField::Text if owns(NodeType::Text) => fields.text = Some(map.next_value()?),
@@ -201,7 +237,7 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
         NodeField::TagName => {
           fields.metadata.tag_name = map
             .next_value::<Option<Box<str>>>()?
-            .map(|name| self.names.get(&name));
+            .map(|name| self.tree.names.get(&name));
         }
         NodeField::ClassName => fields.metadata.class_name = map.next_value()?,
         NodeField::Id => fields.metadata.id = map.next_value()?,
@@ -211,14 +247,20 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
             .map(|attributes| {
               attributes
                 .into_iter()
-                .map(|(name, value)| (self.names.get(&name), value))
+                .map(|(name, value)| (self.tree.names.get(&name), value))
                 .collect()
             });
         }
         NodeField::Preset => {
-          fields.metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new);
+          fields.metadata.preset = map
+            .next_value_seed(OptionalStyle(&self.tree.values))?
+            .map(Arc::new);
         }
-        NodeField::Style => fields.metadata.style = map.next_value()?,
+        NodeField::Style => {
+          fields.metadata.style = map
+            .next_value_seed(OptionalStyle(&self.tree.values))?
+            .map(Box::new);
+        }
         NodeField::Tw => fields.metadata.tw = map.next_value()?,
         NodeField::Dir => fields.metadata.dir = map.next_value()?,
         NodeField::Lang => fields.lang = map.next_value::<Option<Box<str>>>()?,
@@ -228,7 +270,9 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
       }
     }
 
-    fields.into_node(self.names).map_err(Error::missing_field)
+    fields
+      .into_node(&self.tree.names)
+      .map_err(Error::missing_field)
   }
 }
 

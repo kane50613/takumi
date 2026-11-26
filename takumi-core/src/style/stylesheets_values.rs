@@ -6,33 +6,21 @@ use smallvec::SmallVec;
 use super::{CssInputParseError, ParsedDeclarations, PropertyId};
 use crate::style::{CssInput, CssNumber};
 
-thread_local! {
-  static VALUES: RefCell<Option<Values>> = const { RefCell::new(None) };
-}
-
 /// The CSS values one node tree's styles parsed, reused where its nodes repeat them.
-pub(crate) struct ParsedValues;
+#[derive(Default)]
+pub(crate) struct ParsedValues(RefCell<Values>);
 
 impl ParsedValues {
-  /// Runs `read` with the values it parses kept for reuse until it returns, unless an outer
-  /// `read` already keeps them.
-  pub(crate) fn scope<T>(read: impl FnOnce() -> T) -> T {
-    let _scope = VALUES
-      .with_borrow_mut(|values| values.is_none().then(|| *values = Some(Values::default())))
-      .map(|()| Scope);
-
-    read()
-  }
-
-  /// `input` parsed as `property`, reused when the scope parsed the same value for it before.
-  pub(crate) fn parse(
+  /// `input` parsed as `property`, reused when the tree parsed the same value for it before.
+  pub(crate) fn parse<'i>(
+    &self,
     property: PropertyId,
-    input: CssInput<'_>,
-  ) -> Result<ParsedDeclarations, CssInputParseError<'_>> {
-    let kept = VALUES.with_borrow(|values| {
-      let values = values.as_ref()?;
+    input: CssInput<'i>,
+  ) -> Result<ParsedDeclarations, CssInputParseError<'i>> {
+    let kept = {
+      let values = self.0.borrow();
 
-      Some(match &input {
+      match &input {
         CssInput::Str(text) => values
           .texts
           .get(text.as_ref())
@@ -42,13 +30,11 @@ impl ParsedValues {
           .get(&NumberKey::from(*number))
           .and_then(|by| by.find(property)),
         CssInput::Unexpected(_) => None,
-      })
-    });
+      }
+    };
 
-    match kept {
-      Some(Some(declarations)) => return Ok(declarations),
-      Some(None) => {}
-      None => return property.parse_css_input_declarations(input),
+    if let Some(declarations) = kept {
+      return Ok(declarations);
     }
 
     let key = match &input {
@@ -59,11 +45,10 @@ impl ParsedValues {
     let declarations = property.parse_css_input_declarations(input)?;
 
     if let Some(key) = key {
-      VALUES.with_borrow_mut(|values| {
-        if let Some(values) = values {
-          values.keep(key, property, declarations.clone());
-        }
-      });
+      self
+        .0
+        .borrow_mut()
+        .keep(key, property, declarations.clone());
     }
     Ok(declarations)
   }
@@ -121,14 +106,5 @@ impl From<CssNumber> for NumberKey {
       CssNumber::Unsigned(value) => Self::Unsigned(value),
       CssNumber::Float(value) => Self::Float(value.to_bits()),
     }
-  }
-}
-
-/// Drops the kept values when the scope that opened them ends, even by unwinding.
-struct Scope;
-
-impl Drop for Scope {
-  fn drop(&mut self) {
-    VALUES.with_borrow_mut(|values| *values = None);
   }
 }
