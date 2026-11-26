@@ -28,7 +28,11 @@ const nonAttributeProps = new Set([
 const booleanishProps = new Set(["contentEditable", "draggable", "spellCheck"]);
 
 /** The attribute names React DOM writes for props that spell them otherwise. */
-const attributeNames: Record<string, string> = { htmlFor: "for" };
+const attributeNames: Record<string, string> = {
+  acceptCharset: "accept-charset",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+};
 
 /** Reads node metadata from element props under one set of {@link FromJsxOptions}. */
 export class NodeMetadataReader {
