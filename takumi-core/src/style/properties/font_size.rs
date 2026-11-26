@@ -73,7 +73,7 @@ impl_css_enum!(
   "large" => FontSizeKeyword::Large,
   "x-large" => FontSizeKeyword::XLarge,
   "xx-large" => FontSizeKeyword::XXLarge,
-  "xxx-large" => FontSizeKeyword::XXXLarge,
+  "xxx-large" | "-webkit-xxx-large" => FontSizeKeyword::XXXLarge,
 );
 
 // https://drafts.csswg.org/css-fonts-4/#valdef-font-size-larger
@@ -116,6 +116,11 @@ impl FontSize {
     }
   }
 
+  /// Whether the size is authored as a negative length, which `font-size` rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   fn parse_relative<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
@@ -154,7 +159,17 @@ impl<'i> FromCss<'i> for FontSize {
       .try_parse(FontSizeKeyword::from_css)
       .map(Self::Keyword)
       .or_else(|_| input.try_parse(Self::parse_relative))
-      .or_else(|_| Length::from_css(input).map(Self::Length))
+      .or_else(|_| {
+        let state = input.state();
+        let token = input.next()?.clone();
+
+        if matches!(&token, Token::Ident(ident) if ident.eq_ignore_ascii_case("auto")) {
+          return Err(unexpected_token!(&token));
+        }
+
+        input.reset(&state);
+        Length::from_css(input).map(Self::Length)
+      })
   }
 
   const VALID_TOKENS: &'static [&'static str] = &[

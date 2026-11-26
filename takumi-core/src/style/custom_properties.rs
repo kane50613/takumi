@@ -76,14 +76,28 @@ impl CustomProperties {
   }
 
   /// Sets `name` as a declaration specifies it. A CSS-wide keyword resolves here, as the cascade
-  /// resolves it for a custom property: `inherit` takes `parent`'s value, `initial` the registered
-  /// initial value or none, and `unset` either one as the property inherits.
+  /// resolves it for a custom property.
   /// <https://drafts.csswg.org/css-variables-1/#defining-variables>
   pub(crate) fn declare(&mut self, name: String, value: String, parent: Option<&Self>) {
     let Ok(keyword) = CssWideKeyword::from_css_str(&value) else {
       return self.set(name, value);
     };
-    let registration = self.registration(&name);
+
+    match self.keyword_value(&name, keyword, parent) {
+      Some(value) => self.set(name, value),
+      None => self.remove(&name),
+    }
+  }
+
+  /// The value a CSS-wide `keyword` gives `name`: `inherit` takes `parent`'s value, `initial` the
+  /// registered initial value or none, and `unset` either one as the property inherits.
+  pub(crate) fn keyword_value(
+    &self,
+    name: &str,
+    keyword: CssWideKeyword,
+    parent: Option<&Self>,
+  ) -> Option<String> {
+    let registration = self.registration(name);
     let inherits = registration.is_none_or(|rule| rule.inherits);
     let inherited = match keyword {
       CssWideKeyword::Inherit => true,
@@ -93,14 +107,10 @@ impl CustomProperties {
       | CssWideKeyword::RevertRule => inherits,
       CssWideKeyword::Initial => false,
     };
-    let resolved = match parent {
-      Some(parent) if inherited => parent.get(&name).map(str::to_owned),
-      _ => registration.and_then(|rule| rule.initial_value.clone()),
-    };
 
-    match resolved {
-      Some(value) => self.set(name, value),
-      None => self.remove(&name),
+    match parent {
+      Some(parent) if inherited => parent.get(name).map(str::to_owned),
+      _ => registration.and_then(|rule| rule.initial_value.clone()),
     }
   }
 

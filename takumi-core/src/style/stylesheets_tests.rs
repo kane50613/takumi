@@ -1921,6 +1921,48 @@ fn a_css_wide_keyword_a_var_substitutes_into_a_custom_property_applies() {
 }
 
 #[test]
+fn a_property_reading_a_substituted_keyword_reads_what_it_resolves_to() {
+  let parent = inherited_style_from_pairs([("--a", "1"), ("--b", "2")], &ComputedStyle::default());
+  let style = inherited_style_from_pairs(
+    [
+      ("--a", "var(--x, inherit)"),
+      ("--b", "var(--a)"),
+      ("--c", "x var(--a) y"),
+    ],
+    &parent,
+  );
+
+  assert_eq!(style.custom_properties.get("--a"), Some("1"));
+  assert_eq!(style.custom_properties.get("--b"), Some("1"));
+  assert_eq!(style.custom_properties.get("--c"), Some("x 1 y"));
+}
+
+#[test]
+fn font_size_rejects_a_negative_length_and_auto() {
+  let size = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .inherited_data
+      .font_size
+  };
+  let twenty = FontSize::from(Length::Px(20.0));
+
+  for css in [
+    "font-size: 20px; font-size: -10px",
+    "font-size: 20px; font-size: -1em",
+    "font-size: 20px; font-size: auto",
+    "font-size: 20px; font: -10px serif",
+    "font-size: 20px; font: auto serif",
+  ] {
+    assert_eq!(size(css), twenty, "{css}");
+  }
+  assert_eq!(
+    size("font-size: -webkit-xxx-large"),
+    FontSize::Keyword(FontSizeKeyword::XXXLarge)
+  );
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [
