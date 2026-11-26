@@ -15,7 +15,7 @@ use super::gradient_utils::{
 use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, parse_angle,
+  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
   tw::TailwindPropertyParser, unexpected_token,
 };
 
@@ -82,7 +82,7 @@ impl LinearGradient {
         keyword_direction.to_angle()
       }
     };
-    let degrees = angle.0.rem_euclid(360.0);
+    let degrees = angle.normalized();
 
     // Blink's `EndPointsFromAngle` takes the four axis angles exactly.
     if degrees == 0.0 {
@@ -538,10 +538,7 @@ impl Animatable for Angle {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    let from_degrees = **from;
-    let to_degrees = **to;
-    let delta = (to_degrees - from_degrees + 180.0).rem_euclid(360.0) - 180.0;
-    *self = Angle::new(from_degrees + delta * progress);
+    *self = Angle::new(lerp(**from, **to, progress));
   }
 }
 
@@ -587,9 +584,14 @@ impl Angle {
     Angle(0.0)
   }
 
-  /// Creates a new angle value, normalizing it to the range [0, 360).
-  pub fn new(value: f32) -> Self {
-    Angle(value.rem_euclid(360.0))
+  /// Creates a new angle value, keeping the degrees as specified.
+  pub const fn new(value: f32) -> Self {
+    Angle(value)
+  }
+
+  /// The direction the angle points in, as degrees in [0, 360).
+  pub fn normalized(self) -> f32 {
+    self.0.rem_euclid(360.0)
   }
 }
 
@@ -998,26 +1000,57 @@ mod tests {
     }
   }
 
+  /// Blink's `CSSAngleInterpolationType` blends the specified degrees as a number.
   #[test]
-  fn test_angle_interpolate_uses_shortest_path_across_zero() {
-    let from = Angle::new(0.0);
-    let to = Angle::new(-3.0);
-    let mut interpolated = from;
+  fn an_angle_interpolates_its_specified_degrees() {
+    for (from, to, progress, expected) in [
+      (0.0, 360.0, 0.25, 90.0),
+      (0.0, 720.0, 0.5, 360.0),
+      (0.0, -3.0, 0.5, -1.5),
+      (-3.0, 0.0, 0.5, -1.5),
+    ] {
+      let interpolated = Angle::interpolated(
+        &Angle::new(from),
+        &Angle::new(to),
+        progress,
+        &sizing(),
+        Color::transparent(),
+      );
 
-    interpolated.interpolate(&from, &to, 0.5, &sizing(), Color::transparent());
-
-    assert!((*interpolated - 358.5).abs() < 0.001);
+      assert_eq!(
+        *interpolated, expected,
+        "{from}deg to {to}deg at {progress}"
+      );
+    }
   }
 
   #[test]
-  fn test_angle_interpolate_uses_shortest_path_forward_across_zero() {
-    let from = Angle::new(-3.0);
-    let to = Angle::new(0.0);
-    let mut interpolated = from;
+  fn an_angle_keeps_its_specified_degrees() {
+    assert_eq!(Angle::from_css_str("720deg").map(|angle| *angle), Ok(720.0));
+    assert_eq!(
+      Angle::from_css_str("-1turn").map(|angle| *angle),
+      Ok(-360.0)
+    );
+    assert_eq!(Angle::new(-90.0).to_css_string(), "-90deg");
+  }
 
-    interpolated.interpolate(&from, &to, 0.5, &sizing(), Color::transparent());
+  /// Blink's `Gradient::EndPointsFromAngle` wraps the angle into [0, 360).
+  #[test]
+  fn a_gradient_angle_past_a_turn_points_as_its_normalized_angle() {
+    for (angle, normalized) in [(450.0, 90.0), (-90.0, 270.0), (720.0, 0.0), (405.0, 45.0)] {
+      let gradient = |degrees| {
+        LinearGradient::builder()
+          .direction(LinearGradientDirection::Angle(Angle::new(degrees)))
+          .stops([])
+          .build()
+      };
 
-    assert!((*interpolated - 358.5).abs() < 0.001);
+      assert_eq!(
+        gradient(angle).direction_components(40.0, 30.0),
+        gradient(normalized).direction_components(40.0, 30.0),
+        "{angle}deg"
+      );
+    }
   }
 
   #[test]
@@ -1275,7 +1308,7 @@ mod tests {
         vertical: Some(VerticalKeyword::Top)
       }
       .to_angle(),
-      Angle::new(315.0)
+      Angle::new(-45.0)
     );
     assert_eq!(
       GradientKeywordDirection {
