@@ -119,7 +119,7 @@ impl<'a> StyleResolver<'a> {
           host.sizing.viewport,
           root_context.cache().tailwind(),
           None,
-          host.style.lang,
+          host.style.inherited_language(),
         );
 
         (root_context, matched, true)

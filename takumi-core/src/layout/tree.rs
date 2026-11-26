@@ -61,7 +61,7 @@ use crate::{
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
     Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
-    Direction, Display, ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId,
+    Direction, Display, ElementAnimations, Float, FontUnits, LangAttribute, LineHeight, LonghandId,
     MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
     StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
     page_rule::PageContext,
@@ -2463,7 +2463,7 @@ impl RenderNode {
       parent_context.sizing.viewport,
       parent_context.cache().tailwind(),
       containers,
-      parent_context.style.lang,
+      parent_context.style.inherited_language(),
     );
     let mut list_item_counts = ListItemCounts::default();
 
@@ -3554,7 +3554,7 @@ impl RenderContext {
     matched: &MatchedDeclarationsView<'_>,
     is_document_root: bool,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let lang = layers.lang;
+    let lang = layers.lang.clone();
     // What reads the container through the parent's sizing while the child resolves is the
     // child's read.
     let parent_read = self.sizing.container_read.take();
@@ -3562,8 +3562,13 @@ impl RenderContext {
     let (declarations, sources) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
     let animating = declarations.may_animate().then(|| declarations.clone());
-    let base =
-      declarations.inherit_element(&inherited_parent, lang, is_document_root, &sources, None);
+    let base = declarations.inherit_element(
+      &inherited_parent,
+      lang.as_ref(),
+      is_document_root,
+      &sources,
+      None,
+    );
     let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
@@ -3576,7 +3581,7 @@ impl RenderContext {
         base,
         &animations,
         &inherited_parent,
-        (lang, is_document_root),
+        (lang.as_ref(), is_document_root),
       ),
       None => base,
     };
@@ -3608,7 +3613,7 @@ impl RenderContext {
     base: ComputedStyle,
     animations: &ElementAnimations<'_>,
     inherited_parent: &ComputedStyle,
-    (lang, is_document_root): (Option<Option<Lang>>, bool),
+    (lang, is_document_root): (Option<&LangAttribute>, bool),
   ) -> ComputedStyle {
     // The cascade decides which animated longhands an important declaration hides; the preview
     // that samples the custom properties leaves out the ones any does.
@@ -3870,7 +3875,7 @@ impl PageContext {
         parent_context.sizing.viewport,
         parent_context.cache().tailwind(),
         None,
-        parent_context.style.lang,
+        parent_context.style.inherited_language(),
       )
     })
   }

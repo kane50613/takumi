@@ -218,6 +218,24 @@ impl TwVarRef {
   }
 }
 
+/// An element's `lang` attribute: the language it names, and its text where that is not the
+/// language's canonical form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LangAttribute {
+  pub(crate) lang: Option<Lang>,
+  pub(crate) text: Option<Arc<str>>,
+}
+
+impl LangAttribute {
+  /// The attribute of `text`, which names `lang`.
+  pub(crate) fn new(lang: Option<Lang>, text: &str) -> Self {
+    Self {
+      lang,
+      text: (lang.as_ref().map(Lang::as_str) != Some(text)).then(|| text.into()),
+    }
+  }
+}
+
 /// A BCP-47 `language[-Script][-REGION]` tag from the `lang` attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Lang {
@@ -1049,15 +1067,16 @@ macro_rules! define_style {
         pub(crate) fn inherit_element(
           self,
           parent: &ComputedStyle,
-          lang: Option<Option<Lang>>,
+          lang: Option<&LangAttribute>,
           is_document_root: bool,
           sources: &[CascadeSource],
           animations: Option<&dyn AnimationOrigin>,
         ) -> ComputedStyle {
           let mut style = self.cascade(parent, is_document_root, sources, animations);
 
-          if let Some(lang) = lang {
-            style.lang = lang;
+          if let Some(LangAttribute { lang, text }) = lang {
+            style.lang = *lang;
+            style.lang_text = text.clone();
           }
           style
         }
@@ -1260,6 +1279,9 @@ macro_rules! define_style {
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         pub lang: Option<Lang>,
+        /// The inherited `lang` attribute's text where `lang` does not spell it, which `:lang()`
+        /// matches as Blink's `Element::ComputeInheritedLanguage` keeps it.
+        pub(crate) lang_text: Option<Arc<str>>,
         /// `display` before an out-of-flow or floating box blockified it, as Blink's
         /// `OriginalDisplay`.
         pub original_display: Display,
@@ -1274,6 +1296,7 @@ macro_rules! define_style {
           Self {
             custom_properties: Default::default(),
             lang: None,
+            lang_text: None,
             original_display: Display::default(),
             $($group: Rc::default(),)*
           }
@@ -1393,6 +1416,7 @@ macro_rules! define_style {
           INITIAL_STYLE.with(|initial| Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
+            lang_text: parent.lang_text.clone(),
             original_display: Display::default(),
             $(
               $group: Rc::clone(if $group_ty::INHERITED { &parent.$group } else { &initial.$group }),
@@ -1405,6 +1429,7 @@ macro_rules! define_style {
         pub(crate) fn inherited_equal(&self, other: &Self) -> bool {
           self.custom_properties == other.custom_properties
             && self.lang == other.lang
+            && self.lang_text == other.lang_text
             $(&& (!$group_ty::INHERITED || self.$group == other.$group))*
         }
 
@@ -1420,6 +1445,7 @@ macro_rules! define_style {
           let mut style = INITIAL_STYLE.with(|initial| Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
+            lang_text: parent.lang_text.clone(),
             original_display: Display::default(),
             $(
               $group: share_group(

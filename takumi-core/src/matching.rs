@@ -25,7 +25,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, FontUnits, Lang,
+    BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, FontUnits,
     LonghandId, MediaQueryList, SizingContext, StyleDeclarationBlock, TwRule,
     selector::{
       CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
@@ -41,8 +41,9 @@ struct StyleArena<'a> {
   form_controls: OnceCell<FormControls>,
   /// Each node's directionality, built on the first `:dir()` query, as Blink caches it on the node.
   directionality: OnceCell<Box<[Direction]>>,
-  /// The language past the root, Blink's `Document::ContentLanguage`.
-  document_lang: Option<Lang>,
+  /// The language past the root, Blink's `Document::ContentLanguage`, or the inherited language of
+  /// an inline `svg` element's host.
+  document_lang: Option<&'a str>,
 }
 
 /// Checkedness and selectedness the whole tree decides, by arena index.
@@ -165,7 +166,7 @@ impl<'a> StyleArena<'a> {
     directions.into()
   }
 
-  fn new(root: &'a Node, document_lang: Option<Lang>) -> Self {
+  fn new(root: &'a Node, document_lang: Option<&'a str>) -> Self {
     let mut arena = StyleArena {
       nodes: Vec::new(),
       form_controls: OnceCell::new(),
@@ -677,7 +678,7 @@ impl Element for ArenaElement<'_> {
     self
       .tree
       .document_lang
-      .is_some_and(|lang| lang_matches(lang.as_str(), range))
+      .is_some_and(|lang| lang_matches(lang, range))
   }
   fn match_pseudo_element(
     &self,
@@ -1062,7 +1063,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
   viewport: Viewport,
   tailwind: &TailwindCache,
   containers: Option<&QueryContainers>,
-  document_lang: Option<Lang>,
+  document_lang: Option<&str>,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
   let (mut rule_offset, mut layer_offset) = (0, 0);
