@@ -1703,6 +1703,16 @@ fn container_queries_ask_as_blink_evaluates_them() {
     )),
     300.0
   );
+
+  for feature in ["(pointer: none)", "(min-color: 1)", "(device-width > 0px)"] {
+    assert_eq!(
+      target_in_card(&format!(
+        "{card} @container {feature} {{ .target {{ width: 50px }} }}"
+      )),
+      300.0,
+      "{feature}"
+    );
+  }
 }
 
 /// A nested `@scope` stops at the limit of the scope around it, a rule takes its highest

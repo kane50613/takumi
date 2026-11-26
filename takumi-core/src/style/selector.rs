@@ -2743,6 +2743,71 @@ mod tests {
   }
 
   #[test]
+  fn device_features_answer_as_a_static_render() {
+    let screen = Viewport::new((800, 600));
+    let print = screen.with_media_target(MediaTarget::Print);
+
+    for (query, matches_screen, matches_print) in [
+      ("(pointer: none)", true, true),
+      ("(pointer: fine)", false, false),
+      ("(pointer)", false, false),
+      ("(any-pointer: none)", true, true),
+      ("(hover: none)", true, true),
+      ("(hover)", false, false),
+      ("(any-hover: hover)", false, false),
+      ("(prefers-reduced-transparency: no-preference)", true, true),
+      ("(prefers-reduced-transparency)", false, false),
+      ("(prefers-reduced-data: no-preference)", false, false),
+      ("(scripting: enabled)", true, true),
+      ("(scripting)", true, true),
+      ("(update: fast)", true, false),
+      ("(update: none)", false, true),
+      ("(update)", true, false),
+      ("(color)", true, true),
+      ("(min-color: 8)", true, true),
+      ("(color > 8)", false, false),
+      ("(color-index: 0)", true, true),
+      ("(color-index)", false, false),
+      ("(monochrome)", false, false),
+      ("(max-monochrome: 0)", true, true),
+      ("(color-gamut: srgb)", true, true),
+      ("(color-gamut: p3)", false, false),
+      ("(color-gamut)", true, true),
+      ("(dynamic-range: standard)", true, true),
+      ("(dynamic-range: high)", false, false),
+      ("(video-dynamic-range: standard)", false, false),
+      ("(display-mode: browser)", true, true),
+      ("(display-mode: standalone)", false, false),
+      ("(grid: 0)", true, true),
+      ("(grid)", false, false),
+      ("(grid: 2)", false, false),
+      ("(overflow-block: scroll)", true, false),
+      ("(overflow-block: paged)", false, true),
+      ("(overflow-block)", true, true),
+      ("(overflow-inline: scroll)", true, false),
+      ("(overflow-inline: none)", false, true),
+      ("(overflow-inline)", true, false),
+      ("(device-width: 800px)", true, true),
+      ("(min-device-height: 601px)", false, false),
+      ("(device-aspect-ratio: 4/3)", true, true),
+      ("(device-width)", true, true),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .a {{ width: 1px; }} }}"));
+      let matches = |viewport: Viewport| {
+        sheet.rules.first().is_some_and(|rule| {
+          rule
+            .media_queries
+            .first()
+            .is_some_and(|media| media.matches(viewport))
+        })
+      };
+
+      assert_eq!(matches(screen), matches_screen, "{query} on screen");
+      assert_eq!(matches(print), matches_print, "{query} on print");
+    }
+  }
+
+  #[test]
   fn test_parse_media_rule_with_viewport_features() {
     let sheet = parse_stylesheet(
       r#"
