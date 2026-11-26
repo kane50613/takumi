@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="100" viewBox="0 0 160 100">
   <clipPath id="cp0">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 8h120v24h-120v-24Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM9 9h118v22h-118v-22Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <path d="M8 12h120v24h-120v-24Z" fill="#7f2e37"/>
@@ -8,7 +8,7 @@
   <rect x="8" y="8" width="120" height="24" fill="#f9b4b4"/>
   <path d="M8 8h120v24h-120v-24Zm4 4h112v16h-112v-16Z" fill="#0f172a" fill-opacity=".6" fill-rule="evenodd"/>
   <clipPath id="cp1">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM8 40h120v24h-120v-24Z" clip-rule="evenodd"/>
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM9 41h118v22h-118v-22Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp1)">
     <path d="M8 44h120v24h-120v-24Z" fill="#96bcf8"/>
