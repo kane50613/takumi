@@ -6,7 +6,7 @@ packages:
 
 # Block elements isolate their bidi text
 
-The default styles give `div`, `p`, headings, lists, table parts, `bdi`, `output`, and the other elements HTML's rendering rules list `unicode-bidi: isolate`, as Chrome's do. An element made inline by CSS keeps its text apart from the bidi ordering of the text around it.
+`div`, `p`, headings, lists, table parts, `bdi`, `output`, and the other elements HTML's rendering rules list now isolate their bidi text, as they do in Chrome. A `<bdo>` from JSX now overrides the bidi of its text as one parsed from HTML does. An element made inline by CSS keeps its text apart from the bidi ordering of the text around it.
 
 ```html
 <div>

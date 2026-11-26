@@ -19,25 +19,28 @@ use crate::{
 /// with entries nothing reads again.
 const MAX_ENTRIES: usize = 4096;
 
-/// The rules a box matched, with the parent's `currentColor` and font size, which Blink's key
-/// also hashes to keep a key's entries few.
+/// The rules a box matched and whether its tag isolates its bidi, with the parent's
+/// `currentColor` and font size, which Blink's key also hashes to keep a key's entries few.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MatchedStyleKey {
   rules: SmallVec<[(RuleId, bool); 8]>,
+  isolate: bool,
   parent_color: [u8; 4],
   parent_font_size: u32,
 }
 
 impl MatchedStyleKey {
-  /// The key of a box that matched `matched` under a parent with `parent_sizing` and
-  /// `parent_color`.
+  /// The key of a box that matched `matched`, isolating when `isolate`, under a parent with
+  /// `parent_sizing` and `parent_color`.
   pub(crate) fn new(
     matched: &MatchedDeclarationsView<'_>,
+    isolate: bool,
     parent_sizing: &SizingContext,
     parent_color: Color,
   ) -> Self {
     Self {
       rules: matched.rules().into(),
+      isolate,
       parent_color: parent_color.0,
       parent_font_size: parent_sizing.font_size.to_bits(),
     }

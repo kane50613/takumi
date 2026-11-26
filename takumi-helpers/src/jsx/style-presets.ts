@@ -44,7 +44,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginTop: "1em",
     marginBottom: "1em",
     display: "block",
-    unicodeBidi: "isolate",
   },
   blockquote: {
     marginTop: "1em",
@@ -52,7 +51,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginLeft: 40,
     marginRight: 40,
     display: "block",
-    unicodeBidi: "isolate",
   },
   figure: {
     marginTop: "1em",
@@ -60,53 +58,41 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginLeft: 40,
     marginRight: 40,
     display: "block",
-    unicodeBidi: "isolate",
   },
   figcaption: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   address: {
     fontStyle: "italic",
     display: "block",
-    unicodeBidi: "isolate",
   },
   article: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   aside: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   footer: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   header: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   hgroup: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   main: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   nav: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   section: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   center: {
     textAlign: "center",
     display: "block",
-    unicodeBidi: "isolate",
   },
   hr: {
     marginTop: "0.5em",
@@ -115,7 +101,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: "auto",
     borderWidth: 1,
     display: "block",
-    unicodeBidi: "isolate",
   },
   // Lists
   ul: {
@@ -124,7 +109,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     paddingInlineStart: 40,
     display: "block",
     listStyleType: "disc",
-    unicodeBidi: "isolate",
   },
   ol: {
     marginTop: "1em",
@@ -132,7 +116,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     paddingInlineStart: 40,
     display: "block",
     listStyleType: "decimal",
-    unicodeBidi: "isolate",
   },
   menu: {
     marginTop: "1em",
@@ -140,31 +123,25 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     paddingInlineStart: 40,
     display: "block",
     listStyleType: "disc",
-    unicodeBidi: "isolate",
   },
   li: {
     display: "list-item",
-    unicodeBidi: "isolate",
   },
   dl: {
     marginTop: "1em",
     marginBottom: "1em",
     display: "block",
-    unicodeBidi: "isolate",
   },
   dt: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   dd: {
     marginLeft: 40,
     display: "block",
-    unicodeBidi: "isolate",
   },
   // Forms and interactive elements
   form: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   fieldset: {
     marginLeft: 2,
@@ -180,18 +157,15 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     paddingLeft: 2,
     paddingRight: 2,
     display: "block",
-    unicodeBidi: "isolate",
   },
   details: {
     display: "block",
   },
   summary: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   search: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   // Heading elements
   h1: {
@@ -202,7 +176,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   h2: {
     fontSize: "1.5em",
@@ -212,7 +185,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   h3: {
     fontSize: "1.17em",
@@ -222,7 +194,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   h4: {
     marginTop: "1.33em",
@@ -231,7 +202,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   h5: {
     fontSize: "0.83em",
@@ -241,7 +211,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   h6: {
     fontSize: "0.67em",
@@ -251,7 +220,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     marginRight: 0,
     fontWeight: "bold",
     display: "block",
-    unicodeBidi: "isolate",
   },
   u: {
     textDecoration: "underline",
@@ -291,7 +259,6 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     whiteSpace: "pre",
     margin: "1em 0",
     display: "block",
-    unicodeBidi: "isolate",
   },
   br: {
     whiteSpace: "pre",
@@ -322,64 +289,47 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   },
   div: {
     display: "block",
-    unicodeBidi: "isolate",
   },
   table: {
     display: "table",
     boxSizing: "border-box",
     borderSpacing: "2px",
-    unicodeBidi: "isolate",
   },
   thead: {
     display: "table-header-group",
     breakInside: "avoid",
-    unicodeBidi: "isolate",
   },
   tbody: {
     display: "table-row-group",
-    unicodeBidi: "isolate",
   },
   tfoot: {
     display: "table-footer-group",
     breakInside: "avoid",
-    unicodeBidi: "isolate",
   },
   tr: {
     display: "table-row",
-    unicodeBidi: "isolate",
   },
   td: {
     display: "table-cell",
     padding: 1,
-    unicodeBidi: "isolate",
   },
   th: {
     display: "table-cell",
     padding: 1,
     fontWeight: "bold",
     textAlign: "center",
-    unicodeBidi: "isolate",
   },
   caption: {
     display: "table-caption",
     textAlign: "center",
-    unicodeBidi: "isolate",
   },
   colgroup: {
     display: "table-column-group",
-    unicodeBidi: "isolate",
   },
   col: {
     display: "table-column",
-    unicodeBidi: "isolate",
-  },
-  bdi: {
-    unicodeBidi: "isolate",
   },
   bdo: {
     unicodeBidi: "isolate-override",
-  },
-  output: {
-    unicodeBidi: "isolate",
   },
 };

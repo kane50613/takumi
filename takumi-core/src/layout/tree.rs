@@ -3511,7 +3511,14 @@ impl RenderContext {
     // style cannot skip the note.
     let key =
       (layers.is_preset_only() && !is_document_root && self.sizing.current_color_read.is_none())
-        .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+        .then(|| {
+          MatchedStyleKey::new(
+            matched,
+            layers.direction.isolate,
+            &self.sizing,
+            self.current_color,
+          )
+        });
     let cache = self.matched_styles();
 
     if let Some(key) = &key

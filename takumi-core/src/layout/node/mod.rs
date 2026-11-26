@@ -827,11 +827,18 @@ pub(crate) struct NodeStyleLayers {
 }
 
 impl NodeStyleLayers {
-  /// Whether nothing but the preset styles the element beyond its matched rules.
+  /// Whether nothing but the preset and its tag's bidi isolation style the element beyond its
+  /// matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
     self.presentation.is_none()
       && self.inline.is_none()
-      && self.direction.is_empty()
+      // A valid `dir` also sets `direction`, so `isolate` alone comes from the tag, which
+      // `MatchedStyleKey` holds.
+      && DirectionStyle {
+        isolate: false,
+        ..self.direction
+      }
+      .is_empty()
       && self.lang.is_none()
   }
 }
