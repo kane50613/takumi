@@ -484,8 +484,8 @@ impl BorderProperties {
     let sides = self.sides();
     // Blink's `BoxDecorationData::BorderObscuresBackgroundEdge`, which counts a side without a
     // border as present, and its `ComputedStyle::HasBorder`, without which no border paints. A
-    // collapsed table's cell paints no border of its own, as `BoxDecorationData` skips one whose
-    // fragment `HasCollapsedBorders`.
+    // collapsed table and its cells paint no border of their own, as `BoxDecorationData` skips one
+    // whose fragment `HasCollapsedBorders`.
     let obscures_edge = sides.iter().all(|side| {
       side.color.0[3] == u8::MAX
         && !matches!(

@@ -6,7 +6,7 @@ use takumi_core::paint_tree::{
   PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
 };
 
-use crate::test_utils::{CONTEXT, TEST_IMAGES, format_generated};
+use crate::test_utils::{CONTEXT, TEST_IMAGES, format_generated, render_node};
 
 const CSS: &str = r#"
   .card {
@@ -823,4 +823,20 @@ fn a_positioned_span_clips_none_of_its_overflow() {
     step,
     PaintStep::BeginClip { node } if *node == layer.id
   )));
+}
+
+/// A table that collapses its borders paints none of its own, so its rounded background fills its
+/// whole border box, as Blink's `BoxDecorationData` skips the bleed inset of a fragment that
+/// `HasCollapsedBorders`.
+#[test]
+fn a_collapsed_table_background_fills_its_rounded_border_box() {
+  let node = Node::from_html(
+    r#"<table style="border-collapse:collapse;border:6px solid #000;border-radius:30px;background:#f00"><tr><td style="width:80px;height:60px;padding:0"></td></tr></table>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let image = render_node(node, Viewport::new((120, 100)));
+  let offset = (6 * image.width() as usize + 12) * 4;
+
+  assert_eq!(image.as_raw()[offset..offset + 4], [255, 0, 0, 255]);
 }
