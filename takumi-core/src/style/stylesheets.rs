@@ -1158,9 +1158,9 @@ macro_rules! define_style {
             font_values,
             is_document_root,
           );
-          // A revert keyword `var()` substitutes rolls the property back as one written out does,
-          // as Blink reads a CSS-wide keyword after substitution, so the element's custom
-          // properties resolve again with the values they roll back to.
+          // A CSS-wide keyword `var()` substitutes applies as one written out does, as Blink reads
+          // it after substitution, so the element's custom properties resolve again with the
+          // values it gives them.
           let rolled_back = substituted_rollbacks(&style, &custom_properties);
 
           if !rolled_back.is_empty() {
@@ -2903,8 +2903,9 @@ fn rollback_value(
   )
 }
 
-/// The custom properties whose winning declaration's `var()` substituted a revert keyword, each
-/// with the value it rolls back to. Approximate: each rolls back once after every property
+/// The custom properties whose winning declaration's `var()` substituted a CSS-wide keyword, each
+/// with the value it applies as: a revert keyword's rollback, or any other keyword itself.
+/// Approximate: each rolls back once after every property
 /// resolves, so a property whose `var()` reads a reverting one keeps the keyword, where Blink's
 /// `ResolveRevertTo` resolves each target as it reaches it.
 fn substituted_rollbacks(
@@ -2918,19 +2919,20 @@ fn substituted_rollbacks(
     if !seen.insert(name) || !contains_var_references(value) {
       continue;
     }
-    let Some(keyword) = style
+    let Some((resolved, keyword)) = style
       .custom_properties
       .get(name)
-      .and_then(|resolved| CssWideKeyword::from_css_str(resolved).ok())
-      .filter(|keyword| keyword.reverts())
+      .and_then(|resolved| Some((resolved, CssWideKeyword::from_css_str(resolved).ok()?)))
     else {
       continue;
     };
+    let value = if keyword.reverts() {
+      rollback_value(declarations, index, Some(keyword))
+    } else {
+      resolved.to_owned()
+    };
 
-    rolled_back.push((
-      name.clone(),
-      rollback_value(declarations, index, Some(keyword)),
-    ));
+    rolled_back.push((name.clone(), value));
   }
   rolled_back
 }

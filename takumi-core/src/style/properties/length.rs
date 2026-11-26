@@ -163,7 +163,7 @@ impl Length {
   /// Tailwind's default `--container-*` width `token` names, which `max-w-*` and the `@` container
   /// variants read.
   pub(crate) fn container_width(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
+    match token {
       "3xs" => Some(Length::Rem(16.0)),
       "2xs" => Some(Length::Rem(18.0)),
       "xs" => Some(Length::Rem(20.0)),

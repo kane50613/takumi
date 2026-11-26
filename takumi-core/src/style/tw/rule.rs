@@ -3,7 +3,7 @@
 //! sorts them.
 
 use crate::sort_key::sort_by_key;
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 
 use selectors::parser::Selector;
 use smallvec::SmallVec;
@@ -33,7 +33,7 @@ pub(crate) struct TwOrder {
   /// a longer one sharing its start, as Tailwind reads a missing index as infinite.
   properties: SmallVec<[u16; 4]>,
   count: Reverse<usize>,
-  name: Box<str>,
+  name: NaturalName,
 }
 
 impl TwOrder {
@@ -57,8 +57,72 @@ impl TwOrder {
       variants,
       properties,
       count: Reverse(declarations.iter().count()),
-      name: name.into(),
+      name: NaturalName(name.into()),
     }
+  }
+}
+
+/// A utility's name, ordered as Tailwind's [`compare`](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/src/utils/compare.ts)
+/// does, with digit runs by value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NaturalName(Box<str>);
+
+impl Ord for NaturalName {
+  fn cmp(&self, other: &Self) -> Ordering {
+    let (mut left, mut right) = (self.0.as_bytes(), other.0.as_bytes());
+
+    while let (Some(&a), Some(&z)) = (left.first(), right.first()) {
+      if a.is_ascii_digit() && z.is_ascii_digit() {
+        let (a_run, a_rest) = split_digits(left);
+        let (z_run, z_rest) = split_digits(right);
+        let order = compare_digits(a_run, z_run);
+
+        if order != Ordering::Equal {
+          return order;
+        }
+
+        (left, right) = (a_rest, z_rest);
+      } else if a == z {
+        (left, right) = (&left[1..], &right[1..]);
+      } else {
+        return a.cmp(&z);
+      }
+    }
+
+    left.len().cmp(&right.len())
+  }
+}
+
+/// Digit runs by value, then by text when only leading zeros differ.
+fn compare_digits(a: &[u8], z: &[u8]) -> Ordering {
+  let value = |run: &[u8]| {
+    run
+      .iter()
+      .position(|&byte| byte != b'0')
+      .map_or(0, |zeros| run.len() - zeros)
+  };
+  let (a_value, z_value) = (&a[a.len() - value(a)..], &z[z.len() - value(z)..]);
+
+  a_value
+    .len()
+    .cmp(&z_value.len())
+    .then_with(|| a_value.cmp(z_value))
+    .then_with(|| a.cmp(z))
+}
+
+/// The leading digits of `bytes` and what follows them.
+fn split_digits(bytes: &[u8]) -> (&[u8], &[u8]) {
+  bytes.split_at(
+    bytes
+      .iter()
+      .take_while(|byte| byte.is_ascii_digit())
+      .count(),
+  )
+}
+
+impl PartialOrd for NaturalName {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
   }
 }
 
@@ -68,7 +132,7 @@ impl TwOrder {
 pub(crate) struct TwRule {
   pub(crate) declarations: StyleDeclarationBlock,
   pub(crate) important: bool,
-  pub(crate) breakpoint: Option<Breakpoint>,
+  pub(crate) breakpoint: Vec<Breakpoint>,
   /// The container queries `@` variants ask of the element's containers.
   pub(crate) container: Vec<ContainerQuery>,
   /// The media queries the late variants require of the viewport.
@@ -143,8 +207,8 @@ impl TwRule {
   pub(crate) fn is_active(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> bool {
     self
       .breakpoint
-      .as_ref()
-      .is_none_or(|breakpoint| breakpoint.matches(viewport, breakpoints))
+      .iter()
+      .all(|breakpoint| breakpoint.matches(viewport, breakpoints))
       && self.media.iter().all(|media| media.matches(viewport))
   }
 }

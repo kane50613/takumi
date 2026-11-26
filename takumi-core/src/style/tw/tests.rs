@@ -71,7 +71,7 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 
   Some((
     builtin_declarations(&rule.declarations),
-    rule.breakpoint.clone(),
+    rule.breakpoint.first().cloned(),
     rule.important,
   ))
 }
@@ -636,7 +636,11 @@ fn test_values_sorting() {
         })
         .collect::<Vec<_>>();
 
-      (declarations, rule.breakpoint.clone(), rule.important)
+      (
+        declarations,
+        rule.breakpoint.first().cloned(),
+        rule.important,
+      )
     })
     .collect::<Vec<_>>();
 
@@ -2084,4 +2088,49 @@ fn media_variants_follow_the_viewport() {
   assert!(expand_apply("rtl:w-4").is_none());
   assert!(expand_apply("first:w-4").is_none());
   assert!(expand_apply("w-4").is_some());
+}
+
+#[test]
+fn test_equal_utilities_sort_by_name_with_numbers_by_value() {
+  let values = TailwindValues::from_str("p-10 p-2 p-1/2").expect("tailwind values should parse");
+  let names = cascade_order(values.rules(None).iter().map(Arc::as_ref))
+    .into_iter()
+    .map(|rule| rule.id)
+    .collect::<Vec<_>>();
+  let id = |token: &str| xxhash_rust::xxh3::xxh3_64(token.as_bytes());
+
+  assert_eq!(names, vec![id("p-1/2"), id("p-2"), id("p-10")]);
+}
+
+#[test]
+fn test_arbitrary_variants_on_the_element() {
+  for token in ["[&.active]:p-2", "[&[data-x]]:p-2", "[&:nth-child(4)]:p-2"] {
+    assert!(
+      TwRule::parse(token).is_some_and(|rule| rule.condition.is_some()),
+      "{token}"
+    );
+  }
+
+  assert!(TwRule::parse("[&_p]:p-2").is_none());
+}
+
+#[test]
+fn test_min_and_max_breakpoints_stack() {
+  let at = |width: u32, token: &str| {
+    TwRule::parse(token)
+      .unwrap()
+      .is_active(Viewport::new((width, 1000)), &Default::default())
+  };
+
+  assert!(at(700, "max-md:flex"));
+  assert!(!at(800, "max-md:flex"));
+  assert!(at(700, "max-[800px]:flex"));
+  assert!(!at(900, "max-[800px]:flex"));
+  assert!(at(700, "min-[600px]:flex"));
+  assert!(!at(500, "min-[600px]:flex"));
+  assert!(at(700, "min-sm:flex"));
+  assert!(!at(500, "min-sm:flex"));
+  assert!(at(700, "sm:max-md:flex"));
+  assert!(!at(500, "sm:max-md:flex"));
+  assert!(!at(800, "sm:max-md:flex"));
 }

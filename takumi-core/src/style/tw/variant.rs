@@ -3,13 +3,13 @@
 
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::Parser;
 use selectors::parser::{ParseRelative, Selector, SelectorList};
 
 use super::{extract_arbitrary_value, is_ident};
 use crate::{
   style::{
-    Length, ToCss,
+    FromCssStr, Length, ToCss,
     media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl, TakumiSelectorParser},
   },
@@ -19,19 +19,44 @@ use crate::{
 /// Widths a stylesheet's `--breakpoint-*` variables assign, keyed by token.
 pub(crate) type BreakpointOverrides = HashMap<String, Length>;
 
-/// A breakpoint variant, `md:`, which applies from a viewport width on.
+/// A breakpoint variant, `md:`, `min-md:`, or `max-[600px]:`, which applies from a viewport width
+/// on, or below one.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Breakpoint {
   /// Built-in width; `None` for a token only a `--breakpoint-*` variable defines.
   pub width: Option<Length>,
   /// The variant token, which a `--breakpoint-<token>` variable re-sizes.
   pub token: Arc<str>,
+  /// Whether the variant applies below its width, as `max-*` does.
+  below: bool,
 }
 
 impl Breakpoint {
-  /// Parse a breakpoint from a token.
+  /// Parse a breakpoint from a token, `max-` and `min-` prefixed or not.
   pub fn parse(token: &str) -> Option<Self> {
-    let width = match_ignore_ascii_case! {token,
+    match token.strip_prefix("max-") {
+      Some(value) => Self::with_width(value, true),
+      None => Self::with_width(token.strip_prefix("min-").unwrap_or(token), false),
+    }
+  }
+
+  fn with_width(value: &str, below: bool) -> Option<Self> {
+    if let Some(arbitrary) = extract_arbitrary_value(value) {
+      let width = Length::from_css_str(&arbitrary).ok().filter(|width| {
+        matches!(
+          width,
+          Length::Rem(_) | Length::Em(_) | Length::Px(_) | Length::Vw(_)
+        )
+      })?;
+
+      return Some(Breakpoint {
+        width: Some(width),
+        token: value.into(),
+        below,
+      });
+    }
+
+    let width = match value {
       "sm" => Some(Length::Rem(40.0)),
       "md" => Some(Length::Rem(48.0)),
       "lg" => Some(Length::Rem(64.0)),
@@ -40,13 +65,14 @@ impl Breakpoint {
       _ => None,
     };
 
-    if width.is_none() && !is_ident(token) {
+    if width.is_none() && !is_ident(value) {
       return None;
     }
 
     Some(Breakpoint {
       width,
-      token: token.to_ascii_lowercase().into(),
+      token: value.into(),
+      below,
     })
   }
 
@@ -60,27 +86,40 @@ impl Breakpoint {
     };
 
     let breakpoint_width = match width {
-      Length::Rem(value) => viewport.to_device(value * viewport.font_size),
+      Length::Rem(value) | Length::Em(value) => viewport.to_device(value * viewport.font_size),
       Length::Px(value) => viewport.to_device(value),
       Length::Vw(value) => (value / 100.0) * viewport_width as f32,
       _ => return false,
     };
 
+    if self.below {
+      return (viewport_width as f32) < breakpoint_width;
+    }
+
     viewport_width >= breakpoint_width as u32
   }
 
-  /// Where the breakpoint sorts among others: by its built-in width, then its token. Approximate:
-  /// Tailwind compares the widths a theme gives.
-  fn order(&self) -> (u32, Arc<str>) {
+  /// Where the breakpoint sorts among others: `max-*` first and widest first, then the rest
+  /// narrowest first, each by its built-in width, then its token. Approximate: Tailwind compares
+  /// the widths a theme gives.
+  fn order(&self) -> BreakpointOrder {
     let rem = match self.width {
-      Some(Length::Rem(rem)) => rem,
+      Some(Length::Rem(rem) | Length::Em(rem)) => rem,
       Some(Length::Px(px)) => px / 16.0,
       _ => f32::INFINITY,
     };
+    let bits = rem.to_bits();
 
-    (rem.to_bits(), Arc::clone(&self.token))
+    if self.below {
+      (false, !bits, Arc::clone(&self.token))
+    } else {
+      (true, bits, Arc::clone(&self.token))
+    }
   }
 }
+
+/// A breakpoint's sort key, from `Breakpoint::order`.
+type BreakpointOrder = (bool, u32, Arc<str>);
 
 /// A container query variant, `@md:` or `@max-[400px]/sidebar:`, which applies while the nearest
 /// inline-size container, or the one it names, meets a width. Approximate: a named width is
@@ -226,6 +265,8 @@ pub(crate) enum Variant {
     pseudo_class: String,
     rank: u8,
   },
+  /// An arbitrary variant, `[&:nth-child(4)]`, which sorts after every registered one.
+  Arbitrary(String),
   PseudoElement(PseudoElement),
 }
 
@@ -269,6 +310,10 @@ impl Variant {
       return ContainerVariant::parse(token).map(Self::Container);
     }
 
+    if let Some(compound) = arbitrary_compound(token) {
+      return Some(Self::Arbitrary(compound));
+    }
+
     if let Some(pseudo_class) = pseudo_class(token) {
       return Some(Self::Structural {
         rank: structural_rank(token),
@@ -298,17 +343,20 @@ fn structural_rank(token: &str) -> u8 {
   STRUCTURAL_RANK + REGISTERED.len() as u8 + functional as u8
 }
 
-/// The variants of one utility: at most one breakpoint and one pseudo-element, and the
+/// The variants of one utility: its breakpoints, at most one pseudo-element, and the
 /// pseudo-classes they put on the element.
 #[derive(Debug, Default)]
 pub(super) struct Variants {
-  pub(super) breakpoint: Option<Breakpoint>,
+  /// The breakpoints, every one of which must hold.
+  pub(super) breakpoint: Vec<Breakpoint>,
   /// The container queries `@` variants ask, every one of which must hold.
   pub(super) container: Vec<ContainerVariant>,
   /// The media queries the late variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
+  /// The compounds of the arbitrary variants.
+  arbitrary: Vec<String>,
   /// A bit per variant rank, so comparing two sorts them as Tailwind's variant bit sets do.
   ranks: u32,
   /// A bit per late variant, which outranks every other variant.
@@ -317,7 +365,7 @@ pub(super) struct Variants {
 
 impl Variants {
   /// The variants a token opens with and the utility after them, or `None` when a variant is
-  /// unknown or repeats a breakpoint or pseudo-element.
+  /// unknown or repeats a pseudo-element.
   pub(super) fn parse(mut token: &str) -> Option<(Self, &str)> {
     let mut variants = Self::default();
 
@@ -329,14 +377,10 @@ impl Variants {
     Some((variants, token))
   }
 
-  /// Adds `variant`, or `None` for a second breakpoint or pseudo-element.
+  /// Adds `variant`, or `None` for a second pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
-      Variant::Breakpoint(breakpoint) => {
-        if self.breakpoint.replace(breakpoint).is_some() {
-          return None;
-        }
-      }
+      Variant::Breakpoint(breakpoint) => self.breakpoint.push(breakpoint),
       Variant::Container(container) => self.container.push(container),
       Variant::Late { condition, rank } => {
         match condition {
@@ -350,6 +394,10 @@ impl Variants {
       Variant::Structural { pseudo_class, rank } => {
         self.pseudo_classes.push_str(&pseudo_class);
         self.ranks |= 1 << rank;
+      }
+      Variant::Arbitrary(compound) => {
+        self.pseudo_classes.push_str(&compound);
+        self.arbitrary.push(compound);
       }
       Variant::PseudoElement(pseudo_element) => {
         let rank = match pseudo_element {
@@ -377,10 +425,15 @@ impl Variants {
     condition(&self.pseudo_classes).map(Some)
   }
 
-  /// The variants' sort key, the latest Tailwind registers first: the late variants, a container
+  /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
   /// query, a breakpoint, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
+    let mut arbitrary = self.arbitrary.clone();
+
+    arbitrary.sort_unstable_by(|left, right| right.cmp(left));
+
     VariantOrder {
+      arbitrary,
       late: self.late,
       container: {
         let mut orders: Vec<ContainerOrder> = self
@@ -392,7 +445,13 @@ impl Variants {
         orders.sort_unstable_by(|left, right| right.cmp(left));
         orders
       },
-      breakpoint: self.breakpoint.as_ref().map(Breakpoint::order),
+      breakpoint: {
+        let mut orders: Vec<BreakpointOrder> =
+          self.breakpoint.iter().map(Breakpoint::order).collect();
+
+        orders.sort_unstable_by(|left, right| right.cmp(left));
+        orders
+      },
       ranks: self.ranks,
     }
   }
@@ -401,11 +460,14 @@ impl Variants {
 /// Tailwind's variant order for one utility.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VariantOrder {
+  /// Approximate: Tailwind gives each arbitrary variant a bit by its selector's text, where this
+  /// compares the compound's text without the `&`.
+  arbitrary: Vec<String>,
   late: u8,
   /// Approximate: several container variants sort by their latest first, where Tailwind's variant
   /// bit set gives each group one bit.
   container: Vec<ContainerOrder>,
-  breakpoint: Option<(u32, Arc<str>)>,
+  breakpoint: Vec<BreakpointOrder>,
   ranks: u32,
 }
 
@@ -432,12 +494,8 @@ fn pseudo_class(variant: &str) -> Option<String> {
     return Some(format!(":not({})", pseudo_class(negated)?));
   }
 
-  // An arbitrary variant that only adds to the element's own compound, such as `[&:nth-child(3)]`.
-  if let Some(compound) = variant
-    .strip_prefix("[&")
-    .and_then(|rest| rest.strip_suffix(']'))
-  {
-    return compound.starts_with(':').then(|| arbitrary(compound));
+  if let Some(compound) = arbitrary_compound(variant) {
+    return Some(compound);
   }
 
   for (prefix, function) in [
@@ -454,13 +512,30 @@ fn pseudo_class(variant: &str) -> Option<String> {
       .and_then(|rest| rest.strip_suffix(']'))
     {
       Some(bracketed) => arbitrary(bracketed),
-      None => argument.parse::<u32>().ok()?.to_string(),
+      None => argument
+        .parse::<u32>()
+        .ok()
+        .filter(|number| number.to_string() == argument)?
+        .to_string(),
     };
 
     return Some(format!(":{function}({argument})"));
   }
 
   None
+}
+
+/// The compound an arbitrary variant such as `[&:nth-child(3)]` or `[&.active]` adds to the
+/// element itself. Approximate: one that reaches past the element, `[&_p]`, and an at-rule one,
+/// `[@media(…)]`, are unsupported.
+fn arbitrary_compound(variant: &str) -> Option<String> {
+  let compound = variant
+    .strip_prefix("[&")
+    .and_then(|rest| rest.strip_suffix(']'))?;
+
+  compound
+    .starts_with([':', '.', '#', '['])
+    .then(|| arbitrary(compound))
 }
 
 /// An arbitrary value, which Tailwind writes with underscores for spaces and `\_` for an
@@ -545,7 +620,7 @@ fn split_top_level(token: &str, separator: u8) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-  use super::{Variant, Variants, condition, pseudo_class, split_variant};
+  use super::{Breakpoint, Variant, Variants, condition, pseudo_class, split_variant};
   use crate::style::selector::PseudoElement;
 
   #[test]
@@ -558,16 +633,31 @@ mod tests {
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
+      ("[&.active]", Some(".active")),
+      ("[&[data-x]]", Some("[data-x]")),
+      ("[&_p]", None),
       (
         "[&:is([data-state=foo\\_bar])]",
         Some(":is([data-state=foo_bar])"),
       ),
       ("nth-x", None),
+      ("nth-007", None),
+      ("nth-last-of-type-01", None),
       ("hover", None),
       ("md", None),
     ] {
       assert_eq!(pseudo_class(variant).as_deref(), expected, "{variant}");
     }
+  }
+
+  #[test]
+  fn variant_names_and_theme_keys_are_case_sensitive() {
+    assert_eq!(
+      Breakpoint::parse("SM").map(|breakpoint| breakpoint.width),
+      Some(None)
+    );
+    assert!(Variant::parse("@MD").is_none());
+    assert!(Variant::parse("@max-LG").is_none());
   }
 
   #[test]
@@ -591,11 +681,11 @@ mod tests {
   }
 
   #[test]
-  fn a_utility_takes_one_breakpoint_and_one_pseudo_element() {
+  fn a_utility_takes_several_breakpoints_and_one_pseudo_element() {
     let mut variants = Variants::default();
 
     assert!(variants.push(Variant::parse("md").unwrap()).is_some());
-    assert!(variants.push(Variant::parse("lg").unwrap()).is_none());
+    assert!(variants.push(Variant::parse("max-lg").unwrap()).is_some());
 
     let mut variants = Variants::default();
 
@@ -614,7 +704,6 @@ mod tests {
       "empty",
       "nth-3",
       "nth-last-of-type-2",
-      "[&:nth-child(4)]",
       "sm",
       "md",
       "@max-[100px]",
@@ -629,6 +718,8 @@ mod tests {
       "rtl",
       "dark",
       "print",
+      "[&:nth-child(4)]",
+      "[&:nth-child(5)]",
     ];
     let order = |token: &str| {
       let mut variants = Variants::default();
@@ -641,6 +732,31 @@ mod tests {
       assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
     }
     assert_eq!(order("@md/sidebar"), order("@min-md"));
+  }
+
+  #[test]
+  fn breakpoints_order_max_widest_first_then_min_narrowest_first() {
+    let order = |token: &str| {
+      let mut variants = Variants::default();
+
+      variants.push(Variant::parse(token).unwrap()).unwrap();
+      variants.order()
+    };
+
+    for pair in [
+      "max-lg",
+      "max-md",
+      "max-[600px]",
+      "min-[600px]",
+      "sm",
+      "min-md",
+      "lg",
+    ]
+    .windows(2)
+    {
+      assert!(order(pair[0]) < order(pair[1]), "{pair:?}");
+    }
+    assert_eq!(order("min-md"), order("md"));
   }
 
   #[test]

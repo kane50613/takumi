@@ -39,7 +39,7 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
     .collect::<Option<Vec<_>>>()?;
 
   if rules.iter().any(|rule| {
-    rule.breakpoint.is_some()
+    !rule.breakpoint.is_empty()
       || !rule.container.is_empty()
       || !rule.media.is_empty()
       || rule.condition.is_some()

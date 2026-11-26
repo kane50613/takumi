@@ -3,7 +3,9 @@ use std::{
   sync::Arc,
 };
 
-use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb, parse_color};
+use color::{
+  AlphaColor, ColorSpaceTag, DynamicColor, Flags, HueDirection, Rgba8, Srgb, parse_color,
+};
 use cssparser::{
   Parser, Token,
   color::{parse_hash_color, parse_named_color},
@@ -194,7 +196,9 @@ pub enum ColorInput {
   /// Inherit from the `color` value.
   #[default]
   CurrentColor,
-  /// A color value.
+  /// A color value. Approximate: a leaf colour is clipped to 8-bit sRGB when parsed, so
+  /// `color-mix()` and relative colours read it there, where Blink keeps it as a float colour in
+  /// its own space.
   Value(Color),
   /// A system colour keyword, computing to its colour in the used color scheme.
   System(SystemColor),
@@ -1078,9 +1082,14 @@ fn parse_color_mix_percentage<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32
 impl<'i> FromCss<'i> for ColorMixValue {
   /// Blink's `ConsumeColorMixFunction`, inside the function's block.
   fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let interpolation = ColorInterpolationMethod::from_css(input)?;
-
-    input.expect_comma()?;
+    // Only an explicit `in <space>` is followed by a comma.
+    let interpolation = match input.try_parse(ColorInterpolationMethod::from_css) {
+      Ok(interpolation) => {
+        input.expect_comma()?;
+        interpolation
+      }
+      Err(_) => ColorInterpolationMethod::default(),
+    };
     let (color1, percentage1) = parse_color_mix_operand(input)?;
     input.expect_comma()?;
     let (color2, percentage2) = parse_color_mix_operand(input)?;
@@ -1112,8 +1121,12 @@ impl ToCss for ColorMixValue {
     };
 
     dest.write_str("color-mix(")?;
-    self.interpolation.to_css(dest)?;
-    dest.write_str(", ")?;
+
+    if self.interpolation != ColorInterpolationMethod::default() {
+      self.interpolation.to_css(dest)?;
+      dest.write_str(", ")?;
+    }
+
     write_operand(dest, &self.color1, self.percentage1)?;
     dest.write_str(", ")?;
     write_operand(dest, &self.color2, self.percentage2)?;
@@ -1121,7 +1134,8 @@ impl ToCss for ColorMixValue {
   }
 }
 
-/// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
+/// Reference: https://www.w3.org/TR/css-color-5/#relative-colors. Approximate: `color(from …)` is
+/// unsupported, since its channels are unscaled and name a space after the origin.
 fn relative_target_cs(name: &str) -> Option<ColorSpaceTag> {
   Some(match_ignore_ascii_case! { name,
     "rgb" | "rgba" => ColorSpaceTag::Srgb,
@@ -1336,7 +1350,11 @@ impl RelativeColorValue {
     });
     let components = [c0 / scale, c1 / scale, c2 / scale, alpha.clamp(0.0, 1.0)];
 
-    Color::from_dynamic(origin.map(|_, _, _, _| components))
+    Color::from_dynamic(DynamicColor {
+      cs,
+      flags: Flags::default(),
+      components,
+    })
   }
 }
 
@@ -1684,7 +1702,7 @@ mod tests {
       "light-dark(rgb(255, 0, 0), currentColor)",
       "color-mix(in srgb, currentColor 25%, rgb(255, 255, 255))",
       "color-mix(in lch longer hue, rgb(255, 0, 0), rgb(0, 0, 255) 40%)",
-      "color-mix(in oklab, light-dark(rgb(255, 255, 255), rgb(0, 0, 0)), rgb(255, 0, 0))",
+      "color-mix(light-dark(rgb(255, 255, 255), rgb(0, 0, 0)), rgb(255, 0, 0))",
       "rgb(from currentColor b g r / alpha)",
       "hsl(from light-dark(rgb(255, 0, 0), rgb(0, 0, 255)) 120deg s 50%)",
       "oklch(from rgb(255, 0, 0) l c none / 0.5)",
@@ -1785,6 +1803,31 @@ mod tests {
       computed("color-mix(in srgb, red, blue)"),
       Some(ColorInput::Value(Color([128, 0, 128, 255])))
     );
+  }
+
+  #[test]
+  fn relative_colour_keeps_literal_channels_over_a_powerless_origin_hue() {
+    assert_eq!(
+      computed("hsl(from white 120 50 50)"),
+      computed("hsl(120 50 50)")
+    );
+    assert_eq!(
+      computed("hsl(from white 120 50 50)"),
+      Some(ColorInput::Value(Color([64, 191, 64, 255])))
+    );
+    assert_eq!(
+      computed("hsl(from white h 50 50)"),
+      computed("hsl(0 50 50)")
+    );
+  }
+
+  #[test]
+  fn test_parse_color_mix_defaults_to_oklab() {
+    assert_eq!(
+      computed("color-mix(red, blue)"),
+      computed("color-mix(in oklab, red, blue)")
+    );
+    assert!(computed("color-mix(red, blue)").is_some());
   }
 
   #[test]
