@@ -93,8 +93,9 @@ impl LayerDeclaration {
   }
 }
 
-/// The order of every stylesheet's layers in one layer tree across the stylesheets of a render, as
-/// Blink's `CascadeLayerMap` merges the layers of an origin's sheets.
+/// The order of every stylesheet's layers in one layer tree across the stylesheets of a render, a
+/// declaration under a failing media query left out, as Blink's `CascadeLayerMap` merges the layers
+/// of an origin's sheets and `RuleSet::AddChildRules` skips a failing `@media`.
 pub(crate) struct CascadeLayerMap {
   /// Each sheet's layers by the order they take in it alone with every media query holding.
   orders: Vec<Vec<usize>>,
@@ -102,7 +103,7 @@ pub(crate) struct CascadeLayerMap {
 }
 
 impl CascadeLayerMap {
-  pub(crate) fn new(stylesheets: &[&StyleSheet], _viewport: Viewport) -> Self {
+  pub(crate) fn new(stylesheets: &[&StyleSheet], viewport: Viewport) -> Self {
     let mut tree = LayerTree::default();
     let layers: Vec<Vec<Option<usize>>> = stylesheets
       .iter()
@@ -110,7 +111,13 @@ impl CascadeLayerMap {
         let mut layers = vec![None; sheet.layer_count];
 
         for (order, declaration) in sheet.layer_declarations.iter() {
-          layers[*order].get_or_insert_with(|| tree.insert(&declaration.path));
+          if declaration
+            .media_queries
+            .iter()
+            .all(|media| media.matches(viewport))
+          {
+            layers[*order].get_or_insert_with(|| tree.insert(&declaration.path));
+          }
         }
         layers
       })

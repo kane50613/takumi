@@ -1078,7 +1078,7 @@ mod matching_tests {
     layout::node::Node,
     matching::{MatchedDeclarationsView, match_stylesheets_view},
     style::{ComputedStyle, Length, Style, StyleSheet},
-    viewport::Viewport,
+    viewport::{MediaTarget, Viewport},
   };
 
   fn container_with_class(class_name: &str) -> Node {
@@ -1310,6 +1310,33 @@ mod matching_tests {
       computed_style_from_matches(matched[0].element())
         .box_data
         .width,
+      Length::Px(10.0).into()
+    );
+  }
+
+  #[test]
+  fn layers_declared_under_a_failing_media_query_take_no_order() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        @media print { @layer b; }
+        @layer a, b;
+        @layer a { .card { width: 10px; } }
+        @layer b { .card { width: 20px; } }
+      "#,
+    );
+    let width = |viewport: Viewport| {
+      let matched =
+        match_stylesheets_view(&root, &[&stylesheet], viewport, Cache::default().tailwind());
+
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width
+    };
+
+    assert_eq!(width(Viewport::default()), Length::Px(20.0).into());
+    assert_eq!(
+      width(Viewport::default().with_media_target(MediaTarget::Print)),
       Length::Px(10.0).into()
     );
   }
