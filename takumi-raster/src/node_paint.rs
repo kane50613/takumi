@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
@@ -184,7 +183,7 @@ pub(crate) struct CanvasDevice<'c> {
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// The span background strips already rasterized, reused on every line.
-  strip_tiles: FxHashMap<StripTileKey, Option<BackgroundTile>>,
+  strip_tiles: Vec<(StripTileKey, Option<BackgroundTile>)>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -212,7 +211,7 @@ impl<'c> CanvasDevice<'c> {
       clips: Vec::new(),
       layers: Vec::new(),
       shadow: None,
-      strip_tiles: FxHashMap::default(),
+      strip_tiles: Vec::new(),
       error: None,
     }
   }
@@ -850,7 +849,12 @@ impl GlyphDevice for CanvasDevice<'_> {
       return;
     };
     let key = (key, (window.left, window.top, window.width, window.height));
-    let tile = match self.strip_tiles.remove(&key) {
+    let cached = self
+      .strip_tiles
+      .iter()
+      .position(|(cached, _)| *cached == key)
+      .map(|index| self.strip_tiles.swap_remove(index).1);
+    let tile = match cached {
       Some(tile) => tile,
       None => background_image_layers(
         &background.background,
@@ -888,7 +892,7 @@ impl GlyphDevice for CanvasDevice<'_> {
         context.style.misc_inherited_data.image_rendering,
       );
     }
-    self.strip_tiles.insert(key, tile);
+    self.strip_tiles.push((key, tile));
   }
 
   fn fill_text_clip(
