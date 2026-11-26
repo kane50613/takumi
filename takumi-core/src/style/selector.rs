@@ -2316,7 +2316,10 @@ fn root_theme_values<T>(
   let mut winners = HashMap::<String, usize>::new();
 
   for rule in rules {
-    if !rule.media_queries.is_empty() || rule.selectors.to_css_string() != ":root" {
+    if !rule.media_queries.is_empty()
+      || !rule.container_queries.is_empty()
+      || rule.selectors.to_css_string() != ":root"
+    {
       continue;
     }
 

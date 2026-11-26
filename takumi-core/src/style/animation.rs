@@ -437,23 +437,41 @@ impl ThemeKeyframes {
   }
 
   /// Pushes the keyframes kept to `keyframes`, each once, with `animate_theme` the `--animate-*`
-  /// values the stylesheet's theme overrides, keyed by token.
+  /// values the stylesheet's theme overrides, keyed by token, following `var(--animate-*)` aliases
+  /// as Tailwind's `isVariableUsed` does.
   pub(crate) fn resolve_into(
     &self,
     animate_theme: &HashMap<String, String>,
     keyframes: &mut Vec<&'static KeyframesRule>,
   ) {
-    // Tailwind's default theme sets `--animate-<token>` to a value naming `<token>`.
-    let theme_values = self.animate_tokens.iter().map(|token| {
-      animate_theme
-        .get(token.as_ref())
-        .map_or(token.as_ref(), String::as_str)
-    });
-    let named_by_theme = theme_values
-      .flat_map(|value| value.split(|char: char| char.is_whitespace() || char == ','))
-      .filter_map(tailwind_theme_keyframes);
+    let mut tokens: Vec<&str> = self.animate_tokens.iter().map(AsRef::as_ref).collect();
+    let mut theme_rules = Vec::new();
+    let mut next = 0;
 
-    for rule in self.named.iter().copied().chain(named_by_theme) {
+    while let Some(&token) = tokens.get(next) {
+      next += 1;
+
+      // Tailwind's default theme sets `--animate-<token>` to a value naming `<token>`.
+      let value = animate_theme.get(token).map_or(token, String::as_str);
+
+      theme_rules.extend(
+        value
+          .split(|char: char| char.is_whitespace() || char == ',')
+          .filter_map(tailwind_theme_keyframes),
+      );
+
+      for alias in value.split("var(--animate-").skip(1) {
+        let end = alias
+          .find(|char: char| !(char.is_alphanumeric() || char == '-' || char == '_'))
+          .unwrap_or(alias.len());
+
+        if !tokens.contains(&&alias[..end]) {
+          tokens.push(&alias[..end]);
+        }
+      }
+    }
+
+    for rule in self.named.iter().copied().chain(theme_rules) {
       if !keyframes.iter().any(|known| ptr::eq(*known, rule)) {
         keyframes.push(rule);
       }

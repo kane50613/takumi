@@ -4023,6 +4023,36 @@ mod tests {
     );
   }
 
+  /// Tailwind follows a used `--animate-*` value's `var(--animate-*)` aliases, stopping at cycles,
+  /// and a `:root` inside `@container` never applies, so it overrides no theme value.
+  #[test]
+  fn theme_keyframes_follow_animate_aliases_and_skip_container_roots() {
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
+
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-soft: var(--animate-fade); --animate-fade: pulse 2s linear; }",
+        vec![tw("animate-soft")]
+      ),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-soft: var(--animate-fade); --animate-fade: var(--animate-soft); }",
+        vec![tw("animate-soft")]
+      ),
+      [1.0]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@container (min-width: 10000px) { :root { --animate-pulse: spin 1s linear; } }",
+        vec![tw("animate-pulse")]
+      ),
+      [0.5]
+    );
+  }
+
   /// A style every row repeats stays shared while the rows' other styles come and go.
   #[test]
   fn a_style_repeated_among_many_others_stays_shared() {
