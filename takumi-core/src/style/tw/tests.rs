@@ -2085,3 +2085,15 @@ fn media_variants_follow_the_viewport() {
   assert!(expand_apply("first:w-4").is_none());
   assert!(expand_apply("w-4").is_some());
 }
+
+#[test]
+fn test_equal_utilities_sort_by_name_with_numbers_by_value() {
+  let values = TailwindValues::from_str("p-10 p-2 p-1/2").expect("tailwind values should parse");
+  let names = cascade_order(values.rules(None).iter().map(Arc::as_ref))
+    .into_iter()
+    .map(|rule| rule.id)
+    .collect::<Vec<_>>();
+  let id = |token: &str| xxhash_rust::xxh3::xxh3_64(token.as_bytes());
+
+  assert_eq!(names, vec![id("p-1/2"), id("p-2"), id("p-10")]);
+}
