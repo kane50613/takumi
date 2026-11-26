@@ -488,7 +488,8 @@ impl<'i> FromCss<'i> for Filter {
         }
 
         input.reset(&start);
-        Length::from_css_in(input, mode).map(Filter::Blur)
+        // Blink's `ConsumeFilterFunction` parses the radius in `kHTMLStandardMode` in any mode.
+        Length::from_css(input).map(Filter::Blur)
       }),
       "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css_in(input, mode).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(token)),
@@ -657,6 +658,15 @@ mod tests {
   #[test]
   fn test_parse_blur_filter() {
     assert_eq!(Filter::from_css_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
+  }
+
+  #[test]
+  fn blur_takes_a_unit_even_in_an_svg_attribute() {
+    let parse = |css| Filter::from_css_in(&mut Parser::new(css), ParseMode::SvgAttribute);
+
+    assert!(parse("blur(5)").is_err());
+    assert_eq!(parse("blur(0)"), Ok(Filter::Blur(Length::zero())));
+    assert_eq!(parse("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
   }
 
   #[test]
