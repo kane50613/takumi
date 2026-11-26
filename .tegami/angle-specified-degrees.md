@@ -20,3 +20,12 @@ An angle now keeps the degrees you write, as in Chrome, so animations interpolat
 /* Before: no rotation at any point */
 /* After: 90deg a quarter of the way through */
 ```
+
+#### Migration
+
+Write an oblique angle within ±90deg.
+
+```diff
+- font-style: oblique 350deg;
++ font-style: oblique -10deg;
+```
