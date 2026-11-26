@@ -2129,3 +2129,18 @@ fn a_container_query_of_a_name_alone_holds_inside_that_name() {
     50.0
   );
 }
+
+/// A root its own limit matches scopes nothing, as Blink's `CalculateActivations` checks a new
+/// activation against the limit, and a limit without `:scope` reads as `:scope` and a descendant,
+/// which the root is not.
+#[test]
+fn a_scope_root_that_is_its_own_limit_scopes_nothing() {
+  assert_eq!(
+    card_widths("@scope (.card) to (.card) { p { width: 30px } }"),
+    [1200.0, 30.0, 30.0]
+  );
+  assert_eq!(
+    card_widths("@scope (.card) to (:scope) { p { width: 30px } }"),
+    [1200.0, 1200.0, 1200.0]
+  );
+}

@@ -1417,7 +1417,7 @@ fn container_query_holds(
 /// The roots `scope` puts `element` in scope of, closest first, each with how many generations up
 /// it is: an inclusive ancestor its start selectors match, or without them the parent of the
 /// `<style>` element holding the rule, the tree's root for a sheet no element holds, with no
-/// element its end selectors match from `element` up to it. Inside another `@scope`, a root must
+/// element its end selectors match from `element` up to and including it. Inside another `@scope`, a root must
 /// be in that scope from an outer root `element` is in scope of too.
 /// <https://drafts.csswg.org/css-cascade-6/#scope-limits>
 fn scope_roots(
@@ -1471,7 +1471,7 @@ fn scope_roots(
     };
     let limited = scope.end.as_ref().is_some_and(|end| {
       successors(Some(element), Element::parent_element)
-        .take_while(|limit| limit.opaque() != root.opaque())
+        .take(proximity + 1)
         .any(|limit| matches(end, limit, Some(root.opaque()), ctx))
     });
 
