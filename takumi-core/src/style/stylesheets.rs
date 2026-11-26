@@ -3,7 +3,7 @@ use std::{
   fmt,
   rc::Rc,
   str::FromStr,
-  sync::{Arc, OnceLock},
+  sync::{Arc, LazyLock, OnceLock},
 };
 
 use cssparser::{
@@ -39,7 +39,7 @@ mod stylesheets_vars;
 
 use self::{
   stylesheets_helpers::*,
-  stylesheets_vars::{apply_deferred_declaration, resolve_custom_properties},
+  stylesheets_vars::{apply_deferred_declaration, resolve_declared_custom_properties},
 };
 pub(crate) use self::{
   stylesheets_mask::PropertyMask,
@@ -116,7 +116,46 @@ impl StyleDeclaration {
   }
 }
 
+impl StyleDeclaration {
+  /// The declarations it stands for once `var()` substitutes into it: a pending substitution its
+  /// value, or `unset` on each longhand when it is invalid at computed-value time, and a utility
+  /// reference its value, its fallback, or nothing.
+  fn substituted(self, custom_properties: &CustomProperties) -> ParsedDeclarations {
+    match self {
+      Self::Deferred(deferred) => deferred
+        .substituted(custom_properties)
+        .unwrap_or_else(|| unset(deferred.property.target_longhands())),
+      Self::VarRef(var_ref) => {
+        if custom_properties.contains(var_ref.name.as_ref())
+          && let Some(declarations) = var_ref.deferred.substituted(custom_properties)
+        {
+          return declarations;
+        }
+        var_ref
+          .fallback
+          .map(|fallback| fallback.substituted(custom_properties))
+          .unwrap_or_default()
+      }
+      declaration => smallvec![declaration],
+    }
+  }
+}
+
 impl DeferredDeclaration {
+  /// The declarations its value parses to once `var()` substitutes into it, or `None` when it is
+  /// invalid at computed-value time.
+  pub(crate) fn substituted(
+    &self,
+    custom_properties: &CustomProperties,
+  ) -> Option<ParsedDeclarations> {
+    let resolved_value = resolve_var_references(&self.specified_value, custom_properties)?;
+
+    self
+      .property
+      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
+      .ok()
+  }
+
   /// Applies its substituted value, or `unset` when it is
   /// [invalid at computed-value time](https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time).
   fn apply_with_parent(&self, style: &mut ComputedStyle, parent: &ComputedStyle) {
@@ -124,11 +163,19 @@ impl DeferredDeclaration {
       return;
     }
 
-    for longhand in self.property.target_longhands().iter() {
-      StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset)
-        .apply_with_parent(style, parent);
+    for declaration in unset(self.property.target_longhands()) {
+      declaration.apply_with_parent(style, parent);
     }
   }
+}
+
+/// `unset` on each of `longhands`, as a declaration invalid at computed-value time sets them.
+/// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
+fn unset(longhands: PropertyMask) -> ParsedDeclarations {
+  longhands
+    .iter()
+    .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset))
+    .collect()
 }
 
 /// A utility value read from a custom property, with the built-in scale as its
@@ -486,6 +533,72 @@ macro_rules! define_style {
             .into_iter()
             .filter(|property| !matches!(property, Self::Direction | Self::UnicodeBidi))
             .collect()
+        }
+
+        /// The `animation` longhands, which an element's animations leave as its style without
+        /// them decided them.
+        pub(crate) fn animation() -> PropertyMask {
+          [
+            Self::AnimationName,
+            Self::AnimationDuration,
+            Self::AnimationDelay,
+            Self::AnimationTimingFunction,
+            Self::AnimationIterationCount,
+            Self::AnimationDirection,
+            Self::AnimationFillMode,
+            Self::AnimationPlayState,
+          ]
+          .into_iter()
+          .collect()
+        }
+
+        /// The physical longhand this one sets in a `direction: rtl` element when `rtl`, as Blink's
+        /// `ResolveSurrogate` maps a logical property: itself unless it is logical.
+        pub(crate) fn physical(self, rtl: bool) -> Self {
+          match self {
+            $(
+              Self::[<$transient:camel>] => {
+                if rtl {
+                  Self::[<$transient_rtl:camel>]
+                } else {
+                  Self::[<$transient_ltr:camel>]
+                }
+              }
+            )*
+            _ => self,
+          }
+        }
+
+        /// Blink's high-priority longhands by their `priority` in `css_properties.json5`, the
+        /// highest first. Each group applies before the next, and all before the other longhands.
+        pub(crate) fn high_priority() -> [PropertyMask; 2] {
+          [
+            [Self::ColorScheme, Self::Position].into_iter().collect(),
+            [
+              Self::Color,
+              Self::Direction,
+              Self::FontFamily,
+              Self::FontFeatureSettings,
+              Self::FontKerning,
+              Self::FontLanguageOverride,
+              Self::FontOpticalSizing,
+              Self::FontSize,
+              Self::FontStretch,
+              Self::FontStyle,
+              Self::FontSynthesisSmallCaps,
+              Self::FontSynthesisStyle,
+              Self::FontSynthesisWeight,
+              Self::FontVariantCaps,
+              Self::FontVariantEastAsian,
+              Self::FontVariantLigatures,
+              Self::FontVariantNumeric,
+              Self::FontVariantPosition,
+              Self::FontVariationSettings,
+              Self::FontWeight,
+            ]
+            .into_iter()
+            .collect(),
+          ]
         }
 
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
@@ -911,15 +1024,19 @@ macro_rules! define_style {
           self.declarations.append(declarations);
         }
 
-        /// Merges a matched block declaration by declaration, which the cascade
-        /// does to keep each one's own importance, and takes its element state.
-        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
+        /// Merges a matched block declaration by declaration, each `important` when the block
+        /// is, and takes its element state.
+        pub(crate) fn merge_matched_block(
+          &mut self,
+          declarations: &StyleDeclarationBlock,
+          important: bool,
+        ) {
           self
             .declarations
             .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
 
           for declaration in declarations.iter() {
-            self.push(declaration.clone(), false);
+            self.push(declaration.clone(), important);
           }
         }
 
@@ -933,111 +1050,132 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
-        /// Resolves an element's style against its parent, with the declarations a cycle invalidated.
+        /// Resolves an element's style against its parent.
         pub(crate) fn inherit_element(
           self,
           parent: &ComputedStyle,
           lang: Option<Lang>,
           is_document_root: bool,
-        ) -> (ComputedStyle, InvalidDeclarations) {
-          let (mut style, invalid) = self.cascade(parent, is_document_root);
+          animations: Option<&dyn AnimationOrigin>,
+        ) -> ComputedStyle {
+          let mut style = self.cascade(parent, is_document_root, animations);
 
           if let Some(lang) = lang {
             style.lang = Some(lang);
           }
-          (style, invalid)
+          style
         }
 
         /// Resolves this style against a parent into a computed style.
         #[cfg(test)]
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
-          self.cascade(parent, false).0
+          self.cascade(parent, false, None)
         }
 
+        /// The longhands an important declaration sets.
+        pub(crate) fn important_longhands(&self) -> PropertyMask {
+          let mut longhands = PropertyMask::new();
+
+          for (index, declaration) in self.declarations.declarations.iter().enumerate() {
+            if self.declarations.important.get(index) {
+              longhands.union(&declaration.affected_longhands());
+            }
+          }
+          longhands
+        }
+
+        /// Whether a declaration sets `animation-name`, which no element inherits.
+        pub(crate) fn may_animate(&self) -> bool {
+          self
+            .declarations
+            .iter()
+            .any(|declaration| declaration.affected_longhands().contains(&LonghandId::AnimationName))
+        }
+
+        /// Blink's `StyleCascade::Apply`, with `animations` cascading as the animation origin: above
+        /// the normal declarations and below the important ones.
         fn cascade(
           self,
           parent: &ComputedStyle,
           is_document_root: bool,
-        ) -> (ComputedStyle, InvalidDeclarations) {
+          animations: Option<&dyn AnimationOrigin>,
+        ) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
-          let mut declarations = ParsedDeclarations::new();
+          let mut declarations: SmallVec<[(StyleDeclaration, bool); 8]> = SmallVec::new();
           let mut declared_custom_properties = Vec::new();
-          // A cycle resolves the custom properties again from what the element declares.
-          let mut specified_custom_properties = Vec::new();
-          let registered = style.custom_properties.has_registrations();
 
           for name in &self.declarations.element_state {
             style.custom_properties.register_element_state(name);
           }
 
-          for declaration in self.declarations.declarations {
-            match declaration {
-              StyleDeclaration::CustomProperty(name, value) => {
-                declared_custom_properties.push(name.clone());
-                if registered {
-                  specified_custom_properties.push((name.clone(), value.clone()));
-                }
-                style
-                  .custom_properties
-                  .declare(name, value, Some(&parent.custom_properties));
+          let important = self.declarations.important;
+          let mut animated_custom_properties = animations
+            .map_or(&[][..], AnimationOrigin::custom_properties)
+            .iter();
+          let mut declare = |name: String, value: String| {
+            declared_custom_properties.push(name.clone());
+            style
+              .custom_properties
+              .declare(name, value, Some(&parent.custom_properties));
+          };
+
+          for (index, declaration) in self.declarations.declarations.into_iter().enumerate() {
+            let is_important = important.get(index);
+
+            if is_important {
+              for (name, value) in animated_custom_properties.by_ref() {
+                declare(name.clone(), value.clone());
               }
-              declaration => declarations.push(declaration),
+            }
+            match declaration {
+              StyleDeclaration::CustomProperty(name, value) => declare(name, value),
+              declaration => declarations.push((declaration, is_important)),
             }
           }
+          for (name, value) in animated_custom_properties {
+            declare(name.clone(), value.clone());
+          }
 
-          resolve_declared_custom_properties(&mut style, &declared_custom_properties, parent);
-
-          let invalid = InvalidDeclarations::find(
-            &style,
-            &declarations,
-            &specified_custom_properties,
+          // The `var()` values of `font-size` and `line-height`, which a registered custom property
+          // reads through its font-relative units.
+          let fonts = [LonghandId::FontSize, LonghandId::LineHeight].map(|longhand| {
+            declarations
+              .iter()
+              .rfind(|(declaration, _)| declaration.affected_longhands().contains(&longhand))
+              .and_then(|(declaration, _)| declaration.deferred())
+          });
+          let cycles = resolve_declared_custom_properties(
+            &mut style,
+            &declared_custom_properties,
+            parent,
+            fonts.map(|deferred| deferred.map(|deferred| deferred.specified_value.as_str())),
             is_document_root,
           );
 
-          if !invalid.is_empty() {
-            for (name, value) in specified_custom_properties {
-              style
-                .custom_properties
-                .declare(name, value, Some(&parent.custom_properties));
-            }
-            for name in &invalid.names {
-              style.custom_properties.reset_to_initial(name);
-            }
-            resolve_declared_custom_properties(&mut style, &declared_custom_properties, parent);
+          if cycles.contains(&true) {
+            let invalid: SmallVec<[DeferredDeclaration; 2]> = fonts
+              .into_iter()
+              .zip(cycles)
+              .filter_map(|(deferred, cycle)| deferred.filter(|_| cycle).cloned())
+              .collect();
+
             declarations = declarations
               .into_iter()
-              .flat_map(|declaration| invalid.replace(declaration))
+.flat_map(|(declaration, is_important)| -> SmallVec<[(StyleDeclaration, bool); 8]> {
+                if declaration.deferred().is_some_and(|deferred| invalid.contains(deferred)) {
+                  unset(declaration.affected_longhands())
+                    .into_iter()
+                    .map(|declaration| (declaration, is_important))
+                    .collect()
+                } else {
+                  smallvec![(declaration, is_important)]
+                }
+              })
               .collect();
           }
 
-          // Pre-resolve `direction` so logical-axis applies below see the
-          // final value even if `direction:` is declared later in the block.
-          for declaration in &declarations {
-            match declaration {
-              StyleDeclaration::Direction(d) => style.inherited_data_mut().direction = *d,
-              StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
-                style.inherited_data_mut().direction = match keyword {
-                  CssWideKeyword::Initial => Direction::default(),
-                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.inherited_data.direction,
-                };
-              }
-              StyleDeclaration::Deferred(deferred)
-                if matches!(deferred.property, PropertyId::Longhand(LonghandId::Direction)) =>
-              {
-                deferred.apply_with_parent(&mut style, parent);
-              }
-              _ => {}
-            }
-          }
-
-          let parent_font_weight = parent.inherited_data.font_weight.value();
-          for mut declaration in declarations {
-            if let StyleDeclaration::FontWeight(weight) = &mut declaration {
-              *weight = weight.resolve_against(parent_font_weight);
-            }
-            declaration.apply_with_parent(&mut style, parent);
-          }
-          (style, invalid)
+          apply_winning_declarations(&mut style, parent, declarations, animations);
+          style
         }
       }
 
@@ -2557,203 +2695,129 @@ impl ComputedStyle {
   }
 }
 
-impl Style {
-  /// The `animation` longhands its declarations set through `var()` of one of the custom
-  /// properties `names`, directly or through a custom property it declares.
-  pub(crate) fn animation_longhands_reading(&self, names: &[&str]) -> PropertyMask {
-    const ANIMATION: [LonghandId; 8] = [
-      LonghandId::AnimationName,
-      LonghandId::AnimationDuration,
-      LonghandId::AnimationDelay,
-      LonghandId::AnimationTimingFunction,
-      LonghandId::AnimationIterationCount,
-      LonghandId::AnimationDirection,
-      LonghandId::AnimationFillMode,
-      LonghandId::AnimationPlayState,
-    ];
+/// The animation origin of a cascade, as Blink's `CascadeOrigin::kAnimation`: what an element's
+/// animations set, above its normal declarations and below its important ones.
+pub(crate) trait AnimationOrigin {
+  /// The longhands the animations set.
+  fn longhands(&self) -> PropertyMask;
 
-    let aliases: Vec<(String, String)> = self
-      .declarations
-      .declarations
-      .iter()
-      .filter_map(|declaration| match declaration {
-        StyleDeclaration::CustomProperty(name, value) => Some((name.clone(), value.clone())),
-        _ => None,
-      })
-      .collect();
+  /// The custom properties the animations set.
+  fn custom_properties(&self) -> &[(String, String)];
 
-    self
-      .declarations
-      .declarations
-      .iter()
-      .filter_map(StyleDeclaration::deferred)
-      .filter(|deferred| {
-        names
-          .iter()
-          .any(|name| reads(&deferred.specified_value, name, &aliases))
-      })
-      .flat_map(|deferred| {
-        deferred
-          .property
-          .target_longhands()
-          .iter()
-          .collect::<Vec<_>>()
-      })
-      .filter(|longhand| ANIMATION.contains(longhand))
-      .collect()
-  }
+  /// Applies the animations of `longhands` to `style` in `phase` of
+  /// [`apply_winning_declarations`]: 0 and 1 the high-priority groups, 2 the rest.
+  fn apply(&self, style: &mut ComputedStyle, longhands: &PropertyMask, phase: usize);
 }
 
-/// Substitutes `var()` among the custom properties, enforcing registered syntax before and after.
-fn resolve_declared_custom_properties(
+/// Applies each longhand's winning declaration, the last of `declarations` in cascade order, or
+/// the animation of a longhand no important declaration sets, as Blink's `StyleCascade::Apply`
+/// does. `direction` applies first, since it decides the physical longhand a logical one sets, then
+/// the high-priority longhands, then `vertical-align` ahead of the `baseline-source` it overlaps,
+/// then the rest. Each phase applies its animations after its declarations, which they take as
+/// their underlying values.
+fn apply_winning_declarations(
   style: &mut ComputedStyle,
-  declared: &[String],
   parent: &ComputedStyle,
+  declarations: SmallVec<[(StyleDeclaration, bool); 8]>,
+  animations: Option<&dyn AnimationOrigin>,
 ) {
-  style
-    .custom_properties
-    .enforce_syntax(declared, &parent.custom_properties);
-  if let Some(resolved) = resolve_custom_properties(style.custom_properties.values()) {
-    style.custom_properties.replace_values(resolved);
-  }
-  style
-    .custom_properties
-    .enforce_syntax(declared, &parent.custom_properties);
-}
+  static HIGH_PRIORITY: LazyLock<[PropertyMask; 2]> = LazyLock::new(LonghandId::high_priority);
 
-/// The winning `font-size` and `line-height` declarations in a relative-unit cycle with registered
-/// custom properties, which act as `unset` while those properties take their initial values.
-/// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
-#[derive(Debug, Default, Clone)]
-pub(crate) struct InvalidDeclarations {
-  declarations: Vec<DeferredDeclaration>,
-  names: Vec<String>,
-}
-
-impl InvalidDeclarations {
-  fn find(
-    style: &ComputedStyle,
-    declarations: &ParsedDeclarations,
-    aliases: &[(String, String)],
-    is_document_root: bool,
-  ) -> Self {
-    let mut invalid = Self::default();
-
-    if style.custom_properties.typed_values().next().is_none() {
-      return invalid;
-    }
-
-    for (longhand, units, root_units) in [
-      (
-        LonghandId::FontSize,
-        &["em", "ex", "cap", "ch", "ic", "lh"][..],
-        &["rem", "rlh"][..],
-      ),
-      (LonghandId::LineHeight, &["lh"][..], &["rlh"][..]),
-    ] {
-      let Some(winner) = declarations
-        .iter()
-        .rfind(|declaration| declaration.affected_longhands().contains(&longhand))
-      else {
-        continue;
-      };
-      let Some(deferred) = winner.deferred() else {
-        continue;
-      };
-      let relative =
-        |value: &str| has_unit(value, units) || (is_document_root && has_unit(value, root_units));
-      let before = invalid.names.len();
-
-      for (name, value) in style.custom_properties.typed_values() {
-        if relative(value) && reads(&deferred.specified_value, name, aliases) {
-          invalid.names.push(name.to_owned());
-        }
-      }
-      if invalid.names.len() > before && !invalid.declarations.contains(deferred) {
-        invalid.declarations.push(deferred.clone());
-      }
-    }
-    invalid
-  }
-
-  fn is_empty(&self) -> bool {
-    self.declarations.is_empty()
-  }
-
-  /// `declaration`, or `unset` for each of its longhands when a cycle invalidated it.
-  pub(crate) fn replace(&self, declaration: StyleDeclaration) -> ParsedDeclarations {
-    if !declaration
-      .deferred()
-      .is_some_and(|deferred| self.declarations.contains(deferred))
-    {
-      return [declaration].into_iter().collect();
-    }
-
+  let mut declarations: SmallVec<[Option<(StyleDeclaration, bool)>; 8]> = declarations
+    .into_iter()
+    .flat_map(|(declaration, is_important)| {
+      declaration
+        .substituted(&style.custom_properties)
+        .into_iter()
+        .map(move |declaration| Some((declaration, is_important)))
+    })
+    .collect();
+  let longhand = |declaration: &Option<(StyleDeclaration, bool)>| {
     declaration
-      .affected_longhands()
-      .iter()
-      .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, CssWideKeyword::Unset))
-      .collect()
+      .as_ref()
+      .map(|(declaration, _)| declaration.longhand_id())
+  };
+
+  if let Some((direction, _)) = declarations
+    .iter()
+    .rposition(|declaration| longhand(declaration) == Some(LonghandId::Direction))
+    .and_then(|index| declarations[index].take())
+  {
+    direction.apply_with_parent(style, parent);
   }
-}
 
-/// Whether `value` holds a dimension in one of `units`, at any depth.
-fn has_unit(value: &str, units: &[&str]) -> bool {
-  fn walk(input: &mut Parser<'_>, units: &[&str]) -> bool {
-    while let Ok(token) = input.next() {
-      match token {
-        Token::Dimension { unit, .. }
-          if units.iter().any(|known| unit.eq_ignore_ascii_case(known)) =>
-        {
-          return true;
-        }
-        Token::Function(_) | Token::ParenthesisBlock => {
-          let nested = input
-            .parse_nested_block(|input| Ok::<_, cssparser::ParseError<()>>(walk(input, units)))
-            .unwrap_or(false);
+  let rtl = style.inherited_data.direction == Direction::Rtl;
+  let phase = |longhand: LonghandId| match longhand {
+    longhand if HIGH_PRIORITY[0].contains(&longhand) => 0,
+    longhand if HIGH_PRIORITY[1].contains(&longhand) => 1,
+    LonghandId::VerticalAlign => 2,
+    _ => 3,
+  };
+  let mut seen: PropertyMask = [LonghandId::Direction].into_iter().collect();
+  let mut important = PropertyMask::new();
+  let mut winners: SmallVec<[(usize, usize, LonghandId); 8]> = SmallVec::new();
 
-          if nested {
-            return true;
-          }
-        }
-        _ => {}
+  for (index, declaration) in declarations.iter().enumerate().rev() {
+    if let Some((declaration, is_important)) = declaration
+      && let longhand = declaration.longhand_id().physical(rtl)
+      && seen.insert(longhand)
+    {
+      if *is_important {
+        important.insert(longhand);
+      }
+      winners.push((phase(longhand), index, longhand));
+    }
+  }
+  winners.sort_unstable();
+
+  let vertical_align = winners
+    .iter()
+    .find(|(.., longhand)| *longhand == LonghandId::VerticalAlign)
+    .map(|&(_, index, _)| index);
+  let parent_font_weight = parent.inherited_data.font_weight.value();
+  let mut animated = animations.map_or_else(PropertyMask::new, AnimationOrigin::longhands);
+
+  animated.difference(&important);
+
+  let mut winners = winners.into_iter().peekable();
+
+  for (animation_phase, group) in [Some(&HIGH_PRIORITY[0]), Some(&HIGH_PRIORITY[1]), None]
+    .into_iter()
+    .enumerate()
+  {
+    let last_phase = if group.is_some() { animation_phase } else { 3 };
+
+    while let Some((_, index, longhand)) = winners.next_if(|(phase, ..)| *phase <= last_phase) {
+      // `vertical-align` resets `baseline-source`, which keeps a value only from a later declaration.
+      if longhand == LonghandId::BaselineSource && vertical_align > Some(index) {
+        continue;
+      }
+      let Some((mut declaration, _)) = declarations[index].take() else {
+        continue;
+      };
+
+      if let StyleDeclaration::FontWeight(weight) = &mut declaration {
+        *weight = weight.resolve_against(parent_font_weight);
+      }
+      declaration.apply_with_parent(style, parent);
+    }
+
+    let Some(animations) = animations else {
+      continue;
+    };
+    let mut longhands = animated;
+
+    match group {
+      Some(group) => longhands.intersect(group),
+      None => {
+        longhands.difference(&HIGH_PRIORITY[0]);
+        longhands.difference(&HIGH_PRIORITY[1]);
       }
     }
-    false
-  }
-
-  walk(&mut Parser::new(value), units)
-}
-
-/// Whether `value` names the custom property `name`, not one that merely contains it.
-fn references(value: &str, name: &str) -> bool {
-  let is_name =
-    |character: char| character.is_alphanumeric() || character == '-' || character == '_';
-
-  value.match_indices(name).any(|(at, _)| {
-    !value[..at].chars().next_back().is_some_and(is_name)
-      && !value[at + name.len()..].chars().next().is_some_and(is_name)
-  })
-}
-
-/// Whether `value` reads the custom property `name`, directly or through the custom properties
-/// `aliases` an element declares.
-fn reads(value: &str, name: &str, aliases: &[(String, String)]) -> bool {
-  let mut pending = vec![value];
-  let mut visited = vec![false; aliases.len()];
-
-  while let Some(value) = pending.pop() {
-    if references(value, name) {
-      return true;
-    }
-    for (index, (alias, alias_value)) in aliases.iter().enumerate() {
-      if !visited[index] && references(value, alias) {
-        visited[index] = true;
-        pending.push(alias_value);
-      }
+    if !longhands.is_empty() {
+      animations.apply(style, &longhands, animation_phase);
     }
   }
-  false
 }
 
 /// Ordered specified declarations plus the set of important properties.

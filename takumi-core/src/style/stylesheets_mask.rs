@@ -43,6 +43,20 @@ impl PropertyMask {
     }
   }
 
+  pub(crate) fn intersect(&mut self, other: &Self) {
+    for (word, other_word) in self.words.iter_mut().zip(other.words) {
+      *word &= other_word;
+    }
+  }
+
+  pub(crate) fn intersects(&self, other: &Self) -> bool {
+    self
+      .words
+      .iter()
+      .zip(other.words)
+      .any(|(word, other_word)| word & other_word != 0)
+  }
+
   pub(crate) fn contains_all(&self, other: &Self) -> bool {
     self
       .words

@@ -44,10 +44,6 @@ impl CustomProperties {
     &self.values
   }
 
-  pub(crate) fn replace_values(&mut self, values: HashMap<String, String>) {
-    self.values = Arc::new(values);
-  }
-
   /// Sets `name` as a declaration specifies it. A CSS-wide keyword resolves here, as the cascade
   /// resolves it for a custom property: `inherit` takes `parent`'s value, `initial` the registered
   /// initial value or none, and `unset` either one as the property inherits.
@@ -166,26 +162,6 @@ impl CustomProperties {
         Some(value) => self.set(name.clone(), value.to_owned()),
         None => self.remove(name),
       }
-    }
-  }
-
-  /// Each property a typed syntax registers, with its value.
-  pub(crate) fn typed_values(&self) -> impl Iterator<Item = (&str, &str)> {
-    self
-      .registrations
-      .values()
-      .filter(|rule| rule.syntax != PropertySyntax::Universal)
-      .filter_map(|rule| Some((rule.name.as_str(), self.get(&rule.name)?)))
-  }
-
-  /// Sets the registered `name` to its initial value.
-  pub(crate) fn reset_to_initial(&mut self, name: &str) {
-    match self
-      .registration(name)
-      .and_then(|rule| rule.initial_value.clone())
-    {
-      Some(value) => self.set(name.to_owned(), value),
-      None => self.remove(name),
     }
   }
 

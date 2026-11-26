@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 use cssparser::{Parser, Token, TokenSerializationType};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CssInput, CustomProperties};
+use crate::style::{ComputedStyle, CustomProperties, PropertySyntax};
 
 const MAX_VAR_DEPTH: u32 = 100;
 const MAX_VAR_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -173,11 +173,37 @@ enum Resolution {
   Valid(String),
 }
 
+/// The longhands a registered custom property reads through font-relative units, with the units
+/// that read them and the ones that read them only on the root, as nodes of the cycle graph.
+/// <https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles>
+const FONT_LONGHANDS: [(&str, &[&str], &[&str]); 2] = [
+  (
+    "font-size",
+    &["em", "ex", "cap", "ch", "ic", "lh"],
+    &["rem", "rlh"],
+  ),
+  ("line-height", &["lh"], &["rlh"]),
+];
+
+/// The `var()` values of [`FONT_LONGHANDS`] an element declares, which a registered custom
+/// property with font-relative units reads.
+#[derive(Clone, Copy)]
+struct FontDependencies<'a> {
+  properties: &'a CustomProperties,
+  values: [Option<&'a str>; 2],
+  is_document_root: bool,
+}
+
 struct Resolver<'a> {
   specified: &'a HashMap<String, String>,
   resolved: HashMap<String, Resolution>,
   cycles: CycleResolver,
   budget: usize,
+  fonts: Option<FontDependencies<'a>>,
+  /// Which of [`FONT_LONGHANDS`] a cycle reached.
+  font_cycles: [bool; 2],
+  /// The custom properties a cycle reached.
+  cycle_names: Vec<String>,
 }
 
 impl<'a> Resolver<'a> {
@@ -187,6 +213,42 @@ impl<'a> Resolver<'a> {
       resolved: HashMap::new(),
       cycles: CycleResolver::default(),
       budget: MAX_VAR_OUTPUT_BYTES,
+      fonts: None,
+      font_cycles: [false; 2],
+      cycle_names: Vec::new(),
+    }
+  }
+
+  /// Walks the font longhand values the registered `name`, resolved to `value`, reads through its
+  /// font-relative units, as Blink's `CascadeResolver` does, so a cycle back to `name` reaches both.
+  fn follow_font_longhands(&mut self, name: &str, value: &str, depth: u32) {
+    let Some(fonts) = self.fonts else {
+      return;
+    };
+
+    if fonts
+      .properties
+      .registration(name)
+      .is_none_or(|rule| rule.syntax == PropertySyntax::Universal)
+    {
+      return;
+    }
+    for (index, ((longhand, units, root_units), longhand_value)) in
+      FONT_LONGHANDS.into_iter().zip(fonts.values).enumerate()
+    {
+      let Some(longhand_value) = longhand_value else {
+        continue;
+      };
+
+      if !has_unit(value, units) && !(fonts.is_document_root && has_unit(value, root_units)) {
+        continue;
+      }
+      self.cycles.push(longhand);
+      let _ = self.resolve_value(longhand_value, depth);
+      if self.cycles.in_cycle() {
+        self.font_cycles[index] = true;
+      }
+      self.cycles.pop();
     }
   }
 
@@ -209,8 +271,16 @@ impl<'a> Resolver<'a> {
     self.cycles.push(name);
     let saved_budget = std::mem::replace(&mut self.budget, MAX_VAR_OUTPUT_BYTES);
     let value = self.resolve_value(specified, depth + 1);
+
+    if let Some(value) = &value {
+      self.follow_font_longhands(name, value, depth + 1);
+    }
     self.budget = saved_budget;
     let in_cycle = self.cycles.in_cycle();
+
+    if in_cycle {
+      self.cycle_names.push(name.to_owned());
+    }
     self.cycles.pop();
 
     match (value, in_cycle) {
@@ -378,24 +448,127 @@ fn charge(budget: &mut usize, bytes: usize) -> Result<(), ()> {
   Ok(())
 }
 
-pub(crate) fn resolve_custom_properties(
-  specified: &HashMap<String, String>,
-) -> Option<HashMap<String, String>> {
-  if !specified
-    .values()
-    .any(|value| contains_var_references(value))
+/// Resolves `var()` in the custom properties an element declares, `declared`, as Blink applies
+/// them: the values it inherits resolved already. Returns which of `font-size` and `line-height`,
+/// whose `var()` values `fonts` holds, a cycle through a registered property's font-relative units
+/// reaches. A registered property in a cycle takes its `unset` value, as Blink's `ApplyUnset` gives
+/// it, and the others read it there.
+pub(crate) fn resolve_declared_custom_properties(
+  style: &mut ComputedStyle,
+  declared: &[String],
+  parent: &ComputedStyle,
+  fonts: [Option<&str>; 2],
+  is_document_root: bool,
+) -> [bool; 2] {
+  let properties = &mut style.custom_properties;
+
+  properties.enforce_syntax(declared, &parent.custom_properties);
+
+  let follows_fonts = fonts.iter().any(Option::is_some) && properties.has_registrations();
+
+  if !follows_fonts
+    && !declared
+      .iter()
+      .any(|name| properties.get(name).is_some_and(contains_var_references))
   {
-    return None;
+    return [false; 2];
   }
 
-  let mut resolver = Resolver::new(specified);
-  let mut resolved = HashMap::new();
-  for name in specified.keys() {
-    if let Some(value) = resolver.resolve_property(name, 0) {
-      resolved.insert(name.clone(), value);
+  let specified: Vec<(String, Option<String>)> = declared
+    .iter()
+    .map(|name| (name.clone(), properties.get(name).map(str::to_owned)))
+    .collect();
+  let (resolved, font_cycles, cycle_names) = {
+    let mut resolver = Resolver::new(properties.values());
+
+    resolver.fonts = Some(FontDependencies {
+      properties,
+      values: fonts,
+      is_document_root,
+    });
+    let resolved: Vec<Option<String>> = declared
+      .iter()
+      .map(|name| resolver.resolve_property(name, 0))
+      .collect();
+
+    (resolved, resolver.font_cycles, resolver.cycle_names)
+  };
+
+  set_resolved(properties, declared, resolved);
+
+  let registered_in_cycle = cycle_names.iter().any(|name| {
+    properties
+      .registration(name)
+      .is_some_and(|rule| rule.syntax != PropertySyntax::Universal)
+  });
+
+  properties.enforce_syntax(declared, &parent.custom_properties);
+  if registered_in_cycle {
+    let others: Vec<String> = specified
+      .into_iter()
+      .filter(|(name, _)| !cycle_names.contains(name))
+      .map(|(name, value)| {
+        if let Some(value) = value {
+          properties.set(name.clone(), value);
+        }
+        name
+      })
+      .collect();
+    let resolved: Vec<Option<String>> = {
+      let mut resolver = Resolver::new(properties.values());
+
+      others
+        .iter()
+        .map(|name| resolver.resolve_property(name, 0))
+        .collect()
+    };
+
+    set_resolved(properties, &others, resolved);
+    properties.enforce_syntax(&others, &parent.custom_properties);
+  }
+  font_cycles
+}
+
+/// Sets each of `names` to its `resolved` value, removing one that has none.
+fn set_resolved(
+  properties: &mut CustomProperties,
+  names: &[String],
+  resolved: Vec<Option<String>>,
+) {
+  for (name, value) in names.iter().zip(resolved) {
+    match value {
+      Some(value) => properties.set(name.clone(), value),
+      None => properties.remove(name),
     }
   }
-  Some(resolved)
+}
+
+/// Whether `value` holds a dimension in one of `units`, at any depth.
+fn has_unit(value: &str, units: &[&str]) -> bool {
+  fn walk(input: &mut Parser<'_>, units: &[&str]) -> bool {
+    while let Ok(token) = input.next() {
+      match token {
+        Token::Dimension { unit, .. }
+          if units.iter().any(|known| unit.eq_ignore_ascii_case(known)) =>
+        {
+          return true;
+        }
+        Token::Function(_) | Token::ParenthesisBlock => {
+          let nested = input
+            .parse_nested_block(|input| Ok::<_, cssparser::ParseError<()>>(walk(input, units)))
+            .unwrap_or(false);
+
+          if nested {
+            return true;
+          }
+        }
+        _ => {}
+      }
+    }
+    false
+  }
+
+  walk(&mut Parser::new(value), units)
 }
 
 pub(crate) fn contains_var_references(value: &str) -> bool {
@@ -453,16 +626,7 @@ pub(crate) fn apply_deferred_declaration(
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
 ) -> bool {
-  let Some(resolved_value) =
-    resolve_var_references(&deferred.specified_value, &style.custom_properties)
-  else {
-    return false;
-  };
-
-  let Ok(declarations) = deferred
-    .property
-    .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
-  else {
+  let Some(declarations) = deferred.substituted(&style.custom_properties) else {
     return false;
   };
 

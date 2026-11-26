@@ -916,3 +916,190 @@ fn color_mix_of_current_color_in_color_mixes_the_parent_colour() {
 
   assert_eq!(image.as_raw()[..4], [128, 0, 128, 255]);
 }
+
+/// The first pixel of a 4px block with `class` under `css`, rendered at time 0.
+fn first_pixel_with_css(class: &str, css: &str) -> Vec<u8> {
+  let image = takumi::render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((4, 4)))
+      .node(styled_block(
+        class,
+        serde_json::json!({ "width": "4px", "height": "4px" }),
+      ))
+      .stylesheet(StyleSheet::parse_loosy(css).into())
+      .fonts(&crate::test_utils::CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  image.as_raw()[..4].to_vec()
+}
+
+/// `color-scheme` cascades its declarations, its animation, and its `!important` declarations
+/// before the colours that read it, as Blink's `ApplyHighPriority` applies it, so every
+/// `light-dark()` resolves in the scheme that wins.
+#[test]
+fn light_dark_resolves_in_the_color_scheme_that_wins_the_cascade() {
+  const KEYFRAMES: &str = "
+    @keyframes to-dark { from, to { color-scheme: dark } }
+    @keyframes to-light { from, to { color-scheme: light } }
+    @keyframes fill { from, to { background-color: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    .static { background-color: light-dark(rgb(255,0,0), rgb(0,0,255)) }";
+  let (red, blue) = (vec![255, 0, 0, 255], vec![0, 0, 255, 255]);
+
+  for (rule, expected) in [
+    (".a { animation: to-dark 1s paused }", &blue),
+    (".a { animation: fill 1s paused, to-dark 1s paused }", &blue),
+    (".a { animation: to-dark 1s paused, fill 1s paused }", &blue),
+    (
+      ".a { color-scheme: light !important; animation: to-dark 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: light !important; animation: to-dark 1s paused, fill 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: dark; animation: to-light 1s paused, fill 1s paused }",
+      &red,
+    ),
+    (
+      ".a { color-scheme: light; animation: fill 1s paused, to-dark 1s paused }",
+      &blue,
+    ),
+  ] {
+    let class = if rule.contains("fill 1s") {
+      "a"
+    } else {
+      "a static"
+    };
+
+    assert_eq!(
+      &first_pixel_with_css(class, &format!("{KEYFRAMES} {rule}")),
+      expected,
+      "{rule}"
+    );
+  }
+}
+
+/// A keyframed custom property resolves its `light-dark()` in the scheme an animation of
+/// `color-scheme` gives.
+#[test]
+fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
+  let css = "
+    @property --ink { syntax: '<color>'; inherits: false; initial-value: black }
+    @keyframes ink { from, to { color-scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    .a { background-color: var(--ink); animation: ink 1s paused }
+    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }";
+
+  assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
+  assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
+}
+
+/// The width and height `.box` measures to under `css`.
+fn box_size(css: &str) -> (f32, f32) {
+  let measured = measure_with_css(Node::container([block("box")]), css);
+
+  (measured.children[0].width, measured.children[0].height)
+}
+
+/// `color` and the font longhands are high priority, so they apply before the other longhands and
+/// against the parent, as Blink's `ApplyHighPriority` applies them, animated or not.
+#[test]
+fn animations_read_the_font_and_colour_the_high_priority_longhands_give() {
+  // An animated element's `em` font size reads its parent's font size.
+  assert_eq!(
+    box_size(
+      "@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+       .box { font-size: 2em; height: 1em; animation: fade 1s }"
+    )
+    .1,
+    32.0
+  );
+  // An animated font size interpolates an `em` against the parent's font size.
+  assert_eq!(
+    box_size(
+      "@keyframes f { from { font-size: 1em } to { font-size: 40px } }
+       .box { font-size: 30px; height: 1em; animation: f 1000ms linear -500ms }"
+    )
+    .1,
+    28.0
+  );
+  // Another animation reads the animated font size.
+  assert_eq!(
+    box_size(
+      "@keyframes f { from, to { font-size: 20px } }
+       @keyframes w { from { width: 10em } to { width: 100px } }
+       .box { animation: w 1000ms linear -500ms, f 1s }"
+    )
+    .0,
+    150.0
+  );
+  // Another animation reads the animated colour as `currentColor`.
+  assert_eq!(
+    first_pixel_with_css(
+      "a",
+      "@keyframes c { from, to { color: rgb(0,0,255) } }
+       @keyframes b { from { background-color: currentColor } to { background-color: rgb(0,255,0) } }
+       .a { color: rgb(255,0,0); animation: b 1s paused, c 1s paused }"
+    ),
+    [0, 0, 255, 255]
+  );
+}
+
+/// Where `.box`, a 10px block under `css`, starts from its parent's left edge.
+fn box_left(css: &str) -> f32 {
+  measure_with_css(
+    Node::container([block("box")]),
+    &format!(".box {{ width: 10px; height: 10px }} {css}"),
+  )
+  .children[0]
+    .transform[4]
+}
+
+/// Each longhand takes its last declaration in cascade order, as Blink's `StyleCascade` picks it.
+/// A logical property counts as the physical one it sets in the element's own `direction`, decided
+/// first wherever it is declared, and a shorthand with `var()` as each longhand it sets.
+#[test]
+fn each_longhand_takes_its_last_declaration() {
+  assert_eq!(
+    box_left(".box { margin-left: 10px; margin-inline-start: 20px }"),
+    20.0
+  );
+  assert_eq!(
+    box_left(".box { margin-inline-start: 20px; margin-left: 10px }"),
+    10.0
+  );
+  assert_eq!(
+    box_left(".box { margin-left: 7px; margin-inline-end: 20px; direction: rtl }"),
+    20.0
+  );
+  assert_eq!(
+    box_left(".box { margin-inline-end: 20px; margin-left: 7px; direction: rtl }"),
+    7.0
+  );
+
+  let font = |declarations: &str| {
+    box_size(&format!(
+      ".box {{ --f: 10px serif; height: 1em; {declarations} }}"
+    ))
+    .1
+  };
+
+  assert_eq!(font("font: var(--f); font-size: 30px"), 30.0);
+  assert_eq!(font("font-size: 30px; font: var(--f)"), 10.0);
+}
+
+/// A registered custom property in a cycle with `font-size` takes its `unset` value, as Blink's
+/// `ApplyUnset` gives it: the parent's when it inherits, not its initial value.
+#[test]
+fn a_registered_property_in_a_font_size_cycle_is_unset() {
+  let measured = measure_with_css(
+    Node::container([Node::container([block("box")]).with_class_name("parent")]),
+    "@property --x { syntax: '<length>'; inherits: true; initial-value: 5px }
+     .parent { --x: 7px }
+     .box { --x: 2em; font-size: var(--x); width: var(--x) }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 7.0);
+}
