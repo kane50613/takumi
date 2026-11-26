@@ -1402,18 +1402,21 @@ fn scope_roots(
     .map(|parent| scope_roots(parent, element, ctx));
 
   for (proximity, root) in successors(Some(element), Element::parent_element).enumerate() {
-    let outer_roots: SmallVec<[(Option<OpaqueElement>, u32); 2]> = match &scope.parent {
-      Some(parent) => scope_roots(parent, root, ctx)
-        .into_iter()
-        .filter(|(outer, _)| {
-          element_outer_roots
-            .iter()
-            .flatten()
-            .any(|(element_outer, _)| element_outer == outer)
-        })
-        .collect(),
-      None => SmallVec::from_slice(&[(None, 0)]),
-    };
+    let outer_roots: SmallVec<[(Option<OpaqueElement>, u32); 2]> =
+      match (&scope.parent, &element_outer_roots) {
+        (Some(parent), Some(element_outer_roots)) if proximity > 0 => {
+          scope_roots(parent, root, ctx)
+            .into_iter()
+            .filter(|(outer, _)| {
+              element_outer_roots
+                .iter()
+                .any(|(element_outer, _)| element_outer == outer)
+            })
+            .collect()
+        }
+        (_, Some(element_outer_roots)) => element_outer_roots.clone(),
+        _ => SmallVec::from_slice(&[(None, 0)]),
+      };
     let is_root = match &scope.start {
       Some(start) => outer_roots
         .iter()
