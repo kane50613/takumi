@@ -1044,7 +1044,6 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
-        /// Resolves an element's style against its parent.
         /// Resolves an element's style against its parent, each declaration cascading from its
         /// place in `sources`, or from an author rule beyond it.
         pub(crate) fn inherit_element(
