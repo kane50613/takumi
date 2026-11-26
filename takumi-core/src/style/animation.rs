@@ -428,29 +428,24 @@ fn keyframe<const N: usize>(offset: f32, declarations: [StyleDeclaration; N]) ->
 /// One sampled point on an animation's timeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct AnimationSample {
-  /// Progress through the current iteration.
+  /// Directed progress through the current iteration.
   progress: f32,
-  /// Whether the sample comes from before the active phase, which the step
-  /// easing functions treat as sitting on the lower step.
+  /// Whether a step easing function sitting exactly on a jump takes the lower step, which Blink
+  /// calls the left limit direction.
   before: bool,
 }
 
-impl AnimationSample {
-  fn active(progress: f32) -> Self {
-    Self {
-      progress,
-      before: false,
-    }
-  }
-
-  fn before(progress: f32) -> Self {
-    Self {
-      progress,
-      before: true,
-    }
-  }
+/// Where a sample falls against an animation's active interval.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AnimationPhase {
+  Before,
+  Active,
+  After,
 }
 
+/// The sample of an animation at `time_ms`, or `None` when it neither runs nor fills then, as
+/// Blink's `Timing::CalculateTimings` samples it.
+/// <https://w3.org/TR/web-animations-1/#core-animation-model-calculations>
 fn sample_animation_progress(
   time_ms: f32,
   duration_ms: f32,
@@ -459,82 +454,89 @@ fn sample_animation_progress(
   direction: AnimationDirection,
   fill_mode: AnimationFillMode,
 ) -> Option<AnimationSample> {
-  let active_time = time_ms - delay_ms;
-
-  if active_time < 0.0 {
-    return match fill_mode {
-      AnimationFillMode::Backwards | AnimationFillMode::Both => {
-        Some(AnimationSample::before(start_progress(direction)))
-      }
-      _ => None,
-    };
-  }
-
-  let total_active_duration = match iteration_count {
-    _ if duration_ms <= 0.0 => 0.0,
+  let iteration_count = match iteration_count {
     AnimationIterationCount::Infinite => f32::INFINITY,
-    AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
+    AnimationIterationCount::Number(count) => count.max(0.0),
+  };
+  let duration_ms = duration_ms.max(0.0);
+  let active_duration = if duration_ms == 0.0 || iteration_count == 0.0 {
+    0.0
+  } else {
+    duration_ms * iteration_count
+  };
+  let local_active_time = time_ms - delay_ms;
+  let fills_backwards = matches!(
+    fill_mode,
+    AnimationFillMode::Backwards | AnimationFillMode::Both
+  );
+  let fills_forwards = matches!(
+    fill_mode,
+    AnimationFillMode::Forwards | AnimationFillMode::Both
+  );
+  let (phase, active_time) = if local_active_time < 0.0 {
+    (AnimationPhase::Before, fills_backwards.then_some(0.0)?)
+  } else if local_active_time >= active_duration {
+    (AnimationPhase::After, fills_forwards.then_some(active_duration)?)
+  } else {
+    (AnimationPhase::Active, local_active_time)
   };
 
-  if active_time >= total_active_duration {
-    return match fill_mode {
-      AnimationFillMode::Forwards | AnimationFillMode::Both => {
-        let end_progress = match iteration_count {
-          AnimationIterationCount::Infinite => end_progress(direction, 0),
-          AnimationIterationCount::Number(count) => {
-            let count = count.max(0.0);
-            let completed_iterations = count.floor() as usize;
-            let fraction = count.fract();
-            if fraction > f32::EPSILON {
-              apply_direction(fraction, direction, completed_iterations)
-            } else if completed_iterations == 0 {
-              start_progress(direction)
-            } else {
-              end_progress(direction, completed_iterations - 1)
-            }
-          }
-        };
-        Some(AnimationSample::active(end_progress))
-      }
-      _ => None,
+  let overall_progress = match phase {
+    _ if duration_ms > 0.0 => active_time / duration_ms,
+    AnimationPhase::Before => 0.0,
+    _ => iteration_count,
+  };
+  let mut simple_progress = if overall_progress.is_infinite() {
+    0.0
+  } else {
+    overall_progress.fract()
+  };
+
+  if simple_progress <= f32::EPSILON && phase == AnimationPhase::After && iteration_count != 0.0 {
+    simple_progress = 1.0;
+  }
+
+  let current_iteration = if phase == AnimationPhase::After && iteration_count.is_infinite() {
+    f32::INFINITY
+  } else if simple_progress == 1.0 {
+    (overall_progress.floor() - 1.0).max(0.0)
+  } else {
+    overall_progress.floor()
+  };
+  let forwards = is_current_direction_forwards(direction, current_iteration);
+  let mut progress = if forwards {
+    simple_progress
+  } else {
+    1.0 - simple_progress
+  };
+
+  if phase == AnimationPhase::After {
+    progress = match forwards {
+      true if (progress - 1.0).abs() <= f32::EPSILON => 1.0,
+      false if progress.abs() <= f32::EPSILON => 0.0,
+      _ => progress,
     };
   }
 
-  let overall_progress = active_time / duration_ms;
-
-  Some(AnimationSample::active(apply_direction(
-    overall_progress.fract(),
-    direction,
-    overall_progress.floor() as usize,
-  )))
+  Some(AnimationSample {
+    progress,
+    before: if forwards {
+      phase == AnimationPhase::Before
+    } else {
+      phase == AnimationPhase::After
+    },
+  })
 }
 
-fn start_progress(direction: AnimationDirection) -> f32 {
-  apply_direction(0.0, direction, 0)
-}
+/// Whether `direction` plays the iteration at `current_iteration` forwards.
+fn is_current_direction_forwards(direction: AnimationDirection, current_iteration: f32) -> bool {
+  let even = current_iteration.is_infinite() || current_iteration % 2.0 == 0.0;
 
-fn end_progress(direction: AnimationDirection, iteration_index: usize) -> f32 {
-  apply_direction(1.0, direction, iteration_index)
-}
-
-fn apply_direction(progress: f32, direction: AnimationDirection, iteration_index: usize) -> f32 {
   match direction {
-    AnimationDirection::Normal => progress,
-    AnimationDirection::Reverse => 1.0 - progress,
-    AnimationDirection::Alternate => {
-      if iteration_index.is_multiple_of(2) {
-        progress
-      } else {
-        1.0 - progress
-      }
-    }
-    AnimationDirection::AlternateReverse => {
-      if iteration_index.is_multiple_of(2) {
-        1.0 - progress
-      } else {
-        progress
-      }
-    }
+    AnimationDirection::Normal => true,
+    AnimationDirection::Reverse => false,
+    AnimationDirection::Alternate => even,
+    AnimationDirection::AlternateReverse => !even,
   }
 }
 
@@ -872,6 +874,27 @@ mod tests {
 
     assert_eq!(paused("0ms"), 0.0);
     assert_eq!(paused("-250ms"), 0.25);
+  }
+
+  /// A step easing takes its lower step on the side the iteration's direction plays away from:
+  /// before the start played forwards, after the end played in reverse.
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-transformed-progress>
+  #[test]
+  fn a_reversed_step_takes_its_limit_from_the_playback_direction() {
+    let (style, stylesheet) = linear_animation("from { opacity: 0 } to { opacity: 1 }");
+    let reversed = |timing: &str, delay: &str, fill: &str, time| {
+      let mut style = style.clone();
+      let animation = Rc::make_mut(&mut style.misc1_data);
+
+      animation.animation_timing_function = AnimationTimingFunctions::from_css_str(timing).unwrap();
+      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animation.animation_fill_mode = AnimationFillModes::from_css_str(fill).unwrap();
+      animation.animation_direction = AnimationDirections::from_css_str("reverse").unwrap();
+      animate(style, &stylesheet, time).svg_data.opacity.0
+    };
+
+    assert_eq!(reversed("steps(2, start)", "0ms", "forwards", 1500), 0.0);
+    assert_eq!(reversed("steps(2)", "500ms", "backwards", 0), 1.0);
   }
 
   /// A linear 1000ms animation of `keyframes` on a default style.
