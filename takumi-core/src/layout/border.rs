@@ -482,17 +482,20 @@ impl BorderProperties {
   /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_painter_base.cc;l=1141>
   pub(crate) fn background_bleed_inset(&self) -> Option<Rect<f32>> {
     let sides = self.sides();
-    // Blink's `BorderEdge::ObscuresBackgroundEdge`.
+    // Blink's `BoxDecorationData::BorderObscuresBackgroundEdge`, which counts a side without a
+    // border as present, and its `ComputedStyle::HasBorder`, without which no border paints.
     let obscures_edge = sides.iter().all(|side| {
-      side.width > 0.0
-        && side.color.0[3] == u8::MAX
+      side.color.0[3] == u8::MAX
         && !matches!(
           side.style,
-          BorderStyle::None | BorderStyle::Hidden | BorderStyle::Dotted | BorderStyle::Dashed
+          BorderStyle::Hidden | BorderStyle::Dotted | BorderStyle::Dashed
         )
     });
+    let has_border = sides.iter().any(|side| {
+      side.width > 0.0 && !matches!(side.style, BorderStyle::None | BorderStyle::Hidden)
+    });
 
-    if self.is_zero() || !obscures_edge {
+    if self.is_zero() || !obscures_edge || !has_border {
       return None;
     }
 
@@ -1099,6 +1102,27 @@ mod tests {
         .background_bleed_inset()
         .map(|inset| inset.top),
       Some(1.0)
+    );
+  }
+
+  /// A side without a border neither hides nor shows the background's edge, so it leaves the
+  /// other sides to shrink the background.
+  #[test]
+  fn a_side_without_a_border_leaves_the_bleed_inset() {
+    let without = |width, style| {
+      let mut border = opaque_border(8.0, BorderStyle::Solid, SpacePair::from_single(10.0));
+
+      border.width.right = width;
+      border.style.right = style;
+      border.background_bleed_inset().map(|inset| inset.right)
+    };
+
+    assert_eq!(without(0.0, BorderStyle::None), Some(0.0));
+    assert_eq!(without(0.0, BorderStyle::Solid), Some(0.0));
+    assert_eq!(without(8.0, BorderStyle::Dotted), None);
+    assert_eq!(
+      opaque_border(0.0, BorderStyle::None, SpacePair::from_single(10.0)).background_bleed_inset(),
+      None
     );
   }
 
