@@ -8,10 +8,62 @@ use crate::{
   text::bidi_paragraph::BidiParagraph,
 };
 
+/// The elements html.css's [bidi rendering](https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering)
+/// gives `unicode-bidi: isolate`. Approximate: it leaves out `listing`, `plaintext`, `xmp`, and
+/// `dir`, which have no default style here.
+const ISOLATING_TAGS: &[&str] = &[
+  "address",
+  "blockquote",
+  "center",
+  "div",
+  "figure",
+  "figcaption",
+  "footer",
+  "form",
+  "header",
+  "hr",
+  "legend",
+  "main",
+  "p",
+  "pre",
+  "summary",
+  "article",
+  "aside",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hgroup",
+  "nav",
+  "section",
+  "search",
+  "table",
+  "caption",
+  "colgroup",
+  "col",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "td",
+  "th",
+  "dd",
+  "dl",
+  "dt",
+  "menu",
+  "ol",
+  "ul",
+  "li",
+  "bdi",
+  "output",
+];
+
 /// The declarations an element's `dir` attribute and tag give the cascade.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub(crate) struct DirectionStyle {
-  /// html.css's `[dir=ltr i], [dir=rtl i], [dir=auto i] { unicode-bidi: isolate }`.
+  /// html.css's `unicode-bidi: isolate` for a valid `dir` or an [`ISOLATING_TAGS`] element.
   pub(crate) isolate: bool,
   /// html.css's `textarea[dir=auto i], pre[dir=auto i] { unicode-bidi: plaintext }`.
   pub(crate) plaintext: bool,
@@ -52,7 +104,7 @@ impl Node {
     };
 
     DirectionStyle {
-      isolate: self.has_valid_dir_attribute(),
+      isolate: self.has_valid_dir_attribute() || is_any(ISOLATING_TAGS),
       plaintext: auto && is_any(&["textarea", "pre"]),
       auto_unicode_bidi,
       direction,
@@ -179,6 +231,17 @@ mod tests {
     assert_eq!(style("search"), Some(UnicodeBidi::Plaintext));
     assert_eq!(style("email"), Some(UnicodeBidi::Plaintext));
     assert_eq!(style("text"), Some(UnicodeBidi::Isolate));
+  }
+
+  #[test]
+  fn the_elements_html_css_lists_isolate_their_bidi() {
+    let isolate = |tag: &str| element(tag, &[], vec![]).direction_style().isolate;
+
+    assert!(isolate("div"));
+    assert!(isolate("TD"));
+    assert!(isolate("bdi"));
+    assert!(!isolate("span"));
+    assert!(!isolate("bdo"));
   }
 
   #[test]

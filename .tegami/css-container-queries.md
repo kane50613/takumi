@@ -13,7 +13,7 @@ packages:
 - Conditions take `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, and `orientation`, with range syntax, as a comma-separated list, and an `em` reads the container's font size.
 - A condition with a feature it does not know, or with `style()` or `scroll-state()`, which takumi does not support yet, holds of no container, while the other conditions in its list still can.
 - `@container` also nests in a style rule.
-- Container units such as `cqw` and `cqi` read the nearest container that contains their axis, and the viewport without one. They resolve on the element that declares them, so a container's `letter-spacing: 1cqw` reads the container around it, and its children inherit the same pixels. A list item's marker reads the item's own size when the item is a container. `MeasuredNode::of` no longer takes a container size for them.
+- Container units such as `cqw` and `cqi` read the nearest container that contains their axis, and the viewport without one. They resolve on the element that declares them, so a container's `letter-spacing: 1cqw` reads the container around it, and its children inherit the same pixels. A list item's marker reads the item's own size when the item is a container. `MeasuredNode::of` no longer takes a container size for them. `RenderNode::node_at_path_mut` is removed.
 
 ```css
 .sidebar {

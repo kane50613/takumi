@@ -15,19 +15,13 @@ use crate::style::{
 /// The `@property` rules in force, by name, shared by every element they reach.
 pub(crate) type Registrations = Arc<HashMap<String, PropertyRule>>;
 
-/// The custom properties an element resolves `var()` against, with the `@property` registrations
-/// that decide how each one inherits. As Blink's `StyleInheritedVariables` and
-/// `StyleNonInheritedVariables`, the values a child inherits sit apart from the ones that stop here,
-/// so a child shares the first and starts the second empty, each in a trie a change copies only a
-/// path of. A registered property without a value
-/// takes its initial value, as Blink's `StyleInitialData` gives it, unless it holds `None`, the
-/// guaranteed-invalid value.
+/// Blink's `StyleInheritedVariables` and `StyleNonInheritedVariables`, with their registrations.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CustomProperties {
   inherited: HashTrie<String, Option<String>>,
   /// Registered properties that do not inherit, and the element state below.
   non_inherited: HashTrie<String, Option<String>>,
-  registrations: Arc<HashMap<String, PropertyRule>>,
+  registrations: Registrations,
   /// Names a utility engine wrote as this element's own composition state.
   /// Unlike a registration, this does not reach the children.
   element_state: Arc<HashSet<String>>,
@@ -147,9 +141,7 @@ impl CustomProperties {
     self.registrations = Arc::clone(registrations);
   }
 
-  /// A copy with each registered value computed against `sizing`, if any changes: a `<length>` to
-  /// px, an `<angle>` to deg, a `<color>` to its color, and so on. A child takes the ones that do
-  /// not inherit through `inherit` alone, as Blink's `ApplyInherit` copies the computed value.
+  /// A copy with each registered value computed against `sizing`, if any changes.
   /// <https://drafts.css-houdini.org/css-properties-values-api-1/#calculation-of-computed-values>
   pub(crate) fn with_computed_values(&self, sizing: &SizingContext) -> Option<Self> {
     let mut computed: Option<Self> = None;
@@ -175,11 +167,7 @@ impl CustomProperties {
     computed
   }
 
-  /// Computes each of the `declared` names its registered syntax takes, as far as the element
-  /// needs no sizing to, and makes each it does not take invalid at computed-value time: `unset`,
-  /// so the parent's value when it inherits and the initial value otherwise, or guaranteed-invalid
-  /// for the universal syntax, as Blink's `SupportsGuaranteedInvalid`. A value `var()` has yet to
-  /// substitute into waits.
+  /// Computes each `declared` value its registered syntax takes and makes the rest invalid.
   /// <https://drafts.csswg.org/css-variables-1/#invalid-at-computed-value-time>
   pub(crate) fn enforce_syntax(&mut self, declared: &[String], parent: &Self) {
     let registrations = Arc::clone(&self.registrations);

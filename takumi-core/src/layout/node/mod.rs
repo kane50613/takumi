@@ -60,11 +60,8 @@ impl Names {
   }
 }
 
-/// The attributes a node holds in its own fields rather than in `attributes`, which builders leave
-/// out of `attributes` and [`Node::attribute`] reads back. `dir` holds only `ltr` and `rtl` as
-/// written in lowercase, and `lang` only a tag in its canonical spelling, so any other value stays
-/// in `attributes`, which [`Node::attribute`] reads first. Approximate: `style` keeps no attribute
-/// text, so `[style]` does not match.
+/// Attributes held in node fields rather than `attributes`.
+/// Approximate: `style` keeps no attribute text, so `[style]` does not match.
 const LIFTED_ATTRIBUTES: [&str; 5] = ["id", "class", "lang", "dir", "src"];
 
 /// Shared metadata stored by every renderable node.
@@ -562,12 +559,8 @@ impl Node {
     if let Some(class_name) = &self.metadata.class_name {
       attrs.push(format!("class=\"{}\"", escape_attr(class_name)));
     }
-    if let Some(dir) = &self.metadata.dir {
-      let dir_str = match dir {
-        Direction::Rtl => "rtl",
-        Direction::Ltr => "ltr",
-      };
-      attrs.push(format!("dir=\"{}\"", dir_str));
+    if let Some(dir) = self.metadata.dir {
+      attrs.push(format!("dir=\"{}\"", dir.as_str()));
     }
     if let Some(lang) = &self.metadata.lang
       && !self
@@ -827,11 +820,18 @@ pub(crate) struct NodeStyleLayers {
 }
 
 impl NodeStyleLayers {
-  /// Whether nothing but the preset styles the element beyond its matched rules.
+  /// Whether nothing but the preset and its tag's bidi isolation style the element beyond its
+  /// matched rules.
   pub(crate) fn is_preset_only(&self) -> bool {
     self.presentation.is_none()
       && self.inline.is_none()
-      && self.direction.is_empty()
+      // A valid `dir` also sets `direction`, so `isolate` alone comes from the tag, which
+      // `MatchedStyleKey` holds.
+      && DirectionStyle {
+        isolate: false,
+        ..self.direction
+      }
+      .is_empty()
       && self.lang.is_none()
   }
 }

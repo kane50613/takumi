@@ -25,59 +25,8 @@ describe("fromJsx - stylePresets overriding", () => {
       } satisfies TextNode);
     });
 
-    test("block element presets isolate their bidi as html.css does", () => {
-      const tags: (keyof typeof defaultStylePresets)[] = [
-        "address",
-        "blockquote",
-        "center",
-        "div",
-        "figure",
-        "figcaption",
-        "footer",
-        "form",
-        "header",
-        "hr",
-        "legend",
-        "main",
-        "p",
-        "pre",
-        "summary",
-        "article",
-        "aside",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "hgroup",
-        "nav",
-        "section",
-        "search",
-        "table",
-        "caption",
-        "colgroup",
-        "col",
-        "thead",
-        "tbody",
-        "tfoot",
-        "tr",
-        "td",
-        "th",
-        "dd",
-        "dl",
-        "dt",
-        "menu",
-        "ol",
-        "ul",
-        "li",
-        "bdi",
-        "output",
-      ];
-
-      for (const tag of tags) {
-        expect([tag, defaultStylePresets[tag]?.unicodeBidi]).toEqual([tag, "isolate"]);
-      }
+    test("bdo element preset overrides the bidi of its text", () => {
+      expect(defaultStylePresets.bdo?.unicodeBidi).toBe("isolate-override");
     });
 
     test("pre element preset includes white-space: pre", () => {

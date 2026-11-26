@@ -2705,16 +2705,17 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
   /// Blink's `CalculateIntrinsicBlockSize` in `ComputeGridGeometry`: the block size `rows` take, or
   /// without the items when the grid contains its block size.
   fn calculate_intrinsic_block_size(&mut self, rows: &GridTrackCollection) -> LayoutUnit {
-    if self.style.contains_block_size() {
-      return self.intrinsic_block_size_ignoring_children();
-    }
+    let rows_block_size = if self.style.contains_block_size() {
+      self.rows_block_size_ignoring_children()
+    } else {
+      rows.total_set_span_size().unwrap_or_default()
+    };
 
-    rows.total_set_span_size().unwrap_or_default() + self.border_padding.block_sum()
+    rows_block_size + self.border_padding.block_sum()
   }
 
-  /// Blink's `ComputeIntrinsicBlockSizeIgnoringChildren`: the block size a block-size-contained
-  /// grid's rows take without its items.
-  fn intrinsic_block_size_ignoring_children(&mut self) -> LayoutUnit {
+  /// Blink's `ComputeIntrinsicBlockSizeIgnoringChildren` without the border and padding.
+  fn rows_block_size_ignoring_children(&mut self) -> LayoutUnit {
     let mut sizing_tree = self.build_grid_sizing_tree_ignoring_children();
 
     self.initialize_track_sizes(&mut sizing_tree, 0, None, Some(ForRows));
@@ -2731,7 +2732,6 @@ impl<'t, 'r> GridLayoutAlgorithm<'t, 'r> {
       .rows
       .total_set_span_size()
       .unwrap_or_default()
-      + self.border_padding.block_sum()
   }
 
   /// Blink's `ComputeGridGeometry`: the sized grid, the out-of-flow children, and the intrinsic block

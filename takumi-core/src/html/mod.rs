@@ -66,97 +66,80 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("datalist", "display:none"),
   ("template", "display:none"),
   ("body", "margin:8px;display:block"),
-  (
-    "p",
-    "margin-top:1em;margin-bottom:1em;display:block;unicode-bidi:isolate",
-  ),
+  ("p", "margin-top:1em;margin-bottom:1em;display:block"),
   (
     "blockquote",
-    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block;unicode-bidi:isolate",
+    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block",
   ),
   (
     "figure",
-    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block;unicode-bidi:isolate",
+    "margin-top:1em;margin-bottom:1em;margin-left:40px;margin-right:40px;display:block",
   ),
-  ("figcaption", "display:block;unicode-bidi:isolate"),
-  (
-    "address",
-    "font-style:italic;display:block;unicode-bidi:isolate",
-  ),
-  ("article", "display:block;unicode-bidi:isolate"),
-  ("aside", "display:block;unicode-bidi:isolate"),
-  ("footer", "display:block;unicode-bidi:isolate"),
-  ("header", "display:block;unicode-bidi:isolate"),
-  ("hgroup", "display:block;unicode-bidi:isolate"),
-  ("main", "display:block;unicode-bidi:isolate"),
-  ("nav", "display:block;unicode-bidi:isolate"),
-  ("section", "display:block;unicode-bidi:isolate"),
-  (
-    "center",
-    "text-align:center;display:block;unicode-bidi:isolate",
-  ),
+  ("figcaption", "display:block"),
+  ("address", "font-style:italic;display:block"),
+  ("article", "display:block"),
+  ("aside", "display:block"),
+  ("footer", "display:block"),
+  ("header", "display:block"),
+  ("hgroup", "display:block"),
+  ("main", "display:block"),
+  ("nav", "display:block"),
+  ("section", "display:block"),
+  ("center", "text-align:center;display:block"),
   (
     "hr",
-    "margin-top:0.5em;margin-bottom:0.5em;margin-left:auto;margin-right:auto;border-width:1px;display:block;unicode-bidi:isolate",
+    "margin-top:0.5em;margin-bottom:0.5em;margin-left:auto;margin-right:auto;border-width:1px;display:block",
   ),
   (
     "ul",
-    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc;unicode-bidi:isolate",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc",
   ),
   (
     "ol",
-    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:decimal;unicode-bidi:isolate",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:decimal",
   ),
   (
     "menu",
-    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc;unicode-bidi:isolate",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc",
   ),
-  ("li", "display:list-item;unicode-bidi:isolate"),
-  (
-    "dl",
-    "margin-top:1em;margin-bottom:1em;display:block;unicode-bidi:isolate",
-  ),
-  ("dt", "display:block;unicode-bidi:isolate"),
-  ("dd", "margin-left:40px;display:block;unicode-bidi:isolate"),
-  ("form", "display:block;unicode-bidi:isolate"),
+  ("li", "display:list-item"),
+  ("dl", "margin-top:1em;margin-bottom:1em;display:block"),
+  ("dt", "display:block"),
+  ("dd", "margin-left:40px;display:block"),
+  ("form", "display:block"),
   (
     "fieldset",
     "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block",
   ),
-  (
-    "legend",
-    "padding-left:2px;padding-right:2px;display:block;unicode-bidi:isolate",
-  ),
+  ("legend", "padding-left:2px;padding-right:2px;display:block"),
   ("details", "display:block"),
-  ("summary", "display:block;unicode-bidi:isolate"),
-  ("search", "display:block;unicode-bidi:isolate"),
+  ("summary", "display:block"),
+  ("search", "display:block"),
   (
     "h1",
-    "font-size:2em;margin-top:0.67em;margin-bottom:0.67em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "font-size:2em;margin-top:0.67em;margin-bottom:0.67em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
   (
     "h2",
-    "font-size:1.5em;margin-top:0.83em;margin-bottom:0.83em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "font-size:1.5em;margin-top:0.83em;margin-bottom:0.83em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
   (
     "h3",
-    "font-size:1.17em;margin-top:1em;margin-bottom:1em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "font-size:1.17em;margin-top:1em;margin-bottom:1em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
   (
     "h4",
-    "margin-top:1.33em;margin-bottom:1.33em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "margin-top:1.33em;margin-bottom:1.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
   (
     "h5",
-    "font-size:0.83em;margin-top:1.67em;margin-bottom:1.67em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "font-size:0.83em;margin-top:1.67em;margin-bottom:1.67em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
   (
     "h6",
-    "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block;unicode-bidi:isolate",
+    "font-size:0.67em;margin-top:2.33em;margin-bottom:2.33em;margin-left:0;margin-right:0;font-weight:bold;display:block",
   ),
-  ("bdi", "unicode-bidi:isolate"),
   ("bdo", "unicode-bidi:isolate-override"),
-  ("output", "unicode-bidi:isolate"),
   ("u", "text-decoration:underline"),
   ("ins", "text-decoration:underline"),
   ("strong", "font-weight:bolder"),
@@ -170,7 +153,7 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("samp", "font-family:monospace"),
   (
     "pre",
-    "font-family:monospace;white-space:pre;margin:1em 0;display:block;unicode-bidi:isolate",
+    "font-family:monospace;white-space:pre;margin:1em 0;display:block",
   ),
   ("mark", "background-color:yellow;color:black"),
   ("big", "font-size:larger"),
@@ -179,44 +162,32 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("del", "text-decoration:line-through"),
   ("sub", "font-size:smaller;vertical-align:sub"),
   ("sup", "font-size:smaller;vertical-align:super"),
-  ("div", "display:block;unicode-bidi:isolate"),
+  ("div", "display:block"),
   (
     "table",
-    "display:table;box-sizing:border-box;border-spacing:2px;unicode-bidi:isolate",
+    "display:table;box-sizing:border-box;border-spacing:2px",
   ),
   (
     "thead",
-    "display:table-header-group;vertical-align:middle;break-inside:avoid;unicode-bidi:isolate",
+    "display:table-header-group;vertical-align:middle;break-inside:avoid",
   ),
-  (
-    "tbody",
-    "display:table-row-group;vertical-align:middle;unicode-bidi:isolate",
-  ),
+  ("tbody", "display:table-row-group;vertical-align:middle"),
   (
     "tfoot",
-    "display:table-footer-group;vertical-align:middle;break-inside:avoid;unicode-bidi:isolate",
+    "display:table-footer-group;vertical-align:middle;break-inside:avoid",
   ),
-  (
-    "tr",
-    "display:table-row;vertical-align:inherit;unicode-bidi:isolate",
-  ),
+  ("tr", "display:table-row;vertical-align:inherit"),
   (
     "td",
-    "display:table-cell;padding:1px;vertical-align:inherit;unicode-bidi:isolate",
+    "display:table-cell;padding:1px;vertical-align:inherit",
   ),
   (
     "th",
-    "display:table-cell;padding:1px;vertical-align:inherit;font-weight:bold;text-align:center;unicode-bidi:isolate",
+    "display:table-cell;padding:1px;vertical-align:inherit;font-weight:bold;text-align:center",
   ),
-  (
-    "caption",
-    "display:table-caption;text-align:center;unicode-bidi:isolate",
-  ),
-  (
-    "colgroup",
-    "display:table-column-group;unicode-bidi:isolate",
-  ),
-  ("col", "display:table-column;unicode-bidi:isolate"),
+  ("caption", "display:table-caption;text-align:center"),
+  ("colgroup", "display:table-column-group"),
+  ("col", "display:table-column"),
   // `html.css` for a text field, which `input_preset` picks by the element's `type`.
   // Approximate: Blink's `-webkit-small-control` resolves to Arial, which a document rarely loads,
   // so this names `system-ui`, and a document that loads Arial still draws its fields without it.
@@ -393,9 +364,7 @@ impl ParsedHtml {
     for index in 0..=self.css.len() {
       while let Some(link) = links.next_if(|link| link.css_index == index) {
         if let Some(text) = fetch(link) {
-          let css_text = in_media(link.media.as_deref(), text.clone());
-
-          css.push(owned_css(link.owner, &text, css_text));
+          css.push(sheet_css(link.owner, link.media.as_deref(), &text));
         }
       }
 
@@ -424,17 +393,14 @@ impl StyleElement {
   /// The text, inside an `@media` rule when the element has a `media` attribute, between the
   /// owner it names and the end of that owner when it may hold an `@scope` rule.
   pub fn css(&self) -> String {
-    owned_css(
-      self.owner,
-      &self.text,
-      in_media(self.media.as_deref(), self.text.clone()),
-    )
+    sheet_css(self.owner, self.media.as_deref(), &self.text)
   }
 }
 
-/// `css`, the CSS of a sheet whose source is `text`, between the owner it names and the end of
-/// that owner when it may hold an `@scope` rule.
-fn owned_css(owner: Option<u32>, text: &str, css: String) -> String {
+/// `text` inside an `@media` rule for `media`, owned by `owner` when it may hold an `@scope` rule.
+fn sheet_css(owner: Option<u32>, media: Option<&str>, text: &str) -> String {
+  let css = in_media(media, text.to_owned());
+
   match owner {
     // An at-keyword starts with a literal `@`, however its name is escaped.
     Some(owner) if text.contains('@') => {
@@ -1093,7 +1059,7 @@ fn qualified_name(attr: &Attribute) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{StyleDeclaration, UnicodeBidi};
+  use crate::style::StyleDeclaration;
 
   fn parse(source: &str) -> Node {
     from_html(source, FromHtmlOptions::default()).unwrap()
@@ -1189,74 +1155,6 @@ mod tests {
     let block = StyleDeclarationBlock::parse_loosy("font-size:64px;width:wider;color:red");
 
     assert_eq!(block.len(), 2);
-  }
-
-  /// html.css's bidi rendering isolates each element its rule lists.
-  /// <https://html.spec.whatwg.org/multipage/rendering.html#bidi-rendering>
-  #[test]
-  fn block_presets_isolate_their_bidi() {
-    let presets = StylePresets::default();
-
-    for tag in [
-      "address",
-      "blockquote",
-      "center",
-      "div",
-      "figure",
-      "figcaption",
-      "footer",
-      "form",
-      "header",
-      "hr",
-      "legend",
-      "main",
-      "p",
-      "pre",
-      "summary",
-      "article",
-      "aside",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "hgroup",
-      "nav",
-      "section",
-      "search",
-      "table",
-      "caption",
-      "colgroup",
-      "col",
-      "thead",
-      "tbody",
-      "tfoot",
-      "tr",
-      "td",
-      "th",
-      "dd",
-      "dl",
-      "dt",
-      "menu",
-      "ol",
-      "ul",
-      "li",
-      "bdi",
-      "output",
-    ] {
-      assert!(
-        presets.get(tag).is_some_and(|style| {
-          style.declarations.iter().any(|declaration| {
-            matches!(
-              declaration,
-              StyleDeclaration::UnicodeBidi(UnicodeBidi::Isolate)
-            )
-          })
-        }),
-        "{tag}"
-      );
-    }
   }
 
   #[test]

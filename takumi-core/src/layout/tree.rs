@@ -2329,15 +2329,6 @@ impl RenderNode {
     Some(current)
   }
 
-  /// Mutable [`node_at_path`](Self::node_at_path).
-  pub fn node_at_path_mut(&mut self, path: &[usize]) -> Option<&mut RenderNode> {
-    let mut current = self;
-    for &index in path {
-      current = current.children.as_deref_mut()?.get_mut(index)?;
-    }
-    Some(current)
-  }
-
   pub(crate) fn is_inline_level(&self) -> bool {
     self.context.style.base_data.display.is_inline_level()
   }
@@ -3511,7 +3502,14 @@ impl RenderContext {
     // style cannot skip the note.
     let key =
       (layers.is_preset_only() && !is_document_root && self.sizing.current_color_read.is_none())
-        .then(|| MatchedStyleKey::new(matched, &self.sizing, self.current_color));
+        .then(|| {
+          MatchedStyleKey::new(
+            matched,
+            layers.direction.isolate,
+            &self.sizing,
+            self.current_color,
+          )
+        });
     let cache = self.matched_styles();
 
     if let Some(key) = &key
