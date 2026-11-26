@@ -1873,7 +1873,7 @@ define_style! {
     }
     /// Blink's `svg->svgmisc` field group.
     svg_misc_data: StyleSvgMiscData {
-      baseline_shift: BaselineShift where mode = SvgAttribute,
+      baseline_shift: BaselineShift,
       flood_color: ColorInput = ColorInput::Value(Color::black()),
       flood_opacity: PercentageNumber,
       lighting_color: ColorInput = ColorInput::Value(Color::white()),
@@ -2059,7 +2059,7 @@ define_style! {
       stroke: SvgPaint where inherit = true = SvgPaint::None,
       stroke_width: Length where inherit = true where non_negative = true where mode = SvgAttribute = Length::Px(1.0),
       stroke_opacity: PercentageNumber where inherit = true,
-      stroke_dasharray: Option<StrokeDasharray> where inherit = true where mode = SvgAttribute,
+      stroke_dasharray: Option<StrokeDasharray> where inherit = true,
       stroke_dashoffset: Length where inherit = true where mode = SvgAttribute = Length::zero(),
       stroke_linecap: LineCap where inherit = true,
       stroke_miterlimit: StrokeMiterlimit where inherit = true,

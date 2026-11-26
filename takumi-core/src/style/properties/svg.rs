@@ -185,8 +185,8 @@ impl StrokeDasharray {
     &self.0
   }
 
-  fn item<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Length> {
-    let length = Length::from_css_in(input, mode)?;
+  fn item<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Length> {
+    let length = Length::from_css_in(input, ParseMode::SvgAttribute)?;
 
     if matches!(length, Length::Auto) || length.is_negative() {
       return Err(ValueError::invalid("a dash must be a non-negative length"));
@@ -220,13 +220,14 @@ impl Animatable for StrokeDasharray {
 }
 
 impl<'i> FromCss<'i> for StrokeDasharray {
-  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
-    let mut lengths = vec![Self::item(input, mode)?];
+  /// Parses in Blink's `kSVGAttributeMode` in any mode, as `StrokeDasharray::ParseSingleValue`.
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
+    let mut lengths = vec![Self::item(input)?];
 
     while let Ok(length) = input.try_parse(|input| {
       let _ = input.try_parse(Parser::expect_comma);
 
-      Self::item(input, mode)
+      Self::item(input)
     }) {
       lengths.push(length);
     }
@@ -739,7 +740,8 @@ impl Animatable for BaselineShift {
 }
 
 impl<'i> FromCss<'i> for BaselineShift {
-  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+  /// Parses in Blink's `kSVGAttributeMode` in any mode, as `BaselineShift::ParseSingleValue`.
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     for (keyword, shift) in [
       ("baseline", Self::default()),
       ("sub", Self::Sub),
@@ -750,7 +752,7 @@ impl<'i> FromCss<'i> for BaselineShift {
       }
     }
 
-    let length = Length::from_css_in(input, mode)?;
+    let length = Length::from_css_in(input, ParseMode::SvgAttribute)?;
 
     if matches!(length, Length::Auto) {
       return Err(ValueError::invalid("baseline-shift takes no `auto`"));
@@ -920,5 +922,23 @@ impl ToCss for SvgPath {
     }
 
     dest.write_str("\")")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn svg_length_values_take_a_bare_number_in_css_text() {
+    assert_eq!(
+      StrokeDasharray::from_css_str("5 3"),
+      Ok(StrokeDasharray::new([Length::Px(5.0), Length::Px(3.0)]))
+    );
+    assert_eq!(
+      BaselineShift::from_css_str("5"),
+      Ok(BaselineShift::Length(Length::Px(5.0)))
+    );
   }
 }
