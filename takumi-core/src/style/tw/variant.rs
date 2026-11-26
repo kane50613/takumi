@@ -1,7 +1,11 @@
 //! Tailwind's variants, such as `md:`, `first:`, and `before:`: the conditions a utility applies
 //! under, and where they sort it.
 
-use std::{cmp::Ordering, collections::HashMap, sync::Arc};
+use std::{
+  cmp::{Ordering, Reverse},
+  collections::HashMap,
+  sync::Arc,
+};
 
 use cssparser::Parser;
 use selectors::parser::{ParseRelative, Selector, SelectorList};
@@ -31,8 +35,8 @@ pub(crate) struct Breakpoint {
   below: bool,
   /// Whether a `not-` run flipped `below`.
   negated: bool,
-  /// Whether a `not-` run wraps it, so it sorts in Tailwind's `not` group.
-  in_not: bool,
+  /// How many `not-` prefixes wrap it, which sort it in Tailwind's `not` group when any.
+  nots: usize,
 }
 
 impl Breakpoint {
@@ -58,7 +62,7 @@ impl Breakpoint {
         token: value.into(),
         below,
         negated: false,
-        in_not: false,
+        nots: 0,
       });
     }
 
@@ -80,17 +84,19 @@ impl Breakpoint {
       token: value.into(),
       below,
       negated: false,
-      in_not: false,
+      nots: 0,
     })
   }
 
   /// The breakpoint a `not-` run makes of this one: Tailwind's `@media not (width >= …)` holds
   /// exactly where the opposite `max-*` or `min-*` breakpoint does.
-  fn under_not(self, negated: bool) -> Self {
+  fn under_not(self, nots: usize) -> Self {
+    let negated = nots % 2 == 1;
+
     Self {
       below: self.below != negated,
       negated,
-      in_not: true,
+      nots,
       ..self
     }
   }
@@ -320,6 +326,8 @@ pub(crate) enum Variant {
   Structural {
     pseudo_class: String,
     rank: u8,
+    /// Its sort key in Tailwind's `not` group, under `not-`.
+    not_order: Option<NotOrder>,
   },
   /// An arbitrary variant, `[&:nth-child(4)]`, which sorts after every registered one.
   Arbitrary(String),
@@ -397,16 +405,19 @@ impl Variant {
     }
 
     if let Some(pseudo_class) = pseudo_class(token) {
+      let (base, nots) = strip_negations(token);
+
       return Some(Self::Structural {
         rank: structural_rank(token),
         pseudo_class,
+        not_order: (nots > 0).then(|| NotInner::Structural(structural_rank(base)).under_nots(nots)),
       });
     }
 
-    let (base, negated) = strip_negations(token);
+    let (base, nots) = strip_negations(token);
 
-    if base.len() != token.len() {
-      return Self::parse(base)?.under_not(negated);
+    if nots > 0 {
+      return Self::parse(base)?.under_not(nots);
     }
 
     Breakpoint::parse(token).map(Self::Breakpoint)
@@ -415,19 +426,21 @@ impl Variant {
   /// The variant a `not-` run makes of this at-rule variant, negating it when `negated`, or
   /// `None` for one Tailwind's `not` does not negate here. Approximate: Tailwind also negates a
   /// container query and `ltr:` and `rtl:`, and sorts every variant under `not-` in its group.
-  fn under_not(self, negated: bool) -> Option<Self> {
+  fn under_not(self, nots: usize) -> Option<Self> {
+    let negated = nots % 2 == 1;
+
     match self {
-      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.under_not(negated))),
+      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.under_not(nots))),
       Self::Late {
         condition: LateCondition::Media(query),
         rank,
       } => Some(Self::NotMedia {
         query: negate_query(query, negated),
-        order: NotOrder::Late(rank),
+        order: NotInner::Late(rank).under_nots(nots),
       }),
       Self::Preference { query, rank } => Some(Self::NotMedia {
         query: negate_query(query, negated),
-        order: NotOrder::Preference(rank),
+        order: NotInner::Preference(rank).under_nots(nots),
       }),
       _ if negated => None,
       variant => Some(variant),
@@ -444,13 +457,31 @@ fn negate_query(query: &str, negated: bool) -> String {
   query.to_owned()
 }
 
-/// Where a media query or breakpoint variant under `not-` sorts in Tailwind's `not` group: by
-/// the inner variant, a preference first, then a breakpoint, then a late variant.
+/// Where a variant under `not-` sorts in Tailwind's `not` group, which compares the compounds
+/// nested in it: one under more `not-` prefixes first, then by the inner variant.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum NotOrder {
+pub(crate) struct NotOrder {
+  nesting: Reverse<usize>,
+  inner: NotInner,
+}
+
+/// The variant a `not-` run wraps: a structural variant first, then a preference, a breakpoint,
+/// and a late variant.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum NotInner {
+  Structural(u8),
   Preference(u8),
   Breakpoint(BreakpointOrder),
   Late(u8),
+}
+
+impl NotInner {
+  fn under_nots(self, nots: usize) -> NotOrder {
+    NotOrder {
+      nesting: Reverse(nots),
+      inner: self,
+    }
+  }
 }
 
 /// Where a structural variant sorts. Approximate: values of one variant keep their order.
@@ -481,8 +512,8 @@ pub(super) struct Variants {
   pub(super) container: Vec<ContainerVariant>,
   /// The media queries the late and preference variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
-  /// The sort keys of the media query variants under `not-`.
-  not_media: Vec<NotOrder>,
+  /// The sort keys of the media query and structural variants under `not-`.
+  not_orders: Vec<NotOrder>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
   /// The compounds of the arbitrary variants.
@@ -513,7 +544,7 @@ impl Variants {
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
       Variant::Breakpoint(breakpoint) => {
-        if breakpoint.in_not {
+        if breakpoint.nots > 0 {
           self.ranks |= 1 << NOT_RANK;
         }
         self.breakpoint.push(breakpoint);
@@ -538,11 +569,16 @@ impl Variants {
         self
           .media
           .push(MediaQueryList::parse(&mut Parser::new(&query)).ok()?);
-        self.not_media.push(order);
+        self.not_orders.push(order);
         self.ranks |= 1 << NOT_RANK;
       }
-      Variant::Structural { pseudo_class, rank } => {
+      Variant::Structural {
+        pseudo_class,
+        rank,
+        not_order,
+      } => {
         self.pseudo_classes.push_str(&pseudo_class);
+        self.not_orders.extend(not_order);
         self.ranks |= 1 << rank;
       }
       Variant::Arbitrary(compound) => {
@@ -592,7 +628,7 @@ impl Variants {
         self
           .breakpoint
           .iter()
-          .filter(|breakpoint| !breakpoint.in_not)
+          .filter(|breakpoint| breakpoint.nots == 0)
           .map(Breakpoint::order),
       ),
       preference: self.preference,
@@ -601,9 +637,9 @@ impl Variants {
         self
           .breakpoint
           .iter()
-          .filter(|breakpoint| breakpoint.in_not)
-          .map(|breakpoint| NotOrder::Breakpoint(breakpoint.order()))
-          .chain(self.not_media.iter().cloned()),
+          .filter(|breakpoint| breakpoint.nots > 0)
+          .map(|breakpoint| NotInner::Breakpoint(breakpoint.order()).under_nots(breakpoint.nots))
+          .chain(self.not_orders.iter().cloned()),
       ),
     }
   }
@@ -635,23 +671,28 @@ pub(crate) struct VariantOrder {
   not: Vec<NotOrder>,
 }
 
-/// The variant under a run of `not-` prefixes, and whether the run negates it: Tailwind's `not`
-/// compounds with itself, and each pair cancels out.
-fn strip_negations(token: &str) -> (&str, bool) {
+/// The variant under a run of `not-` prefixes, and how many: Tailwind's `not` compounds with
+/// itself, and each pair cancels out.
+fn strip_negations(token: &str) -> (&str, usize) {
   let base = token.trim_start_matches("not-");
-  let negations = (token.len() - base.len()) / "not-".len();
 
-  (base, negations % 2 == 1)
+  (base, (token.len() - base.len()) / "not-".len())
 }
 
 /// The selector a structural, form state, or attribute variant compiles to, under any `not-`
 /// prefixes, or `None` for any other variant.
 fn pseudo_class(variant: &str) -> Option<String> {
-  match strip_negations(variant) {
-    (base, true) if UNREACHED_STATES.contains(&base) => Some(format!(":not(:{base})")),
-    (base, true) => Some(format!(":not({})", element_pseudo_class(base)?)),
-    (base, false) => element_pseudo_class(base),
+  let (base, nots) = strip_negations(variant);
+
+  if nots % 2 == 0 {
+    return element_pseudo_class(base);
   }
+
+  if UNREACHED_STATES.contains(&base) {
+    return Some(format!(":not(:{base})"));
+  }
+
+  Some(format!(":not({})", element_pseudo_class(base)?))
 }
 
 /// The selector a structural, form state, or attribute variant without `not-` compiles to.

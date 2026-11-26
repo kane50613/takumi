@@ -2417,6 +2417,10 @@ fn test_not_variants_sort_in_the_not_group() {
   assert!(order("not-not-md:w-4") < order("sm:w-4"));
   assert!(order("not-sm:w-4") < order("not-dark:w-4"));
   assert!(order("not-motion-safe:w-4") < order("not-sm:w-4"));
+  assert!(order("not-not-dark:w-4") < order("not-sm:w-4"));
+  assert!(order("not-not-sm:w-4") < order("not-motion-safe:w-4"));
+  assert!(order("not-enabled:w-4") < order("not-disabled:w-4"));
+  assert!(order("not-first:w-4") < order("not-motion-safe:w-4"));
 }
 
 #[test]
