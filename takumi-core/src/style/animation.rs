@@ -94,7 +94,7 @@ impl<'s> ElementAnimations<'s> {
 
     for animation in animations {
       let underlying = style.clone();
-      let keyframes = ResolvedKeyframes::new(&animation.keyframes, &underlying);
+      let keyframes = ResolvedKeyframes::new(animation.keyframes, &underlying);
       let mut animated = animation.longhands;
 
       animated.intersect(longhands);
