@@ -7,7 +7,8 @@ use serde::{
 
 use crate::{
   layout::node::{
-    ImageData, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, NodeMetadata, TextData,
+    ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Names, Node, NodeKind, NodeMetadata,
+    TextData,
   },
   style::{Lang, ParsedValues, Style},
 };
@@ -176,43 +177,36 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
   }
 
   fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-    let mut node_type = None;
-    let mut metadata = NodeMetadata::default();
-    let mut children = None;
-    let mut text = None;
-    let mut src = None;
-    let mut width = None;
-    let mut height = None;
-    let mut lang = None;
+    let mut fields = NodeFields::default();
 
     while let Some(field) = map.next_key::<NodeField>()? {
       // Once `type` is read, a key another node type owns is skipped unread.
-      let owns = |kind: NodeType| node_type.is_none_or(|known| known == kind);
+      let owns = |kind: NodeType| fields.node_type.is_none_or(|known| known == kind);
 
       match field {
         _ if field.is_metadata() && !self.reads_metadata => {
           map.next_value::<IgnoredAny>()?;
         }
-        NodeField::Type => node_type = Some(map.next_value()?),
+        NodeField::Type => fields.node_type = Some(map.next_value()?),
         NodeField::Children if owns(NodeType::Container) => {
-          children = map.next_value_seed(Children {
+          fields.children = map.next_value_seed(Children {
             depth: self.depth + 1,
             names: self.names,
           })?;
         }
-        NodeField::Text if owns(NodeType::Text) => text = Some(map.next_value()?),
-        NodeField::Src if owns(NodeType::Image) => src = Some(map.next_value()?),
-        NodeField::Width if owns(NodeType::Image) => width = map.next_value()?,
-        NodeField::Height if owns(NodeType::Image) => height = map.next_value()?,
+        NodeField::Text if owns(NodeType::Text) => fields.text = Some(map.next_value()?),
+        NodeField::Src if owns(NodeType::Image) => fields.src = Some(map.next_value()?),
+        NodeField::Width if owns(NodeType::Image) => fields.width = map.next_value()?,
+        NodeField::Height if owns(NodeType::Image) => fields.height = map.next_value()?,
         NodeField::TagName => {
-          metadata.tag_name = map
+          fields.metadata.tag_name = map
             .next_value::<Option<Box<str>>>()?
             .map(|name| self.names.get(&name));
         }
-        NodeField::ClassName => metadata.class_name = map.next_value()?,
-        NodeField::Id => metadata.id = map.next_value()?,
+        NodeField::ClassName => fields.metadata.class_name = map.next_value()?,
+        NodeField::Id => fields.metadata.id = map.next_value()?,
         NodeField::Attributes => {
-          metadata.attributes = map
+          fields.metadata.attributes = map
             .next_value::<Option<BTreeMap<Box<str>, Box<str>>>>()?
             .map(|attributes| {
               attributes
@@ -221,54 +215,78 @@ impl<'de> Visitor<'de> for NodeVisitor<'_> {
                 .collect()
             });
         }
-        NodeField::Preset => metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new),
-        NodeField::Style => metadata.style = map.next_value()?,
-        NodeField::Tw => metadata.tw = map.next_value()?,
-        NodeField::Dir => metadata.dir = map.next_value()?,
-        NodeField::Lang => lang = map.next_value::<Option<Box<str>>>()?,
+        NodeField::Preset => {
+          fields.metadata.preset = map.next_value::<Option<Style>>()?.map(Arc::new);
+        }
+        NodeField::Style => fields.metadata.style = map.next_value()?,
+        NodeField::Tw => fields.metadata.tw = map.next_value()?,
+        NodeField::Dir => fields.metadata.dir = map.next_value()?,
+        NodeField::Lang => fields.lang = map.next_value::<Option<Box<str>>>()?,
         _ => {
           map.next_value::<IgnoredAny>()?;
         }
       }
     }
 
-    if let Some(text) = lang {
+    fields.into_node(self.names).map_err(Error::missing_field)
+  }
+}
+
+/// What the keys of a node object set.
+#[derive(Default)]
+struct NodeFields {
+  node_type: Option<NodeType>,
+  metadata: NodeMetadata,
+  children: Option<Vec<Node>>,
+  text: Option<String>,
+  src: Option<ImageSourceInput>,
+  width: Option<f32>,
+  height: Option<f32>,
+  lang: Option<Box<str>>,
+}
+
+impl NodeFields {
+  /// The node they make, or the key it lacks.
+  fn into_node(mut self, names: &Names) -> Result<(NodeMetadata, NodeKind), &'static str> {
+    if let Some(text) = self.lang {
       let (lang, keeps_text) = Lang::from_attribute(&text);
-      let has_lang_attribute = metadata
+      let has_lang_attribute = self
+        .metadata
         .attributes
         .iter()
         .flatten()
         .any(|(name, _)| name.as_ref() == "lang");
 
-      metadata.lang = lang;
+      self.metadata.lang = lang;
       if keeps_text && !has_lang_attribute {
-        metadata.attributes = Some(
-          metadata
+        self.metadata.attributes = Some(
+          self
+            .metadata
             .attributes
             .take()
             .into_iter()
             .flatten()
-            .chain([(self.names.get("lang"), text)])
+            .chain([(names.get("lang"), text)])
             .collect(),
         );
       }
     }
 
-    let kind = match node_type.ok_or_else(|| Error::missing_field("type"))? {
+    let kind = match self.node_type.ok_or("type")? {
       NodeType::Container => NodeKind::Container {
-        children: children.unwrap_or_default(),
+        children: self.children.unwrap_or_default(),
       },
       NodeType::Image => NodeKind::Image(ImageData {
-        src: src.ok_or_else(|| Error::missing_field("src"))?,
-        width,
-        height,
+        src: self.src.ok_or("src")?,
+        width: self.width,
+        height: self.height,
       }),
       NodeType::Text => NodeKind::Text(TextData {
-        text: text.ok_or_else(|| Error::missing_field("text"))?,
+        text: self.text.ok_or("text")?,
       }),
     };
 
-    Ok((metadata, kind))
+    Ok((self.metadata, kind))
   }
 }
 

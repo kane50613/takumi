@@ -907,51 +907,9 @@ macro_rules! define_style {
               let mut style = Style::default();
 
               while let Some(key) = map.next_key::<Cow<'de, str>>()? {
-                let property = PropertyId::from_camel_case(&key);
                 let css_input = map.next_value_seed(CssValueSeed)?;
 
-                // `undefined` / `null` values are how JS callers express "no declaration".
-                if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
-                  continue;
-                }
-
-                if property == PropertyId::Ignored {
-                  style.declarations.ignored.push(IgnoredDeclaration::new(
-                    key,
-                    &css_input.to_string(),
-                    IgnoredReason::UnknownProperty,
-                    DeclarationOrigin::StyleObject,
-                  ));
-                  continue;
-                }
-
-                let (css_input, important) = split_important(css_input);
-
-                if matches!(property, PropertyId::Custom) {
-                  if !matches!(css_input, CssInput::Unexpected(_)) {
-                    style.declarations.push(
-                      StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
-                      important,
-                    );
-                  }
-                } else {
-                  // An invalid value drops only its declaration, as CSS 2.2 4.2 rules for illegal values:
-                  // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
-                  match ParsedValues::parse(property, css_input) {
-                    Ok(declarations) => {
-                      style.declarations.append_parsed_declarations(declarations, important);
-                    }
-                    Err(error) => {
-                      log::warn!(target: "takumi::style", "ignoring {}", error.message(&key));
-                      style.declarations.ignored.push(IgnoredDeclaration::new(
-                        key.as_ref(),
-                        &error.value(),
-                        IgnoredReason::InvalidValue,
-                        DeclarationOrigin::StyleObject,
-                      ));
-                    }
-                  }
-                }
+                style.declarations.push_object_entry(key, css_input);
               }
 
               Ok(style)
@@ -3180,6 +3138,54 @@ impl StyleDeclarationBlock {
     }
     self.important.push(self.declarations.len(), important);
     self.declarations.push(declaration);
+  }
+
+  /// Appends what the `key: value` entry of a style object declares, or records it as ignored.
+  fn push_object_entry(&mut self, key: Cow<'_, str>, css_input: CssInput<'_>) {
+    // `undefined` / `null` values are how JS callers express "no declaration".
+    if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
+      return;
+    }
+
+    let property = PropertyId::from_camel_case(&key);
+
+    if property == PropertyId::Ignored {
+      self.ignored.push(IgnoredDeclaration::new(
+        key,
+        &css_input.to_string(),
+        IgnoredReason::UnknownProperty,
+        DeclarationOrigin::StyleObject,
+      ));
+      return;
+    }
+
+    let (css_input, important) = split_important(css_input);
+
+    if matches!(property, PropertyId::Custom) {
+      if !matches!(css_input, CssInput::Unexpected(_)) {
+        self.push(
+          StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
+          important,
+        );
+      }
+    } else {
+      // An invalid value drops only its declaration, as CSS 2.2 4.2 rules for illegal values:
+      // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
+      match ParsedValues::parse(property, css_input) {
+        Ok(declarations) => {
+          self.append_parsed_declarations(declarations, important);
+        }
+        Err(error) => {
+          log::warn!(target: "takumi::style", "ignoring {}", error.message(&key));
+          self.ignored.push(IgnoredDeclaration::new(
+            key.as_ref(),
+            &error.value(),
+            IgnoredReason::InvalidValue,
+            DeclarationOrigin::StyleObject,
+          ));
+        }
+      }
+    }
   }
 
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
