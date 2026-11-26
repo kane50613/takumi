@@ -2115,3 +2115,17 @@ fn an_unsupported_container_function_leaves_the_rest_of_its_list() {
     300.0
   );
 }
+
+/// A query that names its container alone holds inside any box of that name, whatever its
+/// `container-type`, as Blink's `ConsumeContainerQuery` takes a name with no condition.
+#[test]
+fn a_container_query_of_a_name_alone_holds_inside_that_name() {
+  assert_eq!(
+    target_in_card(
+      ".card { container-name: card; width: 300px }
+       @container card { .target { width: 50px } }
+       @container other { .target { width: 60px } }"
+    ),
+    50.0
+  );
+}

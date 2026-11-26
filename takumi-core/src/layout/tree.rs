@@ -2536,15 +2536,17 @@ impl RenderNode {
         };
         let style = &render_node.context.style.misc_data;
 
-        (style.container_type != ContainerType::Normal).then(|| {
-          (
-            NodeId::new(index),
-            source_order,
-            style.container_type,
-            style.container_name.clone(),
-            QueryFont::of(&render_node.context.sizing),
-          )
-        })
+        (style.container_type != ContainerType::Normal || !style.container_name.0.is_empty()).then(
+          || {
+            (
+              NodeId::new(index),
+              source_order,
+              style.container_type,
+              style.container_name.clone(),
+              QueryFont::of(&render_node.context.sizing),
+            )
+          },
+        )
       })
       .collect();
     let results = tree.into_results();

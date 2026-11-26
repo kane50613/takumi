@@ -632,31 +632,44 @@ impl ContainerQuery {
 }
 
 /// One condition of a container query: the name of the container it asks, if it names one, and a
-/// size condition on that container.
+/// size condition on that container, which a query that names its container may leave out, as
+/// Blink's `ConsumeContainerQuery` takes a name alone.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ContainerCondition {
   pub(crate) name: Option<Box<str>>,
-  condition: MediaCondition,
+  condition: Option<MediaCondition>,
 }
 
 impl ContainerCondition {
   fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let name = input.try_parse(ContainerName::parse_name).ok();
-    let condition = MediaCondition::parse(input)?;
+    let condition = if name.is_some() {
+      input.try_parse(MediaCondition::parse).ok()
+    } else {
+      Some(MediaCondition::parse(input)?)
+    };
 
     Ok(Self { name, condition })
   }
 
+  /// Whether it asks about a size, which only a container whose `container-type` contains the axes
+  /// it reads answers, where a name alone picks any container of that name.
+  pub(crate) fn queries_size(&self) -> bool {
+    self.condition.is_some()
+  }
+
   /// Whether it reads the block axis, which only a `container-type: size` container answers.
   pub(crate) fn reads_block_axis(&self) -> bool {
-    self.condition.any_feature(&|feature| {
-      matches!(
-        feature,
-        MediaFeature::Height(..)
-          | MediaFeature::BlockSize(..)
-          | MediaFeature::AspectRatio(..)
-          | MediaFeature::Orientation(..)
-      )
+    self.condition.as_ref().is_some_and(|condition| {
+      condition.any_feature(&|feature| {
+        matches!(
+          feature,
+          MediaFeature::Height(..)
+            | MediaFeature::BlockSize(..)
+            | MediaFeature::AspectRatio(..)
+            | MediaFeature::Orientation(..)
+        )
+      })
     })
   }
 
@@ -671,14 +684,18 @@ impl ContainerCondition {
     viewport: Viewport,
     sizing: &SizingContext,
   ) -> bool {
-    let unknown = self.condition.any_feature(&|feature| {
-      matches!(
-        feature,
-        MediaFeature::Resolution(..) | MediaFeature::PrefersColorScheme(..) | MediaFeature::Unknown
-      )
-    });
+    self.condition.as_ref().is_none_or(|condition| {
+      let unknown = condition.any_feature(&|feature| {
+        matches!(
+          feature,
+          MediaFeature::Resolution(..)
+            | MediaFeature::PrefersColorScheme(..)
+            | MediaFeature::Unknown
+        )
+      });
 
-    !unknown && self.condition.matches(viewport, size, sizing)
+      !unknown && condition.matches(viewport, size, sizing)
+    })
   }
 }
 

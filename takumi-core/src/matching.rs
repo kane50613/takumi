@@ -1360,7 +1360,7 @@ pub(crate) type QueryContainers = FxHashMap<usize, QueryContainer>;
 
 /// Whether a condition of `query` holds of its query container: the nearest of `start` and its
 /// ancestors that the condition names, if it names one, and whose `container-type` contains each
-/// axis it reads. <https://drafts.csswg.org/css-conditional-5/#container-rule>
+/// axis it reads, if it asks about a size. <https://drafts.csswg.org/css-conditional-5/#container-rule>
 fn container_query_holds(
   query: &ContainerQuery,
   start: Option<ArenaElement<'_>>,
@@ -1377,14 +1377,16 @@ fn container_query_holds(
       containers
         .get(&ancestor.index)
         .filter(|container| {
-          (if reads_block_axis {
-            container.container_type.contains_block_size()
-          } else {
-            container.container_type.contains_inline_size()
-          }) && condition
-            .name
-            .as_deref()
-            .is_none_or(|name| container.name.has(name))
+          (!condition.queries_size()
+            || if reads_block_axis {
+              container.container_type.contains_block_size()
+            } else {
+              container.container_type.contains_inline_size()
+            })
+            && condition
+              .name
+              .as_deref()
+              .is_none_or(|name| container.name.has(name))
         })
         .map(|container| (ancestor, container))
     });
