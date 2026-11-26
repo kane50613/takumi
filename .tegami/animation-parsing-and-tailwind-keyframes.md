@@ -23,9 +23,18 @@ When animations stack on one property, a keyframe an animation leaves out takes 
 
 The keyframes behind `animate-spin`, `animate-ping`, `animate-pulse`, and `animate-bounce` now follow Tailwind's theme. `bounce` eases each half as Tailwind does, and `spin` and `ping` animate `transform`. `spin` turns through quarter turns, so it matches Tailwind only under the `linear` easing `animate-spin` uses.
 
-These keyframes exist once an `animate-*` class, an arbitrary `animate-[…]` value, or an `@apply` names them. A plain `animation: spin 1s` without its own `@keyframes spin` stays still, as in Chrome. Your own `@keyframes` with the same name still wins.
+These keyframes exist once an `animate-*` class, an arbitrary `animate-[…]` value, or an `@apply` in the render names them, and then any `animation` in the render can use them. A plain `animation: spin 1s` stays still, as in Chrome, when nothing in the render names `spin` and the stylesheet has no `@keyframes spin`. Your own `@keyframes` with the same name still wins.
 
 #### Migration
+
+`animation-duration` and `animation-delay` need a unit, so Chrome and takumi now drop a declaration with a unitless `0`. Write `0s` instead.
+
+```diff
+- animation-duration: 0;
+- animation-delay: 0;
++ animation-duration: 0s;
++ animation-delay: 0s;
+```
 
 `StyleDeclaration::animation_duration` takes `AnimationDuration` values instead of bare `AnimationTime` values.
 
