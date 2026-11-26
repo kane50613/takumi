@@ -469,6 +469,13 @@ impl MediaCondition {
   fn parse_in_parens<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let token = input.next()?.clone();
 
+    if let Token::Function(_) = token {
+      return input.parse_nested_block(|input| {
+        while input.next().is_ok() {}
+        Ok(Self::Feature(MediaFeature::Unknown))
+      });
+    }
+
     if token != Token::ParenthesisBlock {
       return Err(CssParseError::unexpected_token());
     }
@@ -604,6 +611,9 @@ fn viewport_size(viewport: Viewport) -> Size<Option<f32>> {
 
 /// An `@container` rule's query: a comma-separated list of conditions, which holds when one does.
 /// <https://drafts.csswg.org/css-conditional-5/#container-rule>
+///
+/// Approximate: `style()` and `scroll-state()` parse as `<general-enclosed>`, so a condition that
+/// uses them holds of no container, where Blink evaluates them against the container.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ContainerQuery(Vec<ContainerCondition>);
 

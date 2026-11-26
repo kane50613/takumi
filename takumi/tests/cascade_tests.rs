@@ -2095,3 +2095,23 @@ fn an_unknown_container_condition_leaves_the_rest_of_its_list() {
     300.0
   );
 }
+
+/// A `style()` or `scroll-state()` condition parses, holding of no container, and leaves the other
+/// conditions of its list.
+#[test]
+fn an_unsupported_container_function_leaves_the_rest_of_its_list() {
+  let card = ".card { container-type: inline-size; width: 300px }";
+
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container style(--wide: 1), scroll-state(stuck: top), (width > 0px) {{ .target {{ width: 50px }} }}"
+    )),
+    50.0
+  );
+  assert_eq!(
+    target_in_card(&format!(
+      "{card} @container style(--wide: 1) {{ .target {{ width: 50px }} }}"
+    )),
+    300.0
+  );
+}
