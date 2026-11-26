@@ -191,8 +191,14 @@ fn active_animations<'s>(
       let keyframes = find_keyframes(stylesheet, name.as_ref()?, viewport)?;
       let duration: AnimationTime = repeated_list_value(&animation.animation_duration, index);
       let delay: AnimationTime = repeated_list_value(&animation.animation_delay, index);
+      // Blink pauses a paused CSS animation as it creates it, holding its current time at 0.
+      // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/animation/css/css_animations.cc>
+      let current_time = match repeated_list_value(&animation.animation_play_state, index) {
+        AnimationPlayState::Running => time as f32,
+        AnimationPlayState::Paused => 0.0,
+      };
       let sample = sample_animation_progress(
-        time as f32,
+        current_time,
         duration.milliseconds,
         delay.milliseconds,
         repeated_list_value(&animation.animation_iteration_count, index),
@@ -847,6 +853,23 @@ mod tests {
     let animated = animate(style, &stylesheet, 0);
 
     assert_eq!(animated.svg_data.opacity.0, 0.5);
+  }
+
+  /// A paused animation holds the frame at its start time, whatever the render's time.
+  #[test]
+  fn a_paused_animation_holds_its_start_time() {
+    let (style, stylesheet) = linear_animation("from { opacity: 0 } to { opacity: 1 }");
+    let paused = |delay: &str| {
+      let mut style = style.clone();
+      let animation = Rc::make_mut(&mut style.misc1_data);
+
+      animation.animation_play_state = AnimationPlayStates::from_css_str("paused").unwrap();
+      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animate(style, &stylesheet, 500).svg_data.opacity.0
+    };
+
+    assert_eq!(paused("0ms"), 0.0);
+    assert_eq!(paused("-250ms"), 0.25);
   }
 
   /// A linear 1000ms animation of `keyframes` on a default style.
