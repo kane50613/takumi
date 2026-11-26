@@ -672,7 +672,11 @@ impl PaintDevice for CanvasDevice<'_> {
         border,
         size,
         offset,
-      } if unclipped => (*border, *size, *offset),
+      } if unclipped
+        && self.tiles_whole_pixels(*size, transform * Affine::translation(offset.x, offset.y)) =>
+      {
+        (*border, *size, *offset)
+      }
       _ => {
         let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
@@ -1125,6 +1129,9 @@ fn blit_background_tiles(
   }
 }
 
+/// Approximate: a clip with fractional edges, which a bleed inset gives, shrinks to the whole pixels
+/// inside it, where Blink clips the layers to the fractional edges. The pixels it drops lie under the
+/// opaque border the inset is for.
 fn draw_clipped_background(
   clip: ClipBox,
   offset: Point<f32>,
@@ -1132,11 +1139,23 @@ fn draw_clipped_background(
   context: &RenderContext,
   canvas: &mut Canvas,
 ) -> Result<()> {
-  let at = offset + clip.offset;
+  let start = offset + clip.offset;
+  let at = Point {
+    x: start.x.ceil(),
+    y: start.y.ceil(),
+  };
+  let size = Size {
+    width: (start.x + clip.size.width).floor() - at.x,
+    height: (start.y + clip.size.height).floor() - at.y,
+  };
+
+  if size.width <= 0.0 || size.height <= 0.0 {
+    return Ok(());
+  }
 
   if let Some(tile) = rasterize_layers(
     layers,
-    clip.size.map(|size| size as u32),
+    size.map(|size| size as u32),
     context,
     clip.border,
     Affine::translation(-at.x, -at.y),
@@ -1238,7 +1257,7 @@ mod tests {
   use takumi_core::{
     geometry::{Point, Rect, Size},
     layout::border::BorderProperties,
-    painter::{BoxBorderPainter, StrokeStyle},
+    painter::{BoxBorderPainter, FillShape, PaintDevice, StrokeStyle},
     style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   };
 
@@ -1304,6 +1323,35 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
     assert!((8..40).all(|x| image.get_pixel(x, 2)[3] > 0));
+  }
+
+  #[test]
+  fn a_fractional_rounded_rect_covers_its_last_partial_pixel() {
+    let mut canvas = Canvas::new(Size {
+      width: 16,
+      height: 16,
+    });
+    let mut device = CanvasDevice::new(&mut canvas, Affine::IDENTITY, ImageScalingAlgorithm::Auto);
+
+    device.fill_shape(
+      &FillShape::RoundedRect {
+        border: BorderProperties::default(),
+        size: Size {
+          width: 10.5,
+          height: 10.0,
+        },
+        offset: Point { x: 1.0, y: 1.0 },
+      },
+      Color([0, 0, 0, 255]),
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let alpha = image.get_pixel(11, 5)[3];
+
+    assert!((96..=160).contains(&alpha), "{alpha}");
   }
 
   #[test]

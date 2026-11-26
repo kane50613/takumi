@@ -154,6 +154,8 @@ impl FillShape {
   }
 }
 
+/// Approximate: inset radii that no longer fit the region scale to fit it again, where Blink's
+/// `RoundedInnerRectClipper` clips each corner with its own radius.
 impl From<ClipBox> for FillShape {
   fn from(clip: ClipBox) -> Self {
     if clip.follows_origin() {
