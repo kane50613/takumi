@@ -12,7 +12,11 @@ const flags = [
   "--strip-target-features",
 ];
 
+// `-g` keeps the name section and leaves every other section byte-identical to the shipped output.
+const namedFlags = [...flags.filter((flag) => flag !== "--strip-debug"), "-g"];
+
 const [wasmFile] = process.argv.slice(2);
+const namedOutput = process.env.WASM_OPT_NAMED_OUTPUT;
 
 if (!wasmFile) {
   throw new Error("usage: bun scripts/wasm-opt.mts <file.wasm>");
@@ -25,6 +29,10 @@ if (!version.stdout.toString().includes(`version ${BINARYEN_VERSION}`)) {
     `wasm-opt from binaryen version_${BINARYEN_VERSION} is required on PATH ` +
       `(https://github.com/WebAssembly/binaryen/releases/tag/version_${BINARYEN_VERSION}).`,
   );
+}
+
+if (namedOutput) {
+  await $`wasm-opt ${namedFlags} ${wasmFile} -o ${namedOutput}`;
 }
 
 await $`wasm-opt ${flags} ${wasmFile} -o ${wasmFile}`;

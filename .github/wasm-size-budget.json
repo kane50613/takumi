@@ -1,0 +1,12 @@
+{
+  "@takumi-rs/wasm": {
+    "brotliGrowthBytes": 4096
+  },
+  "takumi-pdf": {
+    "brotliGrowthBytes": 4096,
+    "gzipCeilingBytes": 2097152
+  },
+  "takumi-paint": {
+    "brotliGrowthBytes": 4096
+  }
+}
