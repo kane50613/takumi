@@ -9,7 +9,7 @@ use selectors::parser::{ParseRelative, Selector, SelectorList};
 use super::{extract_arbitrary_value, is_ident};
 use crate::{
   style::{
-    FromCssStr, Length, ToCss,
+    Length, ToCss,
     media_query::{ContainerQuery, MediaQueryList},
     selector::{PseudoElement, SelectorImpl, TakumiSelectorParser},
   },
