@@ -2536,8 +2536,10 @@ impl RenderNode {
     tree
   }
 
-  /// The query containers among its boxes, sized by laying it out in its viewport, which every
-  /// caller lays the tree out in too: a renderer in its viewport, a PDF page in its page area.
+  /// The query containers among its boxes, sized by laying it out in its viewport, which a renderer
+  /// lays the tree out in too. Approximate: a PDF finds them in its first page area, so a later
+  /// page kind of another content width reads the first one's container sizes, where Blink sizes
+  /// each fragment's containers in its own page.
   fn query_containers(&self) -> QueryContainers {
     let mut tree = LayoutTree::from_render_node(self);
     let available_space = tree.initial_containing_block(self.context.sizing.viewport.into());
