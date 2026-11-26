@@ -417,9 +417,9 @@ mod tests {
     layout::node::Node,
     measure,
     style::{
-      AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
-      FromCssStr, KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style,
-      StyleDeclaration, StyleSheet,
+      AnimationDuration, AnimationFillMode, AnimationTime, AnimationTimingFunction, Color,
+      ColorInput, Display, FromCssStr, KeyframeRule, KeyframesRule, Length, Length::Px, Position,
+      Style, StyleDeclaration, StyleSheet,
     },
     viewport::Viewport,
   };
@@ -711,7 +711,7 @@ mod tests {
           [Some("grow".to_string())].into(),
         ))
         .with(StyleDeclaration::animation_duration(
-          [AnimationTime::from_milliseconds(1000.0)].into(),
+          [AnimationDuration(AnimationTime::from_milliseconds(1000.0))].into(),
         ))
         .with(StyleDeclaration::animation_timing_function(
           [AnimationTimingFunction::Linear].into(),

@@ -1898,7 +1898,7 @@ define_style! {
     }
     /// Blink's `misc->misc1` field group, which Blink nests in `misc`.
     misc1_data: StyleMisc1Data {
-      animation_delay: AnimationDurations,
+      animation_delay: AnimationDelays,
       animation_direction: AnimationDirections,
       animation_duration: AnimationDurations,
       animation_fill_mode: AnimationFillModes,
@@ -2103,7 +2103,7 @@ define_style! {
       target.push(StyleDeclaration::offset_anchor(value.anchor));
     },
     animation: Animations => [AnimationName, AnimationDuration, AnimationDelay, AnimationTimingFunction, AnimationIterationCount, AnimationDirection, AnimationFillMode, AnimationPlayState] |value, target| {
-      target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| animation.duration).collect()));
+      target.push(StyleDeclaration::animation_duration(value.iter().map(|animation| AnimationDuration(animation.duration)).collect()));
       target.push(StyleDeclaration::animation_delay(value.iter().map(|animation| animation.delay).collect()));
       target.push(StyleDeclaration::animation_timing_function(
         value

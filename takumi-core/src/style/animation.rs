@@ -189,7 +189,7 @@ fn active_animations<'s>(
     .enumerate()
     .filter_map(move |(index, name)| {
       let keyframes = find_keyframes(stylesheet, name.as_ref()?, viewport)?;
-      let duration: AnimationTime = repeated_list_value(&animation.animation_duration, index);
+      let AnimationDuration(duration) = repeated_list_value(&animation.animation_duration, index);
       let delay: AnimationTime = repeated_list_value(&animation.animation_delay, index);
       // Blink pauses a paused CSS animation as it creates it, holding its current time at 0.
       // <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/animation/css/css_animations.cc>
@@ -723,6 +723,7 @@ macro_rules! impl_passthrough_animatable {
 impl_passthrough_animatable!(
   AnimationNames,
   AnimationDurations,
+  AnimationDelays,
   AnimationTimingFunctions,
   AnimationIterationCounts,
   AlignItems,
@@ -890,7 +891,7 @@ mod tests {
       let animation = Rc::make_mut(&mut style.misc1_data);
 
       animation.animation_play_state = AnimationPlayStates::from_css_str("paused").unwrap();
-      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animation.animation_delay = AnimationDelays::from_css_str(delay).unwrap();
       animate(style, &stylesheet, 500).svg_data.opacity.0
     };
 
@@ -909,7 +910,7 @@ mod tests {
       let animation = Rc::make_mut(&mut style.misc1_data);
 
       animation.animation_timing_function = AnimationTimingFunctions::from_css_str(timing).unwrap();
-      animation.animation_delay = AnimationDurations::from_css_str(delay).unwrap();
+      animation.animation_delay = AnimationDelays::from_css_str(delay).unwrap();
       animation.animation_fill_mode = AnimationFillModes::from_css_str(fill).unwrap();
       animation.animation_direction = AnimationDirections::from_css_str("reverse").unwrap();
       animate(style, &stylesheet, time).svg_data.opacity.0
