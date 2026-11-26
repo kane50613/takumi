@@ -1938,6 +1938,31 @@ fn a_property_reading_a_substituted_keyword_reads_what_it_resolves_to() {
 }
 
 #[test]
+fn font_size_rejects_a_negative_length_and_auto() {
+  let size = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .inherited_data
+      .font_size
+  };
+  let twenty = FontSize::from(Length::Px(20.0));
+
+  for css in [
+    "font-size: 20px; font-size: -10px",
+    "font-size: 20px; font-size: -1em",
+    "font-size: 20px; font-size: auto",
+    "font-size: 20px; font: -10px serif",
+    "font-size: 20px; font: auto serif",
+  ] {
+    assert_eq!(size(css), twenty, "{css}");
+  }
+  assert_eq!(
+    size("font-size: -webkit-xxx-large"),
+    FontSize::Keyword(FontSizeKeyword::XXXLarge)
+  );
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [

@@ -1971,7 +1971,7 @@ define_style! {
       font_stretch: FontStretch where inherit = true,
       color: ColorInput where inherit = true,
       color_scheme: ColorSchemes where inherit = true,
-      font_size: FontSize where inherit = true,
+      font_size: FontSize where inherit = true where non_negative = true,
       font_family: FontFamily where inherit = true,
       line_height: LineHeight where inherit = true,
       font_weight: FontWeight where inherit = true,
