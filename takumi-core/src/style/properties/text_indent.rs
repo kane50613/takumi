@@ -48,7 +48,11 @@ impl TextIndent {
   }
 }
 
-impl MakeComputed for TextIndent {}
+impl MakeComputed for TextIndent {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    self.amount.make_computed(sizing);
+  }
+}
 
 impl Animatable for TextIndent {
   fn interpolate(

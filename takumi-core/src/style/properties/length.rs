@@ -574,6 +574,13 @@ impl MakeComputed for Length {
       return;
     }
 
+    // Blink's `CSSToLengthConversionData` resolves container units against the element's own
+    // container sizes, so the boxes that inherit the value inherit pixels.
+    if let Self::CqH(_) | Self::CqW(_) | Self::CqMin(_) | Self::CqMax(_) = *self {
+      *self = Self::Px(sizing.to_css(self.to_px_pre_dpr(sizing, 0.0)));
+      return;
+    }
+
     if let Self::Math(expr) = *self {
       *self = expr.make_computed(sizing);
       return;

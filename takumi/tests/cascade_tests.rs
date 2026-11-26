@@ -2147,6 +2147,32 @@ fn container_units_read_the_nearest_query_container() {
   );
 }
 
+/// A container unit in an inherited property resolves on the element that declares it, against
+/// its own container, and its descendants inherit the pixels, as Blink computes the value once.
+#[test]
+fn an_inherited_container_unit_resolves_where_it_is_declared() {
+  let node = Node::from_html(
+    r#"<div class="container"><p class="line">x</p><p class="indent"><span class="mark"></span></p></div><p class="reference"><span class="mark"></span></p>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    ".container { container-type: inline-size; width: 400px; line-height: 10cqw; text-indent: 5cqw }
+     p { margin: 0 }
+     .reference { text-indent: 5vw; line-height: 0 }
+     .mark { display: inline-block; width: 1px; height: 1px }",
+  );
+  let viewport_width = create_test_viewport().size.width.expect("has a width") as f32;
+  let container = &measured.children[0].children[0];
+
+  assert_eq!(container.children[0].height, viewport_width / 10.0);
+  assert_eq!(
+    container.children[1].children[0].transform[4],
+    measured.children[0].children[1].children[0].transform[4]
+  );
+}
+
 /// An unknown condition holds of no container but leaves the other conditions of its list, as
 /// Blink's `ConsumeGeneralEnclosed` parses it and `SelectsAnyContainer` rejects only its query.
 #[test]
