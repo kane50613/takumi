@@ -60,11 +60,8 @@ impl Names {
   }
 }
 
-/// The attributes a node holds in its own fields rather than in `attributes`, which builders leave
-/// out of `attributes` and [`Node::attribute`] reads back. `dir` holds only `ltr` and `rtl` as
-/// written in lowercase, and `lang` only a tag in its canonical spelling, so any other value stays
-/// in `attributes`, which [`Node::attribute`] reads first. Approximate: `style` keeps no attribute
-/// text, so `[style]` does not match.
+/// Attributes held in node fields rather than `attributes`.
+/// Approximate: `style` keeps no attribute text, so `[style]` does not match.
 const LIFTED_ATTRIBUTES: [&str; 5] = ["id", "class", "lang", "dir", "src"];
 
 /// Shared metadata stored by every renderable node.
