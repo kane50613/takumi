@@ -990,10 +990,15 @@ fn animated_custom_property_resolves_light_dark_in_the_animated_color_scheme() {
     @property --ink { syntax: '<color>'; inherits: false; initial-value: black }
     @keyframes ink { from, to { color-scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
     .a { background-color: var(--ink); animation: ink 1s paused }
-    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }";
+    .b { color-scheme: light !important; background-color: var(--ink); animation: ink 1s paused }
+    @keyframes theme { from, to { --scheme: dark; --ink: light-dark(rgb(255,0,0), rgb(0,0,255)) } }
+    @keyframes scheme { from, to { color-scheme: var(--scheme) } }
+    .c { --scheme: light; color-scheme: light; background-color: var(--ink); animation: theme 1s paused, scheme 1s paused }";
 
   assert_eq!(first_pixel_with_css("a", css), [0, 0, 255, 255]);
   assert_eq!(first_pixel_with_css("b", css), [255, 0, 0, 255]);
+  // The scheme a keyframe reads through another animated property decides `--ink` too.
+  assert_eq!(first_pixel_with_css("c", css), [0, 0, 255, 255]);
 }
 
 /// A keyframed registered `em` reads the font size the cascade ends with, after a `font-size` reads
@@ -1185,6 +1190,15 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     )
     .0,
     40.0
+  );
+  // Rolling back to another important declaration, it hides the animation as that one does.
+  assert_eq!(
+    paragraph(
+      "@keyframes w { from, to { width: 100px } }
+       .box { width: 50px !important } p.box { width: revert-rule !important; animation: w 1s }"
+    )
+    .0,
+    50.0
   );
   // Without a weaker declaration, a revert keyword is `unset`.
   assert_eq!(paragraph(".box { width: revert-layer }").0, 1200.0);

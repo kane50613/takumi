@@ -2980,7 +2980,8 @@ fn apply_winning_declarations(
       })
   };
   // What the declaration `declaration` at `index` from `source` for the physical `target` cascades
-  // to: itself, the weaker declaration its revert keyword rolls back to, or `unset` on `target`.
+  // to: itself, the weaker declaration its revert keyword rolls back to, or `unset` on `target`,
+  // with the source it lands on, `None` for `unset`.
   let resolve = |mut declaration: StyleDeclaration,
                  mut source: CascadeSource,
                  index: usize,
@@ -2998,12 +2999,15 @@ fn apply_winning_declarations(
           .map(|(candidate, candidate_source, _)| (earlier, candidate, candidate_source))
       });
       let Some((earlier, candidate, candidate_source)) = rollback else {
-        return StyleDeclaration::CssWideKeyword(target, CssWideKeyword::Unset);
+        return (
+          StyleDeclaration::CssWideKeyword(target, CssWideKeyword::Unset),
+          None,
+        );
       };
 
       (before, declaration, source) = (earlier, candidate, candidate_source);
     }
-    declaration
+    (declaration, Some(source))
   };
   if let Some((index, (declaration, source, _))) = (0..declarations.len())
     .rev()
@@ -3020,6 +3024,7 @@ fn apply_winning_declarations(
     })
   {
     resolve(declaration, source, index, LonghandId::Direction, false)
+      .0
       .apply_with_parent(style, parent);
   }
 
@@ -3049,22 +3054,15 @@ fn apply_winning_declarations(
       if !seen.insert(longhand) {
         continue;
       }
-      // An important `revert-rule` leaves its own rule, which lets the animation origin below it
-      // win, as Blink's `FindRevertRule` finds an interpolation there.
-      let reverts_to_animation = matches!(
-        declaration,
-        StyleDeclaration::CssWideKeyword(_, CssWideKeyword::RevertRule)
-      ) && animated.contains(&longhand);
+      let (resolved, landed) = resolve(declaration, source, index, longhand, rtl);
 
-      if source.origin.is_important() && !reverts_to_animation {
+      // An important declaration hides the animation origin below it, unless its revert keyword
+      // rolls back past it to a normal declaration or to none, as Blink's `FindRevertRule` then
+      // finds the interpolation.
+      if landed.is_some_and(|landed| landed.origin.is_important()) {
         important.insert(longhand);
       }
-      winners.push((
-        phase(longhand),
-        index,
-        longhand,
-        resolve(declaration, source, index, longhand, rtl),
-      ));
+      winners.push((phase(longhand), index, longhand, resolved));
     }
   }
   winners.sort_unstable_by_key(|&(phase, index, ..)| (phase, index));

@@ -3591,20 +3591,15 @@ impl RenderContext {
       cascade(declarations, sampled)
     } else {
       let style = cascade(declarations.clone(), sampled.clone());
+      // A registered value reads the font size, colour scheme, and colour the cascade ends with,
+      // which a longhand reading an animated custom property through `var()` still changes, as
+      // Blink applies the custom properties an element's other longhands read after them.
+      let resampled = self.sampled_custom_properties(&style, animations);
 
-      // A registered `em` reads the font size the cascade ends with, which a `font-size` reading
-      // an animated custom property through `var()` still changes, as Blink applies the custom
-      // properties an element's other longhands read after its fonts.
-      if style.inherited_data.font_size == preview.inherited_data.font_size {
+      if resampled == sampled {
         style
       } else {
-        let resampled = self.sampled_custom_properties(&style, animations);
-
-        if resampled == sampled {
-          style
-        } else {
-          cascade(declarations, resampled)
-        }
+        cascade(declarations, resampled)
       }
     };
 
