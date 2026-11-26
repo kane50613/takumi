@@ -1647,16 +1647,31 @@ fn tw_rule_order(arena: &StyleArena<'_>, tailwind: &TailwindCache) -> FxHashMap<
     .collect()
 }
 
-/// RFC 4647 basic filtering, as `:lang()` uses.
+/// Whether the language `lang` matches `range`, as stable Blink's `SelectorChecker` matches
+/// `:lang()`: a malformed or empty `lang` never matches, and `range` matches it as a prefix that
+/// ends at a subtag.
 pub(crate) fn lang_matches(lang: &str, range: &str) -> bool {
-  if range == "*" {
-    return true;
-  }
-  lang.eq_ignore_ascii_case(range)
-    || lang
+  is_valid_language_tag(lang)
+    && lang
       .get(..range.len())
       .is_some_and(|prefix| prefix.eq_ignore_ascii_case(range))
-      && lang.as_bytes().get(range.len()) == Some(&b'-')
+    && matches!(lang.as_bytes().get(range.len()), None | Some(b'-'))
+}
+
+/// Whether `tag` is a well-formed RFC 5646 language tag, as Blink's `IsValidBCP47Value` checks one:
+/// hyphen-separated subtags of one to eight characters, the first alphabetic and the rest
+/// alphanumeric.
+fn is_valid_language_tag(tag: &str) -> bool {
+  tag.split('-').enumerate().all(|(index, subtag)| {
+    (1..=8).contains(&subtag.len())
+      && subtag.bytes().all(|byte| {
+        if index == 0 {
+          byte.is_ascii_alphabetic()
+        } else {
+          byte.is_ascii_alphanumeric()
+        }
+      })
+  })
 }
 
 #[cfg(test)]
@@ -1666,10 +1681,21 @@ mod tests {
   use crate::{
     context::RenderContext,
     layout::{node::Node, tree::RenderNode},
+    matching::lang_matches,
     resources::font::Fonts,
     style::{SizingContext, StyleSheet},
     viewport::Viewport,
   };
+
+  #[test]
+  fn a_malformed_or_empty_lang_never_matches() {
+    assert!(lang_matches("en-US", "en"));
+    assert!(lang_matches("EN", "en"));
+    assert!(!lang_matches("en-", "en"));
+    assert!(!lang_matches("en_US", "en"));
+    assert!(!lang_matches("english-x", "en"));
+    assert!(!lang_matches("", "en"));
+  }
 
   #[test]
   fn a_class_splits_on_ascii_whitespace_only() {
