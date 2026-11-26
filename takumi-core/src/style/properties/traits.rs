@@ -172,6 +172,20 @@ pub(crate) fn parse_ident_enum_keyword<'i>(
     .ok_or_else(|| build_unexpected_token(&Token::Ident(ident.to_owned()), expect, valid_tokens))
 }
 
+/// The keyword in `tokens` that `impl_css_enum` lists first for `value` among the parallel
+/// `values`, which is its canonical keyword since aliases follow it.
+pub(crate) fn enum_keyword<T: PartialEq>(
+  value: &T,
+  values: &[T],
+  tokens: &[&'static str],
+) -> &'static str {
+  values
+    .iter()
+    .position(|candidate| candidate == value)
+    .and_then(|index| tokens.get(index).copied())
+    .unwrap_or_default()
+}
+
 /// Defines reusable message templates for CSS parse errors.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
@@ -710,11 +724,10 @@ macro_rules! impl_comma_list_from_css {
         input: &mut cssparser::Parser<'i>,
         mode: $crate::style::ParseMode,
       ) -> $crate::style::ParseResult<'i, Self> {
-        input
-          .parse_comma_separated(|input| {
-            <$elem as $crate::style::FromCss>::from_css_in(input, mode)
-          })
-          .map(Vec::into_boxed_slice)
+        $crate::style::parse_comma_separated(input, |input| {
+          <$elem as $crate::style::FromCss>::from_css_in(input, mode)
+        })
+        .map(Vec::into_boxed_slice)
       }
 
       const VALID_TOKENS: &'static [&'static str] = $valid;
@@ -808,11 +821,11 @@ macro_rules! impl_css_enum {
 
     impl crate::style::properties::ToCss for $enum_type {
       fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
-        match self {
-          $(
-            $variant => dest.write_str($canonical),
-          )*
-        }
+        dest.write_str($crate::style::properties::enum_keyword(
+          self,
+          Self::KEYWORD_VALUES,
+          <Self as crate::style::FromCss>::VALID_TOKENS,
+        ))
       }
     }
 

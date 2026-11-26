@@ -15,7 +15,7 @@ use crate::{
   style::{
     Angle, Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseMode,
     ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss,
-    unexpected_token,
+    parse_nested_block, unexpected_token,
   },
 };
 
@@ -360,7 +360,7 @@ impl<'i> FromCss<'i> for ConicGradient {
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, ConicGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut from_angle: Option<Angle> = None;
       let mut center: Option<PositionValue> = None;
       let mut interpolation = None;

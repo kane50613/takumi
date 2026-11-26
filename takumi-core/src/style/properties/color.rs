@@ -21,7 +21,7 @@ use crate::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseMode, ParseResult,
     SizingContext, ToCss, impl_css_enum,
     math::mul_div_255,
-    parse_percentage_value, significant,
+    parse_nested_block, parse_percentage_value, significant,
     tw::TailwindPropertyParser,
     tw::{Namespace, extract_arbitrary_value},
     unexpected_token,
@@ -1410,13 +1410,11 @@ impl<'i> FromCss<'i> for ColorInput {
         let name = name.clone();
 
         match_ignore_ascii_case! { &*name,
-          "light-dark" => input
-            .parse_nested_block(LightDarkValuePair::from_css)
+          "light-dark" => parse_nested_block(input, LightDarkValuePair::from_css)
             .map(|pair| ColorInput::LightDark(Arc::new(pair))),
-          "color-mix" => input
-            .parse_nested_block(ColorMixValue::from_css)
+          "color-mix" => parse_nested_block(input, ColorMixValue::from_css)
             .map(|color_mix| ColorInput::ColorMix(Arc::new(color_mix))),
-          _ => input.parse_nested_block(|input| {
+          _ => parse_nested_block(input, |input| {
             if let Some(cs) = relative_target_cs(&name)
               && input.try_parse(|input| input.expect_ident_matching("from")).is_ok()
             {

@@ -11,7 +11,7 @@ use cssparser::{ParseError as CssParseError, Parser};
 use crate::style::{
   ParseResult, ToCss,
   interner::{self, Interner},
-  lerp, parse_number_value, parse_percentage_value, significant,
+  lerp, parse_comma_separated, parse_number_value, parse_percentage_value, significant,
 };
 
 /// A `linear()` curve, by its index among the interned curves.
@@ -33,7 +33,7 @@ impl LinearEasing {
   pub(crate) fn parse<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut points: Vec<(f32, Option<f32>)> = Vec::new();
 
-    for stop in input.parse_comma_separated(parse_stop)? {
+    for stop in parse_comma_separated(input, parse_stop)? {
       points.extend(stop);
     }
     if !(2..=interner::MAX_PARTS).contains(&points.len()) {

@@ -13,7 +13,7 @@ use crate::{
   geometry::{Point, Size, arclen_accuracy},
   style::{
     Angle, Animatable, BasicShape, Color, FromCss, Length, MakeComputed, ParseMode, ParseResult,
-    ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
+    ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum, parse_nested_block,
   },
 };
 
@@ -60,7 +60,7 @@ pub struct RayShape {
 
 fn parse_ray<'i>(input: &mut Parser<'i>) -> ParseResult<'i, RayShape> {
   input.expect_function_matching("ray")?;
-  input.parse_nested_block(|input| {
+  parse_nested_block(input, |input| {
     let mut angle = None;
     let mut size = None;
     let mut contain = false;

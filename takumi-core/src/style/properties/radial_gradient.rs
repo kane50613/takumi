@@ -13,7 +13,7 @@ use crate::geometry::Size;
 use crate::style::{
   Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseMode,
   ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss,
-  impl_css_enum, unexpected_token,
+  impl_css_enum, parse_nested_block, unexpected_token,
 };
 
 /// The radii of the ellipse through `corner`, as Blink's `EllipseRadius`.
@@ -466,7 +466,7 @@ impl<'i> FromCss<'i> for RadialGradient {
   fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, RadialGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
       let mut center = PositionValue::center();

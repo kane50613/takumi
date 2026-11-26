@@ -6,7 +6,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_identifier};
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, parse_nested_block,
+  unexpected_token,
 };
 
 /// One counter an element changes, and the integer it changes the counter by or to.
@@ -42,7 +43,7 @@ impl<const DEFAULT: i32, const REVERSIBLE: bool> CounterChanges<DEFAULT, REVERSI
   fn change<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CounterChange> {
     let (name, reversed) = match input.next()?.clone() {
       Token::Function(function) if REVERSIBLE && function.eq_ignore_ascii_case("reversed") => {
-        (input.parse_nested_block(counter_name::<Self>)?, true)
+        (parse_nested_block(input, counter_name::<Self>)?, true)
       }
       token @ Token::Ident(_) => (name_of::<Self>(&token)?, false),
       token => return Err(unexpected_token!(Self, &token)),

@@ -9,7 +9,7 @@ use crate::{
   path_data::PathData,
   style::{
     Animatable, Color, ColorInput, FromCss, Length, MakeComputed, ParseMode, ParseResult,
-    SizingContext, ToCss, ValueError, discrete, impl_css_enum, lerp,
+    SizingContext, ToCss, ValueError, discrete, impl_css_enum, lerp, parse_nested_block,
     properties::interpolate_repeated_list, unexpected_token,
   },
 };
@@ -52,7 +52,9 @@ impl<'i> FromCss<'i> for SvgResource {
     match token {
       Token::UnquotedUrl(url) => Ok(Self(url.as_ref().into())),
       Token::Function(function) if function.eq_ignore_ascii_case("url") => {
-        input.parse_nested_block(|input| Ok(Self(input.expect_string()?.as_ref().into())))
+        parse_nested_block(input, |input| {
+          Ok(Self(input.expect_string()?.as_ref().into()))
+        })
       }
       _ => Err(unexpected_token!(token)),
     }
@@ -875,7 +877,7 @@ impl<'i> FromCss<'i> for SvgPath {
       return Err(unexpected_token!(&token));
     }
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let (commands, complete) = PathData::parse(input.expect_string()?);
 
       if !complete {

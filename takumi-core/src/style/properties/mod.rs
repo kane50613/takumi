@@ -214,6 +214,52 @@ pub(crate) fn parse_comma_list<'i, T>(
   Ok(items.into_boxed_slice())
 }
 
+/// [`Parser::parse_nested_block`] through one shared instance, leaving each caller only `parse`.
+#[inline]
+pub(crate) fn parse_nested_block<'i, T>(
+  input: &mut Parser<'i>,
+  mut parse: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, T> {
+  let mut value = None;
+  parse_nested_block_erased(input, &mut |input| {
+    value = Some(parse(input)?);
+    Ok(())
+  })?;
+  // `value` is set whenever the block parsed.
+  value.ok_or_else(|| ValueError::invalid("nested block produced no value"))
+}
+
+#[inline(never)]
+fn parse_nested_block_erased<'i>(
+  input: &mut Parser<'i>,
+  parse: &mut dyn FnMut(&mut Parser<'i>) -> ParseResult<'i, ()>,
+) -> ParseResult<'i, ()> {
+  input.parse_nested_block(parse)
+}
+
+/// [`Parser::parse_comma_separated`] through one shared instance, leaving each caller only
+/// `parse_item`.
+#[inline]
+pub(crate) fn parse_comma_separated<'i, T>(
+  input: &mut Parser<'i>,
+  mut parse_item: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, Vec<T>> {
+  let mut items = Vec::with_capacity(1);
+  parse_comma_separated_erased(input, &mut |input| {
+    items.push(parse_item(input)?);
+    Ok(())
+  })?;
+  Ok(items)
+}
+
+#[inline(never)]
+fn parse_comma_separated_erased<'i>(
+  input: &mut Parser<'i>,
+  parse_item: &mut dyn FnMut(&mut Parser<'i>) -> ParseResult<'i, ()>,
+) -> ParseResult<'i, ()> {
+  input.parse_comma_separated(parse_item).map(drop)
+}
+
 // These parse Tailwind tokens straight through their `FromCss` value parser.
 impl TailwindPropertyParser for ObjectFit {}
 impl TailwindPropertyParser for ListStyleType {}
