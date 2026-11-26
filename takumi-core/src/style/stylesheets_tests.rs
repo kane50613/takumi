@@ -2242,6 +2242,7 @@ fn a_css_wide_keyword_is_one_only_as_the_whole_value() {
   ));
   assert_eq!(declarations("width: revert-rule extra"), []);
   assert_eq!(declarations("font-family: default"), []);
+  assert_eq!(declarations("font-family: serif inherit"), []);
   assert_eq!(
     declarations("width: revert-rule !important"),
     [StyleDeclaration::CssWideKeyword(

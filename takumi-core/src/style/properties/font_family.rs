@@ -141,6 +141,12 @@ impl<'i> FromCss<'i> for FontFamilyToken {
     }
 
     let first = input.expect_ident_cloned()?;
+
+    // Blink's `ConsumeFontFamily` takes a generic family before it concatenates a name.
+    if let Some(generic) = GenericFamilyType::parse(&first) {
+      return Ok(Self::Generic(generic));
+    }
+
     let mut family_name = first.to_string();
 
     while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
@@ -151,10 +157,6 @@ impl<'i> FromCss<'i> for FontFamilyToken {
     // Blink's `ConcatenateFamilyName`: only a lone CSS-wide keyword or `default` names no family.
     if family_name.len() == first.len() && is_reserved_custom_ident(&first) {
       return Err(CssParseError::unexpected_token());
-    }
-
-    if let Some(generic) = GenericFamilyType::parse(&family_name) {
-      return Ok(Self::Generic(generic));
     }
 
     Ok(Self::Owned(family_name))
