@@ -10,6 +10,11 @@ packages:
 - A repeating animation shows the start of its next iteration at a boundary, so `1s infinite` at 1000ms draws its first keyframe.
 - A zero-duration animation applies only with `animation-fill-mode: forwards` or `both`.
 - A keyframe declaration marked `!important` is invalid, so the animation leaves that property alone.
+- An animation with `animation-play-state: paused` stays at its start whatever `timeMs` is. To hold a fixed frame, pick it with a negative `animation-delay`.
+- `steps()` in a reversed animation lands on the step Chrome shows before it starts and after it ends.
+- `animation-iteration-count: 0` with `forwards` fill shows the first keyframe instead of the last.
+- Two keyframes at one offset with different timing functions each ease only the properties they declare.
+- `@keyframes` names match case-sensitively, so `animation-name: Fade` no longer runs `@keyframes fade`.
 
 ```css
 @keyframes grow {
