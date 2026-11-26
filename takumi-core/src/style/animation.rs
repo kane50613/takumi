@@ -225,7 +225,7 @@ pub(crate) fn find_keyframes<'a>(
     .iter()
     .rev()
     .find(|rule| {
-      rule.name.eq_ignore_ascii_case(name)
+      rule.name == name
         && rule
           .media_queries
           .iter()
@@ -349,7 +349,7 @@ impl KeyframesRule {
 }
 
 fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
-  match name.to_ascii_lowercase().as_str() {
+  match name {
     "spin" => Some(KeyframesRule {
       name: "spin".to_string(),
       keyframes: vec![
@@ -809,7 +809,7 @@ mod tests {
   use crate::{
     style::{
       SizingContext,
-      animation::{sample_animation_progress, tailwind_animation_keyframes},
+      animation::{find_keyframes, sample_animation_progress, tailwind_animation_keyframes},
       *,
     },
     viewport::Viewport,
@@ -1535,6 +1535,17 @@ mod tests {
     assert_eq!(sample(AnimationFillMode::Backwards), None);
     assert_eq!(sample(AnimationFillMode::Forwards), Some(1.0));
     assert_eq!(sample(AnimationFillMode::Both), Some(1.0));
+  }
+
+  /// Blink's `StyleResolver::FindKeyframesRule` matches a keyframes name exactly.
+  #[test]
+  fn a_keyframes_name_matches_case_sensitively() {
+    let stylesheet = StyleSheet::parse("@keyframes Fade { from { opacity: 0 } }").unwrap();
+    let viewport = sizing().viewport;
+
+    assert!(find_keyframes(&stylesheet, "Fade", viewport).is_some());
+    assert!(find_keyframes(&stylesheet, "fade", viewport).is_none());
+    assert!(find_keyframes(&stylesheet, "Spin", viewport).is_none());
   }
 
   #[test]
