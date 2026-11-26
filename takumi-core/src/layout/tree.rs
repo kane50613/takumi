@@ -61,7 +61,7 @@ use crate::{
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
     Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
-    Direction, Display, ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId,
+    Direction, Display, ElementAnimations, Float, FontUnits, Lang, Length, LineHeight, LonghandId,
     MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
     StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
     page_rule::PageContext,
@@ -3581,6 +3581,14 @@ impl RenderContext {
     };
     let sizing = self.child_sizing(&style, &self.sizing, is_document_root);
 
+    // `sizing` makes the element's own line height the `lh` basis, against which its specified
+    // line height would resolve again.
+    if let LineHeight::Length(length) = style.inherited_data.line_height
+      && !matches!(length, Length::Px(_))
+    {
+      style.inherited_data_mut().line_height =
+        LineHeight::Length(Length::Px(sizing.to_css(sizing.line_height)));
+    }
     style.make_computed(&sizing);
     if self.sizing.container_read.replace(parent_read) {
       sizing.container_read.set(true);
@@ -3914,8 +3922,8 @@ mod tests {
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Display, Float, Length, PageName, PropertyRule, PropertySyntax,
-      SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      ComputedStyle, Direction, Display, Float, Length, LineHeight, PageName, PropertyRule,
+      PropertySyntax, SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -4215,6 +4223,34 @@ mod tests {
       .collect::<Vec<_>>();
 
     assert_eq!(margins, [30.0, 30.0, 40.0]);
+  }
+
+  #[test]
+  fn a_line_height_reads_lh_from_its_parent_once() {
+    let stylesheet = parse_stylesheet(
+      ".p { font-size: 16px; line-height: 2 }
+       .c { font-size: 20px; line-height: calc(2lh - 2em) }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([Node::container([]).with_class_name("c")]).with_class_name("p"),
+    );
+    let child = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(
+      child.context.style.inherited_data.line_height,
+      LineHeight::Length(Length::Px(24.0))
+    );
+    assert_eq!(child.context.sizing.line_height, 24.0);
   }
 
   #[test]
