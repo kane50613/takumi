@@ -220,6 +220,7 @@ describe("fromJsx", () => {
         marginTop: "1em",
         marginBottom: "1em",
         display: "block",
+        unicodeBidi: "isolate",
       },
       style: {
         WebkitTextStroke: "1px red",
