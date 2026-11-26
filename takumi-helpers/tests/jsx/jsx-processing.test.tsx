@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { User2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { container } from "../../src/helpers";
+import { fromHtml } from "../../src/html";
 import { fromJsx } from "../../src/jsx";
 import { defaultStylePresets } from "../../src/jsx/style-presets";
 import type { ContainerNode, ImageNode, TextNode } from "../../src/types";
@@ -964,5 +965,39 @@ describe("fromJsx", () => {
       tagName: "img",
       dir: "rtl",
     } satisfies ImageNode);
+  });
+});
+
+describe("select", () => {
+  test("marks the options its value selects as React DOM does", async () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+
+    for (const element of [
+      <select value="b" onChange={() => {}}>
+        <option value="a">A</option>
+        <option value="b">B</option>
+      </select>,
+      <select defaultValue="B">
+        <option>A</option>
+        <option selected>{"B"}</option>
+      </select>,
+      <select multiple defaultValue={["a", "c"]}>
+        <optgroup label="g">
+          <option value="a">A</option>
+          <option value="b">B</option>
+        </optgroup>
+        <option value="c">C</option>
+      </select>,
+      <div>
+        <option selected>A</option>
+        <option selected={false}>B</option>
+      </div>,
+    ]) {
+      const { node } = await fromJsx(element);
+
+      expect(node).toEqual(fromHtml(renderToStaticMarkup(element)).node);
+    }
+
+    error.mockRestore();
   });
 });
