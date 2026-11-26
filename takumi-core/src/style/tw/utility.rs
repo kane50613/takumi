@@ -21,6 +21,29 @@ const SCALE_PAIR: &str = "var(--tw-scale-x, 100%) var(--tw-scale-y, 100%)";
 
 const HAIRLINE: LineWidth = LineWidth::Length(Length::Px(1.0));
 
+/// The `@property` initial value of each `--tw-*` shadow layer.
+const NULL_SHADOW: &str = "0 0 #0000";
+/// Tailwind's `ringOffsetShadowValue`, each variable's `@property` initial value inlined as its
+/// fallback.
+const RING_OFFSET_SHADOW: &str =
+  "var(--tw-ring-inset,) 0 0 0 var(--tw-ring-offset-width, 0px) var(--tw-ring-offset-color, #fff)";
+
+/// A layer of Tailwind's box-shadow stack a shadow utility sets: its variable and the one its
+/// colour reads.
+struct ShadowLayer {
+  variable: &'static str,
+  color: &'static str,
+}
+
+const SHADOW: ShadowLayer = ShadowLayer {
+  variable: "--tw-shadow",
+  color: "--tw-shadow-color",
+};
+const INSET_SHADOW: ShadowLayer = ShadowLayer {
+  variable: "--tw-inset-shadow",
+  color: "--tw-inset-shadow-color",
+};
+
 /// A root's utilities.
 pub(super) struct Utility {
   /// What the root alone writes, as `border` does.
@@ -590,23 +613,53 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
   "outline-offset" => Utility::functional(&[value!(LineWidth, |offset, builder| builder
     .push(StyleDeclaration::outline_offset(Length::from(offset))))]),
   "shadow" => Utility::functional(&[
-    value!(TwVarColor, |color, builder| builder.push_custom("--tw-shadow-color", &color.0)),
+    value!(TwVarColor, |color, builder| builder.push_custom(SHADOW.color, &color.0)),
     value!(BoxShadow, |shadow, builder| builder
-      .push_deferred(LonghandId::BoxShadow, box_shadow_css(&shadow))),
+      .push_box_shadow(SHADOW.variable, &box_shadow_css(&shadow, SHADOW.color))),
   ])
-  .bare(|builder| box_shadow_preset(builder, "--shadow", &SHADOW_SM)),
-  "shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-2xs", &SHADOW_2XS)),
-  "shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-xs", &SHADOW_XS)),
-  "shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-sm", &SHADOW_SM)),
-  "shadow-md" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-md", &SHADOW_MD)),
-  "shadow-lg" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-lg", &SHADOW_LG)),
-  "shadow-xl" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-xl", &SHADOW_XL)),
-  "shadow-2xl" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-2xl", &SHADOW_2XL)),
-  "shadow-none" | "inset-shadow-none" => Utility::fixed(|builder| builder
-    .push_deferred(LonghandId::BoxShadow, "none".to_owned())),
-  "inset-shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-2xs", &INSET_SHADOW_2XS)),
-  "inset-shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-xs", &INSET_SHADOW_XS)),
-  "inset-shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-sm", &INSET_SHADOW_SM)),
+  .bare(|builder| box_shadow_preset(builder, &SHADOW, "--shadow", &SHADOW_SM)),
+  "shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-2xs", &SHADOW_2XS)),
+  "shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-xs", &SHADOW_XS)),
+  "shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-sm", &SHADOW_SM)),
+  "shadow-md" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-md", &SHADOW_MD)),
+  "shadow-lg" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-lg", &SHADOW_LG)),
+  "shadow-xl" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-xl", &SHADOW_XL)),
+  "shadow-2xl" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-2xl", &SHADOW_2XL)),
+  "shadow-none" => Utility::fixed(|builder| builder.push_box_shadow(SHADOW.variable, NULL_SHADOW)),
+  "inset-shadow" => Utility::functional(&[
+    value!(TwVarColor, |color, builder| builder.push_custom(INSET_SHADOW.color, &color.0)),
+    value!(BoxShadow, |shadow, builder| {
+      let shadow = BoxShadow { inset: true, ..shadow };
+
+      builder.push_box_shadow(INSET_SHADOW.variable, &box_shadow_css(&shadow, INSET_SHADOW.color));
+    }),
+  ]),
+  "inset-shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-2xs", &INSET_SHADOW_2XS)),
+  "inset-shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-xs", &INSET_SHADOW_XS)),
+  "inset-shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-sm", &INSET_SHADOW_SM)),
+  "inset-shadow-none" => Utility::fixed(|builder| builder
+    .push_box_shadow(INSET_SHADOW.variable, &format!("inset {NULL_SHADOW}"))),
+  "ring" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| builder
+      .push_box_shadow("--tw-ring-shadow", &ring_shadow_css(width.0))),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-ring-color", &color.0)),
+  ])
+  .bare(|builder| builder.push_box_shadow("--tw-ring-shadow", &ring_shadow_css(Length::Px(1.0)))),
+  "ring-inset" => Utility::fixed(|builder| builder.push_custom("--tw-ring-inset", "inset")),
+  "ring-offset" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| {
+      builder.push_custom("--tw-ring-offset-width", &width.0.to_css_string());
+      builder.push_custom("--tw-ring-offset-shadow", RING_OFFSET_SHADOW);
+    }),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-ring-offset-color", &color.0)),
+  ]),
+  "inset-ring" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| builder
+      .push_box_shadow("--tw-inset-ring-shadow", &inset_ring_shadow_css(width.0))),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-inset-ring-color", &color.0)),
+  ])
+  .bare(|builder| builder
+    .push_box_shadow("--tw-inset-ring-shadow", &inset_ring_shadow_css(Length::Px(1.0)))),
   "grow" | "flex-grow" => Utility::functional(&[value!(FlexGrow, |grow, builder| builder.push(StyleDeclaration::flex_grow(Some(grow))))])
     .bare(|builder| builder.push(StyleDeclaration::flex_grow(Some(FlexGrow(1.0))))),
   "shrink" | "flex-shrink" => Utility::functional(&[value!(FlexGrow, |shrink, builder| builder.push(StyleDeclaration::flex_shrink(Some(shrink))))])
@@ -1026,13 +1079,35 @@ fn drop_shadow(drop_shadow: TwDropShadow, builder: &mut TailwindDeclarationBuild
 
 fn box_shadow_preset(
   builder: &mut TailwindDeclarationBuilder,
+  layer: &ShadowLayer,
   variable: &str,
   layers: &[BoxShadow],
 ) {
-  builder.push_deferred(
-    LonghandId::BoxShadow,
-    preset_shadow_css(variable, layers.iter().map(box_shadow_css)),
+  builder.push_box_shadow(
+    layer.variable,
+    &preset_shadow_css(
+      variable,
+      layers
+        .iter()
+        .map(|shadow| box_shadow_css(shadow, layer.color)),
+    ),
   );
+}
+
+/// Tailwind's `ringShadowValue`, which an offset widens.
+fn ring_shadow_css(width: Length) -> String {
+  format!(
+    "var(--tw-ring-inset,) 0 0 0 calc({} + var(--tw-ring-offset-width, 0px)) var(--tw-ring-color, currentcolor)",
+    width.to_css_string()
+  )
+}
+
+/// Tailwind's `insetRingShadowValue`.
+fn inset_ring_shadow_css(width: Length) -> String {
+  format!(
+    "inset 0 0 0 {} var(--tw-inset-ring-color, currentcolor)",
+    width.to_css_string()
+  )
 }
 
 fn text_shadow_preset(
@@ -1114,7 +1189,7 @@ fn shadow_layer_css(
   out
 }
 
-fn box_shadow_css(shadow: &BoxShadow) -> String {
+fn box_shadow_css(shadow: &BoxShadow, color_variable: &str) -> String {
   shadow_layer_css(
     if shadow.inset { "inset " } else { "" },
     &[
@@ -1124,7 +1199,7 @@ fn box_shadow_css(shadow: &BoxShadow) -> String {
       &shadow.spread_radius,
     ],
     &shadow.color,
-    "--tw-shadow-color",
+    color_variable,
   )
 }
 

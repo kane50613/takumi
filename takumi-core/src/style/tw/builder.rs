@@ -4,6 +4,9 @@ use crate::style::*;
 /// collapses to nothing through the empty fallback.
 const FILTER_CHAIN: &str = "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)";
 const BACKDROP_FILTER_CHAIN: &str = "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)";
+/// The shadow layers Tailwind stacks, in its fixed order, each unset one falling back to its
+/// `@property` initial value.
+const BOX_SHADOW_STACK: &str = "var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow, 0 0 #0000)";
 
 #[derive(Debug, Default)]
 pub(super) struct TailwindDeclarationBuilder {
@@ -62,6 +65,12 @@ impl TailwindDeclarationBuilder {
 
     self.push_custom(&format!("{prefix}{name}"), value);
     self.push_deferred(longhand, chain.to_owned());
+  }
+
+  /// Sets one `--tw-*` shadow layer and the stack that reads them all.
+  pub(super) fn push_box_shadow(&mut self, layer: &str, value: &str) {
+    self.push_custom(layer, value);
+    self.push_deferred(LonghandId::BoxShadow, BOX_SHADOW_STACK.to_owned());
   }
 
   /// Sets each axis variable and the pair that reads them, as `translate-*` and `scale-*` do.

@@ -240,6 +240,35 @@ impl TailwindPropertyParser for TwGradientPosition {
   }
 }
 
+/// A `ring-*` or `ring-offset-*` width: a whole number of pixels, or an arbitrary length.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TwRingWidth(pub Length);
+
+impl<'i> FromCss<'i> for TwRingWidth {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+    let length = Length::from_css(input)?;
+
+    if matches!(length, Length::Auto | Length::Percentage(_)) {
+      return Err(CssParseError::unexpected_token());
+    }
+
+    Ok(TwRingWidth(length))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
+}
+
+impl TailwindPropertyParser for TwRingWidth {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let pixels = token
+      .parse::<u32>()
+      .ok()
+      .filter(|pixels| pixels.to_string() == token)?;
+
+    Some(TwRingWidth(Length::Px(pixels as f32)))
+  }
+}
+
 /// Tailwind `blur-*` radius, themable through `--blur-*`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct TwBlur {

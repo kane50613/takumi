@@ -865,9 +865,13 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.misc1_data.box_shadow,
+      style
+        .misc1_data
+        .box_shadow
+        .as_deref()
+        .map(|shadows| &shadows[4..]),
       Some(
-        [
+        &[
           BoxShadow {
             inset: false,
             offset_x: Length::Px(0.0),
@@ -884,8 +888,7 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
             spread_radius: Length::Px(-2.0),
             color: ColorInput::Value(Color([251, 44, 54, 255])),
           },
-        ]
-        .into()
+        ][..]
       )
     );
   }
@@ -1117,7 +1120,14 @@ fn test_shadow_none_overrides_color_in_either_order() {
     let values = TailwindValues::from_str(classes).unwrap();
     let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
       .inherit(&ComputedStyle::default());
-    assert_eq!(style.misc1_data.box_shadow, None, "case: {classes}");
+    let shadows = style.misc1_data.box_shadow.as_deref().unwrap_or_default();
+
+    assert!(
+      shadows
+        .iter()
+        .all(|shadow| shadow.color == ColorInput::Value(Color::transparent())),
+      "case: {classes}"
+    );
   }
 }
 
@@ -1377,7 +1387,11 @@ fn test_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.misc1_data.box_shadow.as_deref(),
+    computed
+      .misc1_data
+      .box_shadow
+      .as_deref()
+      .map(|shadows| &shadows[4..]),
     Some(
       &[BoxShadow {
         inset: false,
@@ -1863,9 +1877,9 @@ fn test_shadow_color_reads_css_variables() {
 
   let shadows = computed.misc1_data.box_shadow.as_deref().expect("shadows");
 
-  assert_eq!(shadows.len(), 2);
+  assert_eq!(shadows.len(), 6);
 
-  for shadow in shadows {
+  for shadow in &shadows[4..] {
     assert_eq!(shadow.color, ColorInput::Value(Color::from_rgb(0x5b21b6)));
   }
 }
@@ -2139,4 +2153,97 @@ fn test_min_and_max_breakpoints_stack() {
   assert!(at(700, "sm:max-md:flex"));
   assert!(!at(500, "sm:max-md:flex"));
   assert!(!at(800, "sm:max-md:flex"));
+}
+
+/// The box shadows `classes` compute to on an element with no variable defined.
+fn computed_box_shadows(classes: &str) -> Vec<BoxShadow> {
+  let values = TailwindValues::from_str(classes).unwrap();
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+  style
+    .misc1_data
+    .box_shadow
+    .as_deref()
+    .unwrap_or_default()
+    .to_vec()
+}
+
+fn shadow(inset: bool, offset_y: f32, blur: f32, spread: Length, color: ColorInput) -> BoxShadow {
+  BoxShadow {
+    inset,
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(offset_y),
+    blur_radius: Length::Px(blur),
+    spread_radius: spread,
+    color,
+  }
+}
+
+#[test]
+fn test_shadow_ring_and_inset_layers_stack_as_tailwind_orders_them() {
+  let transparent = || {
+    shadow(
+      false,
+      0.0,
+      0.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color::transparent()),
+    )
+  };
+  let red = ColorInput::Value(Color([251, 44, 54, 255]));
+  let blue = ColorInput::Value(Color([43, 127, 255, 255]));
+
+  let stacked = computed_box_shadows(
+    "shadow-md ring-2 ring-red-500 ring-offset-4 ring-offset-blue-500 inset-ring-3 inset-shadow-sm",
+  );
+
+  assert_eq!(stacked.len(), 6);
+  assert_eq!(
+    stacked[0],
+    shadow(
+      true,
+      2.0,
+      4.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color([0, 0, 0, 13]))
+    )
+  );
+  assert_eq!(
+    stacked[1],
+    shadow(true, 0.0, 0.0, Length::Px(3.0), ColorInput::CurrentColor)
+  );
+  assert_eq!(stacked[2], shadow(false, 0.0, 0.0, Length::Px(4.0), blue));
+  assert_eq!(stacked[3].color, red);
+  assert_eq!(stacked[3].spread_radius.to_css_string(), "calc(6px)");
+  assert_eq!(
+    stacked[4],
+    shadow(
+      false,
+      4.0,
+      6.0,
+      Length::Px(-1.0),
+      ColorInput::Value(Color([0, 0, 0, 26]))
+    )
+  );
+
+  let ring = computed_box_shadows("ring inset-shadow-[0_1px_2px_red] ring-inset");
+
+  assert_eq!(ring.len(), 5);
+  assert_eq!(
+    ring[0],
+    shadow(
+      true,
+      1.0,
+      2.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color([255, 0, 0, 255]))
+    )
+  );
+  assert_eq!(ring[1..3], [transparent(), transparent()]);
+  assert!(ring[3].inset);
+  assert_eq!(ring[3].color, ColorInput::CurrentColor);
+  assert_eq!(ring[3].spread_radius.to_css_string(), "calc(1px)");
+  assert_eq!(ring[4], transparent());
 }
