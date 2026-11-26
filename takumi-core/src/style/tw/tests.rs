@@ -2097,3 +2097,15 @@ fn test_equal_utilities_sort_by_name_with_numbers_by_value() {
 
   assert_eq!(names, vec![id("p-1/2"), id("p-2"), id("p-10")]);
 }
+
+#[test]
+fn test_arbitrary_variants_on_the_element() {
+  for token in ["[&.active]:p-2", "[&[data-x]]:p-2", "[&:nth-child(4)]:p-2"] {
+    assert!(
+      TwRule::parse(token).is_some_and(|rule| rule.condition.is_some()),
+      "{token}"
+    );
+  }
+
+  assert!(TwRule::parse("[&_p]:p-2").is_none());
+}

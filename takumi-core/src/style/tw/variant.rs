@@ -226,6 +226,8 @@ pub(crate) enum Variant {
     pseudo_class: String,
     rank: u8,
   },
+  /// An arbitrary variant, `[&:nth-child(4)]`, which sorts after every registered one.
+  Arbitrary(String),
   PseudoElement(PseudoElement),
 }
 
@@ -269,6 +271,10 @@ impl Variant {
       return ContainerVariant::parse(token).map(Self::Container);
     }
 
+    if let Some(compound) = arbitrary_compound(token) {
+      return Some(Self::Arbitrary(compound));
+    }
+
     if let Some(pseudo_class) = pseudo_class(token) {
       return Some(Self::Structural {
         rank: structural_rank(token),
@@ -309,6 +315,8 @@ pub(super) struct Variants {
   pub(super) media: Vec<MediaQueryList>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
+  /// The compounds of the arbitrary variants.
+  arbitrary: Vec<String>,
   /// A bit per variant rank, so comparing two sorts them as Tailwind's variant bit sets do.
   ranks: u32,
   /// A bit per late variant, which outranks every other variant.
@@ -351,6 +359,10 @@ impl Variants {
         self.pseudo_classes.push_str(&pseudo_class);
         self.ranks |= 1 << rank;
       }
+      Variant::Arbitrary(compound) => {
+        self.pseudo_classes.push_str(&compound);
+        self.arbitrary.push(compound);
+      }
       Variant::PseudoElement(pseudo_element) => {
         let rank = match pseudo_element {
           PseudoElement::Before => BEFORE_RANK,
@@ -377,10 +389,15 @@ impl Variants {
     condition(&self.pseudo_classes).map(Some)
   }
 
-  /// The variants' sort key, the latest Tailwind registers first: the late variants, a container
+  /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
   /// query, a breakpoint, then the structural variant bits.
   pub(super) fn order(&self) -> VariantOrder {
+    let mut arbitrary = self.arbitrary.clone();
+
+    arbitrary.sort_unstable_by(|left, right| right.cmp(left));
+
     VariantOrder {
+      arbitrary,
       late: self.late,
       container: {
         let mut orders: Vec<ContainerOrder> = self
@@ -401,6 +418,9 @@ impl Variants {
 /// Tailwind's variant order for one utility.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VariantOrder {
+  /// Approximate: Tailwind gives each arbitrary variant a bit by its selector's text, where this
+  /// compares the compound's text without the `&`.
+  arbitrary: Vec<String>,
   late: u8,
   /// Approximate: several container variants sort by their latest first, where Tailwind's variant
   /// bit set gives each group one bit.
@@ -432,12 +452,8 @@ fn pseudo_class(variant: &str) -> Option<String> {
     return Some(format!(":not({})", pseudo_class(negated)?));
   }
 
-  // An arbitrary variant that only adds to the element's own compound, such as `[&:nth-child(3)]`.
-  if let Some(compound) = variant
-    .strip_prefix("[&")
-    .and_then(|rest| rest.strip_suffix(']'))
-  {
-    return compound.starts_with(':').then(|| arbitrary(compound));
+  if let Some(compound) = arbitrary_compound(variant) {
+    return Some(compound);
   }
 
   for (prefix, function) in [
@@ -465,6 +481,19 @@ fn pseudo_class(variant: &str) -> Option<String> {
   }
 
   None
+}
+
+/// The compound an arbitrary variant such as `[&:nth-child(3)]` or `[&.active]` adds to the
+/// element itself. Approximate: one that reaches past the element, `[&_p]`, and an at-rule one,
+/// `[@media(…)]`, are unsupported.
+fn arbitrary_compound(variant: &str) -> Option<String> {
+  let compound = variant
+    .strip_prefix("[&")
+    .and_then(|rest| rest.strip_suffix(']'))?;
+
+  compound
+    .starts_with([':', '.', '#', '['])
+    .then(|| arbitrary(compound))
 }
 
 /// An arbitrary value, which Tailwind writes with underscores for spaces and `\_` for an
@@ -562,6 +591,9 @@ mod tests {
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
+      ("[&.active]", Some(".active")),
+      ("[&[data-x]]", Some("[data-x]")),
+      ("[&_p]", None),
       (
         "[&:is([data-state=foo\\_bar])]",
         Some(":is([data-state=foo_bar])"),
@@ -630,7 +662,6 @@ mod tests {
       "empty",
       "nth-3",
       "nth-last-of-type-2",
-      "[&:nth-child(4)]",
       "sm",
       "md",
       "@max-[100px]",
@@ -645,6 +676,8 @@ mod tests {
       "rtl",
       "dark",
       "print",
+      "[&:nth-child(4)]",
+      "[&:nth-child(5)]",
     ];
     let order = |token: &str| {
       let mut variants = Variants::default();
