@@ -173,7 +173,11 @@ impl CustomProperties {
       };
       let value = self.own(name);
 
-      if value.is_some_and(contains_var_references) {
+      // A revert keyword `var()` substituted waits for the cascade to roll it back.
+      if value.is_some_and(|value| {
+        contains_var_references(value)
+          || CssWideKeyword::from_css_str(value).is_ok_and(CssWideKeyword::reverts)
+      }) {
         continue;
       }
       if let Some(computed) = value.and_then(|value| rule.syntax.compute(value, None)) {

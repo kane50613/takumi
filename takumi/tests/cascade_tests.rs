@@ -1218,6 +1218,15 @@ fn revert_keywords_roll_back_to_a_weaker_declaration() {
     .0,
     40.0
   );
+  // A registered one keeps the keyword past its syntax until it rolls back.
+  assert_eq!(
+    paragraph(
+      "@property --w { syntax: '<length>'; inherits: false; initial-value: 0px }
+       @layer a { .box { --w: 40px } } .box { --w: var(--missing, revert-layer); width: var(--w) }"
+    )
+    .0,
+    40.0
+  );
 }
 
 /// The widths of `.card`, its `.a` paragraph, and the `.b` paragraph in its `.content` box, in

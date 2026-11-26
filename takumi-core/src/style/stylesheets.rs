@@ -2904,7 +2904,9 @@ fn rollback_value(
 }
 
 /// The custom properties whose winning declaration's `var()` substituted a revert keyword, each
-/// with the value it rolls back to.
+/// with the value it rolls back to. Approximate: each rolls back once after every property
+/// resolves, so a property whose `var()` reads a reverting one keeps the keyword, where Blink's
+/// `ResolveRevertTo` resolves each target as it reaches it.
 fn substituted_rollbacks(
   style: &ComputedStyle,
   declarations: &[(String, String, CascadeSource)],

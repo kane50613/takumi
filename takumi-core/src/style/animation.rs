@@ -655,6 +655,8 @@ struct ResolvedKeyframeStyle {
 }
 
 impl ResolvedKeyframeStyle {
+  /// Approximate: a CSS-wide keyword in a keyframe keeps the base style's value, where Blink rolls
+  /// `revert` back to the user-agent origin and resolves `inherit` and `unset` against the parent.
   fn apply(&mut self, keyframe: &KeyframeRule) {
     for declaration in keyframe.declarations.iter() {
       declaration.apply_to_computed(&mut self.style);
