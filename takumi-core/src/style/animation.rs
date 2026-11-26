@@ -487,18 +487,12 @@ fn sample_animation_progress(
     };
   }
 
-  let progress_within_iteration = active_time / duration_ms;
-  let mut iteration_index = progress_within_iteration.floor() as usize;
-  let mut progress = progress_within_iteration.fract();
-  if active_time > 0.0 && progress_within_iteration.fract().abs() <= f32::EPSILON {
-    progress = 1.0;
-    iteration_index = iteration_index.saturating_sub(1);
-  }
+  let overall_progress = active_time / duration_ms;
 
   Some(AnimationSample::active(apply_direction(
-    progress,
+    overall_progress.fract(),
     direction,
-    iteration_index,
+    overall_progress.floor() as usize,
   )))
 }
 
@@ -1371,8 +1365,9 @@ mod tests {
     assert_eq!(progress.map(|sample| sample.progress), Some(0.5));
   }
 
+  /// <https://w3.org/TR/web-animations-1/#calculating-the-simple-iteration-progress>
   #[test]
-  fn animation_progress_uses_end_of_iteration_for_exact_normal_boundaries() {
+  fn animation_progress_starts_the_next_iteration_at_an_inner_boundary() {
     let progress = sample_animation_progress(
       1000.0,
       1000.0,
@@ -1382,7 +1377,7 @@ mod tests {
       AnimationFillMode::Both,
     );
 
-    assert_eq!(progress.map(|sample| sample.progress), Some(1.0));
+    assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
   }
 
   #[test]
