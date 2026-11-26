@@ -2925,6 +2925,15 @@ mod tests {
       ("(min-device-height: 601px)", false, false),
       ("(device-aspect-ratio: 4/3)", true, true),
       ("(device-width)", true, true),
+      ("(color: calc(8))", true, true),
+      ("(color: calc(8.5))", false, false),
+      ("(grid = 0)", false, false),
+      ("(0 = grid)", false, false),
+      ("(device-width: 800)", false, false),
+      ("(width: 800)", false, false),
+      ("(max-device-width: 0)", false, false),
+      ("(min-width: 0)", true, true),
+      ("(device-aspect-ratio: calc(4) / 3)", true, true),
     ] {
       let sheet = parse_stylesheet(&format!("@media {query} {{ .a {{ width: 1px; }} }}"));
       let matches = |viewport: Viewport| {

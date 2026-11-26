@@ -5,7 +5,7 @@ use cssparser::*;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
-  style::{ContainerName, FromCss, Length, SizingContext},
+  style::{ContainerName, FromCss, Length, SizingContext, parse_number_value},
   viewport::{ColorScheme, MediaTarget, Viewport},
 };
 
@@ -348,9 +348,9 @@ impl MediaFeatureValue {
       return Ok(Self::Resolution(resolution));
     }
 
-    if let Ok(number) = input.try_parse(Parser::expect_number) {
+    if let Ok(number) = input.try_parse(parse_number_value) {
       if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-        let divisor = input.expect_number()?;
+        let divisor = parse_number_value(input).map_err(ParseError::into)?;
 
         if divisor <= 0.0 {
           return Err(CssParseError::unexpected_token());
@@ -411,12 +411,13 @@ impl MediaFeature {
   }
 
   fn new(name: &str, comparison: MediaFeatureComparison, value: MediaFeatureValue) -> Option<Self> {
-    // A size feature takes a `<length>`, which neither `auto` nor a percentage is.
+    // A size feature takes a `<length>`, which neither `auto` nor a percentage is, or a unitless
+    // zero, as Blink's `FeatureWithValidLength` has it.
     let length = match value {
       MediaFeatureValue::Length(length) if length != Length::Auto && !length.has_percentage() => {
         Some(length)
       }
-      MediaFeatureValue::Number(number) => Some(Length::Px(number)),
+      MediaFeatureValue::Number(0.0) => Some(Length::Px(0.0)),
       _ => None,
     };
 
@@ -529,13 +530,28 @@ impl MediaFeature {
     Self::from_value(name, comparison, value)
   }
 
+  /// A feature name the range context takes, which Blink's `IsRangeTypeFeature` keeps `grid` out of.
+  fn expect_range_name<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<CowRcStr<'i>, ParseError<StyleSheetParseError>> {
+    let name = input.expect_ident_cloned()?;
+
+    if name.eq_ignore_ascii_case("grid") {
+      return Err(CssParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedMediaFeature,
+      ));
+    }
+
+    Ok(name)
+  }
+
   /// The range context of Media Queries Level 4, such as `(width >= 40em)` and
   /// `(400px < height <= 700px)`.
   /// <https://drafts.csswg.org/mediaqueries-4/#mq-range-context>
   fn parse_range<'i>(
     input: &mut Parser<'i>,
   ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<StyleSheetParseError>> {
-    if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
+    if let Ok(name) = input.try_parse(Self::expect_range_name) {
       let comparison = MediaFeatureComparison::parse(input)?;
       let value = MediaFeatureValue::parse(input)?;
 
@@ -544,7 +560,7 @@ impl MediaFeature {
 
     let lower_value = MediaFeatureValue::parse(input)?;
     let lower = MediaFeatureComparison::parse(input)?.flipped();
-    let name = input.expect_ident_cloned()?;
+    let name = Self::expect_range_name(input)?;
     let lower_feature = Self::from_value(&name, lower, lower_value)?;
 
     if input.is_exhausted() {
