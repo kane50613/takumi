@@ -1294,6 +1294,27 @@ mod matching_tests {
   }
 
   #[test]
+  fn separate_stylesheets_share_one_layer_order() {
+    let root = container_with_class("card");
+    let first = parse_stylesheet("@layer a, b; @layer b { .card { width: 10px; } }");
+    let second = parse_stylesheet("@layer a { .card { width: 20px; } }");
+
+    let matched = match_stylesheets_view(
+      &root,
+      &[&first, &second],
+      Viewport::default(),
+      Cache::default().tailwind(),
+    );
+
+    assert_eq!(
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
+      Length::Px(10.0).into()
+    );
+  }
+
+  #[test]
   fn root_selector_list_with_host_keeps_matching_root() {
     let root = Node::default();
     let stylesheet = parse_stylesheet(

@@ -28,7 +28,8 @@ use crate::{
     BreakpointOverrides, ContainerName, ContainerQuery, ContainerType, Direction, FontUnits,
     LonghandId, MediaQueryList, SizingContext, StyleDeclarationBlock, TwRule,
     selector::{
-      CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl, StyleSheet,
+      CascadeLayerMap, CssRule, FormState, Ident, PseudoClass, PseudoElement, Scope, SelectorImpl,
+      StyleSheet,
     },
     tw::TailwindCache,
   },
@@ -1026,16 +1027,14 @@ impl RuleIndex {
   }
 }
 
-/// A stylesheet among those a tree matches, with where its rules and named layers sit among them.
+/// A stylesheet among those a tree matches, with where its rules sit among them.
 struct SheetPlacement<'a> {
   sheet: &'a StyleSheet,
   matching_media: Vec<bool>,
   rule_offset: usize,
-  layer_offset: usize,
 }
 
 /// The declaration blocks of `stylesheets` that apply to each node under `root`, in tree order.
-/// Approximate: same-named layers of different sheets stay apart.
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheets: &[&'a StyleSheet],
@@ -1055,18 +1054,18 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
   containers: Option<&QueryContainers>,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
-  let (mut rule_offset, mut layer_offset) = (0, 0);
+  let mut rule_offset = 0;
 
   for &sheet in stylesheets {
     placements.push(SheetPlacement {
       sheet,
       matching_media: sheet.rule_index().matching_media(viewport),
       rule_offset,
-      layer_offset,
     });
     rule_offset += sheet.rules().len();
-    layer_offset += sheet.layer_count;
   }
+
+  let layer_map = CascadeLayerMap::new(stylesheets, viewport);
 
   let no_breakpoints = BreakpointOverrides::default();
   let breakpoints = stylesheets
@@ -1078,7 +1077,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
   let tw_order = tw_rule_order(&arena, tailwind);
   // The named layers, then the `tw` layer, declared last.
-  let layers = layer_offset + 1;
+  let layers = layer_map.count() + 1;
 
   // Every distinct media query list gates some rule, so none matching means no
   // stylesheet rule applies. Without utilities either, skip the matching walk.
@@ -1133,7 +1132,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
       MatchingForInvalidation::No,
     );
 
-    for placement in &placements {
+    for (sheet, placement) in placements.iter().enumerate() {
       let rule_index = placement.sheet.rule_index();
 
       rule_index.candidates(
@@ -1217,7 +1216,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
           record_matches(
             rule,
             source_order,
-            placement.layer_offset,
+            rule.layer_order.map(|layer| layer_map.order(sheet, layer)),
             layers,
             best,
             bucket,
@@ -1495,11 +1494,11 @@ fn selector_target(selector: &Selector<SelectorImpl>) -> Option<SelectorTarget> 
 }
 
 /// Records `rule`'s blocks in `bucket` at the specificity and scope proximity it matched with,
-/// when one of its selectors matched.
+/// when one of its selectors matched, in `layer` among `layers`.
 fn record_matches<'a>(
   rule: &'a CssRule,
   source_order: usize,
-  layer_offset: usize,
+  layer: Option<usize>,
   layers: usize,
   best_specificity: Option<(u32, u32)>,
   bucket: &mut Vec<MatchedRule<'a>>,
@@ -1507,7 +1506,6 @@ fn record_matches<'a>(
   let Some((specificity, proximity)) = best_specificity else {
     return;
   };
-  let layer = rule.layer_order.map(|layer| layer_offset + layer);
 
   if !rule.normal_declarations.is_empty() {
     bucket.push(MatchedRule {

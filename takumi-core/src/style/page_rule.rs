@@ -16,7 +16,8 @@ use crate::{
   style::{
     ContentItem, ContentValue, CustomProperties, Direction, FromCss, Length, MediaQueryList,
     PageName, RawDeclaration, RawDeclarationParser, SizingContext, StyleDeclaration,
-    StyleDeclarationBlock, contains_var_references, resolve_var_references, selector::LayerPath,
+    StyleDeclarationBlock, contains_var_references, resolve_var_references,
+    selector::{CascadeLayerMap, LayerPath},
   },
   units::{ONE_IN_PX, ONE_MM_IN_PX},
   viewport::Viewport,
@@ -815,7 +816,7 @@ impl PageRule {
   /// order: importance, layer, specificity, then source order.
   fn ranked<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
-    layer_count: usize,
+    layers: &CascadeLayerMap,
     viewport: Viewport,
     kind: PageKind,
     name: &PageName,
@@ -840,16 +841,11 @@ impl PageRule {
           | order as u64
       };
 
+      let layer = rule.layer_order.map(|layer| layers.order(0, layer));
+
+      ranked.push((rank(false, layer.unwrap_or(layers.count())), false, rule));
       ranked.push((
-        rank(false, rule.layer_order.unwrap_or(layer_count)),
-        false,
-        rule,
-      ));
-      ranked.push((
-        rank(
-          true,
-          rule.layer_order.map_or(0, |layer| layer_count - layer),
-        ),
+        rank(true, layer.map_or(0, |layer| layers.count() - layer)),
         true,
         rule,
       ));
@@ -866,7 +862,7 @@ impl PageRule {
   /// [`Self::cascade`] does.
   pub(crate) fn styles<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
-    layer_count: usize,
+    layers: &CascadeLayerMap,
     viewport: Viewport,
     kind: PageKind,
     name: &PageName,
@@ -878,7 +874,7 @@ impl PageRule {
       return styles;
     }
 
-    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
+    let ranked = Self::ranked(rules, layers, viewport, kind, name, context);
 
     for &(important, rule) in &ranked {
       rule.style.append_to(&mut styles.page, important);
@@ -906,13 +902,13 @@ impl PageRule {
   /// specificity, then source order.
   pub(crate) fn cascade<'r>(
     rules: impl IntoIterator<Item = &'r Self>,
-    layer_count: usize,
+    layers: &CascadeLayerMap,
     viewport: Viewport,
     kind: PageKind,
     name: &PageName,
     context: &PageContext,
   ) -> PageDescriptors {
-    let ranked = Self::ranked(rules, layer_count, viewport, kind, name, context);
+    let ranked = Self::ranked(rules, layers, viewport, kind, name, context);
     let mut winners = PageDescriptors::default();
 
     for declaration in ranked.into_iter().flat_map(|(important, rule)| {
