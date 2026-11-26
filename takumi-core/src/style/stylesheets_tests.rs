@@ -164,6 +164,32 @@ fn an_invalid_unitless_length_drops_the_whole_declaration() {
 }
 
 #[test]
+fn a_gradient_stop_takes_no_unitless_number() {
+  for css in [
+    "background-image: linear-gradient(red 0.25, blue 100%)",
+    "background-image: conic-gradient(red 0.25, blue)",
+  ] {
+    assert_eq!(
+      computed_from_text(css).background_data.background_image,
+      None,
+      "{css}"
+    );
+  }
+
+  for css in [
+    "background-image: linear-gradient(red 0, blue 100%)",
+    "background-image: linear-gradient(red 12px, blue 25%)",
+    "background-image: conic-gradient(red 0, blue 90deg)",
+  ] {
+    assert_ne!(
+      computed_from_text(css).background_data.background_image,
+      None,
+      "{css}"
+    );
+  }
+}
+
+#[test]
 fn a_polygon_vertex_takes_both_coordinates() {
   for css in [
     "clip-path: polygon(0 10, 100% 0, 0 100%)",

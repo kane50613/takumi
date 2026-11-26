@@ -310,7 +310,7 @@ impl GradientOverlayTile for ConicGradientTile {
 }
 
 impl ConicGradient {
-  /// Parses a conic gradient stop position: a percentage/number (fraction of a turn) or an angle.
+  /// Parses a conic gradient stop position: a percentage, an angle, or a unitless zero.
   fn parse_stop_position<'i>(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
     let token = input.next()?;
 
@@ -318,9 +318,7 @@ impl ConicGradient {
       Token::Percentage { unit_value, .. } => {
         Ok(StopPosition(Length::Percentage(*unit_value * 100.0)))
       }
-      Token::Number { value, .. } if (0.0..=1.0).contains(value) => {
-        Ok(StopPosition(Length::Percentage(*value * 100.0)))
-      }
+      Token::Number { value, .. } if *value == 0.0 => Ok(StopPosition(Length::Percentage(0.0))),
       Token::Dimension { value, unit, .. } => {
         let degrees = match_ignore_ascii_case! { unit,
           "deg" => *value,
