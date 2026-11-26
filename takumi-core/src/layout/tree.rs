@@ -3707,6 +3707,9 @@ impl RenderContext {
         let current_color = self.child_current_color(style, &sizing);
 
         animations.apply(style, longhands, &sizing, current_color);
+        if sizing.container_read.get() {
+          self.sizing.container_read.set(true);
+        }
       }
     }
   }

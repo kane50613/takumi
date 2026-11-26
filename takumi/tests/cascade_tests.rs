@@ -2173,6 +2173,25 @@ fn an_inherited_container_unit_resolves_where_it_is_declared() {
   );
 }
 
+/// A keyframe that mixes a container unit with another unit reads the container, so the tree
+/// builds again against it, as Blink interpolates the two computed lengths.
+#[test]
+fn an_animated_container_unit_reads_its_container() {
+  let node = Node::from_html(
+    r#"<div class="container"><div class="grow"></div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parses");
+  let measured = measure_with_css(
+    Node::container([node]),
+    "@keyframes grow { from { width: 10px } to { width: 50cqw } }
+     .container { container-type: inline-size; width: 200px }
+     .grow { height: 1px; animation: grow 2s linear -1s }",
+  );
+
+  assert_eq!(measured.children[0].children[0].width, 55.0);
+}
+
 /// A `container-type` on a box size containment does not apply to, a non-atomic inline or a table,
 /// makes no size container, as Blink's `ContainerQueryEvaluator` keeps only the contained axes.
 #[test]
