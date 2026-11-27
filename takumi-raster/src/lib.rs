@@ -63,7 +63,6 @@ pub(crate) use background_drawing::*;
 pub(crate) use canvas::*;
 pub(crate) use components::*;
 #[doc(hidden)]
-pub use coverage::{MaskRasterizer, set_mask_rasterizer};
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;
