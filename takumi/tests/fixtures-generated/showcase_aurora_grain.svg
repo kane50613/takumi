@@ -195,12 +195,12 @@
     <stop offset=".111" stop-color="#2dd5c0" stop-opacity=".333"/>
     <stop offset=".127" stop-color="#2ed4be" stop-opacity=".325"/>
     <stop offset=".143" stop-color="#2cd3bd" stop-opacity=".318"/>
-    <stop offset=".159" stop-color="#2ed4be" stop-opacity=".306"/>
+    <stop offset=".159" stop-color="#2ed5be" stop-opacity=".306"/>
     <stop offset=".175" stop-color="#2cd3bc" stop-opacity=".298"/>
     <stop offset=".19" stop-color="#2dd5c0" stop-opacity=".286"/>
     <stop offset=".206" stop-color="#2fd4be" stop-opacity=".278"/>
     <stop offset=".222" stop-color="#2cd3bc" stop-opacity=".271"/>
-    <stop offset=".238" stop-color="#2ed4bd" stop-opacity=".259"/>
+    <stop offset=".238" stop-color="#2ed5bd" stop-opacity=".259"/>
     <stop offset=".254" stop-color="#2cd3bf" stop-opacity=".251"/>
     <stop offset=".27" stop-color="#2dd2bd" stop-opacity=".243"/>
     <stop offset=".286" stop-color="#2bd4be" stop-opacity=".231"/>
