@@ -4,7 +4,7 @@
   <rect x="350" y="141" width="168" height="9" fill="#f00"/>
   <rect x="545" y="141" width="79" height="9" fill="#f00"/>
   <rect x="662" y="141" width="248" height="9" fill="#f00"/>
-  <rect x="969" y="141" width="154.329" height="9" fill="#f00"/>
+  <rect x="969" y="141" width="154.344" height="9" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="76.64" y="136"/>
     <use href="#g1" x="128.58" y="136"/>
@@ -29,7 +29,7 @@
     <use href="#g2" x="1037.31" y="136"/>
     <use href="#g7" x="1073.41" y="136"/>
   </g>
-  <rect x="65.844" y="293" width="1068.288" height="9" fill="#f00"/>
+  <rect x="65.844" y="293" width="1068.297" height="9" fill="#f00"/>
   <g fill="#000">
     <use href="#g14" x="65.84" y="288"/>
     <use href="#g3" x="120.47" y="288"/>

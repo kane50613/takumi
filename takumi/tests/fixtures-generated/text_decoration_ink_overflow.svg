@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="260" viewBox="0 0 480 260">
   <rect x="0" y="0" width="480" height="260" fill="#fff"/>
   <g opacity=".6">
-    <rect x="32" y="29" width="207.616" height="14" fill="#dc2626"/>
+    <rect x="32" y="29" width="207.625" height="14" fill="#dc2626"/>
     <g fill="#0f172a">
       <use href="#g0" x="32" y="75"/>
       <use href="#g1" x="43.68" y="75"/>
@@ -24,7 +24,7 @@
   <g filter="url(#ft0)">
     <rect x="32" y="128" width="416" height="32" fill="#000" fill-opacity="0"/>
     <clipPath id="cp1">
-      <path d="M32 165h187.68v19h-187.68Z"/>
+      <path d="M32 165h187.69v19h-187.69Z"/>
     </clipPath>
     <g clip-path="url(#cp1)">
       <path d="M5 174.5c13.5 19.5 13.5-19.5 27 0s13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0 13.5-19.5 27 0" fill="none" stroke="#2563eb" stroke-width="6"/>

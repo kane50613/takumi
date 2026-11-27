@@ -157,7 +157,7 @@
   <rect x="128" y="26" width="167" height="40" fill="#dbeafe"/>
   <path d="M128 26h167v40h-167v-40Zm2 2h163v36h-163v-36Z" fill="#2563eb" fill-rule="evenodd"/>
   <rect x="133.656" y="58" width="106.344" height="2" fill="#000"/>
-  <rect x="248" y="58" width="41.224" height="2" fill="#000"/>
+  <rect x="248" y="58" width="41.234" height="2" fill="#000"/>
   <g fill="#000">
     <use href="#g18" x="133.66" y="56"/>
     <use href="#g3" x="157.88" y="56"/>
