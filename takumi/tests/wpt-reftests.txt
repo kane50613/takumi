@@ -3209,6 +3209,8 @@ svg/painting/
 !svg/painting/reftests/paint-context-006.svg
 !svg/painting/reftests/paint-order-text-decorations.svg
 !svg/painting/reftests/pattern-external-reference.svg
+!svg/painting/reftests/percentage-attribute.svg
+!svg/painting/reftests/percentage.svg
 !svg/painting/reftests/text-shadow-01.html
 !svg/painting/reftests/text-shadow-02.html
 !svg/painting/reftests/text-shadow-03.html
