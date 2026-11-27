@@ -3,17 +3,17 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
-use takumi_core::geometry::Rect;
 
-use crate::writer::num::FiniteF32;
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::raw::types::NameId;
 use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider, OutlineGlyphCollection};
+use takumi_core::geometry::Rect;
 use yoke::{Yoke, Yokeable};
 
 use crate::writer::Data;
+use crate::writer::num::FiniteF32;
 use crate::writer::text::GlyphId;
 use crate::writer::util::Prehashed;
 

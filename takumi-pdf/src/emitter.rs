@@ -1,24 +1,21 @@
 //! The scene walker that emits boxes, text and images onto a writer surface.
 
-use crate::writer::geom::rotation_at;
 #[cfg(all(feature = "svg", feature = "images"))]
 use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
-use takumi_core::path::{Path, PathBuilder};
-use takumi_core::{
-  paint::SpreadMethod,
-  path::Stroke as PathStroke,
-  style::{LineJoin, MaskType},
-};
 
 use rustc_hash::FxHashMap;
-
+#[cfg(all(feature = "svg", feature = "images"))]
+use takumi_core::resources::image::SvgPicture;
 #[cfg(all(feature = "images", feature = "svg"))]
 use takumi_core::resources::image::{ImageSource, SvgSource};
 #[cfg(feature = "images")]
 use takumi_core::{
+  blur::blur_rgba,
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
+  resources::glyph::ResolvedBitmapGlyph,
+  style::BlurType,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
@@ -30,7 +27,7 @@ use takumi_core::{
     inline_box::resolve_inline_box,
     tree::{NodeOrigin, RenderNode},
   },
-  paint::ConicGradientTile,
+  paint::{ConicGradientTile, SpreadMethod},
   paint_chunk::{ChunkPart, ConversionContext, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{
@@ -39,17 +36,19 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
+  path::{Path, PathBuilder, Stroke as PathStroke},
   resources::image_buffer::demultiplied,
   scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule, Filter, Isolation,
-    Lang, PaintPhase, ResolvedGradientStop,
+    Lang, LineJoin, MaskType, PaintPhase, ResolvedGradientStop,
   },
 };
 
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
+use crate::writer::geom::rotation_at;
 #[cfg(feature = "images")]
 use crate::writer::image::Image as PdfImage;
 use crate::{
@@ -82,10 +81,6 @@ use crate::{
 };
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::{svg::SvgPainter, writer::xobject::XObject};
-#[cfg(all(feature = "svg", feature = "images"))]
-use takumi_core::resources::image::SvgPicture;
-#[cfg(feature = "images")]
-use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);

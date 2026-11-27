@@ -1,18 +1,18 @@
-use crate::writer::geom::{UNIT_RECT, expand, pdf_rect};
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::ops::DerefMut;
-use takumi_core::style::Affine;
 
 use pdf_writer::types::{FontFlags, UnicodeCmap};
 use pdf_writer::writers::WMode;
 use pdf_writer::{Finish, Name, Ref, Str};
 use rustc_hash::FxHashMap;
+use takumi_core::style::Affine;
 
 use super::{FontIdentifier, Type3Identifier};
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::PdfVersion;
+use crate::writer::geom::{UNIT_RECT, expand, pdf_rect};
 use crate::writer::graphics::paint::Fill;
 use crate::writer::graphics::xobject::XObject;
 use crate::writer::resource::ResourceDictionaryBuilder;

@@ -1,17 +1,19 @@
-use crate::writer::geom::{expand, rotation_at};
 use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use takumi_core::paint::SpreadMethod;
-use takumi_core::{geometry::Rect, style::Affine};
 
 use bumpalo::Bump;
 use pdf_writer::types::{FunctionShadingType, PostScriptOp};
 use pdf_writer::{Chunk, Finish, Name, Ref};
-use takumi_core::geometry::Point;
+use takumi_core::{
+  geometry::{Point, Rect},
+  paint::SpreadMethod,
+  style::Affine,
+};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
+use crate::writer::geom::{expand, rotation_at};
 use crate::writer::graphics::color::luma;
 use crate::writer::graphics::color::{Color, ColorSpace};
 use crate::writer::graphics::paint::Stop;

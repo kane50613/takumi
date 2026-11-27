@@ -5,7 +5,6 @@ use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "images")]
 use rustc_hash::FxHashMap;
-use takumi_core::paint::SpreadMethod;
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -14,10 +13,11 @@ use takumi_core::{
     image_buffer::{ImageBuffer, demultiply_pixel},
   },
 };
-use takumi_core::{geometry::Rect, path::Path, path::PathBuilder};
 use takumi_core::{
-  geometry::{PathCommand, Point, Size},
+  geometry::{PathCommand, Point, Rect, Size},
+  paint::SpreadMethod,
   painter::FillShape,
+  path::{Path, PathBuilder},
   style::{Color, FillRule, ResolvedGradientStop},
 };
 

@@ -2,10 +2,10 @@
 
 use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
-use takumi_core::style::Affine;
 
 use pdf_writer::types::{PaintType, TilingType};
 use pdf_writer::{Finish, Ref};
+use takumi_core::style::Affine;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::num::NormalizedF32;

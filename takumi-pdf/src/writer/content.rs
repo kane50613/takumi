@@ -1,34 +1,33 @@
 //! A low-level abstraction over a single content stream.
 
-use crate::writer::geom::{UNIT_RECT, expand};
-use crate::writer::graphics::paint::{line_cap_style, line_join_style};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::slice;
 use std::sync::Arc;
-#[cfg(feature = "images")]
-use takumi_core::geometry::Size;
-use takumi_core::style::{FillRule, LineCap, LineJoin};
-use takumi_core::{geometry::Rect, style::Affine};
 
 use float_cmp::approx_eq;
 use pdf_writer::types::TextRenderingMode;
 use pdf_writer::{Content, Finish, Name, Str, TextStr};
+#[cfg(feature = "images")]
+use takumi_core::geometry::Size;
 use takumi_core::{
-  geometry::{PathCommand, Point},
+  geometry::{PathCommand, Point, Rect},
   path::{Path, PathVerb},
+  style::{Affine, FillRule, LineCap, LineJoin},
 };
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::ValidationError;
+use crate::writer::geom::{UNIT_RECT, expand};
 use crate::writer::graphics::color::{Color, ColorSpace};
 use crate::writer::graphics::graphics_state::{ExtGState, GraphicsStates};
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
 use crate::writer::graphics::paint::{Fill, InnerPaint, PDF_MITER_LIMIT, Paint, Stroke};
+use crate::writer::graphics::paint::{line_cap_style, line_join_style};
 use crate::writer::graphics::shading_function::{
   GradientProperties, GradientPropertiesExt, ShadingFunction,
 };

@@ -7,9 +7,9 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use takumi_core::geometry::Point;
 
 use pdf_writer::{Obj, Ref};
+use takumi_core::geometry::Point;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::error::WriterResult;

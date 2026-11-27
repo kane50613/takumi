@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::num::NonZeroU16;
 use std::rc::Rc;
 use std::sync::Arc;
-use takumi_core::geometry::Size;
 
 use indexmap::IndexMap;
 use pdf_writer::types::{StructRole, StructRole2};
 use pdf_writer::writers::{OutputIntent, StructTreeRoot};
 use pdf_writer::{Chunk, Content, Finish, Limits, Name, Obj, Pdf, Ref, Settings, Str, TextStr};
 use rustc_hash::FxHashMap;
+use takumi_core::geometry::Size;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::{CieBasedColorSpace, DeviceColorSpace};

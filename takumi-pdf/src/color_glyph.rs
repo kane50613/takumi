@@ -5,13 +5,12 @@ use skrifa::{
   color::{ColorPalette, CompositeMode, Extend},
   instance::LocationRef,
 };
-use takumi_core::paint::SpreadMethod;
-use takumi_core::path::Path;
-use takumi_core::resources::color_glyph::{
-  ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
+use takumi_core::{
+  paint::SpreadMethod,
+  path::Path,
+  resources::color_glyph::{ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop},
+  style::{Affine, BlendMode, FillRule, MaskType},
 };
-use takumi_core::style::Affine;
-use takumi_core::style::{BlendMode, FillRule, MaskType};
 
 use crate::writer::{
   color::rgb,

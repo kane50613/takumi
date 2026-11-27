@@ -5,10 +5,14 @@
 //! operations such as applying linear transformations, showing text or images and drawing paths.
 
 use std::num::NonZeroU64;
+
 #[cfg(feature = "images")]
 use takumi_core::geometry::Size;
-use takumi_core::style::FillRule;
-use takumi_core::{geometry::Point, path::Path, style::Affine};
+use takumi_core::{
+  geometry::Point,
+  path::Path,
+  style::{Affine, BlendMode, FillRule},
+};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
@@ -28,7 +32,6 @@ use crate::writer::serialize::SerializeContext;
 use crate::writer::stream::{Stream, StreamBuilder};
 use crate::writer::text::Font;
 use crate::writer::text::{Glyph, draw_glyph};
-use takumi_core::style::BlendMode;
 
 /// Can be used to associate render operations with a unique identifier.
 /// This is useful if you want to backtrack a validation error to a specific

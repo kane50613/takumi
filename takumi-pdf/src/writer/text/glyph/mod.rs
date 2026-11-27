@@ -1,7 +1,7 @@
 use std::ops::Range;
-use takumi_core::style::Affine;
 
 use skrifa::MetadataProvider;
+use takumi_core::style::Affine;
 
 use crate::writer::color::rgb;
 use crate::writer::surface::Surface;

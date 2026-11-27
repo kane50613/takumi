@@ -2,13 +2,12 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use takumi_core::paint::SpreadMethod;
-use takumi_core::style::Affine;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
 use takumi_core::{
+  paint::SpreadMethod,
   path::Stroke as PathStroke,
-  style::{FillRule, LineCap, LineJoin},
+  style::{Affine, FillRule, LineCap, LineJoin},
 };
 
 use crate::writer::graphics::color::{Color, luma, rgb};

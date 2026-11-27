@@ -1,9 +1,13 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::style::FillRule;
-use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds, style::Affine};
-use takumi_core::{geometry::Rect, path::Path};
+use takumi_core::{
+  geometry::{Point, Rect},
+  painter::LineItem,
+  path::Path,
+  scene::SceneBounds,
+  style::{Affine, FillRule},
+};
 
 use crate::{
   emitter::Emitter,

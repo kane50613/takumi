@@ -1,8 +1,8 @@
 use skrifa::outline::DrawSettings;
-use takumi_core::style::Affine;
 use takumi_core::{
   path::{Path, PathBuilder},
   resources::glyph::draw_outline,
+  style::Affine,
 };
 
 use crate::writer::surface::Surface;

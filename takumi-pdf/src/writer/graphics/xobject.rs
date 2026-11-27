@@ -1,12 +1,12 @@
-use crate::writer::geom::pdf_rect;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use takumi_core::geometry::Rect;
 
 use pdf_writer::{Finish, Name, Ref};
+use takumi_core::geometry::Rect;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
+use crate::writer::geom::pdf_rect;
 use crate::writer::graphics::color::{DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::writer::resource;
 use crate::writer::resource::{Resource, Resourceable};

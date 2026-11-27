@@ -3,14 +3,17 @@ use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use takumi_core::geometry::Rect;
 
-use crate::writer::graphics::paint::Stroke;
 use base64::Engine;
 pub(crate) use deferred::*;
 use pdf_writer::Name;
 use siphasher::sip128::{Hasher128, SipHasher13};
-use takumi_core::path::{Path, Stroke as PathStroke};
+use takumi_core::{
+  geometry::Rect,
+  path::{Path, Stroke as PathStroke},
+};
+
+use crate::writer::graphics::paint::Stroke;
 
 pub(crate) trait NameExt {
   fn to_pdf_name(&self) -> Name<'_>;
