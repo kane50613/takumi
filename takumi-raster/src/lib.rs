@@ -62,7 +62,6 @@ mod zlib;
 pub(crate) use background_drawing::*;
 pub(crate) use canvas::*;
 pub(crate) use components::*;
-#[doc(hidden)]
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;

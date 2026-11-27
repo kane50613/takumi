@@ -703,18 +703,6 @@ impl PaintDevice for CanvasDevice<'_> {
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
     if let Some(shadow) = self.shadow {
-      if let FillShape::Rect(size) = shape {
-        let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
-        let device =
-          self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
-
-        if let Some(coverage) =
-          render_rect_mask(*size, device, Some(self.shadow_viewport(blur_radius)))
-        {
-          return self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
-        }
-      }
-
       return self.draw_shadow_of(
         shadow,
         &shape.to_commands(),
