@@ -2008,7 +2008,6 @@ dependencies = [
  "smallvec",
  "takumi-core",
  "tiny-skia",
- "tiny-skia-path",
  "typed-builder",
  "xxhash-rust",
  "zlib-rs",

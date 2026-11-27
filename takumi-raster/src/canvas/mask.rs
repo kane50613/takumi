@@ -719,7 +719,9 @@ fn rasterize_mask(
   let mut path = Command::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
-    path = stroke_path(&path, &stroke, 1.0)?;
+    let (outline, dash) = stroke.outline();
+
+    path = stroke_path(&path, &outline, dash.as_ref(), 1.0)?;
   }
 
   if let Some(transform) = transform {
