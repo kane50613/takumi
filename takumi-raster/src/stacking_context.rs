@@ -1,3 +1,4 @@
+use crate::pixmap::PixmapMut;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Size},
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
@@ -5,7 +6,6 @@ use takumi_core::{
   painter::{OwnContent, TableDecorations, TextClip, paint_collapsed_borders},
   scene::{NodePaint, Scene, SceneBounds, SceneView},
 };
-use tiny_skia::PixmapMut;
 
 use crate::{
   Backdrop, BorderProperties, Canvas, CanvasDevice, CanvasSubcanvas, CanvasViewport,

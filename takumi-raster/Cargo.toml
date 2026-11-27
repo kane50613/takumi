@@ -3,7 +3,7 @@ name = "takumi-raster"
 version = "0.9.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Raster (tiny-skia) painting backend for takumi."
+description = "Raster painting backend for takumi."
 repository = "https://github.com/kane50613/takumi"
 readme = "README.md"
 rust-version = "1.91"
@@ -13,7 +13,6 @@ png.workspace = true
 gif.workspace = true
 jpeg-encoder.workspace = true
 color.workspace = true
-tiny-skia.workspace = true
 tiny-skia-path.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
@@ -63,6 +62,7 @@ pages = ["takumi-core/fragmentation"]
 
 [dev-dependencies]
 serde_json.workspace = true
+tiny-skia.workspace = true
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"

@@ -1,12 +1,12 @@
 //! Gradient tile overlay fast paths and their reference-parity tests.
 
+use crate::pixmap::PixmapMut;
 use takumi_core::{
   geometry::{Point, Size},
   paint::{
     GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
   },
 };
-use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
@@ -462,8 +462,8 @@ pub(crate) fn overlay_radial_gradient_tile(
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
+  use crate::pixmap::PixmapMut;
   use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
-  use tiny_skia::PixmapMut;
 
   use super::*;
   use crate::{

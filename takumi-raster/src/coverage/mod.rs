@@ -11,12 +11,13 @@ mod edge_clipper;
 mod rect;
 mod scan;
 
-use tiny_skia::{FillRule, IntSize, Path};
+use crate::path::Fill;
+use tiny_skia_path::{IntSize, Path};
 
 use blitter::{Coverage, IntBounds, round_out};
 
 /// The coverage of `path` over a `size` mask at the origin, filled by `fill_rule`.
-pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Option<Vec<u8>> {
+pub(crate) fn fill_path(path: &Path, fill_rule: Fill, size: IntSize) -> Option<Vec<u8>> {
   let mask_bounds = IntBounds {
     left: 0,
     top: 0,
@@ -65,11 +66,7 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
 
 /// The coverage of `path` over a `size` mask at the origin without anti-aliasing, as
 /// `SkScan::FillPath` fills it.
-pub(crate) fn fill_path_aliased(
-  path: &Path,
-  fill_rule: FillRule,
-  size: IntSize,
-) -> Option<Vec<u8>> {
+pub(crate) fn fill_path_aliased(path: &Path, fill_rule: Fill, size: IntSize) -> Option<Vec<u8>> {
   let mut mask = vec![0; size.width() as usize * size.height() as usize];
 
   aliased::fill_path(

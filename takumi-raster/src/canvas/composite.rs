@@ -1,7 +1,7 @@
 use std::ops::Range;
 
+use crate::pixmap::PixmapMut;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::PixmapMut;
 
 use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
@@ -507,7 +507,7 @@ fn blend_sampled(
 
 #[cfg(test)]
 mod scaled_rows_tests {
-  use tiny_skia::Pixmap;
+  use crate::pixmap::Pixmap;
 
   use super::*;
   use crate::style::ImageScalingAlgorithm;
@@ -518,13 +518,12 @@ mod scaled_rows_tests {
     for (i, pixel) in source.pixels_mut().iter_mut().enumerate() {
       let alpha = [255u8, 200, 90, 0, 255][i % 5];
       let channel = |k: usize| ((i * 37 + k * 11) % 256) as u8;
-      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
+      *pixel = [
         channel(1).min(alpha),
         channel(2).min(alpha),
         channel(3).min(alpha),
         alpha,
-      )
-      .unwrap();
+      ];
     }
 
     source
@@ -535,7 +534,7 @@ mod scaled_rows_tests {
     let mut canvas = Pixmap::new(40, 30).unwrap();
 
     for (i, pixel) in canvas.pixels_mut().iter_mut().enumerate() {
-      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(0, (i % 100) as u8, 20, 120).unwrap();
+      *pixel = [0, (i % 100) as u8, 20, 120];
     }
 
     let mask: Vec<u8> = (0..36 * 26)
@@ -633,8 +632,9 @@ mod scaled_rows_tests {
 
 #[cfg(test)]
 mod tests {
+  use crate::pixmap::Mask;
   use takumi_core::geometry::{Point, Size};
-  use tiny_skia::{IntSize, Mask};
+  use tiny_skia_path::IntSize;
 
   use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
   use crate::{Placement, style::BlendMode};

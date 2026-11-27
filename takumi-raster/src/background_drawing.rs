@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::path::Fill;
+use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
@@ -9,10 +11,7 @@ use takumi_core::{
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::{BoxBackground, SnappedBox},
 };
-use tiny_skia::{
-  FillRule as TinyFillRule, IntRect, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut,
-  PixmapRef, Rect as TinyRect,
-};
+use tiny_skia_path::{IntRect, IntSize, PathBuilder, Rect as TinyRect};
 
 use crate::resources::image::RenderedImage;
 #[cfg(feature = "svg")]
@@ -108,8 +107,7 @@ impl TileLayer {
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage =
-      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), TinyFillRule::Winding, size)?;
+    let coverage = coverage::fill_path_aliased(&PathBuilder::from_rect(rect), Fill::NonZero, size)?;
 
     TinyMask::from_vec(coverage, size)
   }

@@ -2,6 +2,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use smallvec::SmallVec;
 
+use crate::pixmap::Mask as TinyMask;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
@@ -9,7 +10,7 @@ use takumi_core::{
   resources::glyph_cache::GlyphCache,
   scene::SceneBounds,
 };
-use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
+use tiny_skia_path::{IntSize, Transform as TinyTransform};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{

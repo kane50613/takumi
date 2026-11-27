@@ -1,5 +1,6 @@
+use crate::pixmap::Pixmap;
 use takumi_core::resources::image::parse_svg_filter;
-use tiny_skia::{Color, Pixmap, Transform};
+use tiny_skia_path::Transform;
 
 use super::apply;
 use crate::svg::apply_svg_filter;
@@ -29,7 +30,7 @@ fn lighting_a_layer_larger_than_the_filter_region_stays_in_bounds() {
     .expect("a filter");
     let mut layer = Pixmap::new(12, 12).expect("a pixmap");
 
-    layer.fill(Color::BLACK);
+    layer.pixels_mut().fill([0, 0, 0, 255]);
     apply(&filter, Transform::identity(), &mut layer);
   }
 }

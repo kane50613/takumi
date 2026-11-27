@@ -9,7 +9,7 @@ use skrifa::{
   outline::{DrawSettings, OutlinePen},
   raw::types::BoundingBox,
 };
-use tiny_skia::{Path, PathBuilder, Point, Rect, Transform};
+use tiny_skia_path::{Path, PathBuilder, Point, Rect, Transform};
 
 use crate::resources::glyph::draw_outline;
 

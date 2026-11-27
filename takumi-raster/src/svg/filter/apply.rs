@@ -6,7 +6,8 @@
 
 use std::{f32::consts::SQRT_2, rc::Rc};
 
-use tiny_skia::{IntRect, Pixmap, PixmapRef, Transform};
+use crate::pixmap::{Pixmap, PixmapRef};
+use tiny_skia_path::{IntRect, Transform};
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,

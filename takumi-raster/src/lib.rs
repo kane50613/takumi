@@ -46,6 +46,7 @@ pub(crate) mod inline_drawing;
 mod node_paint;
 mod palette;
 mod path;
+mod pixmap;
 /// Main image renderer and viewport management
 mod render;
 #[cfg(all(test, feature = "pages"))]

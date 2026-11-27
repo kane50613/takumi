@@ -1,5 +1,6 @@
 use std::iter::successors;
 
+use crate::pixmap::{Pixmap, PixmapMut};
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, style::FilterReference};
@@ -8,7 +9,7 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
-use tiny_skia::{IntSize, Pixmap, PixmapMut};
+use tiny_skia_path::IntSize;
 
 #[cfg(feature = "svg")]
 use crate::svg::apply_svg_filter;
@@ -501,9 +502,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
   let shadow_rgb = [sr, sg, sb];
   let source_pixels = pixmap.as_ref().pixels();
   let Some(source_bounds) =
-    find_nonzero_bounds(source_pixels, canvas_width, canvas_height, |pixel| {
-      pixel.alpha()
-    })
+    find_nonzero_bounds(source_pixels, canvas_width, canvas_height, |pixel| pixel[3])
   else {
     return Ok(());
   };
@@ -528,7 +527,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     let src_row = (source_bounds.top as u32 + y) as usize * canvas_width as usize;
     let dst_row = (y + padding) as usize * shadow_width as usize + padding as usize;
     for x in 0..source_bounds.width {
-      let alpha = source_pixels[src_row + (source_bounds.left as u32 + x) as usize].alpha();
+      let alpha = source_pixels[src_row + (source_bounds.left as u32 + x) as usize][3];
       shadow_alpha[dst_row + x as usize] = mul_div_255(sa, alpha);
     }
   }
@@ -577,7 +576,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
-  use tiny_skia::PixmapMut;
+  use crate::pixmap::PixmapMut;
 
   use super::*;
   use crate::{
