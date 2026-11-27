@@ -1,5 +1,8 @@
 use skrifa::outline::{DrawSettings, OutlinePen};
-use takumi_core::resources::glyph::draw_outline;
+use takumi_core::{
+  path::{Path as CorePath, PathBuilder as CorePathBuilder},
+  resources::glyph::draw_outline,
+};
 
 use crate::writer::geom::Path;
 use crate::writer::geom::Transform;
@@ -7,7 +10,7 @@ use crate::writer::surface::Surface;
 use crate::writer::text::Font;
 use crate::writer::text::GlyphId;
 
-pub(crate) fn glyph_path(font: Font, glyph: GlyphId) -> Option<tiny_skia_path::Path> {
+pub(crate) fn glyph_path(font: Font, glyph: GlyphId) -> Option<CorePath> {
   let outline_glyphs = font.outline_glyphs();
   let mut outline_builder = OutlineBuilder::new();
 
@@ -30,7 +33,7 @@ pub(crate) fn draw_glyph(
   base_transform: Transform,
   surface: &mut Surface,
 ) -> Option<()> {
-  let path = Path(glyph_path(font, glyph).and_then(|p| p.transform(base_transform.to_tsp()))?);
+  let path = Path(glyph_path(font, glyph).and_then(|p| p.transform(base_transform.to_affine()))?);
 
   surface.draw_path(&path);
 
@@ -38,14 +41,14 @@ pub(crate) fn draw_glyph(
 }
 
 /// A wrapper struct for implementing the `OutlinePen` trait.
-pub(crate) struct OutlineBuilder(tiny_skia_path::PathBuilder);
+pub(crate) struct OutlineBuilder(CorePathBuilder);
 
 impl OutlineBuilder {
   pub(crate) fn new() -> Self {
-    Self(tiny_skia_path::PathBuilder::new())
+    Self(CorePathBuilder::new())
   }
 
-  pub(crate) fn finish(self) -> Option<tiny_skia_path::Path> {
+  pub(crate) fn finish(self) -> Option<CorePath> {
     self.0.finish()
   }
 }

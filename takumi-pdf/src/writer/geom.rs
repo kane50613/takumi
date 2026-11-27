@@ -2,6 +2,11 @@
 
 use std::hash::{Hash, Hasher};
 
+use takumi_core::{
+  path::{Path as CorePath, PathBuilder as CorePathBuilder, Rect as CoreRect},
+  style::Affine,
+};
+
 /// A point.
 #[allow(missing_docs)]
 #[derive(Copy, Clone, PartialEq, Default, Debug)]
@@ -15,39 +20,39 @@ impl Point {
   pub fn from_xy(x: f32, y: f32) -> Self {
     Self { x, y }
   }
-
-  pub(crate) fn to_tsp(self) -> tiny_skia_path::Point {
-    tiny_skia_path::Point::from_xy(self.x, self.y)
-  }
 }
 
-/// A size.
+/// A size whose width and height are finite and above zero.
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub struct Size(tiny_skia_path::Size);
+pub struct Size {
+  width: f32,
+  height: f32,
+}
 
 impl Size {
   /// Creates a new `Size` from width and height.
   ///
   /// Returns `None` if either the width or the height is not > 0.
   pub fn from_wh(width: f32, height: f32) -> Option<Self> {
-    Some(Self(tiny_skia_path::Size::from_wh(width, height)?))
+    (width > 0.0 && height > 0.0 && width.is_finite() && height.is_finite())
+      .then_some(Self { width, height })
   }
 
   /// Returns the width of the size.
   pub fn width(&self) -> f32 {
-    self.0.width()
+    self.width
   }
 
   /// Returns the height of the size.
   pub fn height(&self) -> f32 {
-    self.0.height()
+    self.height
   }
 }
 
 /// A rectangle defined by left, top, right and bottom edges.
 #[allow(missing_docs)]
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub struct Rect(tiny_skia_path::Rect);
+pub struct Rect(CoreRect);
 
 impl Eq for Rect {}
 
@@ -78,19 +83,17 @@ impl Rect {
 
   /// Creates new `Rect`.
   pub fn from_ltrb(left: f32, top: f32, right: f32, bottom: f32) -> Option<Self> {
-    Some(Self(tiny_skia_path::Rect::from_ltrb(
-      left, top, right, bottom,
-    )?))
+    Some(Self(CoreRect::from_ltrb(left, top, right, bottom)?))
   }
 
   /// Apply a transform to the rect.
   pub fn transform(self, transform: Transform) -> Option<Self> {
-    Some(Self(self.0.transform(transform.to_tsp())?))
+    Some(Self(self.0.transform(transform.0)?))
   }
 
   /// Creates new `Rect`.
   pub fn from_xywh(x: f32, y: f32, w: f32, h: f32) -> Option<Self> {
-    Some(Self(tiny_skia_path::Rect::from_xywh(x, y, w, h)?))
+    Some(Self(CoreRect::from_xywh(x, y, w, h)?))
   }
 
   /// Returns the left edge.
@@ -123,11 +126,7 @@ impl Rect {
     self.0.height()
   }
 
-  pub(crate) fn to_tsp(self) -> tiny_skia_path::Rect {
-    self.0
-  }
-
-  pub(crate) fn from_tsp(rect: tiny_skia_path::Rect) -> Self {
+  pub(crate) fn from_core(rect: CoreRect) -> Self {
     Self(rect)
   }
 
@@ -158,152 +157,175 @@ impl Rect {
 /// Meaning Transform(0, 0, 0, 0, 0, 0) is ok, while it's technically not.
 /// Non-finite values are also not an error.
 #[allow(missing_docs)]
-#[derive(Copy, Clone, PartialEq, Debug, Default)]
-pub struct Transform(tiny_skia_path::Transform);
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct Transform(Affine);
+
+impl Default for Transform {
+  fn default() -> Self {
+    Self::identity()
+  }
+}
 
 impl Transform {
-  /// Creates an identity transform.
   pub fn identity() -> Self {
-    Self(tiny_skia_path::Transform::default())
+    Self(Affine::IDENTITY)
   }
 
-  /// Creates a new `Transform`.
   pub fn from_row(sx: f32, ky: f32, kx: f32, sy: f32, tx: f32, ty: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_row(sx, ky, kx, sy, tx, ty))
+    Self(Affine {
+      a: sx,
+      b: ky,
+      c: kx,
+      d: sy,
+      x: tx,
+      y: ty,
+    })
   }
 
-  /// Creates a new translating `Transform`.
   pub fn from_translate(tx: f32, ty: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_translate(tx, ty))
+    Self::from_row(1.0, 0.0, 0.0, 1.0, tx, ty)
   }
 
-  /// Creates a new scaling `Transform`.
   pub fn from_scale(sx: f32, sy: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_scale(sx, sy))
+    Self::from_row(sx, 0.0, 0.0, sy, 0.0, 0.0)
   }
 
-  /// Creates a new skewing `Transform`.
   pub fn from_skew(kx: f32, ky: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_skew(kx, ky))
+    Self::from_row(1.0, ky, kx, 1.0, 0.0, 0.0)
   }
 
-  /// Creates a new rotating `Transform`.
-  ///
-  /// `angle` in degrees.
+  /// A rotation by `angle` degrees.
   pub fn from_rotate(angle: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_rotate(angle))
+    let radians = angle.to_radians();
+    let (sin, cos) = (radians.sin(), radians.cos());
+
+    Self::from_row(cos, sin, -sin, cos, 0.0, 0.0)
   }
 
-  /// Creates a new rotating `Transform` at the specified position.
-  ///
-  /// `angle` in degrees.
+  /// A rotation by `angle` degrees around `tx`, `ty`.
   pub fn from_rotate_at(angle: f32, tx: f32, ty: f32) -> Self {
-    Self(tiny_skia_path::Transform::from_rotate_at(angle, tx, ty))
+    Self::from_translate(tx, ty)
+      .pre_concat(Self::from_rotate(angle))
+      .pre_concat(Self::from_translate(-tx, -ty))
   }
 
-  /// Return the `sx` component
   pub fn sx(&self) -> f32 {
-    self.0.sx
+    self.0.a
   }
 
-  /// Return the `sy` component
   pub fn sy(&self) -> f32 {
-    self.0.sy
+    self.0.d
   }
 
-  /// Return the `kx` component
   pub fn kx(&self) -> f32 {
-    self.0.kx
+    self.0.c
   }
 
-  /// Return the `kx` component
   pub fn ky(&self) -> f32 {
-    self.0.ky
+    self.0.b
   }
 
-  /// Return the `tx` component
   pub fn tx(&self) -> f32 {
-    self.0.tx
+    self.0.x
   }
 
-  /// Return the `ty` component
   pub fn ty(&self) -> f32 {
-    self.0.ty
+    self.0.y
   }
 
-  /// Returns the inverted transform.
+  /// `SkMatrix::invertNonIdentity`: the inverse through doubles, none where the determinant is
+  /// nearly zero or the inverse leaves the finite range.
   pub fn invert(&self) -> Option<Self> {
-    Some(Self(self.0.invert()?))
+    let Affine { a, b, c, d, x, y } = self.0;
+
+    if self.0 == Affine::IDENTITY {
+      return Some(*self);
+    }
+
+    if b == 0.0 && c == 0.0 {
+      if a != 1.0 || d != 1.0 {
+        let (inv_x, inv_y) = (1.0 / a, 1.0 / d);
+
+        return Some(Self::from_row(
+          inv_x,
+          0.0,
+          0.0,
+          inv_y,
+          -x * inv_x,
+          -y * inv_y,
+        ));
+      }
+
+      return Some(Self::from_translate(-x, -y));
+    }
+
+    let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
+    let nearly_zero = 1.0 / 4096.0_f32;
+
+    if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
+      return None;
+    }
+
+    let inv_det = 1.0 / det;
+    let cross_scale = |p: f32, q: f32, r: f32, s: f32| {
+      ((f64::from(p) * f64::from(q) - f64::from(r) * f64::from(s)) * inv_det) as f32
+    };
+    let inverse = Self::from_row(
+      (f64::from(d) * inv_det) as f32,
+      (-f64::from(b) * inv_det) as f32,
+      (-f64::from(c) * inv_det) as f32,
+      (f64::from(a) * inv_det) as f32,
+      cross_scale(c, y, d, x),
+      cross_scale(b, x, a, y),
+    );
+    let Affine { a, b, c, d, x, y } = inverse.0;
+
+    [a, b, c, d, x, y]
+      .iter()
+      .all(|value| value.is_finite())
+      .then_some(inverse)
   }
 
   pub(crate) fn pre_concat(&self, other: Self) -> Self {
-    Self(self.0.pre_concat(other.0))
+    Self(self.0 * other.0)
   }
 
   pub(crate) fn post_concat(&self, other: Self) -> Self {
-    Self(self.0.post_concat(other.0))
+    Self(other.0 * self.0)
   }
 
-  pub(crate) fn to_tsp(self) -> tiny_skia_path::Transform {
+  pub(crate) fn to_affine(self) -> Affine {
     self.0
   }
 
-  pub(crate) fn from_tsp(ts: tiny_skia_path::Transform) -> Self {
-    Self(ts)
-  }
-
   /// The writer's copy of a core transform.
-  pub(crate) fn from_affine(affine: takumi_core::style::Affine) -> Self {
-    Self::from_row(affine.a, affine.b, affine.c, affine.d, affine.x, affine.y)
+  pub(crate) fn from_affine(affine: Affine) -> Self {
+    Self(affine)
   }
 
   pub(crate) fn to_pdf_transform(self) -> [f32; 6] {
-    [
-      self.0.sx, self.0.ky, self.0.kx, self.0.sy, self.0.tx, self.0.ty,
-    ]
+    let Affine { a, b, c, d, x, y } = self.0;
+
+    [a, b, c, d, x, y]
   }
 }
 
 impl Hash for Transform {
   fn hash<H: Hasher>(&self, state: &mut H) {
-    self.0.tx.to_bits().hash(state);
-    self.0.ty.to_bits().hash(state);
-    self.0.sx.to_bits().hash(state);
-    self.0.sy.to_bits().hash(state);
-    self.0.kx.to_bits().hash(state);
-    self.0.ky.to_bits().hash(state);
+    self.0.x.to_bits().hash(state);
+    self.0.y.to_bits().hash(state);
+    self.0.a.to_bits().hash(state);
+    self.0.d.to_bits().hash(state);
+    self.0.c.to_bits().hash(state);
+    self.0.b.to_bits().hash(state);
   }
 }
 
 /// A path.
-pub struct Path(pub(crate) tiny_skia_path::Path);
+pub struct Path(pub(crate) CorePath);
 
-impl Path {
-  /// The writer's copy of a core path.
-  pub(crate) fn from_core(path: &takumi_core::path::Path) -> Option<Self> {
-    use takumi_core::path::PathSegment;
-
-    let mut builder = tiny_skia_path::PathBuilder::new();
-
-    for segment in path.segments() {
-      match segment {
-        PathSegment::MoveTo(to) => builder.move_to(to.x, to.y),
-        PathSegment::LineTo(to) => builder.line_to(to.x, to.y),
-        PathSegment::QuadTo(control, to) => builder.quad_to(control.x, control.y, to.x, to.y),
-        PathSegment::CubicTo(first, second, to) => {
-          builder.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
-        }
-        PathSegment::Close => builder.close(),
-      }
-    }
-
-    Some(Self(builder.finish()?))
-  }
-}
-
-/// A path builder.
 #[derive(Default)]
-pub struct PathBuilder(tiny_skia_path::PathBuilder);
+pub struct PathBuilder(CorePathBuilder);
 
 impl PathBuilder {
   /// Create a new path.
@@ -337,7 +359,11 @@ impl PathBuilder {
 
   /// Push a rectangle to the path.
   pub fn push_rect(&mut self, rect: Rect) {
-    self.0.push_rect(rect.to_tsp())
+    self.0.move_to(rect.left(), rect.top());
+    self.0.line_to(rect.right(), rect.top());
+    self.0.line_to(rect.right(), rect.bottom());
+    self.0.line_to(rect.left(), rect.bottom());
+    self.0.close();
   }
 
   /// Finish the current path.

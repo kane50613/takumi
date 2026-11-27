@@ -55,7 +55,6 @@ serde_json = "1"
 siphasher = "1"
 thin-vec = "0.2"
 thiserror = "2.0"
-tiny-skia-path = "0.12"
 typed-builder = "0.23"
 wasm-bindgen = "0.2"
 write-fonts = "0.54"
@@ -284,8 +283,6 @@ opt-level = "s"
 [profile.release.package.unicode-bidi]
 opt-level = "z"
 [profile.release.package.kurbo]
-opt-level = "z"
-[profile.release.package.tiny-skia-path]
 opt-level = "z"
 
 

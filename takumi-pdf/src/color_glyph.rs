@@ -256,7 +256,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         // clipped area whole leaves artifacts in Chrome's PDF viewer when zooming.
         let filled = clips.pop().unwrap_or_else(|| bounds.clone());
 
-        let clips: Vec<PdfPath> = clips.iter().filter_map(PdfPath::from_core).collect();
+        let clips: Vec<PdfPath> = clips.into_iter().map(PdfPath).collect();
         let clip_count = clips.len();
 
         for path in &clips {
@@ -268,9 +268,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
 
         surface.set_fill(Some(*fill));
         surface.set_stroke(None);
-        if let Some(filled) = PdfPath::from_core(&filled) {
-          surface.draw_path(&filled);
-        }
+        surface.draw_path(&PdfPath(filled));
         surface.set_fill(old_fill);
         surface.set_stroke(old_stroke);
 

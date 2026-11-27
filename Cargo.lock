@@ -1967,7 +1967,6 @@ dependencies = [
  "skrifa",
  "smallvec",
  "takumi-core",
- "tiny-skia-path",
  "typed-builder",
  "write-fonts",
  "xmp-writer",

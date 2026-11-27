@@ -8,8 +8,8 @@
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use crate::writer::geom::Transform;
 use pdf_writer::{Obj, Ref};
-use tiny_skia_path::Transform;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::error::WriterResult;
@@ -117,10 +117,12 @@ impl XyzDestination {
     let page_ref = page_info.ref_();
     let page_size = page_info.size().height();
 
-    let mut mapped_point = self.0.point.to_tsp();
+    let point = self.0.point;
     // Convert to PDF coordinates
     let invert_transform = Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, page_size);
-    invert_transform.map_point(&mut mapped_point);
+    let (x, y) = invert_transform
+      .to_affine()
+      .transform_point(point.x, point.y);
 
     let mut destination = chunk_container
       .non_stream
@@ -131,6 +133,6 @@ impl XyzDestination {
       Some(struct_ref) => destination.item(struct_ref),
       None => destination.item(page_ref),
     };
-    destination.xyz(mapped_point.x, mapped_point.y, None);
+    destination.xyz(x, y, None);
   }
 }

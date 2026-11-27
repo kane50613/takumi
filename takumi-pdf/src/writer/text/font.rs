@@ -4,12 +4,12 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
+use crate::writer::num::FiniteF32;
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::raw::types::NameId;
 use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider, OutlineGlyphCollection};
-use tiny_skia_path::FiniteF32;
 use yoke::{Yoke, Yokeable};
 
 use crate::writer::Data;
