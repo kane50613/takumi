@@ -109,7 +109,7 @@ impl Cacheable for XObject {
       sc,
       &mut chunk_container.non_stream.resource_dictionaries,
     );
-    x_object.bbox(pdf_rect(self.0.custom_bbox.unwrap_or(self.0.stream.bbox)));
+    x_object.bbox(pdf_rect(self.bbox()));
 
     if use_transparency_group {
       let mut group = x_object.group();

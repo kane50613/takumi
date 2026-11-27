@@ -222,6 +222,9 @@ pub(crate) mod test_utils {
 mod tests {
   use takumi_core::path::{PathBuilder, StrokeDash};
 
+  use crate::writer::graphics::color::luma;
+  use crate::writer::num::NormalizedF32;
+
   use super::*;
 
   #[test]
@@ -232,7 +235,7 @@ mod tests {
     builder.line_to(100.0, 0.0);
 
     let path = builder.finish().unwrap();
-    let mut stroke = Stroke::default();
+    let mut stroke = Stroke::solid(luma::Color::black().into(), NormalizedF32::ONE, 1.0);
 
     stroke.outline.dash = StrokeDash::new(vec![5.0, 95.0], 0.0);
 

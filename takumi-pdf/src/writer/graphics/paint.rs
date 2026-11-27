@@ -237,7 +237,6 @@ impl From<Pattern> for Paint {
 
 /// A color stop in a gradient.
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
-#[allow(private_bounds)]
 pub struct Stop {
   /// The normalized offset of the stop.
   pub offset: NormalizedF32,
@@ -287,19 +286,6 @@ impl Stroke {
       opacity,
       outline: PathStroke {
         width,
-        miter_limit: PDF_MITER_LIMIT,
-        ..PathStroke::default()
-      },
-    }
-  }
-}
-
-impl Default for Stroke {
-  fn default() -> Self {
-    Stroke {
-      paint: luma::Color::black().into(),
-      opacity: NormalizedF32::ONE,
-      outline: PathStroke {
         miter_limit: PDF_MITER_LIMIT,
         ..PathStroke::default()
       },
