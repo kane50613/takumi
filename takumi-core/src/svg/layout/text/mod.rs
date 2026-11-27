@@ -9,7 +9,7 @@ mod shape;
 
 use std::rc::Rc;
 
-use kurbo::CubicBez;
+use kurbo::PathSeg;
 
 pub(super) use self::attributes::PositionLists;
 use self::{
@@ -69,8 +69,8 @@ struct TextPath {
 /// The outline of the shape a `textPath` names, with the transform of the shape applied.
 pub(super) struct TextPathShape {
   commands: Vec<PathCommand>,
-  /// The curves of the commands.
-  curves: Vec<CubicBez>,
+  /// The segments of the commands.
+  curves: Vec<PathSeg>,
   /// Where each curve ends along the path.
   ends: Vec<f64>,
 }

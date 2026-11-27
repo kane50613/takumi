@@ -3331,10 +3331,12 @@ svg/text/reftests/text-bidi-controls-anchors-1.svg
 svg/text/reftests/text-context-fill.svg
 svg/text/reftests/text-font-face-load-image.html
 svg/text/reftests/text-path-transformed-002.html
+svg/text/reftests/text-path-transformed.html
 svg/text/reftests/text-xml-space-001.svg
 svg/text/reftests/textLength-list-x-spacingAndGlyphs.svg
 svg/text/reftests/textLength-list-y-spacingAndGlyphs.svg
 svg/text/reftests/textpath-combining-marks.html
+svg/text/reftests/textpath-letter-spacing-01.svg
 svg/text/reftests/textpath-path-attr-empty-fallback.svg
 svg/text/reftests/textpath-path-attr-invalid-path-fallback.svg
 svg/text/reftests/textpath-path-attr-whitespace-fallback.svg
