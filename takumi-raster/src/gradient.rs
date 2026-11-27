@@ -345,7 +345,7 @@ impl Gradient {
 
   pub(crate) fn shade_row(&self, x: i32, y: i32, out: &mut [[u8; 4]]) {
     for (chunk, pixels) in out.chunks_mut(SHADE_CHUNK).enumerate() {
-      let first = x as f32 + (chunk * SHADE_CHUNK) as f32;
+      let first = chunk * SHADE_CHUNK;
       let mut ts = [0.0; SHADE_CHUNK];
       let mut defined = [true; SHADE_CHUNK];
       let ts = &mut ts[..pixels.len()];
@@ -354,7 +354,7 @@ impl Gradient {
       for (offset, (t, defined)) in ts.iter_mut().zip(&mut defined).enumerate() {
         let (ux, uy) = self
           .device_to_unit
-          .transform_point(first + offset as f32 + 0.5, y as f32 + 0.5);
+          .transform_point(x as f32 + (first + offset) as f32 + 0.5, y as f32 + 0.5);
 
         match self.t(ux, uy) {
           Some(value) => *t = value,
