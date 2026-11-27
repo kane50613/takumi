@@ -69,6 +69,7 @@ pub mod paint_property;
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
+/// Skia's path geometry: building, filling, stroking, and dashing outlines.
 pub mod path;
 pub mod path_data;
 /// Font and image resource management.

@@ -6,13 +6,14 @@
 //! that are supported are "link annotations", which allow you associate a certain region of
 //! the page with a link.
 
+use crate::writer::geom::pdf_rect;
 use pdf_writer::types::AnnotationFlags;
 use pdf_writer::{Finish, Name, Ref, TextStr};
+use takumi_core::geometry::Rect;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::error::WriterResult;
-use crate::writer::geom::Rect;
 use crate::writer::interactive::action::LinkAction;
 use crate::writer::interactive::destination::Destination;
 use crate::writer::page::page_root_transform;
@@ -119,7 +120,7 @@ pub enum Target {
 
 /// A link annotation.
 pub struct LinkAnnotation {
-  pub(crate) rect: Rect,
+  pub(crate) rect: Rect<f32>,
   pub(crate) target: Target,
 }
 
@@ -128,7 +129,7 @@ impl LinkAnnotation {
   ///
   /// `rect`: The bounding box of the link annotation that it should cover on the page.
   /// `target`: The target of the link annotation.
-  pub fn new(rect: Rect, target: Target) -> Self {
+  pub fn new(rect: Rect<f32>, target: Target) -> Self {
     Self { rect, target }
   }
 
@@ -142,9 +143,9 @@ impl LinkAnnotation {
 
     let actual_rect = self
       .rect
-      .transform(page_root_transform(page_height))
+      .transformed(page_root_transform(page_height))
       .unwrap_or(self.rect);
-    annotation.rect(actual_rect.to_pdf_rect());
+    annotation.rect(pdf_rect(actual_rect));
     annotation.border(0.0, 0.0, 0.0, None);
 
     match &self.target {

@@ -3,7 +3,7 @@
 //! Parts left or right of the clip become vertical lines on its edge, so the winding of what stays
 //! inside is unchanged.
 
-use takumi_core::path::{Point, Rect};
+use takumi_core::geometry::{Point, Rect};
 
 use super::edge_builder::{
   chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at, chop_quad_at_x_extrema,
@@ -12,15 +12,15 @@ use super::edge_builder::{
 
 /// A clipped segment, as `SkEdgeClipper::next` returns it.
 pub(super) enum Segment {
-  Line(Point, Point),
-  Quad([Point; 3]),
-  Cubic([Point; 4]),
+  Line(Point<f32>, Point<f32>),
+  Quad([Point<f32>; 3]),
+  Cubic([Point<f32>; 4]),
 }
 
 /// `SkEdgeClipper`: clips segments to `clip`, dropping what lies right of it when the fill
 /// allows.
 pub(super) struct EdgeClipper {
-  clip: Rect,
+  clip: Rect<f32>,
   can_cull_to_the_right: bool,
 }
 
@@ -35,7 +35,7 @@ fn nearly_zero(value: f32) -> bool {
 }
 
 /// `sect_with_horizontal`: the x where `p0`-`p1` crosses `y`.
-fn sect_with_horizontal(p0: Point, p1: Point, y: f32) -> f32 {
+fn sect_with_horizontal(p0: Point<f32>, p1: Point<f32>, y: f32) -> f32 {
   if nearly_zero(p1.y - p0.y) {
     return (p0.x + p1.x) * 0.5;
   }
@@ -51,7 +51,7 @@ fn sect_with_horizontal(p0: Point, p1: Point, y: f32) -> f32 {
 }
 
 /// `sect_with_vertical`: the y where `p0`-`p1` crosses `x`.
-fn sect_with_vertical(p0: Point, p1: Point, x: f32) -> f32 {
+fn sect_with_vertical(p0: Point<f32>, p1: Point<f32>, x: f32) -> f32 {
   if nearly_zero(p1.x - p0.x) {
     return (p0.y + p1.y) * 0.5;
   }
@@ -67,7 +67,7 @@ fn sect_with_vertical(p0: Point, p1: Point, x: f32) -> f32 {
 }
 
 /// `sect_clamp_with_vertical`.
-fn sect_clamp_with_vertical(p0: Point, p1: Point, x: f32) -> f32 {
+fn sect_clamp_with_vertical(p0: Point<f32>, p1: Point<f32>, x: f32) -> f32 {
   pin_unsorted(
     f64::from(sect_with_vertical(p0, p1, x)),
     f64::from(p0.y),
@@ -76,7 +76,7 @@ fn sect_clamp_with_vertical(p0: Point, p1: Point, x: f32) -> f32 {
 }
 
 /// The segment flipped to run upwards when `reverse`.
-fn oriented<const N: usize>(mut points: [Point; N], reverse: bool) -> [Point; N] {
+fn oriented<const N: usize>(mut points: [Point<f32>; N], reverse: bool) -> [Point<f32>; N] {
   if reverse {
     points.reverse();
   }
@@ -129,7 +129,7 @@ fn mono_cubic_closest_t(coords: [f32; 4], x: f32) -> f32 {
 /// Approximate: Skia finds the root with `SkCubics::RootsValidT` and subdivides in doubles. This
 /// bisects the monotonic polynomial in doubles instead, which can pick a split point a float bit
 /// away.
-fn chop_mono_cubic_at_y(src: [Point; 4], y: f32) -> [Point; 7] {
+fn chop_mono_cubic_at_y(src: [Point<f32>; 4], y: f32) -> [Point<f32>; 7] {
   let coords = src.map(|point| f64::from(point.y));
   let eval = |t: f64| {
     let u = 1.0 - t;
@@ -167,7 +167,7 @@ fn chop_mono_cubic_at_y(src: [Point; 4], y: f32) -> [Point; 7] {
     let abcd = mix(abc, bcd);
 
     return [points[0], ab, abc, abcd, bcd, cd, points[3]]
-      .map(|(x, y)| Point::from_xy(x as f32, y as f32));
+      .map(|(x, y)| Point::new(x as f32, y as f32));
   }
 
   let t = mono_cubic_closest_t(src.map(|point| point.y), y);
@@ -177,12 +177,12 @@ fn chop_mono_cubic_at_y(src: [Point; 4], y: f32) -> [Point; 7] {
 }
 
 /// `chop_mono_cubic_at_x`, through [`chop_mono_cubic_at_y`] on the transposed cubic.
-fn chop_mono_cubic_at_x(src: [Point; 4], x: f32) -> [Point; 7] {
+fn chop_mono_cubic_at_x(src: [Point<f32>; 4], x: f32) -> [Point<f32>; 7] {
   chop_mono_cubic_at_y(src.map(transpose), x).map(transpose)
 }
 
 impl EdgeClipper {
-  pub(super) fn new(clip: Rect, can_cull_to_the_right: bool) -> Self {
+  pub(super) fn new(clip: Rect<f32>, can_cull_to_the_right: bool) -> Self {
     Self {
       clip,
       can_cull_to_the_right,
@@ -193,27 +193,26 @@ impl EdgeClipper {
   fn vertical_line(x: f32, y0: f32, y1: f32, reverse: bool, out: &mut Vec<Segment>) {
     let (y0, y1) = if reverse { (y1, y0) } else { (y0, y1) };
 
-    out.push(Segment::Line(Point::from_xy(x, y0), Point::from_xy(x, y1)));
+    out.push(Segment::Line(Point::new(x, y0), Point::new(x, y1)));
   }
 
   /// `SkLineClipper::ClipLine`, keeping the line's direction.
-  pub(super) fn clip_line(&self, p0: Point, p1: Point, out: &mut Vec<Segment>) {
+  pub(super) fn clip_line(&self, p0: Point<f32>, p1: Point<f32>, out: &mut Vec<Segment>) {
     let clip = self.clip;
     let (top_index, bottom_index) = if p0.y < p1.y { (0, 1) } else { (1, 0) };
     let points = [p0, p1];
 
-    if points[bottom_index].y <= clip.top() || points[top_index].y >= clip.bottom() {
+    if points[bottom_index].y <= clip.top || points[top_index].y >= clip.bottom {
       return;
     }
 
     let mut chopped = points;
 
-    if points[top_index].y < clip.top() {
-      chopped[top_index] = Point::from_xy(sect_with_horizontal(p0, p1, clip.top()), clip.top());
+    if points[top_index].y < clip.top {
+      chopped[top_index] = Point::new(sect_with_horizontal(p0, p1, clip.top), clip.top);
     }
-    if chopped[bottom_index].y > clip.bottom() {
-      chopped[bottom_index] =
-        Point::from_xy(sect_with_horizontal(p0, p1, clip.bottom()), clip.bottom());
+    if chopped[bottom_index].y > clip.bottom {
+      chopped[bottom_index] = Point::new(sect_with_horizontal(p0, p1, clip.bottom), clip.bottom);
     }
 
     let (left_index, right_index, reverse) = if p0.x < p1.x {
@@ -221,42 +220,42 @@ impl EdgeClipper {
     } else {
       (1, 0, true)
     };
-    let mut result: Vec<Point> = Vec::with_capacity(4);
+    let mut result: Vec<Point<f32>> = Vec::with_capacity(4);
     let mut reverse = reverse;
 
-    if chopped[right_index].x <= clip.left() {
+    if chopped[right_index].x <= clip.left {
       result.extend([
-        Point::from_xy(clip.left(), chopped[0].y),
-        Point::from_xy(clip.left(), chopped[1].y),
+        Point::new(clip.left, chopped[0].y),
+        Point::new(clip.left, chopped[1].y),
       ]);
       reverse = false;
-    } else if chopped[left_index].x >= clip.right() {
+    } else if chopped[left_index].x >= clip.right {
       if self.can_cull_to_the_right {
         return;
       }
       result.extend([
-        Point::from_xy(clip.right(), chopped[0].y),
-        Point::from_xy(clip.right(), chopped[1].y),
+        Point::new(clip.right, chopped[0].y),
+        Point::new(clip.right, chopped[1].y),
       ]);
       reverse = false;
     } else {
       let (left, right) = (chopped[left_index], chopped[right_index]);
 
-      if left.x < clip.left() {
-        result.push(Point::from_xy(clip.left(), left.y));
-        result.push(Point::from_xy(
-          clip.left(),
-          sect_clamp_with_vertical(chopped[0], chopped[1], clip.left()),
+      if left.x < clip.left {
+        result.push(Point::new(clip.left, left.y));
+        result.push(Point::new(
+          clip.left,
+          sect_clamp_with_vertical(chopped[0], chopped[1], clip.left),
         ));
       } else {
         result.push(left);
       }
-      if right.x > clip.right() {
-        result.push(Point::from_xy(
-          clip.right(),
-          sect_clamp_with_vertical(chopped[0], chopped[1], clip.right()),
+      if right.x > clip.right {
+        result.push(Point::new(
+          clip.right,
+          sect_clamp_with_vertical(chopped[0], chopped[1], clip.right),
         ));
-        result.push(Point::from_xy(clip.right(), right.y));
+        result.push(Point::new(clip.right, right.y));
       } else {
         result.push(right);
       }
@@ -271,7 +270,7 @@ impl EdgeClipper {
   }
 
   /// `SkEdgeClipper::clipQuad`.
-  pub(super) fn clip_quad(&self, src: [Point; 3], out: &mut Vec<Segment>) {
+  pub(super) fn clip_quad(&self, src: [Point<f32>; 3], out: &mut Vec<Segment>) {
     let top = src
       .iter()
       .map(|point| point.y)
@@ -281,7 +280,7 @@ impl EdgeClipper {
       .map(|point| point.y)
       .fold(f32::NEG_INFINITY, f32::max);
 
-    if top >= self.clip.bottom() || bottom <= self.clip.top() {
+    if top >= self.clip.bottom || bottom <= self.clip.top {
       return;
     }
 
@@ -293,46 +292,46 @@ impl EdgeClipper {
   }
 
   /// `SkEdgeClipper::clipMonoQuad`.
-  fn clip_mono_quad(&self, src: [Point; 3], out: &mut Vec<Segment>) {
+  fn clip_mono_quad(&self, src: [Point<f32>; 3], out: &mut Vec<Segment>) {
     let clip = self.clip;
     let mut reverse = src[0].y > src[2].y;
     let mut pts = oriented(src, reverse);
 
-    if pts[2].y <= clip.top() || pts[0].y >= clip.bottom() {
+    if pts[2].y <= clip.top || pts[0].y >= clip.bottom {
       return;
     }
 
     // `chop_quad_in_Y`.
-    if pts[0].y < clip.top() {
-      match chop_mono_quad_at(pts[0].y, pts[1].y, pts[2].y, clip.top()) {
+    if pts[0].y < clip.top {
+      match chop_mono_quad_at(pts[0].y, pts[1].y, pts[2].y, clip.top) {
         Some(t) => {
           let mut tmp = chop_quad_at(pts, t);
 
-          tmp[2].y = clip.top();
-          tmp[3].y = tmp[3].y.max(clip.top());
+          tmp[2].y = clip.top;
+          tmp[3].y = tmp[3].y.max(clip.top);
           pts[0] = tmp[2];
           pts[1] = tmp[3];
         }
         None => {
           for point in &mut pts {
-            point.y = point.y.max(clip.top());
+            point.y = point.y.max(clip.top);
           }
         }
       }
     }
-    if pts[2].y > clip.bottom() {
-      match chop_mono_quad_at(pts[0].y, pts[1].y, pts[2].y, clip.bottom()) {
+    if pts[2].y > clip.bottom {
+      match chop_mono_quad_at(pts[0].y, pts[1].y, pts[2].y, clip.bottom) {
         Some(t) => {
           let mut tmp = chop_quad_at(pts, t);
 
-          tmp[1].y = tmp[1].y.min(clip.bottom());
-          tmp[2].y = clip.bottom();
+          tmp[1].y = tmp[1].y.min(clip.bottom);
+          tmp[2].y = clip.bottom;
           pts[1] = tmp[1];
           pts[2] = tmp[2];
         }
         None => {
           for point in &mut pts {
-            point.y = point.y.min(clip.bottom());
+            point.y = point.y.min(clip.bottom);
           }
         }
       }
@@ -343,42 +342,42 @@ impl EdgeClipper {
       reverse = !reverse;
     }
 
-    if pts[2].x <= clip.left() {
-      return Self::vertical_line(clip.left(), pts[0].y, pts[2].y, reverse, out);
+    if pts[2].x <= clip.left {
+      return Self::vertical_line(clip.left, pts[0].y, pts[2].y, reverse, out);
     }
-    if pts[0].x >= clip.right() {
+    if pts[0].x >= clip.right {
       if !self.can_cull_to_the_right {
-        Self::vertical_line(clip.right(), pts[0].y, pts[2].y, reverse, out);
+        Self::vertical_line(clip.right, pts[0].y, pts[2].y, reverse, out);
       }
       return;
     }
 
-    if pts[0].x < clip.left() {
-      let Some(t) = chop_mono_quad_at(pts[0].x, pts[1].x, pts[2].x, clip.left()) else {
-        return Self::vertical_line(clip.left(), pts[0].y, pts[2].y, reverse, out);
+    if pts[0].x < clip.left {
+      let Some(t) = chop_mono_quad_at(pts[0].x, pts[1].x, pts[2].x, clip.left) else {
+        return Self::vertical_line(clip.left, pts[0].y, pts[2].y, reverse, out);
       };
       let mut tmp = chop_quad_at(pts, t);
 
-      Self::vertical_line(clip.left(), tmp[0].y, tmp[2].y, reverse, out);
-      tmp[2].x = clip.left();
-      tmp[3].x = tmp[3].x.max(clip.left());
+      Self::vertical_line(clip.left, tmp[0].y, tmp[2].y, reverse, out);
+      tmp[2].x = clip.left;
+      tmp[3].x = tmp[3].x.max(clip.left);
       pts[0] = tmp[2];
       pts[1] = tmp[3];
     }
 
-    if pts[2].x > clip.right() {
-      match chop_mono_quad_at(pts[0].x, pts[1].x, pts[2].x, clip.right()) {
+    if pts[2].x > clip.right {
+      match chop_mono_quad_at(pts[0].x, pts[1].x, pts[2].x, clip.right) {
         Some(t) => {
           let mut tmp = chop_quad_at(pts, t);
 
-          tmp[1].x = tmp[1].x.min(clip.right());
-          tmp[2].x = clip.right();
+          tmp[1].x = tmp[1].x.min(clip.right);
+          tmp[2].x = clip.right;
           out.push(Segment::Quad(oriented([tmp[0], tmp[1], tmp[2]], reverse)));
-          Self::vertical_line(clip.right(), tmp[2].y, tmp[4].y, reverse, out);
+          Self::vertical_line(clip.right, tmp[2].y, tmp[4].y, reverse, out);
         }
         None => {
-          pts[1].x = pts[1].x.min(clip.right());
-          pts[2].x = pts[2].x.min(clip.right());
+          pts[1].x = pts[1].x.min(clip.right);
+          pts[2].x = pts[2].x.min(clip.right);
           out.push(Segment::Quad(oriented(pts, reverse)));
         }
       }
@@ -388,7 +387,7 @@ impl EdgeClipper {
   }
 
   /// `SkEdgeClipper::clipCubic`.
-  pub(super) fn clip_cubic(&self, src: [Point; 4], out: &mut Vec<Segment>) {
+  pub(super) fn clip_cubic(&self, src: [Point<f32>; 4], out: &mut Vec<Segment>) {
     let top = src
       .iter()
       .map(|point| point.y)
@@ -398,7 +397,7 @@ impl EdgeClipper {
       .map(|point| point.y)
       .fold(f32::NEG_INFINITY, f32::max);
 
-    if !(bottom > self.clip.top() && top < self.clip.bottom()) {
+    if !(bottom > self.clip.top && top < self.clip.bottom) {
       return;
     }
 
@@ -420,35 +419,35 @@ impl EdgeClipper {
   }
 
   /// `SkEdgeClipper::clipMonoCubic`.
-  fn clip_mono_cubic(&self, src: [Point; 4], out: &mut Vec<Segment>) {
+  fn clip_mono_cubic(&self, src: [Point<f32>; 4], out: &mut Vec<Segment>) {
     let clip = self.clip;
     let mut reverse = src[0].y > src[3].y;
     let mut pts = oriented(src, reverse);
 
-    if pts[3].y <= clip.top() || pts[0].y >= clip.bottom() {
+    if pts[3].y <= clip.top || pts[0].y >= clip.bottom {
       return;
     }
 
     // `chop_cubic_in_Y`.
-    if pts[0].y < clip.top() {
-      let mut tmp = chop_mono_cubic_at_y(pts, clip.top());
+    if pts[0].y < clip.top {
+      let mut tmp = chop_mono_cubic_at_y(pts, clip.top);
 
       // A poor chop of a large cubic can leave its lower part above the clip, so it is chopped
       // again.
-      if tmp[3].y < clip.top() && tmp[4].y < clip.top() && tmp[5].y < clip.top() {
-        tmp = chop_mono_cubic_at_y([tmp[3], tmp[4], tmp[5], tmp[6]], clip.top());
+      if tmp[3].y < clip.top && tmp[4].y < clip.top && tmp[5].y < clip.top {
+        tmp = chop_mono_cubic_at_y([tmp[3], tmp[4], tmp[5], tmp[6]], clip.top);
       }
-      tmp[3].y = clip.top();
-      tmp[4].y = tmp[4].y.max(clip.top());
+      tmp[3].y = clip.top;
+      tmp[4].y = tmp[4].y.max(clip.top);
       pts[0] = tmp[3];
       pts[1] = tmp[4];
       pts[2] = tmp[5];
     }
-    if pts[3].y > clip.bottom() {
-      let mut tmp = chop_mono_cubic_at_y(pts, clip.bottom());
+    if pts[3].y > clip.bottom {
+      let mut tmp = chop_mono_cubic_at_y(pts, clip.bottom);
 
-      tmp[3].y = clip.bottom();
-      tmp[2].y = tmp[2].y.min(clip.bottom());
+      tmp[3].y = clip.bottom;
+      tmp[2].y = tmp[2].y.min(clip.bottom);
       pts[1] = tmp[1];
       pts[2] = tmp[2];
       pts[3] = tmp[3];
@@ -459,37 +458,37 @@ impl EdgeClipper {
       reverse = !reverse;
     }
 
-    if pts[3].x <= clip.left() {
-      return Self::vertical_line(clip.left(), pts[0].y, pts[3].y, reverse, out);
+    if pts[3].x <= clip.left {
+      return Self::vertical_line(clip.left, pts[0].y, pts[3].y, reverse, out);
     }
-    if pts[0].x >= clip.right() {
+    if pts[0].x >= clip.right {
       if !self.can_cull_to_the_right {
-        Self::vertical_line(clip.right(), pts[0].y, pts[3].y, reverse, out);
+        Self::vertical_line(clip.right, pts[0].y, pts[3].y, reverse, out);
       }
       return;
     }
 
-    if pts[0].x < clip.left() {
-      let mut tmp = chop_mono_cubic_at_x(pts, clip.left());
+    if pts[0].x < clip.left {
+      let mut tmp = chop_mono_cubic_at_x(pts, clip.left);
 
-      Self::vertical_line(clip.left(), tmp[0].y, tmp[3].y, reverse, out);
-      tmp[3].x = clip.left();
-      tmp[4].x = tmp[4].x.max(clip.left());
+      Self::vertical_line(clip.left, tmp[0].y, tmp[3].y, reverse, out);
+      tmp[3].x = clip.left;
+      tmp[4].x = tmp[4].x.max(clip.left);
       pts[0] = tmp[3];
       pts[1] = tmp[4];
       pts[2] = tmp[5];
     }
 
-    if pts[3].x > clip.right() {
-      let mut tmp = chop_mono_cubic_at_x(pts, clip.right());
+    if pts[3].x > clip.right {
+      let mut tmp = chop_mono_cubic_at_x(pts, clip.right);
 
-      tmp[3].x = clip.right();
-      tmp[2].x = tmp[2].x.min(clip.right());
+      tmp[3].x = clip.right;
+      tmp[2].x = tmp[2].x.min(clip.right);
       out.push(Segment::Cubic(oriented(
         [tmp[0], tmp[1], tmp[2], tmp[3]],
         reverse,
       )));
-      Self::vertical_line(clip.right(), tmp[3].y, tmp[6].y, reverse, out);
+      Self::vertical_line(clip.right, tmp[3].y, tmp[6].y, reverse, out);
     } else {
       out.push(Segment::Cubic(oriented(pts, reverse)));
     }

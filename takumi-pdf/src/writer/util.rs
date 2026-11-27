@@ -3,14 +3,14 @@ use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+use takumi_core::geometry::Rect;
 
-use crate::writer::geom::Rect;
 use crate::writer::graphics::paint::Stroke;
 use base64::Engine;
 pub(crate) use deferred::*;
 use pdf_writer::Name;
 use siphasher::sip128::{Hasher128, SipHasher13};
-use takumi_core::path::Path;
+use takumi_core::path::{Path, Stroke as PathStroke};
 
 pub(crate) trait NameExt {
   fn to_pdf_name(&self) -> Name<'_>;
@@ -30,12 +30,13 @@ impl NameExt for &str {
 
 /// The bounds of `stroke` along `path`, measured undashed since the viewer dashes it and the solid
 /// outline holds every dash.
-pub(crate) fn calculate_stroke_bbox(stroke: &Stroke, path: &Path) -> Option<Rect> {
-  let (outline, _) = stroke.clone().outline();
+pub(crate) fn calculate_stroke_bbox(stroke: &Stroke, path: &Path) -> Option<Rect<f32>> {
+  let undashed = PathStroke {
+    dash: None,
+    ..stroke.outline.clone()
+  };
 
-  Some(Rect::from_core(
-    path.stroke(&outline, 1.0)?.compute_tight_bounds()?,
-  ))
+  path.stroke(&undashed, 1.0)?.compute_tight_bounds()
 }
 
 pub(crate) struct Prehashed<T: ?Sized> {
@@ -219,10 +220,9 @@ pub(crate) mod test_utils {
 
 #[cfg(test)]
 mod tests {
-  use takumi_core::path::PathBuilder;
+  use takumi_core::path::{PathBuilder, StrokeDash};
 
   use super::*;
-  use crate::writer::graphics::paint::StrokeDash;
 
   #[test]
   fn a_dashed_stroke_is_bounded_by_its_whole_outline() {
@@ -232,16 +232,12 @@ mod tests {
     builder.line_to(100.0, 0.0);
 
     let path = builder.finish().unwrap();
-    let stroke = Stroke {
-      dash: Some(StrokeDash {
-        array: vec![5.0, 95.0],
-        offset: 0.0,
-      }),
-      ..Stroke::default()
-    };
+    let mut stroke = Stroke::default();
+
+    stroke.outline.dash = StrokeDash::new(vec![5.0, 95.0], 0.0);
 
     let bounds = calculate_stroke_bbox(&stroke, &path).unwrap();
 
-    assert_eq!((bounds.left(), bounds.right()), (0.0, 100.0));
+    assert_eq!((bounds.left, bounds.right), (0.0, 100.0));
   }
 }

@@ -304,7 +304,7 @@ impl ToCss for StrokeMiterlimit {
 }
 
 /// Blink's `LineCap`, as `stroke-linecap` sets it.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LineCap {
   /// The stroke ends flat at the endpoint.
   #[default]
@@ -679,7 +679,7 @@ impl_css_enum!(
 );
 
 /// Blink's `EMaskType`.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MaskType {
   /// The mask is the luminance of its content.
   #[default]

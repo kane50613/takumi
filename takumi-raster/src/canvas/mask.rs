@@ -3,7 +3,6 @@ use std::{borrow::Cow, sync::Arc};
 use smallvec::SmallVec;
 
 use crate::pixmap::Mask as TinyMask;
-use takumi_core::path::IntSize;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
@@ -14,8 +13,8 @@ use takumi_core::{
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area,
-  coverage, create_mask, mul_div_255, path::stroke_path, placement_overlap, style::Affine,
+  BorderProperties, BoxMask, Command, Placement, RenderContext, Result, Style, checked_area,
+  coverage, create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -205,16 +204,16 @@ impl PlacedMask {
     let (ClipKind::Shape(shape) | ClipKind::ClipPath(shape)) = &clip.kind else {
       return None;
     };
-    IntSize::from_wh(viewport.size.width, viewport.size.height)?;
+    Size::checked_new(viewport.size.width, viewport.size.height)?;
 
     let (mask, placement) = render_mask(
       &shape.to_commands(),
       Some(clip.transform),
-      Some(Fill::from(shape.rule()).into()),
+      Some(shape.rule().into()),
       Some(viewport),
     );
     // The mask is culled to the viewport, so its placement starts inside it.
-    let covered = IntSize::from_wh(placement.width, placement.height)
+    let covered = Size::checked_new(placement.width, placement.height)
       .and_then(|size| TinyMask::from_vec(mask, size));
 
     Some(match covered {
@@ -240,7 +239,7 @@ fn shape_mask(
   let (mask, placement) = render_mask(
     &shape.to_commands(),
     Some(context.transform),
-    Some(Fill::from(shape.rule()).into()),
+    Some(shape.rule().into()),
     Some(viewport),
   );
 
@@ -469,7 +468,7 @@ fn viewport_mask(
   placement: Placement,
 ) -> Option<TinyMask> {
   if placement == viewport.placement() {
-    let size = IntSize::from_wh(placement.width, placement.height)?;
+    let size = Size::checked_new(placement.width, placement.height)?;
 
     return TinyMask::from_vec(mask.into_owned(), size);
   }
@@ -622,7 +621,7 @@ pub(crate) fn render_rect_mask(
     cull,
   )
   .unwrap_or_default();
-  let Some(mask_size) = IntSize::from_wh(placement.width, placement.height) else {
+  let Some(mask_size) = Size::checked_new(placement.width, placement.height) else {
     return Some((Vec::new(), placement));
   };
 
@@ -719,9 +718,7 @@ fn rasterize_mask(
   let mut path = Command::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
-    let (outline, dash) = stroke.outline();
-
-    path = stroke_path(&path, &outline, dash.as_ref(), 1.0)?;
+    path = path.stroke(stroke, 1.0)?;
   }
 
   if let Some(transform) = transform {
@@ -736,14 +733,14 @@ fn rasterize_mask(
     height,
   } = cull_bounds(
     [
-      bounds.left().floor() as i32,
-      bounds.top().floor() as i32,
-      bounds.right().ceil() as i32,
-      bounds.bottom().ceil() as i32,
+      bounds.left.floor() as i32,
+      bounds.top.floor() as i32,
+      bounds.right.ceil() as i32,
+      bounds.bottom.ceil() as i32,
     ],
     cull,
   )?;
-  let size = IntSize::from_wh(width, height)?;
+  let size = Size::checked_new(width, height)?;
 
   checked_area(width, height, 1)?;
 
@@ -923,7 +920,7 @@ mod tests {
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
-    let mask = TinyMask::from_vec((0..12).collect(), IntSize::from_wh(4, 3).unwrap()).unwrap();
+    let mask = TinyMask::from_vec((0..12).collect(), Size::checked_new(4, 3).unwrap()).unwrap();
     let view = |x: i32| MaskView {
       mask: &mask,
       origin: Point { x, y: 0 },

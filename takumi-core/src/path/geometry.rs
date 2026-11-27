@@ -77,7 +77,7 @@ pub fn find_cubic_extrema(a: f32, b: f32, c: f32, d: f32) -> ([f32; 2], usize) {
 }
 
 /// `SkEvalQuadAt`: the point at `t` on `quad`, from its polynomial coefficients.
-pub fn eval_quad_at(quad: &[Point; 3], t: f32) -> Point {
+pub fn eval_quad_at(quad: &[Point<f32>; 3], t: f32) -> Point<f32> {
   let axis = |p0: f32, p1: f32, p2: f32| {
     let a = p2 - (p1 + p1) + p0;
     let b = (p1 - p0) + (p1 - p0);
@@ -85,14 +85,14 @@ pub fn eval_quad_at(quad: &[Point; 3], t: f32) -> Point {
     (a * t + b) * t + p0
   };
 
-  Point::from_xy(
+  Point::new(
     axis(quad[0].x, quad[1].x, quad[2].x),
     axis(quad[0].y, quad[1].y, quad[2].y),
   )
 }
 
 /// `SkEvalCubicPosAt`: the point at `t` on `cubic`, from its polynomial coefficients.
-pub fn eval_cubic_pos_at(cubic: &[Point; 4], t: f32) -> Point {
+pub fn eval_cubic_pos_at(cubic: &[Point<f32>; 4], t: f32) -> Point<f32> {
   let axis = |p0: f32, p1: f32, p2: f32, p3: f32| {
     let a = p3 + 3.0 * (p1 - p2) - p0;
     let b = 3.0 * (p2 - (p1 + p1) + p0);
@@ -101,18 +101,18 @@ pub fn eval_cubic_pos_at(cubic: &[Point; 4], t: f32) -> Point {
     ((a * t + b) * t + c) * t + p0
   };
 
-  Point::from_xy(
+  Point::new(
     axis(cubic[0].x, cubic[1].x, cubic[2].x, cubic[3].x),
     axis(cubic[0].y, cubic[1].y, cubic[2].y, cubic[3].y),
   )
 }
 
-fn lerp(a: Point, b: Point, t: f32) -> Point {
-  Point::from_xy(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+fn lerp(a: Point<f32>, b: Point<f32>, t: f32) -> Point<f32> {
+  Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
 }
 
 /// `SkChopQuadAt`: the two halves of `src` split at `t`, sharing their middle point.
-pub fn chop_quad_at(src: [Point; 3], t: f32) -> [Point; 5] {
+pub fn chop_quad_at(src: [Point<f32>; 3], t: f32) -> [Point<f32>; 5] {
   let p01 = lerp(src[0], src[1], t);
   let p12 = lerp(src[1], src[2], t);
 
@@ -120,7 +120,7 @@ pub fn chop_quad_at(src: [Point; 3], t: f32) -> [Point; 5] {
 }
 
 /// The control points `SkChopCubicAt` interpolates at `t`: `ab`, `bc`, `cd`, `abc`, `bcd`, `abcd`.
-pub fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
+pub fn cubic_split(src: &[Point<f32>; 4], t: f32) -> [Point<f32>; 6] {
   let ab = lerp(src[0], src[1], t);
   let bc = lerp(src[1], src[2], t);
   let cd = lerp(src[2], src[3], t);
@@ -131,7 +131,7 @@ pub fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
 }
 
 /// `SkChopCubicAt` into seven points.
-pub fn chop_cubic_at(cubic: &[Point; 4], t: f32) -> [Point; 7] {
+pub fn chop_cubic_at(cubic: &[Point<f32>; 4], t: f32) -> [Point<f32>; 7] {
   if t == 1.0 {
     return [
       cubic[0], cubic[1], cubic[2], cubic[3], cubic[3], cubic[3], cubic[3],

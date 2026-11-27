@@ -5,7 +5,11 @@
 //! and a path past the limit strokes nothing, where `skpathutils::FillPathWithPaint` strokes it
 //! undashed.
 
-use std::cmp::Ordering;
+use crate::math::hash_f32;
+use std::{
+  cmp::Ordering,
+  hash::{Hash, Hasher},
+};
 
 use super::{
   Path, PathBuilder, PathVerb, Point, chop_cubic_at, chop_quad_at, conic::NEARLY_ZERO,
@@ -28,6 +32,7 @@ const MAX_RECURSION_DEPTH: u32 = 8;
 #[derive(Clone, PartialEq, Debug)]
 pub struct StrokeDash {
   intervals: Vec<f32>,
+  phase: f32,
   initial_dash_length: f32,
   initial_dash_index: usize,
   interval_length: f32,
@@ -50,6 +55,7 @@ impl StrokeDash {
       return None;
     }
 
+    let original_phase = phase;
     // `CalcDashParameters`.
     let mut phase = phase;
 
@@ -73,10 +79,35 @@ impl StrokeDash {
 
     Some(Self {
       intervals,
+      phase: original_phase,
       initial_dash_length,
       initial_dash_index,
       interval_length: length,
     })
+  }
+}
+
+impl Eq for StrokeDash {}
+
+impl Hash for StrokeDash {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    for interval in &self.intervals {
+      hash_f32(*interval, state);
+    }
+
+    hash_f32(self.phase, state);
+  }
+}
+
+impl StrokeDash {
+  /// The on and off lengths.
+  pub fn intervals(&self) -> &[f32] {
+    &self.intervals
+  }
+
+  /// How far into the intervals the path starts.
+  pub fn phase(&self) -> f32 {
+    self.phase
   }
 }
 
@@ -197,7 +228,7 @@ impl Segment {
 /// `SkContourMeasure`: one contour measured into segments.
 struct ContourMeasure {
   segments: Vec<Segment>,
-  points: Vec<Point>,
+  points: Vec<Point<f32>>,
   length: f32,
   closed: bool,
 }
@@ -211,7 +242,7 @@ struct ContourMeasures<'a> {
 }
 
 /// `SkPoint::Distance`.
-fn point_distance(a: Point, b: Point) -> f32 {
+fn point_distance(a: Point<f32>, b: Point<f32>) -> f32 {
   let (dx, dy) = (a.x - b.x, a.y - b.y);
   let squared = dx * dx + dy * dy;
 
@@ -232,18 +263,18 @@ fn tspan_big_enough(span: u32) -> bool {
   span >> 10 != 0
 }
 
-fn quad_too_curvy(points: &[Point; 3], tolerance: f32) -> bool {
+fn quad_too_curvy(points: &[Point<f32>; 3], tolerance: f32) -> bool {
   let dx = (points[1].x / 2.0) - (((points[0].x + points[2].x) / 2.0) / 2.0);
   let dy = (points[1].y / 2.0) - (((points[0].y + points[2].y) / 2.0) / 2.0);
 
   dx.abs().max(dy.abs()) > tolerance
 }
 
-fn cheap_dist_exceeds_limit(point: Point, x: f32, y: f32, tolerance: f32) -> bool {
+fn cheap_dist_exceeds_limit(point: Point<f32>, x: f32, y: f32, tolerance: f32) -> bool {
   (x - point.x).abs().max((y - point.y).abs()) > tolerance
 }
 
-fn cubic_too_curvy(points: &[Point; 4], tolerance: f32) -> bool {
+fn cubic_too_curvy(points: &[Point<f32>; 4], tolerance: f32) -> bool {
   let at = |t: f32| {
     (
       interp(points[0].x, points[3].x, t),
@@ -290,7 +321,7 @@ impl<'a> ContourMeasures<'a> {
     let mut seen_move = false;
     let verbs = self.path.verbs();
     let points = self.path.points();
-    let mut last = Point::zero();
+    let mut last = Point::ZERO;
 
     while self.verb < verbs.len() {
       let verb = verbs[self.verb];
@@ -396,7 +427,13 @@ impl ContourMeasure {
   }
 
   /// `compute_line_seg`.
-  fn line_segment(&mut self, from: Point, to: Point, distance: f32, point_index: usize) -> f32 {
+  fn line_segment(
+    &mut self,
+    from: Point<f32>,
+    to: Point<f32>,
+    distance: f32,
+    point_index: usize,
+  ) -> f32 {
     let next = distance + point_distance(from, to);
 
     if next > distance {
@@ -410,7 +447,7 @@ impl ContourMeasure {
   #[allow(clippy::too_many_arguments)]
   fn quad_segments(
     &mut self,
-    quad: &[Point; 3],
+    quad: &[Point<f32>; 3],
     distance: f32,
     min_t: u32,
     max_t: u32,
@@ -460,7 +497,7 @@ impl ContourMeasure {
   #[allow(clippy::too_many_arguments)]
   fn cubic_segments(
     &mut self,
-    cubic: &[Point; 4],
+    cubic: &[Point<f32>; 4],
     distance: f32,
     min_t: u32,
     max_t: u32,
@@ -607,16 +644,16 @@ impl ContourMeasure {
   }
 
   /// The points of the curve segment `index` is a piece of, from its start.
-  fn curve(&self, index: usize) -> &[Point] {
+  fn curve(&self, index: usize) -> &[Point<f32>] {
     &self.points[self.segments[index].point_index..]
   }
 
   /// `compute_pos_tan`'s position.
-  fn position(&self, index: usize, t: f32) -> Point {
+  fn position(&self, index: usize, t: f32) -> Point<f32> {
     let points = self.curve(index);
 
     match self.segments[index].kind {
-      SegmentType::Line => Point::from_xy(
+      SegmentType::Line => Point::new(
         interp(points[0].x, points[1].x, t),
         interp(points[0].y, points[1].y, t),
       ),

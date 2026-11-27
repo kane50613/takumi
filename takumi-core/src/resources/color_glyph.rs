@@ -2,8 +2,11 @@
 //! in font units with the y-axis pointing up, as the COLR table defines them. Colors stay palette
 //! indices until a backend draws them, since the text color resolves the foreground index.
 
-use crate::path::{Path, PathBuilder, Point, Rect};
 use crate::style::Affine;
+use crate::{
+  geometry::{Point, Rect},
+  path::{Path, PathBuilder},
+};
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
   color::{Brush, ColorPainter, ColorStop as SkrifaColorStop, CompositeMode, Extend},
@@ -20,7 +23,7 @@ pub struct ColorGlyph {
   pub instructions: Vec<ColorInstruction>,
   /// The union of the glyph's clips, which a fill without a clip of its own covers, or `None`
   /// when it has no clip and so draws nothing.
-  pub bounds: Option<Rect>,
+  pub bounds: Option<Rect<f32>>,
 }
 
 /// One step of a COLR glyph's drawing.
@@ -72,9 +75,9 @@ pub enum ColorPaint {
   /// A gradient along the line from `p0` to `p1`.
   Linear {
     /// The start point.
-    p0: Point,
+    p0: Point<f32>,
     /// The end point.
-    p1: Point,
+    p1: Point<f32>,
     /// The color stops.
     stops: Vec<ColorStop>,
     /// What the gradient paints past its ends.
@@ -85,11 +88,11 @@ pub enum ColorPaint {
   /// A gradient between two circles.
   Radial {
     /// The start circle's center.
-    c0: Point,
+    c0: Point<f32>,
     /// The start circle's radius.
     r0: f32,
     /// The end circle's center.
-    c1: Point,
+    c1: Point<f32>,
     /// The end circle's radius.
     r1: f32,
     /// The color stops.
@@ -103,7 +106,7 @@ pub enum ColorPaint {
   /// COLR's counterclockwise angles, and may reverse the stops to do it.
   Sweep {
     /// The center.
-    center: Point,
+    center: Point<f32>,
     /// The angle the gradient starts at.
     start_angle: f32,
     /// The angle the gradient ends at.
@@ -138,7 +141,7 @@ struct Recorder<'a> {
   clips: Vec<Vec<Path>>,
   /// Each open layer's instructions, and whether every fill in it is bounded.
   stack: Vec<(Vec<ColorInstruction>, bool)>,
-  bounds: Option<Rect>,
+  bounds: Option<Rect<f32>>,
   layers: Vec<CompositeMode>,
   transforms: Vec<Affine>,
   error: bool,
@@ -238,8 +241,8 @@ impl<'a> Recorder<'a> {
         color_stops,
         extend,
       } => ColorPaint::Linear {
-        p0: Point::from_xy(p0.x, p0.y),
-        p1: Point::from_xy(p1.x, p1.y),
+        p0: Point::new(p0.x, p0.y),
+        p1: Point::new(p1.x, p1.y),
         stops: self.stops(color_stops)?,
         extend,
         transform,
@@ -252,9 +255,9 @@ impl<'a> Recorder<'a> {
         color_stops,
         extend,
       } => ColorPaint::Radial {
-        c0: Point::from_xy(c0.x, c0.y),
+        c0: Point::new(c0.x, c0.y),
         r0,
-        c1: Point::from_xy(c1.x, c1.y),
+        c1: Point::new(c1.x, c1.y),
         r1,
         stops: self.stops(color_stops)?,
         extend,
@@ -267,7 +270,7 @@ impl<'a> Recorder<'a> {
         color_stops,
         extend,
       } => ColorPaint::Sweep {
-        center: Point::from_xy(c0.x, c0.y),
+        center: Point::new(c0.x, c0.y),
         start_angle,
         end_angle,
         stops: self.stops(color_stops)?,

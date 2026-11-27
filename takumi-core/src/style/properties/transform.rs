@@ -1,8 +1,10 @@
 use std::{
   fmt,
+  hash::{Hash, Hasher},
   ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
+use crate::math::hash_f32;
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
@@ -111,6 +113,16 @@ pub struct Affine {
   pub y: f32,
 }
 
+impl Eq for Affine {}
+
+impl Hash for Affine {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    for value in self.to_cols_array() {
+      hash_f32(value, state);
+    }
+  }
+}
+
 impl Mul<Affine> for Affine {
   type Output = Affine;
 
@@ -169,7 +181,7 @@ impl Affine {
       && scale_y > f32::EPSILON
   }
 
-  /// The length of each row of the linear part, as tiny-skia's `Transform::get_scale` has them.
+  /// The length of each row of the linear part.
   #[cfg(feature = "svg")]
   pub fn row_scales(self) -> (f32, f32) {
     (self.a.hypot(self.c), self.b.hypot(self.d))

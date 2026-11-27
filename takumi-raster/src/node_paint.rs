@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::pixmap::Pixmap;
 use skrifa::{FontRef, MetadataProvider};
-use takumi_core::path::IntRect;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::{
@@ -24,13 +23,15 @@ use takumi_core::{
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,
-  RenderContext, SizedFontStyle, TileLayer, TileLayers, background_image_layers,
-  collect_background_layers, draw_image, rasterize_layers,
+  BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, PaintSource, RenderContext,
+  SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
+  draw_image, rasterize_layers,
 };
+use takumi_core::path::Stroke;
+
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
-  Stroke, Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
+  Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
   cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   placement_overlap, render_mask, render_rect_mask,
@@ -318,8 +319,7 @@ impl<'c> CanvasDevice<'c> {
       Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
       None => transform,
     };
-    let (mut coverage, placement) =
-      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    let (mut coverage, placement) = self.coverage(shape, shape.rule().into(), transform);
 
     if aliased {
       // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
@@ -509,11 +509,10 @@ impl<'c> CanvasDevice<'c> {
       let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
       let viewport = self.shadow_viewport(blur_radius);
       let cast = self.transform * Affine::translation(shadow.offset_x, shadow.offset_y);
-      let text_stroke = (stroke.0 > 0.0).then(|| {
-        let mut text_stroke = Stroke::new(stroke.0);
-
-        text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin;
-        text_stroke
+      let text_stroke = (stroke.0 > 0.0).then(|| Stroke {
+        width: stroke.0,
+        line_join: style.parent.misc_inherited_data.stroke_linejoin,
+        ..Stroke::default()
       });
       let mut coverages = Vec::with_capacity(glyph_run.glyphs.len());
 
@@ -532,7 +531,7 @@ impl<'c> CanvasDevice<'c> {
               transform,
               None,
             ));
-            if let Some(text_stroke) = text_stroke {
+            if let Some(text_stroke) = &text_stroke {
               coverages.push(cached_glyph_mask(
                 self.canvas.glyphs(),
                 signature,
@@ -612,7 +611,7 @@ impl<'c> CanvasDevice<'c> {
   /// covers, or none when nothing of it shows.
   fn visible_fill(&self, shape: &FillShape, transform: Affine) -> Option<VisibleFill> {
     let canvas_to_box = self.transform.invert()?;
-    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    let coverage = self.coverage(shape, shape.rule().into(), transform);
     let (mask, placement) = self.clipped(coverage, false)?;
 
     Some(VisibleFill {
@@ -662,7 +661,7 @@ impl PaintDevice for CanvasDevice<'_> {
         render_mask(
           &shape.to_commands(),
           Some(device),
-          Some(Fill::from(shape.rule()).into()),
+          Some(shape.rule().into()),
           Some(cull),
         )
       });
@@ -683,7 +682,7 @@ impl PaintDevice for CanvasDevice<'_> {
         (*border, *size, *offset)
       }
       _ => {
-        let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+        let coverage = self.coverage(shape, shape.rule().into(), transform);
 
         return self.draw_coverage(coverage, color);
       }
@@ -707,12 +706,12 @@ impl PaintDevice for CanvasDevice<'_> {
       return self.draw_shadow_of(
         shadow,
         &shape.to_commands(),
-        Style::Stroke(stroke.into()),
+        Style::Stroke(stroke.outline()),
         transform,
       );
     }
 
-    let coverage = self.coverage(shape, Style::Stroke(stroke.into()), transform);
+    let coverage = self.coverage(shape, Style::Stroke(stroke.outline()), transform);
 
     self.draw_coverage(coverage, stroke.color);
   }
@@ -778,12 +777,7 @@ impl PaintDevice for CanvasDevice<'_> {
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
     let fill = shape.fill_shape();
 
-    self.draw_shadow_of(
-      *shadow,
-      &fill.to_commands(),
-      Fill::from(fill.rule()).into(),
-      transform,
-    );
+    self.draw_shadow_of(*shadow, &fill.to_commands(), fill.rule().into(), transform);
   }
 }
 
@@ -1093,7 +1087,7 @@ fn blit_background_tiles(
 
   for layer in layers {
     let (width, height) = layer.tile.dimensions();
-    let mut cuts: Vec<(IntRect, Pixmap)> = Vec::new();
+    let mut cuts: Vec<(Rect<i32>, Pixmap)> = Vec::new();
 
     for y in &layer.ys {
       for x in &layer.xs {
@@ -1118,7 +1112,7 @@ fn blit_background_tiles(
           canvas.overlay_image(
             cut,
             BorderProperties::default(),
-            transform * Affine::translation(part.x() as f32, part.y() as f32),
+            transform * Affine::translation(part.left as f32, part.top as f32),
             algorithm,
             layer.blend_mode,
           );
@@ -1284,7 +1278,7 @@ mod tests {
   };
 
   use super::CanvasDevice;
-  use crate::{Canvas, Stroke, style::LineCap};
+  use crate::{Canvas, style::LineCap};
 
   fn paint_border(
     border: BorderProperties,
@@ -1465,17 +1459,18 @@ mod tests {
 
   #[test]
   fn thin_dotted_border_draws_square_dots() {
-    let stroke = Stroke::from(&StrokeStyle::border(
+    let stroke = StrokeStyle::border(
       Color::black(),
       2.0,
       BorderStyle::Dotted.dash_pattern(2.0, 48.0, false),
-    ));
+    )
+    .outline();
     let Some(dash_pattern) = stroke.dash else {
       unreachable!("thin dotted stroke should produce a dash pattern");
     };
 
-    assert_eq!(stroke.cap, LineCap::Butt);
-    assert_eq!(dash_pattern.intervals, [2.0, 2.0]);
+    assert_eq!(stroke.line_cap, LineCap::Butt);
+    assert_eq!(dash_pattern.intervals(), [2.0, 2.0]);
   }
 
   #[test]

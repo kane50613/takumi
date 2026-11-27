@@ -700,7 +700,7 @@ impl ToCss for BorderSpacing {
 }
 
 /// Defines how the corners of text strokes are rendered.
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LineJoin {
   /// The corners are sharp and pointed.
   #[default]

@@ -1,7 +1,7 @@
 use skrifa::MetadataProvider;
 use skrifa::bitmap::{BitmapData, BitmapFormat, BitmapGlyph, Origin};
+use takumi_core::{geometry::Size, style::Affine};
 
-use crate::writer::geom::{Size, Transform};
 use crate::writer::graphics::image::Image;
 use crate::writer::surface::Surface;
 use crate::writer::text::Font;
@@ -32,23 +32,17 @@ pub(crate) fn draw_glyph(font: Font, glyph: GlyphId, surface: &mut Surface) -> O
   match bitmap_glyph.data {
     BitmapData::Png(data) => {
       let image = Image::from_png(data.to_vec().into(), false).ok()?;
-      let size = Size::from_wh(image.size().0 as f32, image.size().1 as f32)?;
+      let size = Size::positive(image.size().0 as f32, image.size().1 as f32)?;
 
       // Adapted from vello.
       let scale_factor = upem / (bitmap_glyph.ppem_y);
-      let mut transform =
-        Transform::from_translate(-bitmap_glyph.bearing_x, bitmap_glyph.bearing_y)
-          .pre_concat(Transform::from_scale(scale_factor, scale_factor))
-          .pre_concat(Transform::from_translate(
-            -bitmap_glyph.inner_bearing_x,
-            -bitmap_glyph.inner_bearing_y,
-          ));
+      let mut transform = (Affine::translation(-bitmap_glyph.bearing_x, bitmap_glyph.bearing_y)
+        * Affine::scale(scale_factor, scale_factor))
+        * Affine::translation(-bitmap_glyph.inner_bearing_x, -bitmap_glyph.inner_bearing_y);
 
       transform = match bitmap_glyph.placement_origin {
         Origin::TopLeft => transform,
-        Origin::BottomLeft => {
-          transform.pre_concat(Transform::from_translate(0.0, -(image.size().1 as f32)))
-        }
+        Origin::BottomLeft => transform * Affine::translation(0.0, -(image.size().1 as f32)),
       };
 
       transform = if let Some(format) = bitmap_strikes.format() {
@@ -60,7 +54,7 @@ pub(crate) fn draw_glyph(font: Font, glyph: GlyphId, surface: &mut Surface) -> O
           // See also https://github.com/harfbuzz/harfbuzz/issues/2679#issuecomment-1345595425
           // We approximate this vertical shift that seems to be produced by it.
           // This value seems to be pretty close to what is happening on MacOS.
-          transform.pre_concat(Transform::from_translate(0.0, 0.128 * upem / scale_factor))
+          transform * Affine::translation(0.0, 0.128 * upem / scale_factor)
         } else {
           transform
         }

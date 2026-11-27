@@ -1,8 +1,15 @@
 //! The scene walker that emits boxes, text and images onto a writer surface.
 
+use crate::writer::geom::rotation_at;
 #[cfg(all(feature = "svg", feature = "images"))]
 use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
+use takumi_core::path::{Path, PathBuilder};
+use takumi_core::{
+  path::Stroke as PathStroke,
+  resources::image::SvgSpreadMethod,
+  style::{LineJoin, MaskType},
+};
 
 use rustc_hash::FxHashMap;
 
@@ -15,9 +22,7 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{
-    ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Rect as CoreRect, Size,
-  },
+  geometry::{ComputedLayout as Layout, NodeId, PathCommand, Point, Rect, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
@@ -38,15 +43,15 @@ use takumi_core::{
   scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule as CoreFillRule,
-    Filter, Isolation, Lang, PaintPhase, ResolvedGradientStop,
+    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule, Filter, Isolation,
+    Lang, PaintPhase, ResolvedGradientStop,
   },
 };
 
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
 #[cfg(feature = "images")]
-use crate::writer::{geom::Size as PdfSize, image::Image as PdfImage};
+use crate::writer::image::Image as PdfImage;
 use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
@@ -55,7 +60,7 @@ use crate::{
   options::{PT_PER_PX, PdfError},
   paint::{
     draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, normalized, opaque_runs,
-    pdf_path, pdf_stops, pop_transforms, positioned, rect_path, shape_path, spread,
+    pdf_path, pdf_stops, pop_transforms, positioned, shape_path, spread,
   },
   shadow::Band,
   tags::TagCollector,
@@ -63,12 +68,11 @@ use crate::{
   window::{LineFrame, Window},
   writer::{
     Data,
-    geom::{Path as PdfPath, PathBuilder, Point, Rect as PdfRect, Transform},
-    mask::{Mask, MaskType},
+    mask::Mask,
     num::NormalizedF32,
     paint::{
-      Fill, FillRule, LineCap, LineJoin, LinearGradient as PdfLinearGradient, Paint, Pattern,
-      RadialGradient as PdfRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
+      Fill, LinearGradient as PdfLinearGradient, Paint, Pattern,
+      RadialGradient as PdfRadialGradient, Stroke, SweepGradient,
     },
     stream::Stream,
     surface::Surface,
@@ -417,7 +421,7 @@ impl Emitter<'_> {
   /// Runs `emit` clipped to `cell`, relative to `origin`.
   fn within_cell(
     &self,
-    origin: CorePoint<f32>,
+    origin: Point<f32>,
     cell: CellArea,
     surface: &mut Surface,
     emit: impl FnOnce(&mut Surface),
@@ -500,7 +504,7 @@ impl Emitter<'_> {
 
           surface.push_mask(Mask::new(stream, MaskType::Alpha));
         }
-        (None, Some(clip)) => surface.push_clip_path(clip, &shape.rule().into()),
+        (None, Some(clip)) => surface.push_clip_path(clip, &shape.rule()),
         (None, None) => return,
       }
       self.paint_background_layers(node, background, frame, surface);
@@ -514,24 +518,24 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     tiling: &ImageTiling,
-    origin: CorePoint<f32>,
+    origin: Point<f32>,
     surface: &mut Surface,
-    tile_space: Transform,
+    tile_space: Affine,
   ) {
     let dest = tiling.dest;
-    let Some(dest_path) = PdfRect::from_ltrb(
+    let Some(dest_path) = Rect::from_ltrb(
       origin.x + dest.left,
       origin.y + dest.top,
       origin.x + dest.right,
       origin.y + dest.bottom,
     )
-    .and_then(rect_path) else {
+    .map(PathBuilder::from_rect) else {
       return;
     };
     let (xs, ys) = tiling.origins();
 
     if let ([x], [y]) = (xs.as_slice(), ys.as_slice()) {
-      let clipped = !tiling.covers(CoreRect {
+      let clipped = !tiling.covers(Rect {
         left: *x,
         top: *y,
         right: x + tiling.tile.width,
@@ -545,9 +549,9 @@ impl Emitter<'_> {
         image,
         node,
         tiling,
-        origin + CorePoint { x: *x, y: *y },
+        origin + Point { x: *x, y: *y },
         surface,
-        Transform::identity(),
+        Affine::IDENTITY,
       );
       if clipped {
         surface.pop();
@@ -556,14 +560,14 @@ impl Emitter<'_> {
     }
 
     let stream = draw_stream(surface, |tile| {
-      self.background_layer(image, node, tiling, CorePoint::ZERO, tile, tile_space);
+      self.background_layer(image, node, tiling, Point::ZERO, tile, tile_space);
     });
     let step = tiling.step();
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
-        transform: Transform::from_translate(origin.x + tiling.phase.x, origin.y + tiling.phase.y),
+        transform: Affine::translation(origin.x + tiling.phase.x, origin.y + tiling.phase.y),
         width: step.width,
         height: step.height,
       }
@@ -579,9 +583,9 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     tiling: &ImageTiling,
-    at: CorePoint<f32>,
+    at: Point<f32>,
     surface: &mut Surface,
-    pattern_space: Transform,
+    pattern_space: Affine,
   ) {
     let size = tiling.tile;
     let (w, h) = (size.width, size.height);
@@ -605,11 +609,11 @@ impl Emitter<'_> {
       ) else {
         return;
       };
-      let Some(target) = PdfSize::from_wh(w, h) else {
+      let Some(target) = Size::positive(w, h) else {
         return;
       };
 
-      surface.push_transform(&Transform::from_translate(at.x, at.y));
+      surface.push_transform(&Affine::translation(at.x, at.y));
       surface.draw_image(pdf_image, target);
       surface.pop();
       return;
@@ -617,7 +621,7 @@ impl Emitter<'_> {
     let Some((paint, clip)) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
-    let Some(path) = PdfRect::from_xywh(at.x, at.y, w, h).and_then(rect_path) else {
+    let Some(path) = Rect::from_xywh(at.x, at.y, w, h).map(PathBuilder::from_rect) else {
       return;
     };
 
@@ -643,10 +647,10 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     size: Size<f32>,
-    at: CorePoint<f32>,
-    pattern_space: Transform,
-  ) -> Option<(Paint, Option<PdfPath>)> {
-    let CorePoint { x, y } = at;
+    at: Point<f32>,
+    pattern_space: Affine,
+  ) -> Option<(Paint, Option<Path>)> {
+    let Point { x, y } = at;
     let (w, h) = (size.width, size.height);
     let sizing = &node.context.sizing;
     let current_color = node.context.current_color;
@@ -742,15 +746,16 @@ impl Emitter<'_> {
           cx: 0.0,
           cy: 0.0,
           cr: extent,
-          transform: pattern_space.pre_concat(Transform::from_row(
-            scale_x,
-            0.0,
-            0.0,
-            scale_y,
-            x + cx,
-            y + cy,
-          )),
-          spread_method: SpreadMethod::Pad,
+          transform: (pattern_space
+            * Affine {
+              a: scale_x,
+              b: 0.0,
+              c: 0.0,
+              d: scale_y,
+              x: x + cx,
+              y: y + cy,
+            }),
+          spread_method: SvgSpreadMethod::Pad,
           stops,
           anti_alias: false,
         }
@@ -782,12 +787,8 @@ impl Emitter<'_> {
           cy: ccy,
           start_angle: 0.0,
           end_angle: 360.0,
-          transform: pattern_space.pre_concat(Transform::from_rotate_at(
-            tile.start_rad.to_degrees() - 90.0,
-            ccx,
-            ccy,
-          )),
-          spread_method: SpreadMethod::Pad,
+          transform: (pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy)),
+          spread_method: SvgSpreadMethod::Pad,
           stops,
           anti_alias: false,
         }
@@ -821,7 +822,7 @@ impl Emitter<'_> {
           &layer.tiling,
           frame.origin,
           content,
-          Transform::identity(),
+          Affine::IDENTITY,
         );
       }
     });
@@ -856,7 +857,7 @@ impl Emitter<'_> {
       let blended = layer.blend_mode != BlendMode::Normal;
 
       if blended {
-        surface.push_blend_mode(layer.blend_mode.into());
+        surface.push_blend_mode(layer.blend_mode);
       }
       self.layer(
         layer.image,
@@ -864,7 +865,7 @@ impl Emitter<'_> {
         &layer.tiling,
         frame.origin,
         surface,
-        Transform::from_scale(PT_PER_PX, PT_PER_PX),
+        Affine::scale(PT_PER_PX, PT_PER_PX),
       );
       if blended {
         surface.pop();
@@ -934,7 +935,7 @@ impl Emitter<'_> {
   ) {
     let BoxFrame {
       layout,
-      origin: CorePoint { x, y },
+      origin: Point { x, y },
     } = frame;
     let content = layout.content_box_size();
     let offset = layout.content_box_offset();
@@ -987,12 +988,12 @@ impl Emitter<'_> {
     let ix = bx + placement.offset.x;
     let iy = by + placement.offset.y;
 
-    let Some(size) = PdfSize::from_wh(dw, dh) else {
+    let Some(size) = Size::positive(dw, dh) else {
       return;
     };
     let clip_path = replaced.clip.and_then(|clip| {
       if clip.border.is_zero() {
-        PdfRect::from_xywh(bx, by, w, h).and_then(rect_path)
+        Rect::from_xywh(bx, by, w, h).map(PathBuilder::from_rect)
       } else {
         shape_path(&clip.into(), frame.origin)
       }
@@ -1008,17 +1009,10 @@ impl Emitter<'_> {
         height: dh,
       };
 
-      self.draw_svg(
-        svg,
-        context,
-        CorePoint { x: ix, y: iy },
-        size,
-        size,
-        surface,
-      );
+      self.draw_svg(svg, context, Point { x: ix, y: iy }, size, size, surface);
     }
     if let Some(pdf_image) = pdf_image {
-      surface.push_transform(&Transform::from_translate(ix, iy));
+      surface.push_transform(&Affine::translation(ix, iy));
       surface.draw_image(pdf_image, size);
       surface.pop();
     }
@@ -1034,7 +1028,7 @@ impl Emitter<'_> {
     &self,
     svg: &SvgSource,
     context: &RenderContext,
-    at: CorePoint<f32>,
+    at: Point<f32>,
     viewport: Size<f32>,
     size: Size<f32>,
     surface: &mut Surface,
@@ -1044,14 +1038,14 @@ impl Emitter<'_> {
     }
     let picture = svg.picture(context, viewport);
 
-    surface.push_transform(&Transform::from_row(
-      size.width / viewport.width,
-      0.0,
-      0.0,
-      size.height / viewport.height,
-      at.x,
-      at.y,
-    ));
+    surface.push_transform(&Affine {
+      a: size.width / viewport.width,
+      b: 0.0,
+      c: 0.0,
+      d: size.height / viewport.height,
+      x: at.x,
+      y: at.y,
+    });
 
     // A color filter repaints the picture, so only an unfiltered one is shared.
     match picture.key().filter(|_| self.color_filter.is_none()) {
@@ -1094,7 +1088,8 @@ impl Emitter<'_> {
   #[cfg(all(feature = "svg", feature = "images"))]
   /// Paints `picture`, laid out at `viewport`, clipped to its canvas.
   fn paint_picture(&self, picture: &SvgPicture, viewport: Size<f32>, surface: &mut Surface) {
-    let canvas = PdfRect::from_xywh(0.0, 0.0, viewport.width, viewport.height).and_then(rect_path);
+    let canvas =
+      Rect::from_xywh(0.0, 0.0, viewport.width, viewport.height).map(PathBuilder::from_rect);
 
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
@@ -1165,7 +1160,7 @@ impl Emitter<'_> {
   ) {
     let BoxFrame {
       layout,
-      origin: CorePoint { y, .. },
+      origin: Point { y, .. },
     } = frame;
 
     // Marked content does not nest, so each box takes the caller's region over and hands it back.
@@ -1345,7 +1340,7 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     tiling: &ImageTiling,
-    origin: CorePoint<f32>,
+    origin: Point<f32>,
     surface: &mut Surface,
   ) -> Option<Paint> {
     let (xs, ys) = tiling.origins();
@@ -1369,16 +1364,16 @@ impl Emitter<'_> {
         image,
         node,
         tiling,
-        CorePoint::ZERO,
+        Point::ZERO,
         inner,
-        Transform::from_scale(PT_PER_PX, PT_PER_PX),
+        Affine::scale(PT_PER_PX, PT_PER_PX),
       );
     });
 
     Some(
       Pattern {
         stream,
-        transform: Transform::from_translate(origin.x + first_x, origin.y + first_y),
+        transform: Affine::translation(origin.x + first_x, origin.y + first_y),
         width,
         height,
       }
@@ -1397,13 +1392,13 @@ impl Emitter<'_> {
   ) -> Vec<GlyphBackground> {
     let mut fills = Vec::new();
     let rect_clip = |left: f32, top: f32, right: f32, bottom: f32| {
-      PdfRect::from_ltrb(
+      Rect::from_ltrb(
         frame.origin.x + left,
         frame.origin.y + top,
         frame.origin.x + right,
         frame.origin.y + bottom,
       )
-      .and_then(rect_path)
+      .map(PathBuilder::from_rect)
     };
 
     if let Some(color) = background.color {
@@ -1451,7 +1446,7 @@ impl Emitter<'_> {
   ) -> Option<GlyphRun<'r>> {
     let BoxFrame {
       layout,
-      origin: CorePoint { x, y },
+      origin: Point { x, y },
     } = frame;
     let shaped = &run.glyph_run;
 
@@ -1479,27 +1474,27 @@ impl Emitter<'_> {
       font,
       text,
       glyphs,
-      origin: Point::from_xy(x + offset.x, y + offset.y),
+      origin: Point::new(x + offset.x, y + offset.y),
       owned: !self.window.disowns_line(item),
     })
   }
 
   /// Shears the text about the run's baseline for faux oblique. Approximate: raster shears each
   /// glyph about its own origin.
-  fn push_oblique(&self, shaped: &ShapedRun, origin: Point, surface: &mut Surface) -> bool {
+  fn push_oblique(&self, shaped: &ShapedRun, origin: Point<f32>, surface: &mut Surface) -> bool {
     let Some(degrees) = shaped.synthetic_skew else {
       return false;
     };
     let tangent = degrees.to_radians().tan();
 
-    surface.push_transform(&Transform::from_row(
-      1.0,
-      0.0,
-      tangent,
-      1.0,
-      -tangent * (origin.y + shaped.baseline),
-      0.0,
-    ));
+    surface.push_transform(&Affine {
+      a: 1.0,
+      b: 0.0,
+      c: tangent,
+      d: 1.0,
+      x: -tangent * (origin.y + shaped.baseline),
+      y: 0.0,
+    });
     true
   }
 
@@ -1567,7 +1562,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
     if relative.only_translation() {
-      let origin = CorePoint {
+      let origin = Point {
         x: relative.x,
         y: relative.y,
       };
@@ -1575,8 +1570,8 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       return Some((node, BoxFrame::new(layout, origin), 0));
     }
 
-    self.surface.push_transform(&relative.into());
-    Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
+    self.surface.push_transform(&relative);
+    Some((node, BoxFrame::new(layout, Point::ZERO), 1))
   }
 
   /// How the lines of the box `paint` places at `frame` map into the window: through its own
@@ -1706,15 +1701,15 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
       return;
     };
     let origin = if relative.only_translation() {
-      CorePoint {
+      Point {
         x: relative.x,
         y: relative.y,
       }
     } else {
-      self.surface.push_transform(&relative.into());
+      self.surface.push_transform(&relative);
       pushed += 1;
       self.current = clip.transform;
-      CorePoint::ZERO
+      Point::ZERO
     };
 
     // A clip keeps content off the page but not out of the text layer, so what it cuts away must
@@ -1729,7 +1724,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         .narrow(origin.y + top, origin.y + bottom);
     }
     if let Some(path) = shape_path(shape, origin).or_else(|| empty_path(origin)) {
-      self.surface.push_clip_path(&path, &shape.rule().into());
+      self.surface.push_clip_path(&path, &shape.rule());
       pushed += 1;
     }
 
@@ -1796,7 +1791,7 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
   if style.misc_data.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(style.misc_data.mix_blend_mode.into());
+    surface.push_blend_mode(style.misc_data.mix_blend_mode);
     pushed += 1;
   }
   if style.misc_data.isolation == Isolation::Isolate {
@@ -1835,7 +1830,7 @@ enum Saved {
 
 impl SurfaceDevice<'_, '_> {
   /// Clips later draws to `path`, or hides them when the clip has no area.
-  fn open_clip(&mut self, path: Option<PdfPath>, rule: CoreFillRule) {
+  fn open_clip(&mut self, path: Option<Path>, rule: FillRule) {
     let saved = match &path {
       Some(_) => Saved::Clip,
       None => Saved::EmptyClip,
@@ -1844,7 +1839,7 @@ impl SurfaceDevice<'_, '_> {
     self.open(saved);
 
     if let Some(path) = path {
-      self.surface.push_clip_path(&path, &rule.into());
+      self.surface.push_clip_path(&path, &rule);
     }
   }
 
@@ -1876,17 +1871,17 @@ impl SurfaceDevice<'_, '_> {
   fn draw(
     &mut self,
     transform: Affine,
-    build: impl FnOnce(CorePoint<f32>) -> Option<PdfPath>,
-    paint: impl FnOnce(&mut Surface, &PdfPath),
+    build: impl FnOnce(Point<f32>) -> Option<Path>,
+    paint: impl FnOnce(&mut Surface, &Path),
   ) {
     let flat = transform.only_translation();
     let origin = if flat {
-      CorePoint {
+      Point {
         x: transform.x,
         y: transform.y,
       }
     } else {
-      CorePoint::ZERO
+      Point::ZERO
     };
     if self.stack.contains(&Saved::EmptyClip) {
       return;
@@ -1897,7 +1892,7 @@ impl SurfaceDevice<'_, '_> {
     let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
-      self.surface.push_transform(&transform.into());
+      self.surface.push_transform(&transform);
     }
     if artifact {
       self.surface.start_tagged(ContentTag::Artifact);
@@ -1916,7 +1911,7 @@ impl SurfaceDevice<'_, '_> {
 fn border_mask_stream(
   border: &BorderProperties,
   size: Size<f32>,
-  origin: CorePoint<f32>,
+  origin: Point<f32>,
   surface: &mut Surface,
 ) -> Stream {
   draw_stream(surface, |surface| {
@@ -1945,17 +1940,10 @@ impl SurfaceDevice<'_, '_> {
     let stroke = Stroke {
       paint,
       opacity,
-      width: stroke.width,
-      line_cap: if stroke.round_cap {
-        LineCap::Round
-      } else {
-        LineCap::Butt
+      outline: PathStroke {
+        miter_limit: Stroke::default().outline.miter_limit,
+        ..stroke.outline()
       },
-      dash: stroke.dash.map(|intervals| StrokeDash {
-        array: intervals.to_vec(),
-        offset: 0.0,
-      }),
-      ..Stroke::default()
     };
 
     self.draw(
@@ -1975,7 +1963,7 @@ impl SurfaceDevice<'_, '_> {
     for background in fills {
       self.within(background, |device| {
         let fill = Fill {
-          rule: shape.rule().into(),
+          rule: shape.rule(),
           ..background.fill.clone()
         };
 
@@ -2029,7 +2017,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     &mut self,
     border: &BorderProperties,
     size: Size<f32>,
-    origin: CorePoint<f32>,
+    origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
     let stream = border_mask_stream(border, size, origin, self.surface);
@@ -2041,13 +2029,12 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   }
 
   fn transform(&self) -> Affine {
-    Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
-      * Affine::from(self.surface.page_transform())
+    Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip()) * self.surface.page_transform()
   }
 
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let fill = Fill {
-      rule: shape.rule().into(),
+      rule: shape.rule(),
       ..fill_from_rgba(filtered(self.filter, color), 1.0)
     };
 
@@ -2074,13 +2061,13 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     let path = if transform.only_translation() {
       shape_path(
         shape,
-        CorePoint {
+        Point {
           x: transform.x,
           y: transform.y,
         },
       )
     } else {
-      pdf_path(&device_commands(shape, transform), CorePoint::ZERO)
+      pdf_path(&device_commands(shape, transform), Point::ZERO)
     };
 
     self.open_clip(path, shape.rule());
@@ -2104,13 +2091,13 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         width: UNBOUNDED * 2.0,
         height: UNBOUNDED * 2.0,
       },
-      CorePoint {
+      Point {
         x: -UNBOUNDED,
         y: -UNBOUNDED,
       },
     );
     commands.extend(device_commands(shape, transform));
-    self.open_clip(pdf_path(&commands, CorePoint::ZERO), CoreFillRule::EvenOdd);
+    self.open_clip(pdf_path(&commands, Point::ZERO), FillRule::EvenOdd);
   }
 
   fn pop_clip(&mut self) {
@@ -2146,7 +2133,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     for band in bands {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
-        rule: band_shape.rule().into(),
+        rule: band_shape.rule(),
         ..fill_from_rgba(band_color, band.alpha)
       };
 
@@ -2175,7 +2162,7 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
       command.map_points(|point| {
         let (x, y) = transform.transform_point(point.x, point.y);
 
-        CorePoint { x, y }
+        Point { x, y }
       })
     })
     .collect()
@@ -2184,7 +2171,7 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
 /// A paint glyphs show under `background-clip: text`, and the rectangle it shows in.
 struct GlyphBackground {
   fill: Fill,
-  clip: Option<PdfPath>,
+  clip: Option<Path>,
 }
 
 /// The PDF surface as a [`PaintDevice`] for one block's text, glyphs drawn as extractable text.
@@ -2258,12 +2245,11 @@ impl TextDevice<'_, '_, '_, '_> {
       1.0,
     );
 
-    Some(Stroke {
-      paint: stroke_fill.paint,
-      opacity: stroke_fill.opacity,
-      width: brush.stroke_width,
-      ..Stroke::default()
-    })
+    Some(Stroke::solid(
+      stroke_fill.paint,
+      stroke_fill.opacity,
+      brush.stroke_width,
+    ))
   }
 }
 
@@ -2272,7 +2258,7 @@ impl PaintDevice for TextDevice<'_, '_, '_, '_> {
     &mut self,
     border: &BorderProperties,
     size: Size<f32>,
-    origin: CorePoint<f32>,
+    origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
     let stream = border_mask_stream(border, size, origin, self.device.surface);
@@ -2453,7 +2439,7 @@ impl TextDevice<'_, '_, '_, '_> {
     with_paint: bool,
   ) {
     let shifted = match self.shadow {
-      Some(shadow) => frame.shifted(CorePoint {
+      Some(shadow) => frame.shifted(Point {
         x: shadow.offset_x,
         y: shadow.offset_y,
       }),
@@ -2480,7 +2466,7 @@ impl TextDevice<'_, '_, '_, '_> {
     let colors = shadow_color.map(|_| {
       ColorGlyphs::of(
         run,
-        CorePoint {
+        Point {
           x: origin.x,
           y: origin.y,
         },
@@ -2530,19 +2516,19 @@ impl TextDevice<'_, '_, '_, '_> {
           }
 
           for band in Band::of(shadow.blur_radius) {
-            let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
+            let width =
+              2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.outline.width);
 
             surface.push_opacity(normalized(band.alpha));
             surface.set_fill(Some(Fill {
               opacity: NormalizedF32::ONE,
               ..paint.clone()
             }));
-            surface.set_stroke((width > 0.0).then(|| Stroke {
-              paint: paint.paint.clone(),
-              opacity: NormalizedF32::ONE,
-              width,
-              line_join: LineJoin::Round,
-              ..Stroke::default()
+            surface.set_stroke((width > 0.0).then(|| {
+              let mut stroke = Stroke::solid(paint.paint.clone(), NormalizedF32::ONE, width);
+
+              stroke.outline.line_join = LineJoin::Round;
+              stroke
             }));
             surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
             if let Some(colors) = &colors {
@@ -2634,7 +2620,7 @@ impl TextDevice<'_, '_, '_, '_> {
 /// Draws each bitmap glyph's alpha filled with `color`.
 #[cfg(feature = "images")]
 fn draw_silhouettes(
-  bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
+  bitmaps: &[(&ResolvedBitmapGlyph, Point<f32>)],
   color: [u8; 4],
   surface: &mut Surface,
 ) {
@@ -2662,7 +2648,7 @@ fn draw_silhouettes(
 /// Draws each bitmap glyph's alpha blurred as Blink's `DropShadowPaintFilter` blurs it.
 #[cfg(feature = "images")]
 fn draw_blurred_silhouettes(
-  bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
+  bitmaps: &[(&ResolvedBitmapGlyph, Point<f32>)],
   blur_radius: f32,
   color: [u8; 4],
   surface: &mut Surface,
@@ -2714,7 +2700,7 @@ fn draw_alpha(
   transform: Affine,
   surface: &mut Surface,
 ) {
-  let Some(size) = PdfSize::from_wh(width as f32, height as f32) else {
+  let Some(size) = Size::positive(width as f32, height as f32) else {
     return;
   };
   let data = alpha
@@ -2726,7 +2712,7 @@ fn draw_alpha(
     })
     .collect();
 
-  surface.push_transform(&transform.into());
+  surface.push_transform(&transform);
   surface.draw_image(PdfImage::from_rgba8(data, width, height), size);
   surface.pop();
 }
@@ -2737,7 +2723,7 @@ struct GlyphRun<'r> {
   font: Font,
   text: &'r str,
   glyphs: Vec<PdfGlyph>,
-  origin: Point,
+  origin: Point<f32>,
   /// Whether this page owns the run's line and shows its text, not just its outlines.
   owned: bool,
 }
@@ -2767,21 +2753,15 @@ fn background_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
     .unwrap_or(0.0)
     .max(shaped.brush.stroke_width);
 
-  (width > 0.0).then(|| Stroke {
-    paint: fill.paint.clone(),
-    opacity: fill.opacity,
-    width,
-    ..Stroke::default()
-  })
+  (width > 0.0).then(|| Stroke::solid(fill.paint.clone(), fill.opacity, width))
 }
 
 fn synthetic_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
-  Some(Stroke {
-    paint: fill.paint.clone(),
-    // A colour's alpha lives in the fill's opacity, not its paint, so a stroke
-    // built from the paint alone comes out fully opaque.
-    opacity: fill.opacity,
-    width: shaped.synthetic_bold?,
-    ..Stroke::default()
-  })
+  // A colour's alpha lives in the fill's opacity, not its paint, so a stroke
+  // built from the paint alone comes out fully opaque.
+  Some(Stroke::solid(
+    fill.paint.clone(),
+    fill.opacity,
+    shaped.synthetic_bold?,
+  ))
 }

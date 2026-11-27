@@ -3,6 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
+use takumi_core::geometry::Rect;
 
 use crate::writer::num::FiniteF32;
 use skrifa::instance::{Location, LocationRef, Size};
@@ -13,7 +14,6 @@ use skrifa::{FontRef, MetadataProvider, OutlineGlyphCollection};
 use yoke::{Yoke, Yokeable};
 
 use crate::writer::Data;
-use crate::writer::geom::Rect;
 use crate::writer::text::GlyphId;
 use crate::writer::util::Prehashed;
 
@@ -129,7 +129,7 @@ impl Font {
     self.0.font_info.units_per_em as f32
   }
 
-  pub(crate) fn bbox(&self) -> Rect {
+  pub(crate) fn bbox(&self) -> Rect<f32> {
     self.0.font_info.global_bbox
   }
 
@@ -236,7 +236,7 @@ pub(crate) struct FontInfo {
   var_coords: Vec<(Tag, FiniteF32)>,
   location: Location,
   units_per_em: u16,
-  global_bbox: Rect,
+  global_bbox: Rect<f32>,
   num_glyphs: u32,
   postscript_name: Option<String>,
   ascent: FiniteF32,

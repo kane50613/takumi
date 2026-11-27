@@ -1,7 +1,10 @@
 //! Working with pages of a PDF document.
 
+use crate::writer::geom::UNIT_RECT;
+use crate::writer::geom::pdf_rect;
 use std::cell::OnceCell;
 use std::ops::DerefMut;
+use takumi_core::{geometry::Rect, geometry::Size, style::Affine};
 
 use pdf_writer::types::TabOrder;
 use pdf_writer::{Chunk, Finish, Ref};
@@ -11,7 +14,6 @@ use crate::writer::configure::ValidationError;
 use crate::writer::configure::validate::VersionedFeature;
 use crate::writer::content::ContentBuilder;
 use crate::writer::error::WriterResult;
-use crate::writer::geom::{Rect, Size, Transform};
 use crate::writer::interactive::annotation::Annotation;
 use crate::writer::interchange::tagging::{AnnotationIdentifier, Identifier, PageTagIdentifier};
 use crate::writer::resource::ResourceDictionary;
@@ -24,28 +26,23 @@ use crate::writer::util::Deferred;
 #[derive(Clone, Debug)]
 pub struct PageSettings {
   /// The size of the surface, which the media box spans.
-  surface_size: Size,
+  surface_size: Size<f32>,
 }
 
 impl PageSettings {
   /// Create new page settings and define the size of the page surface.
-  pub fn new(size: Size) -> Self {
+  pub fn new(size: Size<f32>) -> Self {
     Self { surface_size: size }
   }
 
   /// The visible area of the surface.
-  pub(crate) fn media_box(&self) -> Rect {
-    Rect::from_xywh(
-      0.0,
-      0.0,
-      self.surface_size.width(),
-      self.surface_size.height(),
-    )
-    .unwrap_or_else(Rect::unit)
+  pub(crate) fn media_box(&self) -> Rect<f32> {
+    Rect::from_xywh(0.0, 0.0, self.surface_size.width, self.surface_size.height)
+      .unwrap_or(UNIT_RECT)
   }
 
   /// The current surface size.
-  pub(crate) fn surface_size(&self) -> Size {
+  pub(crate) fn surface_size(&self) -> Size<f32> {
     self.surface_size
   }
 }
@@ -54,7 +51,7 @@ impl Default for PageSettings {
   /// An A4 page.
   #[expect(clippy::unwrap_used, reason = "A4 is a valid size")]
   fn default() -> Self {
-    Self::new(Size::from_wh(595.0, 842.0).unwrap())
+    Self::new(Size::positive(595.0, 842.0).unwrap())
   }
 }
 
@@ -95,8 +92,8 @@ impl<'a> Page<'a> {
     }
   }
 
-  pub(crate) fn root_transform(&self) -> Transform {
-    page_root_transform(self.page_settings.surface_size().height())
+  pub(crate) fn root_transform(&self) -> Affine {
+    page_root_transform(self.page_settings.surface_size().height)
   }
 
   /// Add an annotation to the page.
@@ -147,8 +144,15 @@ impl<'a> Page<'a> {
   pub fn finish(self) {}
 }
 
-pub(crate) fn page_root_transform(height: f32) -> Transform {
-  Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, height)
+pub(crate) fn page_root_transform(height: f32) -> Affine {
+  Affine {
+    a: 1.0,
+    b: 0.0,
+    c: 0.0,
+    d: -1.0,
+    x: 0.0,
+    y: height,
+  }
 }
 
 impl Drop for Page<'_> {
@@ -242,7 +246,7 @@ impl InternalPage {
           sc,
           chunk_container,
           annot_ref,
-          self.page_settings.surface_size().height(),
+          self.page_settings.surface_size().height,
         )?;
         annotation_refs.push((annot_ref, OnceCell::new()));
       }
@@ -256,16 +260,16 @@ impl InternalPage {
       &mut chunk_container.non_stream.resource_dictionaries,
     );
 
-    let transform_rect = |rect: Rect| {
+    let transform_rect = |rect: Rect<f32>| {
       rect
-        .transform(page_root_transform(
-          self.page_settings.surface_size().height(),
+        .transformed(page_root_transform(
+          self.page_settings.surface_size().height,
         ))
         .unwrap_or(rect)
     };
 
     let media_box = transform_rect(self.page_settings.media_box());
-    page.media_box(media_box.to_pdf_rect());
+    page.media_box(pdf_rect(media_box));
 
     if let Some(struct_parent) = self.struct_parent {
       page.struct_parents(struct_parent);

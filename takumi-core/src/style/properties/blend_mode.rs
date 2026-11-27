@@ -17,7 +17,7 @@ impl<'i> FromCss<'i> for BlendModes {
 }
 
 /// Defines the blending mode for an element.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum BlendMode {
   /// The final color is the top color, regardless of what the bottom color is.

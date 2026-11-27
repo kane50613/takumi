@@ -135,6 +135,7 @@
 //! [`parse_html`]: https://docs.rs/takumi-core/latest/takumi_core/html/fn.parse_html.html
 //! [`render`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/fn.render.html
 use std::{mem::take, rc::Rc};
+use takumi_core::{geometry::Size, style::Affine};
 
 mod bands;
 mod chunks;
@@ -173,7 +174,7 @@ mod subsetter;
 mod writer;
 
 use takumi_core::{
-  geometry::Point as CorePoint,
+  geometry::Point,
   layout::{needs::RenderNeeds, tree::RenderNode},
   page_stream::{SETTLED_PAGES, Settle},
   style::{Color, Lang, page_rule::PageContext},
@@ -199,10 +200,7 @@ use crate::{
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
   writer::{
-    Document, SerializeSettings,
-    configure::ConfigurationBuilder,
-    destination::XyzDestination,
-    geom::{Point, Size as PdfSize, Transform},
+    Document, SerializeSettings, configure::ConfigurationBuilder, destination::XyzDestination,
     page::PageSettings,
   },
 };
@@ -469,7 +467,7 @@ impl SinglePage {
     background: Option<Color>,
     structural: bool,
   ) -> Result<Self, PdfError> {
-    let page_size = PdfSize::from_wh(
+    let page_size = Size::positive(
       content.scene.size.width * PT_PER_PX,
       content.scene.size.height * PT_PER_PX,
     )
@@ -479,7 +477,7 @@ impl SinglePage {
     let mut page = pdf.start_page_with(PageSettings::new(page_size));
     let mut surface = page.surface();
 
-    surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+    surface.push_transform(&Affine::scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(background, content.scene.size, &mut surface);
 
     let mut emitter = Emitter::new(content.view(), state, Some(&inline), None, true);
@@ -497,7 +495,7 @@ impl SinglePage {
       &mut page,
       &rendered.interactive.links,
       (0.0, rendered.content.scene.size.height),
-      CorePoint::ZERO,
+      Point::ZERO,
       state.tags.as_ref(),
       |id| {
         rendered
@@ -515,7 +513,7 @@ impl SinglePage {
   fn destination(&self, top: f32, path: &[usize]) -> XyzDestination {
     xyz_destination(
       0,
-      Point::from_xy(0.0, top.max(0.0) * PT_PER_PX),
+      Point::new(0.0, top.max(0.0) * PT_PER_PX),
       path,
       self.structural,
     )

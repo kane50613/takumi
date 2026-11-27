@@ -1,19 +1,21 @@
+use crate::writer::geom::{expand, rotation_at};
 use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
 use std::sync::Arc;
+use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::{geometry::Rect, style::Affine};
 
 use bumpalo::Bump;
 use pdf_writer::types::{FunctionShadingType, PostScriptOp};
 use pdf_writer::{Chunk, Finish, Name, Ref};
-use takumi_core::path::Point;
+use takumi_core::geometry::Point;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
-use crate::writer::geom::{Rect, Transform};
 use crate::writer::graphics::color::luma;
 use crate::writer::graphics::color::{Color, ColorSpace};
+use crate::writer::graphics::paint::Stop;
 use crate::writer::graphics::paint::{LinearGradient, RadialGradient, SweepGradient};
-use crate::writer::graphics::paint::{SpreadMethod, Stop};
 use crate::writer::num::NormalizedF32;
 use crate::writer::resource;
 use crate::writer::resource::Resourceable;
@@ -57,8 +59,8 @@ pub(crate) struct PostScriptGradient {
   // Only used for sweep gradient
   pub(crate) cy: f32,
   pub(crate) stops: Vec<Stop>,
-  pub(crate) domain: Rect,
-  pub(crate) spread_method: SpreadMethod,
+  pub(crate) domain: Rect<f32>,
+  pub(crate) spread_method: SvgSpreadMethod,
   pub(crate) gradient_type: GradientType,
   pub(crate) anti_alias: bool,
 }
@@ -104,20 +106,20 @@ impl GradientProperties {
 }
 
 pub(crate) trait GradientPropertiesExt {
-  fn gradient_properties(self, bbox: Rect) -> (GradientProperties, Transform);
+  fn gradient_properties(self, bbox: Rect<f32>) -> (GradientProperties, Affine);
 }
 
-fn get_expanded_bbox(mut bbox: Rect, shading_transform: Transform) -> Rect {
+fn get_expanded_bbox(mut bbox: Rect<f32>, shading_transform: Affine) -> Rect<f32> {
   // We need to make sure the shading covers the whole bbox of the object after
   // the transform as been applied. In order to know that, we need to calculate the
   // resulting bbox from the inverted transform. A singular transform (e.g.
   // `gradientTransform="scale(0)"`) is not invertible; the shading collapses to
   // nothing, so the unexpanded bbox is enough.
   if let Some(expanded) = shading_transform
-    .invert()
-    .and_then(|inverted| bbox.transform(inverted))
+    .skia_invert()
+    .and_then(|inverted| bbox.transformed(inverted))
   {
-    bbox.expand(&expanded);
+    expand(&mut bbox, &expanded);
   }
   bbox
 }
@@ -125,7 +127,7 @@ fn get_expanded_bbox(mut bbox: Rect, shading_transform: Transform) -> Rect {
 /// When writing a PostScript shading, we assume that both points are on a horizontal
 /// line. Here, we calculate by how much we need to rotate the second point so that it
 /// is horizontal to the first point, as well as the position of the rotated point.
-fn get_point_ts(start: Point, end: Point) -> (Transform, f32, f32) {
+fn get_point_ts(start: Point<f32>, end: Point<f32>) -> (Affine, f32, f32) {
   let dist = start.distance(end);
 
   let dx = end.x - start.x;
@@ -133,15 +135,15 @@ fn get_point_ts(start: Point, end: Point) -> (Transform, f32, f32) {
   let angle = dy.atan2(dx).to_degrees();
 
   (
-    Transform::from_rotate_at(angle, start.x, start.y),
+    rotation_at(angle, start.x, start.y),
     start.x,
     start.x + dist,
   )
 }
 
 impl GradientPropertiesExt for LinearGradient {
-  fn gradient_properties(self, bbox: Rect) -> (GradientProperties, Transform) {
-    if self.spread_method == SpreadMethod::Pad {
+  fn gradient_properties(self, bbox: Rect<f32>) -> (GradientProperties, Affine) {
+    if self.spread_method == SvgSpreadMethod::Pad {
       (
         GradientProperties::RadialAxialGradient(RadialAxialGradient {
           coords: vec![self.x1, self.y1, self.x2, self.y2],
@@ -152,8 +154,8 @@ impl GradientPropertiesExt for LinearGradient {
         self.transform,
       )
     } else {
-      let p1 = Point::from_xy(self.x1, self.y1);
-      let p2 = Point::from_xy(self.x2, self.y2);
+      let p1 = Point::new(self.x1, self.y1);
+      let p2 = Point::new(self.x2, self.y2);
 
       let (ts, min, max) = get_point_ts(p1, p2);
       (
@@ -163,19 +165,19 @@ impl GradientPropertiesExt for LinearGradient {
           cx: 0.0,
           cy: 0.0,
           stops: self.stops,
-          domain: get_expanded_bbox(bbox, self.transform.pre_concat(ts)),
+          domain: get_expanded_bbox(bbox, self.transform * ts),
           spread_method: self.spread_method,
           gradient_type: GradientType::Linear,
           anti_alias: self.anti_alias,
         }),
-        self.transform.pre_concat(ts),
+        (self.transform * ts),
       )
     }
   }
 }
 
 impl GradientPropertiesExt for SweepGradient {
-  fn gradient_properties(self, bbox: Rect) -> (GradientProperties, Transform) {
+  fn gradient_properties(self, bbox: Rect<f32>) -> (GradientProperties, Affine) {
     let min = self.start_angle;
     let max = self.end_angle;
 
@@ -199,7 +201,7 @@ impl GradientPropertiesExt for SweepGradient {
 }
 
 impl GradientPropertiesExt for RadialGradient {
-  fn gradient_properties(self, _: Rect) -> (GradientProperties, Transform) {
+  fn gradient_properties(self, _: Rect<f32>) -> (GradientProperties, Affine) {
     // TODO: Support other spread methods
     (
       GradientProperties::RadialAxialGradient(RadialAxialGradient {
@@ -313,7 +315,7 @@ fn serialize_postscript_shading(
   shading.anti_alias(post_script_gradient.anti_alias);
   shading.function(function_ref);
 
-  shading.domain([domain.left(), domain.right(), domain.top(), domain.bottom()]);
+  shading.domain([domain.left, domain.right, domain.top, domain.bottom]);
   shading.finish();
 }
 
@@ -536,10 +538,10 @@ fn serialize_sweep_postscript(
   let mut postscript_function = chunk.post_script_function(root_ref, encoded.encoded_data());
   encoded.write_filters(postscript_function.deref_mut().deref_mut());
   postscript_function.domain([
-    properties.domain.left(),
-    properties.domain.right(),
-    properties.domain.top(),
-    properties.domain.bottom(),
+    properties.domain.left,
+    properties.domain.right,
+    properties.domain.top,
+    properties.domain.bottom,
   ]);
 
   if use_opacities {
@@ -602,10 +604,10 @@ fn serialize_linear_postscript(
   let mut postscript_function = chunk.post_script_function(root_ref, encoded.encoded_data());
   encoded.write_filters(postscript_function.deref_mut().deref_mut());
   postscript_function.domain([
-    properties.domain.left(),
-    properties.domain.right(),
-    properties.domain.top(),
-    properties.domain.bottom(),
+    properties.domain.left,
+    properties.domain.right,
+    properties.domain.top,
+    properties.domain.bottom,
   ]);
 
   if use_opacities {
@@ -626,11 +628,11 @@ fn encode_spread_method<'a>(
   max: f32,
   code: &mut Vec<PostScriptOp<'a>>,
   bump: &'a Bump,
-  spread_method: SpreadMethod,
+  spread_method: SvgSpreadMethod,
 ) {
   use pdf_writer::types::PostScriptOp::*;
 
-  if spread_method == SpreadMethod::Pad {
+  if spread_method == SvgSpreadMethod::Pad {
     return;
   }
 
@@ -691,7 +693,7 @@ fn encode_spread_method<'a>(
     Integer(0),
     Gt,
     // x length min o {(abs(i) % 2) > 0}
-    if spread_method == SpreadMethod::Reflect {
+    if spread_method == SvgSpreadMethod::Reflect {
       If(bump.alloc([Integer(2), Index, Exch, Sub]))
     } else {
       Pop

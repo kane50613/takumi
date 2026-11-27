@@ -35,7 +35,7 @@ use crate::svg::{HostReads, SvgDocument, SvgHost};
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
   SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
-  SvgOpPaint, SvgRasterizer, SvgSpreadMethod, SvgStrokeStyle,
+  SvgOpPaint, SvgRasterizer, SvgStrokeStyle,
 };
 use crate::{
   context::RenderContext,
@@ -46,6 +46,17 @@ use crate::{
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
+
+/// Gradient spread method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SvgSpreadMethod {
+  /// Clamp to the edge stops.
+  Pad,
+  /// Mirror-repeat.
+  Reflect,
+  /// Repeat.
+  Repeat,
+}
 
 /// The most pixels an SVG raster or one of its filter buffers may hold.
 #[cfg(feature = "svg-raster")]

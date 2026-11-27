@@ -1,4 +1,5 @@
-use super::{Path, PathBuilder, Point, Rect, Stroke, StrokeDash};
+use super::{Path, PathBuilder, Stroke, StrokeDash};
+use crate::geometry::{Point, Rect};
 use crate::style::{LineCap, LineJoin};
 
 fn line(from: (f32, f32), to: (f32, f32)) -> Path {
@@ -12,7 +13,7 @@ fn line(from: (f32, f32), to: (f32, f32)) -> Path {
 fn bounds(path: &Path) -> (f32, f32, f32, f32) {
   let bounds = path.compute_tight_bounds().unwrap();
 
-  (bounds.left(), bounds.top(), bounds.right(), bounds.bottom())
+  (bounds.left, bounds.top, bounds.right, bounds.bottom)
 }
 
 #[test]
@@ -100,13 +101,11 @@ fn a_lone_zero_length_dash_draws_its_round_cap() {
   let stroke = Stroke {
     width: 4.0,
     line_cap: LineCap::Round,
+    dash: StrokeDash::new(vec![5.0, 5.0], 0.0),
     ..Stroke::default()
   };
-  let dash = StrokeDash::new(vec![5.0, 5.0], 0.0).unwrap();
   let (left, top, right, bottom) = bounds(
     &line((10.0, 10.0), (10.0, 10.0))
-      .dash(&dash, 1.0)
-      .unwrap()
       .stroke(&stroke, 1.0)
       .unwrap(),
   );
@@ -157,13 +156,10 @@ fn appending_a_builder_replaces_a_pending_move_and_continues_its_contour() {
   let path = builder.finish().unwrap();
   let bounds = path.compute_tight_bounds().unwrap();
 
-  assert_eq!((bounds.right(), bounds.bottom()), (30.0, 10.0));
-  assert_eq!(
-    path.points().last().copied(),
-    Some(Point::from_xy(25.0, 10.0))
-  );
+  assert_eq!((bounds.right, bounds.bottom), (30.0, 10.0));
+  assert_eq!(path.points().last().copied(), Some(Point::new(25.0, 10.0)));
   assert_eq!(
     path.points()[path.points().len() - 2],
-    Point::from_xy(20.0, 0.0)
+    Point::new(20.0, 0.0)
   );
 }

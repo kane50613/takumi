@@ -3,6 +3,8 @@
 //! the `SkBlitter` defaults it inherits (`src/core/SkBlitter.cpp`), and `MaskAdditiveBlitter`,
 //! `RunBasedAdditiveBlitter` and `SafeRLEAdditiveBlitter` (`src/core/SkScan_AAAPath.cpp`).
 
+use takumi_core::geometry::Rect;
+
 /// An integer rect, `SkIRect`.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(super) struct IntBounds {
@@ -150,7 +152,7 @@ impl Coverage {
   }
 
   /// `SkBlitter::blitFatAntiRect` for a rect at least three pixels wide.
-  pub(super) fn blit_fat_anti_rect(&mut self, rect: takumi_core::path::Rect) {
+  pub(super) fn blit_fat_anti_rect(&mut self, rect: Rect<f32>) {
     let bounds = round_out(rect);
 
     if bounds.height() == 0 {
@@ -158,13 +160,13 @@ impl Coverage {
     }
 
     let width = bounds.width() as usize;
-    let partial_left = bounds.left as f32 + 1.0 - rect.left();
-    let partial_right = rect.right() - (bounds.right as f32 - 1.0);
-    let mut partial_top = bounds.top as f32 + 1.0 - rect.top();
-    let partial_bottom = rect.bottom() - (bounds.bottom as f32 - 1.0);
+    let partial_left = bounds.left as f32 + 1.0 - rect.left;
+    let partial_right = rect.right - (bounds.right as f32 - 1.0);
+    let mut partial_top = bounds.top as f32 + 1.0 - rect.top;
+    let partial_bottom = rect.bottom - (bounds.bottom as f32 - 1.0);
 
     if bounds.height() == 1 {
-      partial_top = rect.bottom() - rect.top();
+      partial_top = rect.bottom - rect.top;
     }
 
     let mut alphas = vec![0; width];
@@ -206,16 +208,16 @@ const fn saturating_span(start: i32, end: i32) -> i32 {
 
 /// `safeRoundOut` in `SkScan_AntiPath.cpp`: `SkRect::roundOut`, pinned to the range a
 /// supersampled coordinate can hold.
-pub(super) fn round_out(rect: takumi_core::path::Rect) -> IntBounds {
+pub(super) fn round_out(rect: Rect<f32>) -> IntBounds {
   const LIMIT: i32 = i32::MAX >> 2;
 
   let pin = |value: f32| (value as i32).clamp(-LIMIT, LIMIT);
 
   IntBounds {
-    left: pin(rect.left().floor()),
-    top: pin(rect.top().floor()),
-    right: pin(rect.right().ceil()),
-    bottom: pin(rect.bottom().ceil()),
+    left: pin(rect.left.floor()),
+    top: pin(rect.top.floor()),
+    right: pin(rect.right.ceil()),
+    bottom: pin(rect.bottom.ceil()),
   }
 }
 

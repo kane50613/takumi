@@ -2129,10 +2129,8 @@ fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {
       let bounds = PathCommand::build_path(&shape.to_commands())
         .expect("a clip path")
         .bounds();
-      let (_, top) = clip.transform.transform_point(bounds.left(), bounds.top());
-      let (_, bottom) = clip
-        .transform
-        .transform_point(bounds.left(), bounds.bottom());
+      let (_, top) = clip.transform.transform_point(bounds.left, bounds.top);
+      let (_, bottom) = clip.transform.transform_point(bounds.left, bounds.bottom);
 
       (top, bottom)
     })

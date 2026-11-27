@@ -40,6 +40,8 @@ mod debug_drawing;
 mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
+#[cfg(feature = "svg")]
+mod gradient;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;

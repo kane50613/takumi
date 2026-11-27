@@ -34,8 +34,9 @@ use crate::{
     clip::push_ellipse,
     decoration::{ClipBox, ContourOrigin, OutlineGeometry},
   },
+  path::{Stroke, StrokeDash},
   shadow::SizedShadow,
-  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
+  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, LineCap, Overflow, SpacePair},
 };
 
 /// How far a layer's paint can reach: a rectangle of `size` at the origin under `transform`, as
@@ -377,6 +378,22 @@ pub struct StrokeStyle {
 }
 
 impl StrokeStyle {
+  /// The outline this stroke draws: its width, its caps, and its dashes from the start.
+  pub fn outline(&self) -> Stroke {
+    Stroke {
+      width: self.width,
+      line_cap: if self.round_cap {
+        LineCap::Round
+      } else {
+        LineCap::Butt
+      },
+      dash: self
+        .dash
+        .and_then(|intervals| StrokeDash::new(intervals.into(), 0.0)),
+      ..Stroke::default()
+    }
+  }
+
   /// A border or outline stroke in `color`, dashed as `dash` says.
   pub fn border(color: Color, width: f32, dash: Option<BorderDash>) -> Self {
     Self {

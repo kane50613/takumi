@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::num::NonZeroU16;
 use std::rc::Rc;
 use std::sync::Arc;
+use takumi_core::geometry::Size;
 
 use indexmap::IndexMap;
 use pdf_writer::types::{StructRole, StructRole2};
@@ -14,7 +15,6 @@ use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::{CieBasedColorSpace, DeviceColorSpace};
 use crate::writer::configure::{Configuration, PdfVersion, ValidationError, Validators};
 use crate::writer::error::{LimitError, WriterError, WriterResult};
-use crate::writer::geom::Size;
 use crate::writer::graphics::color::{ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::writer::graphics::icc::ICCBasedColorSpace;
 #[cfg(feature = "images")]
@@ -150,7 +150,7 @@ impl Default for SerializeSettings {
 
 pub(crate) struct PageInfo {
   ref_: Ref,
-  surface_size: Size,
+  surface_size: Size<f32>,
   annotations: Vec<(Ref, OnceCell<Ref>)>,
 }
 
@@ -159,7 +159,7 @@ impl PageInfo {
     self.ref_
   }
 
-  pub(crate) fn size(&self) -> Size {
+  pub(crate) fn size(&self) -> Size<f32> {
     self.surface_size
   }
 

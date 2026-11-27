@@ -3,9 +3,10 @@
 //! scan lines is a set of trapezoids whose exact pixel coverage is computed from the edges'
 //! slopes, so no supersampling is involved.
 
-use crate::path::Fill;
+use crate::style::FillRule;
 use smallvec::SmallVec;
-use takumi_core::path::{Path, Rect};
+use takumi_core::geometry::Rect;
+use takumi_core::path::Path;
 
 use super::{
   blitter::{
@@ -909,7 +910,7 @@ fn walk_edges(
   edges: &mut [Edge],
   head: usize,
   tail: usize,
-  fill_rule: Fill,
+  fill_rule: FillRule,
   target: &mut Target,
   start_y: i32,
   stop_y: i32,
@@ -937,7 +938,11 @@ fn walk_edges(
   }
   update_next_next_y(edges[edge].upper_y, y, &mut next_next_y);
 
-  let winding_mask = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
+  let winding_mask = if fill_rule == FillRule::EvenOdd {
+    1
+  } else {
+    -1
+  };
 
   loop {
     let mut winding = 0;
@@ -1070,7 +1075,7 @@ fn walk_edges(
 /// `SkScan::AAAFillPath` for a non-inverse `path` with rounded-out bounds `ir`, clipped to `clip`.
 pub(super) fn fill_path(
   path: &Path,
-  fill_rule: Fill,
+  fill_rule: FillRule,
   ir: IntBounds,
   clip: IntBounds,
   coverage: &mut Coverage,
@@ -1081,10 +1086,10 @@ pub(super) fn fill_path(
     // `try_blit_fat_anti_rect`.
     if let Some(rect) = trivial_rect(path) {
       let Some(rect) = Rect::from_ltrb(
-        rect.left().max(clip.left as f32),
-        rect.top().max(clip.top as f32),
-        rect.right().min(clip.right as f32),
-        rect.bottom().min(clip.bottom as f32),
+        rect.left.max(clip.left as f32),
+        rect.top.max(clip.top as f32),
+        rect.right.min(clip.right as f32),
+        rect.bottom.min(clip.bottom as f32),
       ) else {
         return;
       };
@@ -1125,7 +1130,7 @@ pub(super) fn fill_path(
 /// `aaa_fill_path`, clipping the edges to `clip` when the path bounds `ir` leave it.
 fn fill_edges(
   path: &Path,
-  fill_rule: Fill,
+  fill_rule: FillRule,
   ir: IntBounds,
   clip: IntBounds,
   convex: bool,

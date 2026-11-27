@@ -11,18 +11,19 @@ mod edge_clipper;
 mod rect;
 mod scan;
 
-use crate::path::Fill;
-use takumi_core::path::{IntSize, Path};
+use crate::style::FillRule;
+use takumi_core::geometry::Size;
+use takumi_core::path::Path;
 
 use blitter::{Coverage, IntBounds, round_out};
 
 /// The coverage of `path` over a `size` mask at the origin, filled by `fill_rule`.
-pub(crate) fn fill_path(path: &Path, fill_rule: Fill, size: IntSize) -> Option<Vec<u8>> {
+pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: Size<u32>) -> Option<Vec<u8>> {
   let mask_bounds = IntBounds {
     left: 0,
     top: 0,
-    right: size.width() as i32,
-    bottom: size.height() as i32,
+    right: size.width as i32,
+    bottom: size.height as i32,
   };
   let ir = round_out(path.bounds());
   let fits = |bounds: IntBounds| mask_bounds.contains(bounds);
@@ -55,7 +56,7 @@ pub(crate) fn fill_path(path: &Path, fill_rule: Fill, size: IntSize) -> Option<V
     return fill_path_aliased(path, fill_rule, size);
   }
 
-  let mut coverage = Coverage::new(size.width(), size.height());
+  let mut coverage = Coverage::new(size.width, size.height);
 
   if clipped_ir.width() > 0 && clipped_ir.height() > 0 {
     scan::fill_path(path, fill_rule, ir, clip, &mut coverage);
@@ -66,8 +67,12 @@ pub(crate) fn fill_path(path: &Path, fill_rule: Fill, size: IntSize) -> Option<V
 
 /// The coverage of `path` over a `size` mask at the origin without anti-aliasing, as
 /// `SkScan::FillPath` fills it.
-pub(crate) fn fill_path_aliased(path: &Path, fill_rule: Fill, size: IntSize) -> Option<Vec<u8>> {
-  let mut mask = vec![0; size.width() as usize * size.height() as usize];
+pub(crate) fn fill_path_aliased(
+  path: &Path,
+  fill_rule: FillRule,
+  size: Size<u32>,
+) -> Option<Vec<u8>> {
+  let mut mask = vec![0; size.width as usize * size.height as usize];
 
   aliased::fill_path(
     path,
@@ -75,8 +80,8 @@ pub(crate) fn fill_path_aliased(path: &Path, fill_rule: Fill, size: IntSize) -> 
     IntBounds {
       left: 0,
       top: 0,
-      right: size.width() as i32,
-      bottom: size.height() as i32,
+      right: size.width as i32,
+      bottom: size.height as i32,
     },
     &mut mask,
   );
@@ -86,13 +91,13 @@ pub(crate) fn fill_path_aliased(path: &Path, fill_rule: Fill, size: IntSize) -> 
 
 /// The coverage of the axis-aligned rect `[left, top, right, bottom]` over a `size` mask at the
 /// origin, as `SkDraw::drawRect` fills a rect the matrix keeps a rect.
-pub(crate) fn fill_rect(rect: [f32; 4], size: IntSize) -> Option<Vec<u8>> {
+pub(crate) fn fill_rect(rect: [f32; 4], size: Size<u32>) -> Option<Vec<u8>> {
   // The scan takes the mask's edges to 16.16 fixed point, which holds 32767.
-  if size.width() > 32767 || size.height() > 32767 {
+  if size.width > 32767 || size.height > 32767 {
     return None;
   }
 
-  let mut coverage = Coverage::new(size.width(), size.height());
+  let mut coverage = Coverage::new(size.width, size.height);
 
   rect::fill_rect(rect, &mut coverage);
 
