@@ -4,6 +4,8 @@
 //! Vertical lines also skip `SkBasicEdgeBuilder::combineVertical`, and the unmerged edges walk to
 //! the same spans.
 
+use std::{iter, mem};
+
 use crate::style::FillRule;
 use takumi_core::{
   geometry::{Point, Rect},
@@ -112,12 +114,9 @@ fn walk_edges(
   let mut y = start_y;
 
   while y < stop_y {
-    while let Some(edge) = pending.next_if(|edge| edge.rows.first_y <= y) {
-      active.push(edge);
-    }
-
-    // The list stays sorted by x as `insert_new_edges` and `backward_insert_edge_based_on_x` keep
-    // it, ties in the order they arrived.
+    // The list stays sorted by x, ties in the order they arrived, as Skia's `insert_new_edges` and
+    // `backward_insert_edge_based_on_x` keep it: the edges that crossed move back, then the
+    // arrivals merge in.
     for index in 1..active.len() {
       let mut at = index;
 
@@ -125,6 +124,14 @@ fn walk_edges(
         active.swap(at - 1, at);
         at -= 1;
       }
+    }
+
+    let mut arrivals: Vec<Edge> =
+      iter::from_fn(|| pending.next_if(|edge| edge.rows.first_y <= y)).collect();
+
+    if !arrivals.is_empty() {
+      arrivals.sort_by_key(|edge| edge.rows.x);
+      active = merge_by_x(mem::take(&mut active), arrivals);
     }
 
     let mut winding = 0;
@@ -151,6 +158,25 @@ fn walk_edges(
     active.retain_mut(|edge| edge.advance(y));
     y += 1;
   }
+}
+
+/// `survivors` and `arrivals`, each sorted by x, merged into one list sorted by x with a survivor
+/// ahead of an arrival at the same x.
+fn merge_by_x(survivors: Vec<Edge>, arrivals: Vec<Edge>) -> Vec<Edge> {
+  let mut merged = Vec::with_capacity(survivors.len() + arrivals.len());
+  let mut arrivals = arrivals.into_iter().peekable();
+
+  for survivor in survivors {
+    while let Some(arrival) = arrivals.next_if(|arrival| arrival.rows.x < survivor.rows.x) {
+      merged.push(arrival);
+    }
+
+    merged.push(survivor);
+  }
+
+  merged.extend(arrivals);
+
+  merged
 }
 
 /// `SkEdge`: a monotonic piece of the outline stepped one row at a time.
