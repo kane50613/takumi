@@ -1,6 +1,6 @@
 # The WPT reftests expected to pass: `path` is one test and `dir/` every test under it, and
-# a leading `!` expects a failure. The most specific rule decides. `WPT_UPDATE=1 cargo test --test
-# wpt_reftests` rewrites it.
+# a leading `!` expects a failure. The most specific rule decides. `WPT_UPDATE=1 cargo test
+# --profile wpt --test wpt_reftests` rewrites it.
 css/
 !css/CSS2/backgrounds/background-003.xht
 !css/CSS2/backgrounds/background-attachment-applies-to-001.xht
