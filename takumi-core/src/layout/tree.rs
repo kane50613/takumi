@@ -52,7 +52,7 @@ use crate::{
   layout_unit::{BoxStrut, LayoutUnit},
   matching::{
     MatchedDeclarationsView, NodeMatchedDeclarations, QueryContainer, QueryContainers, QueryFont,
-    RuleId, match_stylesheets_in_containers, match_stylesheets_view,
+    RuleId, match_stylesheets_in_containers,
   },
   painter::OwnContent,
   resources::font::PrimaryFontMetrics,
@@ -61,10 +61,10 @@ use crate::{
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
     Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
-    Direction, Display, ElementAnimations, Float, FontUnits, Lang, Length, LineHeight, LonghandId,
-    MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
-    page_rule::PageContext,
+    Direction, Display, ElementAnimations, Float, FontUnits, LangAttribute, Length, LineHeight,
+    LonghandId, MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext,
+    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi,
+    WhiteSpaceCollapse, page_rule::PageContext,
   },
   viewport::{ColorScheme, Viewport},
 };
@@ -2465,6 +2465,7 @@ impl RenderNode {
       parent_context.sizing.viewport,
       parent_context.cache().tailwind(),
       containers,
+      parent_context.style.inherited_language(),
     );
     let mut list_item_counts = ListItemCounts::default();
 
@@ -3555,7 +3556,7 @@ impl RenderContext {
     matched: &MatchedDeclarationsView<'_>,
     is_document_root: bool,
   ) -> (ComputedStyle, SizingContext, Color) {
-    let lang = layers.lang;
+    let lang = layers.lang.clone();
     // What reads the container through the parent's sizing while the child resolves is the
     // child's read.
     let parent_read = self.sizing.container_read.take();
@@ -3563,8 +3564,13 @@ impl RenderContext {
     let (declarations, sources) = self.cascade(layers, matched);
     let inherited_parent = self.inherited_style();
     let animating = declarations.may_animate().then(|| declarations.clone());
-    let base =
-      declarations.inherit_element(&inherited_parent, lang, is_document_root, &sources, None);
+    let base = declarations.inherit_element(
+      &inherited_parent,
+      lang.as_ref(),
+      is_document_root,
+      &sources,
+      None,
+    );
     let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
@@ -3578,7 +3584,7 @@ impl RenderContext {
         base,
         &animations,
         &inherited_parent,
-        (lang, is_document_root),
+        (lang.as_ref(), is_document_root),
       ),
       None => base,
     };
@@ -3618,7 +3624,7 @@ impl RenderContext {
     base: ComputedStyle,
     animations: &ElementAnimations<'_>,
     inherited_parent: &ComputedStyle,
-    (lang, is_document_root): (Option<Option<Lang>>, bool),
+    (lang, is_document_root): (Option<&LangAttribute>, bool),
   ) -> ComputedStyle {
     // The cascade decides which animated longhands an important declaration hides; the preview
     // that samples the custom properties leaves out the ones any does.
@@ -3875,11 +3881,13 @@ impl PageContext {
     let stylesheet = parent_context.stylesheet();
 
     (!stylesheet.page_rules.is_empty()).then(|| {
-      match_stylesheets_view(
+      match_stylesheets_in_containers(
         tree,
         &[stylesheet],
         parent_context.sizing.viewport,
         parent_context.cache().tailwind(),
+        None,
+        parent_context.style.inherited_language(),
       )
     })
   }
@@ -4872,6 +4880,51 @@ mod tests {
     assert_eq!(
       children[1].context.style.box_data.width,
       Length::Px(20.0).into()
+    );
+  }
+
+  /// Blink's `Element::ComputeInheritedLanguage` reaches the document's language past the root.
+  #[test]
+  fn lang_pseudo_class_matches_the_document_language_without_a_lang_attribute() {
+    use std::sync::Arc;
+
+    use crate::{
+      context::RenderContext,
+      layout::{node::Node, tree::RenderNode},
+      resources::font::Fonts,
+      style::{ComputedStyle, Lang, SizingContext},
+    };
+
+    let stylesheet = StyleSheet::parse(":lang(fr) { width: 10px; }").expect("stylesheet parses");
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .style(ComputedStyle::root(Lang::parse("fr").ok(), None))
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([
+        Node::container([Node::text("inherits")]),
+        Node::container([Node::text("overrides")]).with_lang(Lang::parse("en").unwrap()),
+      ]),
+    );
+    let children = tree.children.as_deref().expect("block children");
+
+    assert_eq!(tree.context.style.box_data.width, Length::Px(10.0).into());
+    assert_eq!(
+      children[0].context.style.box_data.width,
+      Length::Px(10.0).into()
+    );
+    assert_eq!(
+      children[1].context.style.box_data.width,
+      Length::Auto.into()
     );
   }
 

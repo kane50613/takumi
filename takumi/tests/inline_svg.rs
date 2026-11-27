@@ -54,6 +54,22 @@ fn the_svg_style_element_wins_over_the_page_at_equal_specificity() {
   );
 }
 
+/// Blink's `Element::ComputeInheritedLanguage` keeps an ancestor's `lang` text, which `:lang()`
+/// matches as written, so a malformed one matches nothing.
+#[test]
+fn lang_matches_an_ancestors_lang_as_written() {
+  let css = "rect { fill: rgb(0, 0, 255) } rect:lang(en) { fill: rgb(255, 0, 0) }";
+
+  assert_eq!(
+    center(&format!(r#"<div lang="en-US">{RECT}</div>"#), css),
+    [255, 0, 0, 255]
+  );
+  assert_eq!(
+    center(&format!(r#"<div lang="en_US">{RECT}</div>"#), css),
+    [0, 0, 255, 255]
+  );
+}
+
 #[test]
 fn the_root_opacity_applies_once() {
   let html = format!(r#"<div style="background: white">{RECT}</div>"#);

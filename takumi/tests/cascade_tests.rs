@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use takumi::prelude::*;
+use takumi::{prelude::*, unstable::base::style::ComputedStyle};
 
 use crate::test_utils::{block, create_test_viewport, measure_with_css, measure_with_stylesheets};
 
@@ -2394,4 +2394,15 @@ fn a_linked_scope_without_a_start_roots_at_its_link_parent() {
 
   assert_eq!(measured.children[0].children[0].width, 30.0);
   assert_ne!(measured.children[1].width, 30.0);
+}
+
+/// Every `ComputedStyle` field is public, so code outside takumi can build one by struct update.
+#[test]
+fn computed_style_takes_a_struct_update() {
+  let style = ComputedStyle {
+    lang: None,
+    ..ComputedStyle::default()
+  };
+
+  assert_eq!(style, ComputedStyle::default());
 }

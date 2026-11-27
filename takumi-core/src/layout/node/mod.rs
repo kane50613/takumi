@@ -30,8 +30,8 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{
-    Direction, IgnoredDeclaration, KeyframesRule, Lang, Style, StyleDeclaration, TailwindValues,
-    ToCss, TwRule, tw::TailwindCache,
+    Direction, IgnoredDeclaration, KeyframesRule, Lang, LangAttribute, Style, StyleDeclaration,
+    TailwindValues, ToCss, TwRule, tw::TailwindCache,
   },
   viewport::Viewport,
 };
@@ -693,7 +693,9 @@ impl Node {
       presentation: self.metadata.presentation.take(),
       inline,
       direction: self.direction_style(),
-      lang: self.attribute("lang").map(|_| self.metadata.lang),
+      lang: self
+        .attribute("lang")
+        .map(|text| LangAttribute::new(self.metadata.lang, text)),
     }
   }
 
@@ -820,8 +822,8 @@ pub(crate) struct NodeStyleLayers {
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Box<Style>>,
   pub(crate) direction: DirectionStyle,
-  /// The language of the element's `lang` attribute, `Some(None)` for one naming no valid tag.
-  pub(crate) lang: Option<Option<Lang>>,
+  /// The element's `lang` attribute.
+  pub(crate) lang: Option<LangAttribute>,
 }
 
 impl NodeStyleLayers {

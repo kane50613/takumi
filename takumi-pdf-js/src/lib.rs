@@ -23,8 +23,7 @@ use takumi_bindings_common::{
   parse_lang,
   registrations::Retention,
   renderer::RendererOptions,
-  source::read_source,
-  source_cache::SourceCache,
+  source::{JsSourceCache, read_source},
   stylesheet,
   warning::WarningLog,
 };
@@ -147,8 +146,8 @@ impl MeasureInputs {
 pub struct PdfRenderer {
   fonts: FontStore,
   cache: Cache,
-  sources: SourceCache,
-  bands: SourceCache,
+  sources: JsSourceCache,
+  bands: JsSourceCache,
 }
 
 impl PdfRenderer {
@@ -227,8 +226,8 @@ impl PdfRenderer {
     Ok(PdfRenderer {
       fonts: FontStore::new(cache.clone()).map_err(map_error)?,
       cache,
-      sources: SourceCache::default(),
-      bands: SourceCache::default(),
+      sources: JsSourceCache::default(),
+      bands: JsSourceCache::default(),
     })
   }
 

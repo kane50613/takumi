@@ -876,38 +876,12 @@ jobs:
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
         run: bun run build
 
-      # A PR compares against the wasm its base branch's latest successful run built.
       - name: Report wasm size
         working-directory: takumi-wasm
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -eu
-          wasm=pkg/takumi_wasm_bg.wasm
-          raw=$(wc -c < "$wasm")
-          gz=$(gzip -9 -c "$wasm" | wc -c)
-          base_raw=""
-          base_gz=""
-          if [ -n "$BASE_REF" ]; then
-            run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch "$BASE_REF" --status success -L 1 --json databaseId -q '.[0].databaseId' || true)
-            if [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n wasm-package -D "$RUNNER_TEMP/base" > /dev/null 2>&1; then
-              base_raw=$(wc -c < "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm")
-              base_gz=$(gzip -9 -c "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm" | wc -c)
-            fi
-          fi
-          {
-            echo "| takumi wasm | bytes | MiB | change from \`${BASE_REF:-base}\` |"
-            echo "| --- | ---: | ---: | ---: |"
-            awk -v raw="$raw" -v gz="$gz" -v base_raw="$base_raw" -v base_gz="$base_gz" 'BEGIN {
-              printf "| raw | %d | %.2f | %s |\n", raw, raw / 1048576, delta(raw, base_raw)
-              printf "| gzip | %d | %.2f | %s |\n", gz, gz / 1048576, delta(gz, base_gz)
-            }
-            function delta(now, before) {
-              if (before == "") return "n/a"
-              return sprintf("%+d (%+.2f%%)", now - before, 100 * (now - before) / before)
-            }'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: ../.github/scripts/report-wasm-size.sh "takumi wasm" pkg/takumi_wasm_bg.wasm wasm-package
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -925,6 +899,10 @@ jobs:
     name: Build takumi-pdf
     runs-on: ubuntu-latest
     needs: build-helpers
+    permissions:
+      contents: read
+      # To read the base branch's takumi-pdf artifact.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -975,19 +953,12 @@ jobs:
         working-directory: takumi-pdf-js
         env:
           CEILING_BYTES: 2097152
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -eu
-          wasm=pkg/takumi_pdf_wasm_bg.wasm
-          raw=$(wc -c < "$wasm")
-          gz=$(gzip -9 -c "$wasm" | wc -c)
-          {
-            echo "| takumi-pdf wasm | bytes | MiB |"
-            echo "| --- | ---: | ---: |"
-            awk -v raw="$raw" -v gz="$gz" 'BEGIN {
-              printf "| raw | %d | %.2f |\n", raw, raw / 1048576
-              printf "| gzip | %d | %.2f |\n", gz, gz / 1048576
-            }'
-          } >> "$GITHUB_STEP_SUMMARY"
+          ../.github/scripts/report-wasm-size.sh "takumi-pdf wasm" pkg/takumi_pdf_wasm_bg.wasm pdf-package
+          gz=$(gzip -9 -c pkg/takumi_pdf_wasm_bg.wasm | wc -c)
           if [ "$gz" -gt "$CEILING_BYTES" ]; then
             echo "::error::gzipped wasm is $gz bytes, over the $CEILING_BYTES ceiling"
             exit 1
