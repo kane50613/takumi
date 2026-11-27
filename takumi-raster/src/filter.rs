@@ -8,17 +8,19 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
-use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapPaint, Transform as TinyTransform};
+use tiny_skia::{IntSize, Pixmap, PixmapMut};
 
 #[cfg(feature = "svg")]
 use crate::svg::apply_svg_filter;
 use crate::{
-  BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
+  BlurType, BorderProperties, Canvas, PaintSource, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
-  canvas::demultiply_rgba_in_place,
+  canvas::{blit_paint_source_translation, demultiply_rgba_in_place},
   checked_area, mul_div_255, render_mask,
   resources::image_buffer::premultiply_pixel,
-  style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
+  style::{
+    Affine, BlendMode, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable,
+  },
 };
 
 /// Filter prepared for batch execution
@@ -468,12 +470,14 @@ impl Backdrop {
     let viewport = canvas.viewport();
 
     canvas.with_pixmap(|pixmap| {
-      pixmap.draw_pixmap(
-        self.origin.x - viewport.origin.x,
-        self.origin.y - viewport.origin.y,
-        self.image.as_ref(),
-        &PixmapPaint::default(),
-        TinyTransform::identity(),
+      blit_paint_source_translation(
+        &mut pixmap.as_mut(),
+        PaintSource::Pixmap(self.image.as_ref()),
+        Point {
+          x: (self.origin.x - viewport.origin.x) as f32,
+          y: (self.origin.y - viewport.origin.y) as f32,
+        },
+        BlendMode::Normal,
         None,
       );
     });

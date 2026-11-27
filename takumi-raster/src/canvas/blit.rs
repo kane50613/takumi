@@ -11,10 +11,6 @@ use super::{
   composite::PixelSampler,
   mask::{MaskRow, render_cached_mask},
   paint_source::{RowSource, ScaledRows},
-  skia::{
-    FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
-    try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
-  },
 };
 use crate::{
   Placement,
@@ -323,7 +319,7 @@ fn blend_row(dst: &mut [[u8; 4]], row: &[[u8; 4]], mode: BlendMode) {
   }
 }
 
-pub(super) fn blit_paint_source_translation(
+pub(crate) fn blit_paint_source_translation(
   pixmap: &mut PixmapMut<'_>,
   source: PaintSource<'_>,
   offset: Point<f32>,
@@ -515,21 +511,6 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
     height: image.height(),
   };
 
-  if let PaintSource::ColorTile(color) = image
-    && try_fill_color_with_tiny_skia(
-      target,
-      FillColorOptions {
-        color,
-        content_size,
-        border: options.border,
-        transform: options.transform,
-        mode: options.mode,
-      },
-    )
-  {
-    return;
-  }
-
   if let Some(offset) = options.whole_pixel_translation() {
     blit_paint_source_translation(
       target.pixmap,
@@ -538,40 +519,6 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
       options.mode,
       target.combined_mask,
     );
-    return;
-  }
-
-  if options.border.is_zero()
-    && try_draw_image_with_tiny_skia(
-      target,
-      image,
-      options.transform,
-      options.algorithm,
-      options.mode,
-    )
-  {
-    return;
-  }
-
-  if !options.border.is_zero()
-    && image.supports_rounded_fill_fast_path()
-    && try_fill_image_path_with_tiny_skia(
-      target,
-      image,
-      ImagePathFillOptions {
-        content_size,
-        border: options.border,
-        transform: options.transform,
-        source_to_canvas: Affine {
-          x: 0.0,
-          y: 0.0,
-          ..options.transform
-        },
-        algorithm: options.algorithm,
-        mode: options.mode,
-      },
-    )
-  {
     return;
   }
 
@@ -642,8 +589,7 @@ pub(crate) fn overlay_sampled_paint_source(
   options: OverlayOptions,
   sampling: SamplingOptions,
 ) {
-  // A whole-pixel translation copies row spans directly. Tiny-skia would take
-  // the same draw through its sampling pipeline, so this is tried first.
+  // A whole-pixel translation copies row spans directly.
   if let Some(offset) = options.whole_pixel_translation() {
     blit_sampled_paint_source_translation(
       target.pixmap,
@@ -654,26 +600,6 @@ pub(crate) fn overlay_sampled_paint_source(
       options.mode,
       target.combined_mask,
     );
-    return;
-  }
-
-  // Tiny-skia samples a translate-only pattern nearest-neighbour, so a fractional translation keeps
-  // the bilinear composite below.
-  let direct_identity_mapping = options.border.is_zero()
-    && !options.transform.only_translation()
-    && sampling.logical_to_source.is_identity()
-    && size.width == source.width()
-    && size.height == source.height();
-
-  if direct_identity_mapping
-    && try_draw_image_with_tiny_skia(
-      target,
-      source,
-      options.transform,
-      options.algorithm,
-      options.mode,
-    )
-  {
     return;
   }
 
