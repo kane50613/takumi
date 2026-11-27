@@ -1148,7 +1148,7 @@ fn fill_edges(
     )
     .map(|rect| EdgeClipper::new(rect, !convex))
   };
-  let mut edges = build_edges(path, clipper.as_ref());
+  let mut edges: Vec<Edge> = build_edges(path, clipper.as_ref());
   let count = edges.len();
   let start_y = ir.top.max(clip.top);
   let stop_y = ir.bottom.min(clip.bottom);

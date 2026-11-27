@@ -1,6 +1,6 @@
 use tiny_skia::{FillRule, IntSize, Path, PathBuilder, Rect};
 
-use super::fill_path;
+use super::{fill_path, fill_path_aliased};
 
 fn polygon(points: &[(f32, f32)]) -> Path {
   let mut builder = PathBuilder::new();
@@ -149,4 +149,81 @@ fn whole_pixel_square_covers_its_edges_fully() {
     );
     assert_eq!([at(1, 5), at(5, 1)], [0; 2], "{size}");
   }
+}
+
+/// tiny-skia's aliased fill, a port of an older `SkScan::FillPath`, as the oracle.
+fn tiny_skia_aliased(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
+  let mut mask = tiny_skia::Mask::new(width, height).unwrap();
+
+  mask.fill_path(path, fill_rule, false, tiny_skia::Transform::identity());
+  mask.data().to_vec()
+}
+
+#[test]
+fn aliased_polygons_match_skias_fill() {
+  let mut seed = 0x2545_f491_u32;
+  let mut next = |range: f32| {
+    seed ^= seed << 13;
+    seed ^= seed >> 17;
+    seed ^= seed << 5;
+    (seed % 10_000) as f32 / 10_000.0 * range - 8.0
+  };
+
+  for case in 0..200 {
+    let points: Vec<(f32, f32)> = (0..3 + case % 6)
+      .map(|_| (next(80.0), next(60.0)))
+      .collect();
+    let path = polygon(&points);
+
+    for fill_rule in [FillRule::Winding, FillRule::EvenOdd] {
+      assert_eq!(
+        fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
+        tiny_skia_aliased(&path, fill_rule, 64, 48),
+        "case {case} {fill_rule:?} {points:?}",
+      );
+    }
+  }
+}
+
+#[test]
+fn aliased_curves_match_skias_fill() {
+  let mut builder = PathBuilder::new();
+
+  builder.push_circle(30.3, 25.7, 19.6);
+  builder.move_to(2.0, 40.0);
+  builder.quad_to(30.0, -10.0, 60.0, 44.5);
+  builder.close();
+
+  let path = builder.finish().unwrap();
+
+  for fill_rule in [FillRule::Winding, FillRule::EvenOdd] {
+    assert_eq!(
+      fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
+      tiny_skia_aliased(&path, fill_rule, 64, 48),
+      "{fill_rule:?}",
+    );
+  }
+}
+
+#[test]
+fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
+  let width = 20_000;
+  let path = polygon(&[
+    (0.0, 0.0),
+    (width as f32, 0.0),
+    (width as f32, 2.0),
+    (0.0, 2.0),
+  ]);
+  let mask = fill_path_aliased(
+    &path,
+    FillRule::Winding,
+    IntSize::from_wh(width, 2).unwrap(),
+  )
+  .unwrap();
+
+  let row = width as usize;
+
+  // `clip_to_limit` leaves the pixels past 16383 unfilled, as in Skia.
+  assert_eq!([mask[0], mask[row], mask[row + 16_382]], [255; 3]);
+  assert_eq!([mask[16_383], mask[row + 16_383]], [0; 2]);
 }
