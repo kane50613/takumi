@@ -144,55 +144,82 @@ function serializeStyle(style: object): string {
 /** Whether `value` stays inside one CSS declaration; trailing semicolons are allowed. */
 function isCssDeclarationValue(value: string): boolean {
   const expectedClosers: string[] = [];
-  let quote: string | undefined;
+  let index = 0;
 
-  for (let index = 0; index < value.length; index++) {
+  while (index < value.length) {
+    const skipped = skipCssLiteral(value, index);
+
+    if (skipped === -1) {
+      return false;
+    }
+
+    if (skipped !== undefined) {
+      index = skipped;
+      continue;
+    }
+
     const char = value.charAt(index);
-
-    if (char === "\\") {
-      if (index === value.length - 1) return false;
-
-      index++;
-      continue;
-    }
-
-    if (quote) {
-      if (char === quote) quote = undefined;
-      continue;
-    }
-
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-
-    if (char === "/" && value.charAt(index + 1) === "*") {
-      const commentEnd = value.indexOf("*/", index + 2);
-
-      if (commentEnd === -1) return false;
-
-      index = commentEnd + 1;
-      continue;
-    }
-
     const closer = cssClosingBrackets.get(char);
 
     if (closer) {
       expectedClosers.push(closer);
-      continue;
-    }
-
-    if (char === ")" || char === "]" || char === "}") {
-      if (expectedClosers.pop() !== char) return false;
-      continue;
-    }
-
-    if (char === ";" && expectedClosers.length === 0) {
+    } else if (char === ")" || char === "]" || char === "}") {
+      if (expectedClosers.pop() !== char) {
+        return false;
+      }
+    } else if (char === ";" && expectedClosers.length === 0) {
       return /^[;\s]*$/.test(value.slice(index));
     }
+
+    index++;
   }
 
-  return quote === undefined && expectedClosers.length === 0;
+  return expectedClosers.length === 0;
+}
+
+/**
+ * The index past the escape, string, or comment starting at `index`, `-1` when it never ends, or
+ * `undefined` when none starts there.
+ */
+function skipCssLiteral(value: string, index: number): number | undefined {
+  const char = value.charAt(index);
+
+  if (char === "\\") {
+    return index + 1 < value.length ? index + 2 : -1;
+  }
+
+  if (char === '"' || char === "'") {
+    return skipCssString(value, index + 1, char);
+  }
+
+  if (char === "/" && value.charAt(index + 1) === "*") {
+    const commentEnd = value.indexOf("*/", index + 2);
+
+    return commentEnd === -1 ? -1 : commentEnd + 2;
+  }
+}
+
+/** The index past the `quote` that closes a string whose content starts at `index`, or `-1`. */
+function skipCssString(value: string, index: number, quote: string): number {
+  while (index < value.length) {
+    const char = value.charAt(index);
+
+    if (char === quote) {
+      return index + 1;
+    }
+
+    if (char === "\\") {
+      if (index + 1 >= value.length) {
+        return -1;
+      }
+
+      index++;
+    }
+
+    index++;
+  }
+
+  return -1;
 }
 
 function assertXmlName(name: string, kind: "element" | "attribute"): void {

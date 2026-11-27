@@ -148,30 +148,35 @@ class NodeBuilder implements RenderEnv {
     const wrapperResult = this.tryWrapper(element);
     if (wrapperResult !== undefined) return wrapperResult;
 
+    const boxlessResult = this.tryBoxless(element);
+    if (boxlessResult !== undefined) return boxlessResult;
+
+    if (typeof element.type !== "string" || isUnrenderedElement(element.type)) {
+      return emptyResult();
+    }
+
+    return this.hostElement(element, element.type);
+  }
+
+  /** Fragments, `<style>`, and `<head>`, which add children or CSS but no box of their own. */
+  private tryBoxless(element: ReactElementLike): Promise<ConvertedNodes> | undefined {
     if (isFragmentLike(element)) {
       return this.children(element);
     }
 
     if (isHtmlElement(element, "style")) {
       const css = collectStyleText(getElementChildren(element));
-      return {
-        nodes: [],
-        css: css && css.length > 0 ? [css] : [],
-      };
+
+      return Promise.resolve({ nodes: [], css: css && css.length > 0 ? [css] : [] });
     }
 
     if (isHtmlElement(element, "head")) {
-      const children = await this.children(element);
-      return {
-        nodes: [],
-        css: children.css,
-      };
+      return this.children(element).then((children) => ({ nodes: [], css: children.css }));
     }
+  }
 
-    if (typeof element.type !== "string" || isUnrenderedElement(element.type)) {
-      return emptyResult();
-    }
-
+  /** A host element such as `<div>`, `<img>`, or `<br>`, whose tag is `tag`. */
+  private async hostElement(element: ReactElementLike, tag: string): Promise<ConvertedNodes> {
     const metadata = this.elementMetadata(element);
 
     if (isHtmlElement(element, "br")) {
@@ -201,7 +206,7 @@ class NodeBuilder implements RenderEnv {
       return nodeResult(text({ text: textChildren, ...metadata }));
     }
 
-    const children = await this.childBuilder(element.type, element.props).children(element);
+    const children = await this.childBuilder(tag, element.props).children(element);
 
     return {
       nodes: [container({ children: children.nodes, ...metadata })],
