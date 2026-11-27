@@ -22,7 +22,9 @@ mod stylesheets;
 mod supports;
 pub(crate) mod tw;
 
-pub(crate) use animation::{ElementAnimations, find_keyframes};
+pub(crate) use animation::{
+  ElementAnimations, ThemeKeyframes, find_keyframes, tailwind_theme_keyframes,
+};
 pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use calc::{
   parse_calc_number_expression, parse_integer_value, parse_number_value, parse_percentage_value,

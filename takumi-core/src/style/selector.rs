@@ -32,7 +32,7 @@ use crate::{
   matching::RuleIndex,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, RawDeclaration,
-    RawDeclarationParser, StyleDeclaration, StyleDeclarationBlock, expand_apply,
+    RawDeclarationParser, StyleDeclaration, StyleDeclarationBlock, ThemeKeyframes, expand_apply,
     is_reserved_custom_ident, supports::parse_supports_condition,
   },
 };
@@ -429,6 +429,8 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 struct StyleSheetFragment {
   rules: Vec<CssRule>,
   keyframes: Vec<KeyframesRule>,
+  /// The theme `@keyframes` its `@apply` rules read, which rank below every `@keyframes` rule.
+  theme_keyframes: ThemeKeyframes,
   property_rules: Vec<PropertyRule>,
   #[cfg(feature = "font-face")]
   font_faces: Vec<FontFaceRule>,
@@ -451,6 +453,7 @@ impl StyleSheetFragment {
   fn extend(&mut self, other: Self) {
     self.rules.extend(other.rules);
     self.keyframes.extend(other.keyframes);
+    self.theme_keyframes.extend(&other.theme_keyframes);
     self.property_rules.extend(other.property_rules);
     #[cfg(feature = "font-face")]
     self.font_faces.extend(other.font_faces);
@@ -701,7 +704,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
   ) -> Result<Self::AtRule, ()> {
     match prelude {
       // A rule on the parent's selectors, so declarations around `@apply` keep their order.
-      AtRulePrelude::Apply(block) => {
+      AtRulePrelude::Apply(block, theme_keyframes) => {
         let (normal, important) = block.split_importance();
 
         Ok(StyleRuleBodyItem::Rules(StyleSheetFragment {
@@ -709,6 +712,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
             self.parent_selectors.clone(),
             RuleDeclarations { normal, important },
           )],
+          theme_keyframes,
           ..StyleSheetFragment::default()
         }))
       }
@@ -882,8 +886,9 @@ enum AtRulePrelude {
   TailwindImport {
     preflight: bool,
   },
-  /// `@apply`, already expanded into the declarations its utilities stand for.
-  Apply(Box<StyleDeclarationBlock>),
+  /// `@apply`, already expanded into the declarations its utilities stand for and the theme
+  /// `@keyframes` they read.
+  Apply(Box<StyleDeclarationBlock>, ThemeKeyframes),
   /// `@scope`, its root and limit selectors.
   Scope(Scope),
   /// `@container`, its query.
@@ -1349,7 +1354,7 @@ impl NestingContext<'_> {
       | AtRulePrelude::Page(_)
       | AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::StyleOwner(_)
-      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+      | AtRulePrelude::Apply(..) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
     }
@@ -1485,10 +1490,10 @@ fn parse_at_rule_prelude<'i>(
     }
     source.push_str(input.slice_from(start));
 
-    let block = expand_apply(&source)
+    let (block, theme_keyframes) = expand_apply(&source)
       .ok_or_else(|| ParseError::custom(StyleSheetParseErrorKind::InvalidApplyUtility))?;
 
-    return Ok(AtRulePrelude::Apply(Box::new(block)));
+    return Ok(AtRulePrelude::Apply(Box::new(block), theme_keyframes));
   }
 
   if name.eq_ignore_ascii_case("theme") {
@@ -1665,7 +1670,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
       AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::StyleOwner(_)
-      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+      | AtRulePrelude::Apply(..) => Err(ParseError::custom(
         StyleSheetParseErrorKind::UnsupportedNestedAtRule,
       )),
       AtRulePrelude::Media(media_query) => {
@@ -1903,6 +1908,9 @@ pub struct StyleSheet {
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
   /// gate `tw` variants before the cascade runs and so resolve at parse time.
   pub(crate) breakpoints: BreakpointOverrides,
+  /// Values of unconditional `:root` `--animate-*` declarations by token, which name the theme
+  /// `@keyframes` the `animate-*` utilities keep.
+  pub(crate) animate_theme: HashMap<String, String>,
   /// The declarations and at-rules parsing dropped, each once.
   ignored: Box<[IgnoredDeclaration]>,
 }
@@ -2198,6 +2206,7 @@ impl StyleSheet {
     let StyleSheetFragment {
       mut rules,
       keyframes,
+      theme_keyframes,
       property_rules,
       #[cfg(feature = "font-face")]
       mut font_faces,
@@ -2265,11 +2274,27 @@ impl StyleSheet {
         || !rule.important_declarations.declarations.is_empty()
     });
 
+    let animate_theme = root_theme_values(&rules, "--animate-", |value| Some(value.to_owned()));
+    let mut applied_theme_keyframes = Vec::new();
+
+    theme_keyframes.resolve_into(&animate_theme, &mut applied_theme_keyframes);
+
     Ok(Self {
-      breakpoints: collect_breakpoints(&rules),
+      breakpoints: root_theme_values(&rules, "--breakpoint-", |value| {
+        // Only units `Breakpoint::matches` resolves; anything else would
+        // shadow the built-in width with a dead one.
+        Length::from_css_str(value)
+          .ok()
+          .filter(|width| matches!(width, Length::Rem(_) | Length::Px(_) | Length::Vw(_)))
+      }),
+      animate_theme,
       rule_index: Arc::new(RuleIndex::build(&rules)),
       rules: rules.into(),
-      keyframes,
+      keyframes: applied_theme_keyframes
+        .into_iter()
+        .cloned()
+        .chain(keyframes)
+        .collect(),
       property_rules,
       #[cfg(feature = "font-face")]
       font_faces,
@@ -2280,14 +2305,21 @@ impl StyleSheet {
   }
 }
 
-/// `--breakpoint-*` widths from unconditional `:root` rules. Variants gate at
-/// parse time, so only statically-known declarations can re-size them.
-fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
-  let mut breakpoints = BreakpointOverrides::default();
+/// The values `parse` reads from unconditional `:root` `<prefix><token>` declarations, by token.
+/// Variants gate at parse time, so only statically-known declarations can re-size them.
+fn root_theme_values<T>(
+  rules: &[CssRule],
+  prefix: &str,
+  parse: impl Fn(&str) -> Option<T>,
+) -> HashMap<String, T> {
+  let mut values = HashMap::new();
   let mut winners = HashMap::<String, usize>::new();
 
   for rule in rules {
-    if !rule.media_queries.is_empty() || rule.selectors.to_css_string() != ":root" {
+    if !rule.media_queries.is_empty()
+      || !rule.container_queries.is_empty()
+      || rule.selectors.to_css_string() != ":root"
+    {
       continue;
     }
 
@@ -2297,20 +2329,19 @@ fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
 
     for declaration in rule.normal_declarations.declarations.iter() {
       if let StyleDeclaration::CustomProperty(name, value) = declaration
-        && let Some(token) = name.strip_prefix("--breakpoint-")
-        && let Ok(width) = Length::from_css_str(value)
-        // Only units `Breakpoint::matches` resolves; anything else would
-        // shadow the built-in width with a dead one.
-        && matches!(width, Length::Rem(_) | Length::Px(_) | Length::Vw(_))
-        && winners.get(token).is_none_or(|winner| precedence >= *winner)
+        && let Some(token) = name.strip_prefix(prefix)
+        && let Some(parsed) = parse(value)
+        && winners
+          .get(token)
+          .is_none_or(|winner| precedence >= *winner)
       {
         winners.insert(token.to_owned(), precedence);
-        breakpoints.insert(token.to_owned(), width);
+        values.insert(token.to_owned(), parsed);
       }
     }
   }
 
-  breakpoints
+  values
 }
 
 #[cfg(test)]

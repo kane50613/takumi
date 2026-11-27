@@ -8,6 +8,8 @@ const BACKDROP_FILTER_CHAIN: &str = "var(--tw-backdrop-blur,) var(--tw-backdrop-
 #[derive(Debug, Default)]
 pub(super) struct TailwindDeclarationBuilder {
   pub(super) declarations: StyleDeclarationBlock,
+  /// The theme `@keyframes` Tailwind emits for the utility.
+  pub(super) theme_keyframes: ThemeKeyframes,
 }
 
 impl TailwindDeclarationBuilder {
@@ -18,7 +20,10 @@ impl TailwindDeclarationBuilder {
 
     declarations.reserve(utilities);
 
-    Self { declarations }
+    Self {
+      declarations,
+      theme_keyframes: ThemeKeyframes::default(),
+    }
   }
 
   pub(super) fn push(&mut self, declaration: StyleDeclaration) {

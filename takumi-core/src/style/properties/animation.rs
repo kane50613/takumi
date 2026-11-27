@@ -38,7 +38,6 @@ impl<'i> FromCss<'i> for AnimationTime {
         "s" => Ok(Self::from_milliseconds(*value * 1000.0)),
         _ => Err(unexpected_token!(token)),
       },
-      Token::Number { value, .. } if *value == 0.0 => Ok(Self::from_milliseconds(0.0)),
       _ => Err(unexpected_token!(token)),
     }
   }
@@ -60,10 +59,43 @@ impl_comma_list_from_css!(
   &["none", "<custom-ident>", "<string>",]
 );
 
-/// Parsed values for `animation-duration` and `animation-delay`.
-pub(crate) type AnimationDurations = Box<[AnimationTime]>;
+/// One `animation-duration`, a non-negative time or `auto`, which a CSS animation computes to 0.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct AnimationDuration(pub AnimationTime);
 
-impl_comma_list_from_css!(AnimationDurations, AnimationTime);
+impl MakeComputed for AnimationDuration {}
+
+impl<'i> FromCss<'i> for AnimationDuration {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("auto"))
+      .is_ok()
+    {
+      return Ok(Self::default());
+    }
+
+    let time = AnimationTime::from_css(input)?;
+    if time.milliseconds < 0.0 {
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
+    }
+
+    Ok(Self(time))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<time>"];
+}
+
+/// Parsed values for `animation-duration`.
+pub(crate) type AnimationDurations = Box<[AnimationDuration]>;
+
+impl_comma_list_from_css!(AnimationDurations, AnimationDuration);
+
+/// Parsed values for `animation-delay`.
+pub(crate) type AnimationDelays = Box<[AnimationTime]>;
+
+impl_comma_list_from_css!(AnimationDelays, AnimationTime);
 
 /// Supported CSS timing functions for animations.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -314,51 +346,25 @@ pub struct Animation {
 impl MakeComputed for Animation {}
 
 impl<'i> FromCss<'i> for Animation {
+  /// Blink's `ConsumeAnimationShorthand`, each token going to the first longhand in order still unset.
   fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut animation = Self::default();
-    let mut time_count = 0;
+    let mut parsed = [false; ANIMATION_LONGHAND_COUNT];
 
     while !input.is_exhausted() && !next_is_comma(input) {
-      if let Ok(value) = input.try_parse(AnimationTime::from_css) {
-        match time_count {
-          0 => animation.duration = value,
-          1 => animation.delay = value,
-          _ => return Err(input.new_error_for_next_token()),
-        }
-        time_count += 1;
-        continue;
-      }
+      let Some(longhand) = (0..ANIMATION_LONGHAND_COUNT).find(|&longhand| {
+        !parsed[longhand]
+          && input
+            .try_parse(|input| animation.parse_longhand(longhand, input))
+            .is_ok()
+      }) else {
+        return Err(input.new_error_for_next_token());
+      };
 
-      if let Ok(value) = input.try_parse(AnimationTimingFunction::from_css) {
-        animation.timing_function = value;
-        continue;
-      }
+      parsed[longhand] = true;
+    }
 
-      if let Ok(value) = input.try_parse(AnimationIterationCount::from_css) {
-        animation.iteration_count = value;
-        continue;
-      }
-
-      if let Ok(value) = input.try_parse(AnimationDirection::from_css) {
-        animation.direction = value;
-        continue;
-      }
-
-      if let Ok(value) = input.try_parse(AnimationFillMode::from_css) {
-        animation.fill_mode = value;
-        continue;
-      }
-
-      if let Ok(value) = input.try_parse(AnimationPlayState::from_css) {
-        animation.play_state = value;
-        continue;
-      }
-
-      if let Ok(value) = input.try_parse(AnimationName::from_css) {
-        animation.name = value;
-        continue;
-      }
-
+    if !parsed.contains(&true) {
       return Err(input.new_error_for_next_token());
     }
 
@@ -366,6 +372,27 @@ impl<'i> FromCss<'i> for Animation {
   }
 
   const VALID_TOKENS: &'static [&'static str] = Animations::VALID_TOKENS;
+}
+
+/// The longhands of `animation` that take a value, as Blink lists them in `css_properties.json5`.
+const ANIMATION_LONGHAND_COUNT: usize = 8;
+
+impl Animation {
+  /// Parses the value of the `longhand`th longhand of the shorthand into it.
+  fn parse_longhand<'i>(&mut self, longhand: usize, input: &mut Parser<'i>) -> ParseResult<'i, ()> {
+    match longhand {
+      0 => self.duration = AnimationDuration::from_css(input)?.0,
+      1 => self.timing_function = AnimationTimingFunction::from_css(input)?,
+      2 => self.delay = AnimationTime::from_css(input)?,
+      3 => self.iteration_count = AnimationIterationCount::from_css(input)?,
+      4 => self.direction = AnimationDirection::from_css(input)?,
+      5 => self.fill_mode = AnimationFillMode::from_css(input)?,
+      6 => self.play_state = AnimationPlayState::from_css(input)?,
+      _ => self.name = AnimationName::from_css(input)?,
+    }
+
+    Ok(())
+  }
 }
 
 /// Parsed values for the `animation` shorthand.
@@ -601,6 +628,12 @@ impl ToCss for AnimationTime {
   }
 }
 
+impl ToCss for AnimationDuration {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    self.0.to_css(dest)
+  }
+}
+
 impl ToCss for StepPosition {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
@@ -692,6 +725,74 @@ mod tests {
       AnimationTime::from_css_str("2s"),
       Ok(AnimationTime::from_milliseconds(2000.0))
     );
+  }
+
+  /// Blink's `ConsumeTime` takes a dimension alone, so a unitless `0` is an iteration count.
+  #[test]
+  fn a_unitless_zero_is_no_animation_time() {
+    assert!(AnimationTime::from_css_str("0").is_err());
+    assert_eq!(
+      Animations::from_css_str("fade 1s 0"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        iteration_count: AnimationIterationCount::Number(0.0),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
+    );
+    assert_eq!(
+      Animations::from_css_str("fade 0 1s"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        iteration_count: AnimationIterationCount::Number(0.0),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
+    );
+  }
+
+  #[test]
+  fn animation_duration_takes_auto_and_rejects_a_negative_time() {
+    assert_eq!(
+      AnimationDurations::from_css_str("auto, 2s"),
+      Ok(Box::from([
+        AnimationDuration(AnimationTime::from_milliseconds(0.0)),
+        AnimationDuration(AnimationTime::from_milliseconds(2000.0)),
+      ]))
+    );
+    assert!(AnimationDurations::from_css_str("-1s").is_err());
+    assert_eq!(
+      Animations::from_css_str("fade auto"),
+      Ok(Box::from([Animation {
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
+    );
+  }
+
+  /// Blink's `ConsumeAnimationShorthand` fills each longhand once, in the shorthand's order.
+  #[test]
+  fn the_animation_shorthand_takes_each_longhand_once() {
+    assert_eq!(
+      Animations::from_css_str("fade -1s"),
+      Ok(Box::from([Animation {
+        delay: AnimationTime::from_milliseconds(-1000.0),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
+    );
+    assert_eq!(
+      Animations::from_css_str("paused paused"),
+      Ok(Box::from([Animation {
+        play_state: AnimationPlayState::Paused,
+        name: Some("paused".to_string()),
+        ..Animation::default()
+      }]))
+    );
+    assert!(Animations::from_css_str("fade paused paused").is_err());
+    assert!(Animations::from_css_str("fade linear ease").is_err());
+    assert!(Animations::from_css_str("fade 1s 2s 3s").is_err());
+    assert!(Animations::from_css_str("fade, , slide").is_err());
   }
 
   #[test]

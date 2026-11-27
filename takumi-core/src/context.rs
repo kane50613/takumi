@@ -1,5 +1,5 @@
 use std::{
-  cell::Cell,
+  cell::{Cell, Ref, RefCell},
   collections::HashMap,
   rc::Rc,
   sync::{
@@ -22,11 +22,11 @@ use crate::{
     font_fallback_map::FontFallbackMap,
   },
   geometry::{ComputedLayout, Point},
-  layout::inline::InlineLayoutCache,
+  layout::{inline::InlineLayoutCache, node::Node},
   resources::{cache::Cache, font::FontsSnapshot, image::ImageSource},
   style::{
-    Affine, AppliedTextDecorations, Color, ComputedStyle, MatchedStyleCache, SizingContext,
-    StyleSheet,
+    Affine, AppliedTextDecorations, Color, ComputedStyle, KeyframesRule, MatchedStyleCache,
+    SizingContext, StyleSheet,
   },
 };
 
@@ -36,6 +36,8 @@ struct RenderShared {
   images: Rc<HashMap<Arc<str>, ImageSource>>,
   cache: Cache,
   stylesheet: Arc<StyleSheet>,
+  /// The Tailwind theme `@keyframes` the `tw` utilities of the trees the render built read.
+  theme_keyframes: RefCell<Vec<&'static KeyframesRule>>,
   font_families: ExpandedFamilies,
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
@@ -92,6 +94,7 @@ impl From<RenderContextInit> for RenderContext {
         images: init.images,
         cache: init.cache,
         stylesheet: init.stylesheet,
+        theme_keyframes: RefCell::default(),
         font_families: ExpandedFamilies::default(),
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
@@ -254,6 +257,21 @@ impl RenderContext {
   /// The stylesheets to apply before layout/rendering.
   pub(crate) fn stylesheet(&self) -> &Arc<StyleSheet> {
     &self.shared.stylesheet
+  }
+
+  /// The Tailwind theme `@keyframes` the `tw` utilities of the trees the render built read, which
+  /// a stylesheet's `@keyframes` of the same name override.
+  pub(crate) fn theme_keyframes(&self) -> Ref<'_, Vec<&'static KeyframesRule>> {
+    self.shared.theme_keyframes.borrow()
+  }
+
+  /// Notes the theme `@keyframes` the `tw` utilities of `node` read.
+  pub(crate) fn note_theme_keyframes(&self, node: &Node) {
+    node.collect_tw_theme_keyframes(
+      self.cache().tailwind(),
+      &self.stylesheet().animate_theme,
+      &mut self.shared.theme_keyframes.borrow_mut(),
+    );
   }
 
   pub(crate) fn inline_cache(&self) -> &InlineLayoutCache {

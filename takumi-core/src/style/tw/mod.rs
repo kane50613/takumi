@@ -31,8 +31,9 @@ use crate::{
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
-/// Expands an `@apply` list into declarations, `None` for an unknown token or a variant.
-pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
+/// Expands an `@apply` list into declarations and the theme `@keyframes` they read, `None` for an
+/// unknown token or a variant.
+pub(crate) fn expand_apply(source: &str) -> Option<(StyleDeclarationBlock, ThemeKeyframes)> {
   let rules = source
     .split_whitespace()
     .map(TwRule::parse)
@@ -48,7 +49,13 @@ pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
     return None;
   }
 
-  Some(cascaded_block(&rules))
+  let mut theme_keyframes = ThemeKeyframes::default();
+
+  for rule in &rules {
+    theme_keyframes.extend(&rule.theme_keyframes);
+  }
+
+  Some((cascaded_block(&rules), theme_keyframes))
 }
 
 /// `rules` in the order the cascade applies them: the normal ones, then the `!important` ones,

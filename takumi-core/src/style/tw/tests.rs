@@ -1467,7 +1467,7 @@ fn test_animate_preset_reads_a_css_variable() {
   );
   assert_eq!(
     computed.misc1_data.animation_duration.as_ref(),
-    [AnimationTime::from_milliseconds(2000.0)]
+    [AnimationDuration(AnimationTime::from_milliseconds(2000.0))]
   );
 }
 
@@ -1485,7 +1485,7 @@ fn test_animate_preset_falls_back_to_the_builtin_animation() {
   );
   assert_eq!(
     computed.misc1_data.animation_duration.as_ref(),
-    [AnimationTime::from_milliseconds(1000.0)]
+    [AnimationDuration(AnimationTime::from_milliseconds(1000.0))]
   );
   assert_eq!(
     computed.misc1_data.animation_iteration_count.as_ref(),

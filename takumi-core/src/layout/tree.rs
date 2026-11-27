@@ -2411,6 +2411,8 @@ impl RenderNode {
   }
 
   fn build(parent_context: &RenderContext, node: Node, blockifies_children: bool) -> Self {
+    parent_context.note_theme_keyframes(&node);
+
     let mut tree =
       Self::build_in_containers(parent_context, node.clone(), blockifies_children, None);
 
@@ -3572,6 +3574,7 @@ impl RenderContext {
     let mut style = match animating.zip(ElementAnimations::new(
       &base,
       self.stylesheet(),
+      &self.theme_keyframes(),
       self.time_ms(),
       self.sizing.viewport,
     )) {
@@ -3932,6 +3935,7 @@ mod tests {
     style::{
       ComputedStyle, Direction, Display, Float, Length, LineHeight, PageName, PropertyRule,
       PropertySyntax, SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      TailwindValues,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -3941,6 +3945,130 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  /// The opacity of each child of a root holding `children`, one second into their animations
+  /// under `css`.
+  fn opacities_after_one_second(css: &str, children: Vec<Node>) -> Vec<f32> {
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(parse_stylesheet(css)))
+      .time_ms(1000)
+      .build();
+    let tree = RenderNode::from_node(&context, Node::container(children));
+
+    tree
+      .children
+      .as_deref()
+      .expect("block children")
+      .iter()
+      .map(|child| child.context.style.svg_data.opacity.0)
+      .collect()
+  }
+
+  /// Tailwind emits its theme `@keyframes` once a `tw` utility in the document names them, so a
+  /// stylesheet's `animation: pulse` runs only beside an `animate-pulse` or `animate-[pulse…]`.
+  #[test]
+  fn theme_keyframes_run_only_once_a_tw_utility_reads_them() {
+    let css = ".plain { animation: pulse 2s linear }";
+    let plain = || Node::container([]).with_class_name("plain");
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
+
+    assert_eq!(opacities_after_one_second(css, vec![plain()]), [1.0]);
+    assert_eq!(
+      opacities_after_one_second(css, vec![plain(), tw("animate-pulse")]),
+      [0.5, 0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second("", vec![tw("animate-[pulse_2s_linear]")]),
+      [0.5]
+    );
+  }
+
+  /// Tailwind keeps the theme `@keyframes` an `@apply`'d utility reads, below the stylesheet's own.
+  #[test]
+  fn theme_keyframes_run_for_an_applied_utility() {
+    let applied = || vec![Node::container([]).with_class_name("a")];
+
+    assert_eq!(
+      opacities_after_one_second(".a { @apply animate-pulse; }", applied()),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@keyframes pulse { from, to { opacity: 0.25 } } .a { @apply animate-pulse; }",
+        applied()
+      ),
+      [0.25]
+    );
+  }
+
+  /// Tailwind keeps the theme `@keyframes` a used `--animate-*` variable's theme value names, so
+  /// `animate-soft` over `--animate-soft: pulse 2s` runs `pulse`, and overriding
+  /// `--animate-pulse` drops `pulse`.
+  #[test]
+  fn theme_keyframes_run_for_an_animate_variable_value() {
+    let theme = "@theme { --animate-soft: pulse 2s linear; }";
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
+
+    assert_eq!(
+      opacities_after_one_second(theme, vec![tw("animate-soft")]),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        &format!("{theme} .a {{ @apply animate-soft; }}"),
+        vec![Node::container([]).with_class_name("a")]
+      ),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-pulse: spin 1s linear; } .plain { animation: pulse 2s linear }",
+        vec![
+          Node::container([]).with_class_name("plain"),
+          tw("animate-pulse")
+        ]
+      ),
+      [1.0, 1.0]
+    );
+  }
+
+  /// Tailwind follows a used `--animate-*` value's `var(--animate-*)` aliases, stopping at cycles,
+  /// and a `:root` inside `@container` never applies, so it overrides no theme value.
+  #[test]
+  fn theme_keyframes_follow_animate_aliases_and_skip_container_roots() {
+    let tw =
+      |classes: &str| Node::container([]).with_tw(TailwindValues::from_str(classes).unwrap());
+
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-soft: var(--animate-fade); --animate-fade: pulse 2s linear; }",
+        vec![tw("animate-soft")]
+      ),
+      [0.5]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@theme { --animate-soft: var(--animate-fade); --animate-fade: var(--animate-soft); }",
+        vec![tw("animate-soft")]
+      ),
+      [1.0]
+    );
+    assert_eq!(
+      opacities_after_one_second(
+        "@container (min-width: 10000px) { :root { --animate-pulse: spin 1s linear; } }",
+        vec![tw("animate-pulse")]
+      ),
+      [0.5]
+    );
   }
 
   /// A style every row repeats stays shared while the rows' other styles come and go.

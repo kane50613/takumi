@@ -1,9 +1,10 @@
 //! The utilities, keyed by root as Tailwind's [`Utilities`](https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/src/utilities.ts)
 //! registers them: a root alone, as `border` is, or a root and a value, as `border-2` is.
 
-use std::sync::Arc;
+use std::{mem::take, sync::Arc};
 
 use phf::phf_map;
+use thin_vec::thin_vec;
 
 use super::{
   Namespace, TW_VAR_SPACING, TailwindPropertyParser, builder::TailwindDeclarationBuilder,
@@ -128,6 +129,8 @@ impl Utility {
         ValueMatch::NoNegative => return ValueMatch::NoNegative,
         ValueMatch::Emitted => {}
       }
+
+      builder.theme_keyframes = take(&mut builtin.theme_keyframes);
 
       let declarations = builtin.finish().declarations;
 
@@ -999,13 +1002,20 @@ fn border_style(style: BorderStyle, builder: &mut TailwindDeclarationBuilder) {
   builder.push(StyleDeclaration::border_left_style(style));
 }
 
+/// Emits an `animate-*` utility and the theme `@keyframes` it names.
 fn animation(animation: TwAnimation, builder: &mut TailwindDeclarationBuilder) {
   let TwAnimation { animations, token } = animation;
 
   let Some(token) = token else {
+    builder.theme_keyframes.named = animations
+      .iter()
+      .filter_map(|animation| tailwind_theme_keyframes(animation.name.as_deref()?))
+      .collect();
     builder.push_all(StyleDeclaration::expand_animation(animations));
     return;
   };
+
+  builder.theme_keyframes.animate_tokens = thin_vec![Arc::clone(&token)];
 
   let fallback = animation_shorthand_css(&animations);
   let specified_value = if fallback.is_empty() {
