@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 
-use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseMode, ParseResult, ToCss};
 
 /// The `text-overflow` property.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -20,7 +20,7 @@ pub enum TextOverflow {
 impl MakeComputed for TextOverflow {}
 
 impl<'i> FromCss<'i> for TextOverflow {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let string = input.expect_ident_or_string()?;
 
     match_ignore_ascii_case! {string,

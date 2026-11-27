@@ -365,14 +365,8 @@ impl DataType {
       Self::Length | Self::LengthPercentage => {
         let percentage = self == Self::LengthPercentage;
         let length = Length::from_css(input).ok()?;
-        // `Length` reads a unitless number as px, which only zero is.
-        let unitless = input
-          .slice_from(start)
-          .trim()
-          .parse::<f32>()
-          .is_ok_and(|number| number != 0.0);
 
-        if unitless || !is_length(&length, percentage) {
+        if !is_length(&length, percentage) {
           return None;
         }
 

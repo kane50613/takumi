@@ -3,7 +3,7 @@ use std::{fmt, sync::Arc};
 use cssparser::Parser;
 
 use super::font_feature_settings::{Tag, parse_opentype_tag};
-use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseMode, ParseResult, ToCss, parse_comma_separated};
 
 /// An OpenType font variation setting (tag + value) from CSS `font-variation-settings`.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -27,7 +27,7 @@ pub(crate) type FontVariationSettings = Arc<[FontVariation]>;
 impl MakeComputed for FontVariationSettings {}
 
 impl<'i> FromCss<'i> for FontVariationSettings {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
@@ -35,7 +35,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
       return Ok(Arc::new([]));
     }
 
-    let list = input.parse_comma_separated(|input| {
+    let list = parse_comma_separated(input, |input| {
       let tag = parse_opentype_tag::<FontVariationSettings>(input)?;
       let value = input.expect_number()?;
 

@@ -13,8 +13,9 @@ use crate::{
   scene::SceneBounds,
   style::{
     Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
-    ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-    SvgResource, TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
+    ListInterpolationStrategy, MakeComputed, ParseMode, ParseResult, PercentageNumber,
+    SizingContext, SvgResource, TextShadow, ToCss, discrete, parse_nested_block,
+    tw::TailwindPropertyParser, unexpected_token,
   },
 };
 
@@ -374,14 +375,14 @@ pub enum FilterCategory<'f> {
 }
 
 impl<'i> FromCss<'i> for Filters {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Filters::default());
     }
 
     let mut filters = Vec::new();
     while !input.is_exhausted() {
-      filters.push(Filter::from_css(input)?);
+      filters.push(Filter::from_css_in(input, mode)?);
     }
 
     Ok(filters)
@@ -427,7 +428,7 @@ fn parse_amount<'i>(input: &mut Parser<'i>) -> ParseResult<'i, PercentageNumber>
 }
 
 impl<'i> FromCss<'i> for Filter {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     if let Token::UnquotedUrl(url) = token {
@@ -439,7 +440,7 @@ impl<'i> FromCss<'i> for Filter {
     };
 
     if function.eq_ignore_ascii_case("url") {
-      return parser.parse_nested_block(|input| {
+      return parse_nested_block(parser, |input| {
         let url = input.expect_string()?.clone();
 
         parse_filter_url(&url)
@@ -447,11 +448,11 @@ impl<'i> FromCss<'i> for Filter {
     }
 
     match_ignore_ascii_case! {function,
-      "brightness" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Brightness)),
-      "opacity" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Opacity)),
-      "contrast" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Contrast)),
-      "grayscale" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Grayscale)),
-      "hue-rotate" => parser.parse_nested_block(|input| {
+      "brightness" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Brightness)),
+      "opacity" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Opacity)),
+      "contrast" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Contrast)),
+      "grayscale" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Grayscale)),
+      "hue-rotate" => parse_nested_block(parser, |input| {
         // hue-rotate() takes an angle, which only zero may write without a unit.
         if input.is_exhausted() {
           return Ok(Filter::HueRotate(Angle::zero()));
@@ -469,10 +470,10 @@ impl<'i> FromCss<'i> for Filter {
           }
         }
       }),
-      "invert" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Invert)),
-      "saturate" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Saturate)),
-      "sepia" => parser.parse_nested_block(|input| parse_amount(input).map(Filter::Sepia)),
-      "blur" => parser.parse_nested_block(|input| {
+      "invert" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Invert)),
+      "saturate" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Saturate)),
+      "sepia" => parse_nested_block(parser, |input| parse_amount(input).map(Filter::Sepia)),
+      "blur" => parse_nested_block(parser, |input| {
         // blur() radius is optional and defaults to 0; a present argument must be a valid length,
         // which takes no percentage.
         if input.is_exhausted() {
@@ -487,9 +488,10 @@ impl<'i> FromCss<'i> for Filter {
         }
 
         input.reset(&start);
+        // Blink's `ConsumeFilterFunction` parses the radius in `kHTMLStandardMode` in any mode.
         Length::from_css(input).map(Filter::Blur)
       }),
-      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
+      "drop-shadow" => parse_nested_block(parser, |input| TextShadow::from_css_in(input, mode).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(token)),
     }
   }
@@ -656,6 +658,15 @@ mod tests {
   #[test]
   fn test_parse_blur_filter() {
     assert_eq!(Filter::from_css_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
+  }
+
+  #[test]
+  fn blur_takes_a_unit_even_in_an_svg_attribute() {
+    let parse = |css| Filter::from_css_in(&mut Parser::new(css), ParseMode::SvgAttribute);
+
+    assert!(parse("blur(5)").is_err());
+    assert_eq!(parse("blur(0)"), Ok(Filter::Blur(Length::zero())));
+    assert_eq!(parse("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
   }
 
   #[test]

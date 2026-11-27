@@ -10,7 +10,8 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
-    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::mul_div_255, unexpected_token,
+    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::mul_div_255,
+    parse_nested_block, unexpected_token,
   },
 };
 
@@ -104,8 +105,7 @@ fn peeks_modern_color_function(input: &mut Parser<'_>) -> bool {
         .iter()
         .any(|function| name.eq_ignore_ascii_case(function))
         // Relative syntax (`rgb(from ...)`) is modern whatever the function name.
-        || input
-          .parse_nested_block(|arguments| {
+        || parse_nested_block(input, |arguments| {
             let relative =
               matches!(arguments.next(), Ok(Token::Ident(ident)) if ident.eq_ignore_ascii_case("from"));
             while arguments.next().is_ok() {}
@@ -160,19 +160,19 @@ pub(crate) fn push_center_clause(params: &mut String, center: &PositionValue) ->
 /// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
 pub(crate) fn parse_gradient_stops<'i>(
   input: &mut Parser<'i>,
-  parse_position: fn(&mut Parser<'i>) -> ParseResult<'i, StopPosition>,
+  parse_position: impl Fn(&mut Parser<'i>) -> ParseResult<'i, StopPosition>,
 ) -> ParseResult<'i, (Vec<GradientStop>, bool)> {
   let mut stops = Vec::new();
   let mut modern = false;
   loop {
-    if let Ok(hint) = input.try_parse(parse_position) {
+    if let Ok(hint) = input.try_parse(&parse_position) {
       stops.push(GradientStop::Hint(hint));
     } else {
       modern |= peeks_modern_color_function(input);
       let color = ColorInput::from_css(input)?;
-      let first_position = input.try_parse(parse_position).ok();
+      let first_position = input.try_parse(&parse_position).ok();
       let second_position = if first_position.is_some() {
-        input.try_parse(parse_position).ok()
+        input.try_parse(&parse_position).ok()
       } else {
         None
       };

@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, lerp,
   tw::TailwindPropertyParser, unexpected_token,
 };
 
@@ -33,7 +33,7 @@ impl Animatable for FontStretch {
 }
 
 impl<'i> FromCss<'i> for FontStretch {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(value) = input.try_parse(Parser::expect_percentage) {
       return Ok(Self::from_percentage(value));
     }

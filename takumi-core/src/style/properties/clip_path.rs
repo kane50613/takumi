@@ -6,8 +6,9 @@ use crate::{
   geometry::{Point, Size},
   path_data::PathData,
   style::{
-    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, SvgResource,
-    ToCss, ValueError, impl_css_enum, unexpected_token,
+    FromCss, Length, MakeComputed, ParseMode, ParseResult, Sides, SizingContext, SpacePair,
+    SvgResource, ToCss, ValueError, impl_css_enum, parse_comma_separated, parse_nested_block,
+    unexpected_token,
   },
 };
 
@@ -199,8 +200,8 @@ impl BasicShape {
 }
 
 impl<'i> FromCss<'i> for ShapeRadius {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(length) = parser.try_parse(Length::from_css) {
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(length) = parser.try_parse(|input| Length::from_css_in(input, mode)) {
       return Ok(ShapeRadius::Length(length));
     }
 
@@ -217,12 +218,12 @@ impl<'i> FromCss<'i> for ShapeRadius {
 
 impl ShapePosition {
   /// Parses an optional `at <position>` clause, defaulting to the center.
-  fn parse_at<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn parse_at<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("at"))
       .is_ok()
     {
-      return Self::from_css(input);
+      return Self::from_css_in(input, mode);
     }
 
     Ok(Self::default())
@@ -243,10 +244,10 @@ impl FillRule {
 }
 
 impl<'i> FromCss<'i> for ShapePosition {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let first = Length::from_css(parser)?;
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let first = Length::from_css_in(parser, mode)?;
     let second = parser
-      .try_parse(Length::from_css)
+      .try_parse(|input| Length::from_css_in(input, mode))
       .unwrap_or(Length::Percentage(50.0));
 
     Ok(ShapePosition(SpacePair::from_pair(first, second)))
@@ -256,20 +257,20 @@ impl<'i> FromCss<'i> for ShapePosition {
 }
 
 impl<'i> FromCss<'i> for BasicShape {
-  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(parser: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     match token {
       Token::UnquotedUrl(url) => Ok(BasicShape::Url(SvgResource::new(url.as_ref()))),
       Token::Function(function) => {
         match_ignore_ascii_case! { &function,
-          "url" => parser.parse_nested_block(|input| {
+          "url" => parse_nested_block(parser, |input| {
             Ok(BasicShape::Url(SvgResource::new(input.expect_string()?.as_ref())))
           }),
-          "inset" => parser.parse_nested_block(|input| {
-            let inset = Sides::from_css(input)?;
+          "inset" => parse_nested_block(parser, |input| {
+            let inset = Sides::from_css_in(input, mode)?;
             let border_radius = if input.try_parse(|input| input.expect_ident_matching("round")).is_ok() {
-              Some(Sides::from_css(input)?)
+              Some(Sides::from_css_in(input, mode)?)
             } else {
               None
             };
@@ -279,32 +280,36 @@ impl<'i> FromCss<'i> for BasicShape {
               border_radius,
             })))
           }),
-          "circle" => parser.parse_nested_block(|input| {
-            let radius = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
+          "circle" => parse_nested_block(parser, |input| {
+            let radius = input.try_parse(|input| ShapeRadius::from_css_in(input, mode)).unwrap_or_default();
 
-            let position = ShapePosition::parse_at(input)?;
+            let position = ShapePosition::parse_at(input, mode)?;
 
             Ok(BasicShape::Circle(Box::new(CircleShape { radius, position })))
           }),
-          "ellipse" => parser.parse_nested_block(|input| {
-            let radius_x = ShapeRadius::from_css(input)?;
-            let radius_y = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
+          "ellipse" => parse_nested_block(parser, |input| {
+            let radius_x = ShapeRadius::from_css_in(input, mode)?;
+            let radius_y = input.try_parse(|input| ShapeRadius::from_css_in(input, mode)).unwrap_or_default();
 
-            let position = ShapePosition::parse_at(input)?;
+            let position = ShapePosition::parse_at(input, mode)?;
 
             Ok(BasicShape::Ellipse(Box::new(EllipseShape { radius_x, radius_y, position })))
           }),
-          "polygon" => parser.parse_nested_block(|input| {
+          "polygon" => parse_nested_block(parser, |input| {
             let fill_rule = FillRule::parse_prefix(input)?;
 
             Ok(BasicShape::Polygon(PolygonShape {
               fill_rule,
-              coordinates: input
-                .parse_comma_separated(PolygonCoordinate::from_css)?
+              coordinates: parse_comma_separated(input, |input| {
+                Ok(PolygonCoordinate::from_pair(
+                  Length::from_css_in(input, mode)?,
+                  Length::from_css_in(input, mode)?,
+                ))
+              })?
                 .into_boxed_slice(),
             }))
           }),
-          "path" => parser.parse_nested_block(|input| {
+          "path" => parse_nested_block(parser, |input| {
             let fill_rule = FillRule::parse_prefix(input)?;
 
             let path: Box<str> = input.expect_string()?.as_ref().into();

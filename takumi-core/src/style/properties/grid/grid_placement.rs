@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, tw::TailwindPropertyParser,
   unexpected_token,
 };
 
@@ -62,7 +62,7 @@ pub enum GridPlacementSpan {
 }
 
 impl<'i> FromCss<'i> for GridPlacementSpan {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     Ok(GridPlacementSpan::Span(
       input.expect_integer()?.max(1) as u16
     ))
@@ -96,7 +96,7 @@ fn parse_span_keyword<'i>(input: &mut Parser<'i>) -> ParseResult<'i, ()> {
 impl<'i> FromCss<'i> for GridPlacement {
   /// Blink's `ConsumeGridLine`: `auto | <custom-ident> | [ <integer> && <custom-ident>? ] |
   /// [ span && [ <integer> || <custom-ident> ] ]`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()

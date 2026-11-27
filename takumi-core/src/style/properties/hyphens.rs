@@ -2,7 +2,9 @@ use std::{fmt, sync::Arc};
 
 use cssparser::{ParseError as CssParseError, Parser, Token, serialize_string};
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum};
+use crate::style::{
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, impl_css_enum,
+};
 
 /// `hyphens`: where a line may break inside a word with a hyphen.
 /// <https://drafts.csswg.org/css-text-3/#hyphenation>
@@ -43,7 +45,7 @@ impl MakeComputed for HyphenateCharacter {}
 impl Animatable for HyphenateCharacter {}
 
 impl<'i> FromCss<'i> for HyphenateCharacter {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?.clone();
 
     match &token {

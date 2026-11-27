@@ -18,8 +18,8 @@ use crate::{
   Error, Xxh3HashSet,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, CustomProperties, DeclarationOrigin, IgnoredDeclaration,
-    IgnoredReason, SizingContext,
+    CssInput, CssNumber, CssUnexpected, CssValueSeed, CustomProperties, DeclarationOrigin,
+    IgnoredDeclaration, IgnoredReason, SizingContext,
     properties::*,
     selector::{StyleDeclarationParser, log_ignored},
     unexpected_token,
@@ -150,9 +150,11 @@ impl DeferredDeclaration {
   ) -> Option<ParsedDeclarations> {
     let resolved_value = resolve_var_references(&self.specified_value, custom_properties)?;
 
+    // A presentation attribute's substituted value parses as CSS text too, as WPT
+    // svg/styling/css-var-on-length-attributes-02.svg expects.
     self
       .property
-      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
+      .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)), ParseMode::Css)
       .ok()
   }
 
@@ -440,8 +442,12 @@ macro_rules! define_style {
     false
   }};
   // `where parse = path` parses the property with `path` instead of its type's `FromCss`.
-  (@parse $ty:ty, $parse:path) => { $parse };
-  (@parse $ty:ty) => { <$ty as FromCss>::from_css };
+  (@parse $ty:ty, $input:ident, $mode:expr, $parse:path) => { $parse($input, $mode) };
+  (@parse $ty:ty, $input:ident, $mode:expr) => { <$ty as FromCss>::from_css_in($input, $mode) };
+  // `where mode = SvgAttribute` parses the property in that mode wherever it is written, as
+  // Blink's `ParserModeOverridingScope`.
+  (@mode $mode:ident, $forced:ident) => { ParseMode::$forced };
+  (@mode $mode:ident) => { $mode };
   (@builder $name:ident, $ty:ty, manual) => {};
   (@builder $name:ident, $ty:ty) => {
     paste! {
@@ -463,6 +469,7 @@ macro_rules! define_style {
               $(where builder = $longhand_builder:ident)?
               $(where non_negative = $longhand_non_negative:literal)?
               $(where parse = $longhand_parse:path)?
+              $(where mode = $longhand_mode:ident)?
               $(= $longhand_default:expr)?,
           )*
         }
@@ -625,6 +632,7 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           input: &mut cssparser::Parser<'i>,
+          mode: ParseMode,
         ) -> ParseResult<'i, ParsedDeclarations> {
           let state = input.state();
           let keyword = input.try_parse(CssWideKeyword::parse_whole_value).ok();
@@ -637,12 +645,17 @@ macro_rules! define_style {
           let declaration = match self {
             $($(
               Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
-                define_style!(@parse $longhand_ty $(, $longhand_parse)?)(input)?,
+                define_style!(
+                  @parse $longhand_ty,
+                  input,
+                  define_style!(@mode mode $(, $longhand_mode)?)
+                  $(, $longhand_parse)?
+                )?,
               ),
             )*)*
             $(
               Self::[<$transient:camel>] => StyleDeclaration::[<$transient:camel>](
-                <$transient_ty as FromCss>::from_css(input)?,
+                <$transient_ty as FromCss>::from_css_in(input, mode)?,
               ),
             )*
           };
@@ -664,11 +677,12 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           input: &mut cssparser::Parser<'i>,
+          mode: ParseMode,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
               Self::[<$shorthand:camel>] => reject_negative(StyleDeclaration::[<expand_ $shorthand>](
-                <$shorthand_ty as FromCss>::from_css(input)?,
+                <$shorthand_ty as FromCss>::from_css_in(input, mode)?,
               )),
             )*
           }
@@ -770,16 +784,17 @@ macro_rules! define_style {
               }
 
               input.reset(&state);
-              property.parse_declarations(input)
+              property.parse_declarations(input, ParseMode::Css)
             }
             Self::All => Ok(self.expand_keyword(CssWideKeyword::parse_whole_value(input)?)),
-            Self::Longhand(property) => property.parse_declarations(input),
+            Self::Longhand(property) => property.parse_declarations(input, ParseMode::Css),
           }
         }
 
         pub(crate) fn parse_css_input_declarations<'de>(
           self,
           css_input: CssInput<'de>,
+          mode: ParseMode,
         ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
           debug_assert!(
             !matches!(self, Self::Custom),
@@ -815,7 +830,7 @@ macro_rules! define_style {
 
           let source: Cow<'_, str> = match &css_input {
             CssInput::Str(value) => Cow::Borrowed(value.as_ref()),
-            CssInput::Number(number) => Cow::Owned(number.to_string()),
+            CssInput::Number(number) => Cow::Owned(self.number_css(*number)),
             CssInput::Unexpected(_) => unreachable!(),
           };
 
@@ -825,8 +840,8 @@ macro_rules! define_style {
             // `parse_entirely`, because a declaration list drops a value with
             // anything left over and a lone value has no `;` to stop at.
             parser.parse_entirely(|parser| match self {
-              Self::Shorthand(property) => property.parse_declarations(parser),
-              Self::Longhand(property) => property.parse_declarations(parser),
+              Self::Shorthand(property) => property.parse_declarations(parser, mode),
+              Self::Longhand(property) => property.parse_declarations(parser, mode),
               Self::All => Ok(self.expand_keyword(CssWideKeyword::from_css(parser)?)),
               Self::Ignored | Self::Custom => unreachable!(),
             })
@@ -841,6 +856,25 @@ macro_rules! define_style {
           drop(source);
 
           result.map_err(|(expected, failure)| CssInputParseError::new(css_input, expected, failure))
+        }
+
+        /// The CSS text a style object's `number` stands for: the number where the property
+        /// takes it, else the number in px.
+        ///
+        /// Approximate: React writes px after a number for every property outside its
+        /// `isUnitlessNumber` list, where this writes it wherever the property rejects the number.
+        pub(crate) fn number_css(self, number: CssNumber) -> String {
+          let number = number.to_string();
+
+          if matches!(self, Self::Ignored | Self::Custom)
+            || self
+              .parse_css_input_declarations(CssInput::Str(Cow::Borrowed(&number)), ParseMode::Css)
+              .is_ok()
+          {
+            return number;
+          }
+
+          format!("{number}px")
         }
 
         /// Parse-error "expected ..." text for this property's value type.
@@ -891,32 +925,47 @@ macro_rules! define_style {
         where
           D: serde::Deserializer<'de>,
         {
-          struct StyleVisitor;
+          deserializer.deserialize_map(StyleVisitor(None))
+        }
+      }
 
-          impl<'de> serde::de::Visitor<'de> for StyleVisitor {
-            type Value = Style;
+      /// A style object in a node tree, its values reused across the tree.
+      pub(crate) struct StyleSeed<'v>(pub(crate) &'v ParsedValues);
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-              formatter.write_str("a style object")
-            }
+      impl<'de> serde::de::DeserializeSeed<'de> for StyleSeed<'_> {
+        type Value = Style;
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-              A: serde::de::MapAccess<'de>,
-            {
-              let mut style = Style::default();
+        fn deserialize<D>(self, deserializer: D) -> Result<Style, D::Error>
+        where
+          D: serde::Deserializer<'de>,
+        {
+          deserializer.deserialize_map(StyleVisitor(Some(self.0)))
+        }
+      }
 
-              while let Some(key) = map.next_key::<Cow<'de, str>>()? {
-                let css_input = map.next_value_seed(CssValueSeed)?;
+      /// A style object, its values reused when it has a tree's parsed values.
+      struct StyleVisitor<'v>(Option<&'v ParsedValues>);
 
-                style.declarations.push_object_entry(key, css_input);
-              }
+      impl<'de> serde::de::Visitor<'de> for StyleVisitor<'_> {
+        type Value = Style;
 
-              Ok(style)
-            }
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+          formatter.write_str("a style object")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+          A: serde::de::MapAccess<'de>,
+        {
+          let mut style = Style::default();
+
+          while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+            let css_input = map.next_value_seed(CssValueSeed)?;
+
+            style.declarations.push_object_entry(key, css_input, self.0);
           }
 
-          deserializer.deserialize_map(StyleVisitor)
+          Ok(style)
         }
       }
 
@@ -1810,13 +1859,13 @@ define_style! {
     }
     /// Blink's `svg->geometry` field group: the lengths and path SVG shapes are laid out from.
     svg_geometry_data: StyleSvgGeometryData {
-      x: Length = Length::zero(),
-      y: Length = Length::zero(),
-      cx: Length = Length::zero(),
-      cy: Length = Length::zero(),
-      r: Length where non_negative = true = Length::zero(),
-      rx: Length where non_negative = true = Length::Auto,
-      ry: Length where non_negative = true = Length::Auto,
+      x: Length where mode = SvgAttribute = Length::zero(),
+      y: Length where mode = SvgAttribute = Length::zero(),
+      cx: Length where mode = SvgAttribute = Length::zero(),
+      cy: Length where mode = SvgAttribute = Length::zero(),
+      r: Length where non_negative = true where mode = SvgAttribute = Length::zero(),
+      rx: Length where non_negative = true where mode = SvgAttribute = Length::Auto,
+      ry: Length where non_negative = true where mode = SvgAttribute = Length::Auto,
       d: SvgPath,
     }
     /// Blink's `svg->stop` field group.
@@ -1930,7 +1979,7 @@ define_style! {
       color_scheme: ColorSchemes where inherit = true,
       font_size: FontSize where inherit = true where non_negative = true,
       font_family: FontFamily where inherit = true,
-      line_height: LineHeight where inherit = true,
+      line_height: LineHeight where inherit = true where non_negative = true,
       font_weight: FontWeight where inherit = true,
       font_variation_settings: FontVariationSettings where inherit = true,
       font_feature_settings: FontFeatureSettings where inherit = true,
@@ -1947,8 +1996,8 @@ define_style! {
       font_synthesis_small_caps: FontSynthesic where inherit = true,
       text_align: TextAlign where inherit = true,
       text_align_last: TextAlignLast where inherit = true,
-      letter_spacing: Length where inherit = true,
-      word_spacing: Length where inherit = true,
+      letter_spacing: Length where inherit = true where parse = Length::parse_spacing,
+      word_spacing: Length where inherit = true where parse = Length::parse_spacing,
       white_space_collapse: WhiteSpaceCollapse where inherit = true,
       text_wrap_mode: TextWrapMode where inherit = true,
       text_wrap_style: TextWrapStyle where inherit = true,
@@ -2010,10 +2059,10 @@ define_style! {
     /// Blink's `svginherited->stroke` field group, but for `stroke-linejoin`, which `misc_inherited_data` keeps.
     svg_stroke_data: StyleSvgStrokeData {
       stroke: SvgPaint where inherit = true = SvgPaint::None,
-      stroke_width: Length where inherit = true where non_negative = true = Length::Px(1.0),
+      stroke_width: Length where inherit = true where non_negative = true where mode = SvgAttribute = Length::Px(1.0),
       stroke_opacity: PercentageNumber where inherit = true,
       stroke_dasharray: Option<StrokeDasharray> where inherit = true,
-      stroke_dashoffset: Length where inherit = true = Length::zero(),
+      stroke_dashoffset: Length where inherit = true where mode = SvgAttribute = Length::zero(),
       stroke_linecap: LineCap where inherit = true,
       stroke_miterlimit: StrokeMiterlimit where inherit = true,
     }
@@ -2678,7 +2727,7 @@ fn revert_target<T>(
 }
 
 impl<'i> FromCss<'i> for CssWideKeyword {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident_cloned()?;
 
     match_ignore_ascii_case! { ident.as_ref(),
@@ -3141,7 +3190,12 @@ impl StyleDeclarationBlock {
   }
 
   /// Appends what the `key: value` entry of a style object declares, or records it as ignored.
-  fn push_object_entry(&mut self, key: Cow<'_, str>, css_input: CssInput<'_>) {
+  fn push_object_entry(
+    &mut self,
+    key: Cow<'_, str>,
+    css_input: CssInput<'_>,
+    values: Option<&ParsedValues>,
+  ) {
     // `undefined` / `null` values are how JS callers express "no declaration".
     if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
       return;
@@ -3171,7 +3225,12 @@ impl StyleDeclarationBlock {
     } else {
       // An invalid value drops only its declaration, as CSS 2.2 4.2 rules for illegal values:
       // https://www.w3.org/TR/CSS22/syndata.html#parsing-errors
-      match ParsedValues::parse(property, css_input) {
+      let parsed = match values {
+        Some(values) => values.parse(property, css_input),
+        None => property.parse_css_input_declarations(css_input, ParseMode::Css),
+      };
+
+      match parsed {
         Ok(declarations) => {
           self.append_parsed_declarations(declarations, important);
         }

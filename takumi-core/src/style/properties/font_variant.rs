@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss, impl_css_enum,
-  merge_token_lists, merged_token_len, unexpected_token, write_keywords,
+  Animatable, FontFeature, FromCss, MakeComputed, ParseMode, ParseResult, Tag, ToCss,
+  impl_css_enum, merge_token_lists, merged_token_len, unexpected_token, write_keywords,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.
@@ -78,7 +78,7 @@ impl MakeComputed for FontVariantLigatures {}
 impl Animatable for FontVariantLigatures {}
 
 impl<'i> FromCss<'i> for FontVariantLigatures {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -202,7 +202,7 @@ impl MakeComputed for FontVariantNumeric {}
 impl Animatable for FontVariantNumeric {}
 
 impl<'i> FromCss<'i> for FontVariantNumeric {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -318,7 +318,7 @@ impl MakeComputed for FontVariantEastAsian {}
 impl Animatable for FontVariantEastAsian {}
 
 impl<'i> FromCss<'i> for FontVariantEastAsian {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_keyword_set(input, Self::set_keyword)
   }
 
@@ -473,7 +473,7 @@ pub struct FontVariant {
 }
 
 impl<'i> FromCss<'i> for FontVariant {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut value = Self::default();
     while !input.is_exhausted() {
       let ident = input.expect_ident()?;

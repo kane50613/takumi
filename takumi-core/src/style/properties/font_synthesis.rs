@@ -1,7 +1,9 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{FromCss, MakeComputed, ParseResult, impl_css_enum, unexpected_token};
+use crate::style::{
+  FromCss, MakeComputed, ParseMode, ParseResult, impl_css_enum, unexpected_token,
+};
 
 /// Controls synthetic font behaviors.
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
@@ -18,7 +20,7 @@ pub struct FontSynthesis {
 impl MakeComputed for FontSynthesis {}
 
 impl<'i> FromCss<'i> for FontSynthesis {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut weight = FontSynthesic::None;
     let mut style = FontSynthesic::None;
     let mut small_caps = FontSynthesic::None;
