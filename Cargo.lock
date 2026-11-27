@@ -1819,7 +1819,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.22.1"
+version = "2.23.0"
 dependencies = [
  "criterion",
  "gif",
@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-cli"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "cap-std",
  "clap",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1949,7 +1949,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.21.3"
+version = "0.21.4"
 dependencies = [
  "base64",
  "bumpalo",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "bytemuck",
  "color",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-svg"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "quick-xml",
  "rustc-hash",

@@ -1,122 +1,287 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n  takumi-paint:\n    type: patch\n---\n\n# takumi-pdf and takumi-paint run under `nitro dev` and in Nuxt builds without config\n\nTwo setups no longer fail:\n\n- `nitro dev` used to fail with `Cannot find module .../pkg/takumi_pdf_wasm_bg.js`.\n- A Nuxt production server used to fail with `ERR_MODULE_NOT_FOUND` for `bundlers/node.mjs`.\n\nRemove the workaround if you added one. Both still work if you keep them.\n\n```diff\n // nitro.config.ts\n export default defineConfig({\n-  noExternals: [\"takumi-pdf\"],\n });\n\n // nuxt.config.ts\n export default defineNuxtConfig({\n-  nitro: {\n-    externals: { traceInclude: [\"node_modules/takumi-pdf/bundlers/node.mjs\"] },\n-  },\n });\n```\n"
-    filename: pdf-paint-nitro-nuxt.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n  \"@takumi-rs/core\":\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Node trees carrying large images use about the memory of HTML\n\nRendering a node tree that carries large `data:` URIs, such as one from `fromHtml` or JSX, no longer peaks several times above rendering the same HTML string.\n"
+    filename: node-tree-memory.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# `render()` returns bytes you can pass to `Response`\n\n`render()` was typed to return `Uint8Array<ArrayBufferLike>`, which TypeScript 5.7 and later reject as a `BodyInit`, so `new Response(pdf)` failed to typecheck. It now returns `Uint8Array<ArrayBuffer>`, as `takumi-js` does.\n\n```ts\nconst pdf = await render(html);\n\nreturn new Response(pdf, { headers: { \"content-type\": \"application/pdf\" } });\n```\n"
-    filename: pdf-render-array-buffer.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n  takumi-core:\n    type: patch\n---\n\n# Wrapped right-to-left text in fonts that kern the space glyph renders correctly\n\nWhen a right-to-left paragraph, such as Arabic text, wrapped onto a second line in a font that kerns the space glyph against letters, PDF output panicked with `byte index is not a char boundary`, and justified lines in images spread their space to the wrong places or not at all. Both now render as they do without kerning.\n"
+    filename: pdf-wrapped-rtl-kerning.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Gradients with transparency draw as CSS does in PDFs\n\nGradients with transparent or translucent stops now draw in PDFs as they do in browsers:\n\n- A gradient whose alpha changes interpolates premultiplied, as CSS does, so a fade toward `transparent` no longer darkens through black.\n- A linear gradient whose stops are each opaque or transparent, with the alpha changing only at hard stops, such as the highlighter `linear-gradient(transparent 55%, yellow 55%)`, draws without a soft mask. Apple's PDF renderer can draw a soft mask wrong.\n"
+    filename: pdf-hard-stop-gradients.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  takumi-js:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Render Hono JSX and `html` templates\n\n`render`, `ImageResponse`, and takumi-pdf's `render` draw Hono JSX and Hono's `html` template as Hono's `c.html()` would send them.\n\n- Context reaches its consumers, and `Suspense` and `ErrorBoundary` behave as they do in Hono.\n- A JSX element whose tag is `image`, `text`, or `container`, such as an SVG `<image>`, is no longer taken for a node tree.\n\n```tsx\n/** @jsxImportSource hono/jsx */\nimport { Suspense } from \"hono/jsx/streaming\";\nimport { ImageResponse } from \"takumi-js/response\";\n\nconst Title = async () => <h1>{await getTitle()}</h1>;\n\nnew ImageResponse(\n  <Suspense fallback={<h1>Loading</h1>}>\n    <Title />\n  </Suspense>,\n);\n// Before: draws the markup as text, one character per node\n// After: draws the title\n```\n"
+    filename: hono-jsx.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n# Stop a box at the top of a page from painting a line on the page before\n\nA box that starts a page no longer paints a thin line along the bottom of the page before it when the page area is not a whole number of pixels, such as an A4 page of 793.7 × 1122.52 px.\n\nThe page area now rounds up to whole pixels, as in Chromium:\n\n- Content lays out on the rounded area, and PDF pages clip to it. The PDF page size does not change.\n- Page images take the rounded size, so they can be a pixel larger.\n- Viewport units take the rounded area too, so `vh` can be a pixel taller than in Chromium.\n"
+    filename: page-area-whole-px.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# `[dir]` and `img[src]` match elements parsed from HTML\n\nAttribute selectors on `dir` and on an `<img>`'s `src` used to match only nodes built with JSX. `dir=\"auto\"` in JSX also no longer fails the render.\n\n```tsx\n<div dir=\"auto\">{name}</div>\n// Before: the render fails with `unknown variant auto`\n// After: it renders, with its direction taken from its text\n```\n"
+    filename: attribute-selectors.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# `lang` keeps the text it is written with\n\nAn element keeps its `lang` attribute as written, so `[lang]` selectors and `attr(lang)` read the same text as in a browser. A `lang` that is not a language tag takumi reads, such as `lang=\"\"`, stays an attribute instead of being dropped or failing the render. A number `id` or `lang` in JSX is written as text, as React DOM writes it.\n\nAn empty or invalid `lang` also stops the language inherited from the parent, as in Chrome. `:lang()` takes one identifier, so `:lang(en, fr)` and `:lang(\"en\")` drop their rule, and it never matches a malformed `lang` such as `en-`.\n\n```html\n<p lang=\"EN_us\">Hello</p>\n<!-- Before: `[lang=\"EN_us\"]` misses it, and `attr(lang)` reads `en-US` -->\n<!-- After: both read `EN_us` -->\n```\n"
+    filename: lang-attribute.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# JSX writes boolean attributes as React DOM does\n\n`aria-*` and `data-*` props, `draggable`, `contentEditable`, and `spellCheck` keep `false` as the text `\"false\"` and write `true` as `\"true\"`, so attribute selectors match them as in the browser. `htmlFor`, `acceptCharset`, and `httpEquiv` are written as `for`, `accept-charset`, and `http-equiv`.\n\n```tsx\n<div aria-hidden={false} draggable />\n// Before: `[aria-hidden]` misses it, and `[draggable=\"true\"]` misses it\n// After: both match\n```\n"
+    filename: jsx-boolean-attributes.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# `dir=\"auto\"` takes one direction from its text, as in Chrome\n\nAn element with `dir=\"auto\"`, and a `<bdi>`, now takes its `direction` and `:dir()` from the first strong character of its text. It skips `<bdi>`, `<script>`, `<style>`, `<textarea>`, and descendants with a `dir` of `ltr`, `rtl`, or `auto`. Before, each paragraph inside it took its own direction, and `:dir()` read its parent's. A tel input keeps `ltr` under an `rtl` parent.\n"
+    filename: html-directionality.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Validate and compute lengths as Chrome does\n\nCSS text now reads lengths the way Chrome does.\n\n- `letter-spacing: normal` and `word-spacing: normal` set no extra spacing. `auto` is invalid for them and for `text-indent`, so the declaration is dropped.\n- A negative `line-height` is invalid, also inside the `font` shorthand.\n- A `font-size` calculation that comes out negative is `0px`.\n- A unitless number other than `0` is no longer a length in px. `font-size: 12` and `text-indent: 5` are dropped. SVG attributes and the properties Chrome parses like them, such as `stroke-width`, `r`, and `stroke-dasharray`, still take one.\n- A gradient stop takes no unitless number other than `0`. Nor does a `blur()` radius, even in an SVG `filter` attribute. A `polygon()` vertex needs both coordinates.\n- `calc(10% + 2em)` computes its `em` part to px on the element that declares it, so children inherit `calc(10% + 32px)`. A percentage or calculated `line-height` computes to px against the element's own font size.\n- `lh` resolves against the element's own font size and line height, not its parent's.\n\nNumbers in a JSX style object still work. A number becomes px unless the property takes a bare number, as React writes it. The SVG serializer in `@takumi-rs/helpers` now writes `px` after a number in a `style` object, as React DOM does.\n\n```css\n.card {\n  font-size: 20px;\n  line-height: 1.5;\n  /* Before: 24px, from the parent's 16px font */\n  /* After: 30px */\n  height: 1lh;\n}\n```\n\n#### Migration\n\nWrite a unit after a length in CSS text, such as in `font-size` or `text-indent`, since a unitless length other than `0` now drops the declaration. SVG attributes and the SVG properties listed above still take a bare number.\n\n```diff\n- font-size: 12;\n+ font-size: 12px;\n```\n"
+    filename: css-length-validation.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Block elements isolate their bidi text\n\n`div`, `p`, headings, lists, table parts, `bdi`, `output`, and the other elements HTML's rendering rules list now isolate their bidi text, as they do in Chrome. A `<bdo>` from JSX now overrides the bidi of its text as one parsed from HTML does. An element made inline by CSS keeps its text apart from the bidi ordering of the text around it.\n\n```html\n<div>\n  שלום\n  <section style=\"display: inline\">abc 123</section>\n  עולם\n</div>\n<!-- Before: the inline section's text is reordered with the Hebrew around it -->\n<!-- After: it stays one isolated run -->\n```\n"
+    filename: bidi-isolate-presets.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Element language and JSX `<select>` follow Chrome and React DOM\n\n- An SVG element with both `xml:lang` and `lang` takes its language from `xml:lang`, in either order, as Chrome does.\n- `:lang()` matches the render's `lang` option when no ancestor sets `lang`, as Chrome matches the document's language.\n- `:lang()` in an inline `<svg>` reads its HTML ancestors' `lang` as written, so a malformed `lang=\"en_US\"` matches nothing, as in Chrome.\n- A JSX `<select>` with `value` or `defaultValue` marks the options it names as `selected`, as React DOM's server renderer does.\n\n```tsx\n<select defaultValue=\"b\">\n  <option value=\"a\">A</option>\n  <option value=\"b\">B</option>\n</select>\n// Before: neither option has `selected`, so `option:checked` matches A\n// After: B has `selected`, so `option:checked` matches B\n```\n"
+    filename: lang-and-select.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# `color-mix()` and relative colours can read `currentColor`, and system colours render\n\nThese declarations used to be dropped as invalid and now render as they do in Chrome:\n\n- `color-mix()` and relative colours with `currentColor`, which resolve against the colour of the element that uses them. In `color` itself, `currentColor` is the parent's colour.\n- System colours such as `Canvas`, `CanvasText`, `ButtonFace` and `LinkText`, with Chromium's light and dark values.\n\nA relative colour whose origin is `light-dark()` now takes the origin in the element's used color scheme instead of the light one.\n\n`color-mix()` percentages follow Chrome too. A number or a percentage below 0% or above 100% makes the declaration invalid, and percentages that sum to zero mix to transparent.\n\n#### Migration\n\n`ColorInput` is no longer `Copy`, since `color-mix()` and relative colours keep their arguments, and neither are `Border`, `BoxShadow`, `TextShadow`, and `TextStroke`, which hold one. Clone a value you move twice.\n\n```diff\n- let fill = color;\n+ let fill = color.clone();\n  let stroke = color;\n```\n"
+    filename: color-value-resolution.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `@container` and `container-type`\n\n`container-type`, `container-name`, and the `container` shorthand make a box a query container, and `@container` rules read its size, as in Chrome:\n\n- A `size` or `inline-size` container takes no size from its content on the axes it contains, and starts a new formatting context, so its children's margins stay inside it. A non-atomic inline or a table is no size container, since size containment does not apply to it.\n- A query asks the nearest container that has its name and contains every axis it reads, and matches nothing without one.\n- A query of a name alone, such as `@container card`, holds inside any box of that name, whatever its `container-type`.\n- Conditions take `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, and `orientation`, with range syntax, as a comma-separated list, and an `em` reads the container's font size.\n- A condition with a feature it does not know, or with `style()` or `scroll-state()`, which takumi does not support yet, holds of no container, while the other conditions in its list still can.\n- `@container` also nests in a style rule.\n- Container units such as `cqw` and `cqi` read the nearest container that contains their axis, and the viewport without one. They resolve on the element that declares them, so a container's `letter-spacing: 1cqw` reads the container around it, and its children inherit the same pixels. A list item's marker reads the item's own size when the item is a container. `MeasuredNode::of` no longer takes a container size for them. `RenderNode::node_at_path_mut` is removed.\n\n```css\n.sidebar {\n  container: sidebar / inline-size;\n}\n@container sidebar (width > 300px) {\n  .card {\n    display: flex;\n  }\n}\n```\n"
+    filename: css-container-queries.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Tailwind preference variants and breakpoint order\n\n`motion-safe:`, `motion-reduce:`, `contrast-more:`, `contrast-less:`, `forced-colors:`, and `inverted-colors:` now apply as in a default Chrome, and `not-hover:`, `not-focus:`, and the other `not-` variants of a state no static render is in apply. `min-[900px]:` and `sm:` now sort by unit before width as Tailwind does, and `min-*` and `max-*` no longer both match at a fractional width.\n"
+    filename: tailwind-preference-variants.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Tailwind `max-*` and `min-*` breakpoints, and ties that sort by number\n\nThe `tw` prop reads these as Tailwind does:\n\n- `max-md:`, `min-[600px]:`, and `max-[800px]:` compare the viewport width, and `sm:max-md:` applies only while both hold.\n- When two utilities set the same property, digit runs in their names compare as numbers, so `p-2 p-10` applies `p-10`.\n"
+    filename: tailwind-breakpoints-and-order.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `color-mix()` follows `color-scheme` through `light-dark()`\n\nA `color-mix()` whose operands use `light-dark()` mixes the colours of the element's used color scheme, so a dark element mixes the dark colours.\n"
+    filename: color-mix-light-dark.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `revert`, `revert-layer`, and `revert-rule`\n\nThe three keywords roll a property back to a weaker declaration, as in Chrome, or to `unset` without one:\n\n- `revert` rolls back to the browser's default style.\n- `revert-layer` rolls back to the cascade layer below, whatever the declaration's importance.\n- `revert-rule` rolls back to the rule below, past both importance levels of its own rule.\n\nThey work on custom properties and in `all` too.\n\n```css\n@layer base {\n  .card {\n    color: navy;\n  }\n}\n.card {\n  color: red;\n}\n.card.quiet {\n  color: revert-layer; /* navy */\n}\n```\n"
+    filename: css-revert.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# CSS-wide keywords that `var()` substitutes into a custom property\n\n`--a: var(--none, inherit)` now inherits `--a` as in Chrome, and `initial` and `unset` apply the same way, where only the revert keywords did.\n"
+    filename: custom-property-substituted-keyword.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Relative colours keep their channels, and `color-mix()` defaults to Oklab\n\n- `hsl(from white 120 50 50)` keeps the hue it is written with and resolves to the same green as in Chrome, where a powerless origin hue had dropped it to zero.\n- `color-mix(red, blue)` mixes in Oklab as in Chrome, and a mix in Oklab serializes without the `in oklab,` it implies.\n"
+    filename: relative-colors-and-color-mix.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Blurs and shadows render faster\n\nThese effects render faster, and their pixels can change after upgrading:\n\n- `filter: blur()` and `drop-shadow()`\n- `backdrop-filter`\n- `box-shadow` and `text-shadow`\n- SVG `feGaussianBlur`\n\nReview the diffs if you compare renders against pixel-exact snapshots.\n"
+    filename: decimated-blur.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support Tailwind's `@container`, `@sm:`, `rtl:`, `ltr:`, `dark:`, and `print:`\n\nThe `tw` prop now reads these Tailwind v4 utilities and variants, as Tailwind compiles them:\n\n- `@container` sets `container-type`, and `@container/name` also sets `container-name`.\n- `@sm:`, `@min-md:`, `@max-lg:`, and `@min-[400px]:` apply while the nearest inline-size container meets the width, `@sm/name:` asks the container with that name, and `@sm:@max-md:` applies within the range.\n- `rtl:` and `ltr:` follow the element's direction, including `dir=\"auto\"`, and also apply anywhere inside an element with that `dir`, as in Tailwind.\n- `portrait:`, `landscape:`, `dark:`, and `print:` follow the render's viewport, color scheme, and output.\n\n```tsx\n<div tw=\"@container\">\n  <div tw=\"flex flex-col @md:flex-row rtl:text-right\">…</div>\n</div>\n```\n\nA named width such as `@md:` uses Tailwind's default `--container-md`, which a stylesheet's `--container-*` does not change.\n"
+    filename: tailwind-container-direction.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A rounded background tucks under a one-sided border\n\nA rounded box with a border on only some sides now shrinks its background halfway under those borders, as Chrome does, so no background colour shows through the antialiased edge of the border.\n\n```css\n.bar {\n  border-radius: 4px;\n  border-bottom: 6px solid green;\n  background: blue;\n}\n/* Before: a thin blue fringe could show along the green border's rounded edge */\n/* After: the blue stops halfway under the green border */\n```\n"
+    filename: one-sided-border-bleed.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# `light-dark()` and system colours follow `color-scheme`\n\n`light-dark()` and system colours take the colour of an element's used color scheme, as in a browser. The used scheme is:\n\n- the viewport's preferred scheme, when `color-scheme` lists it\n- otherwise the scheme `color-scheme` lists\n- light, under `normal`\n\nThe canvas, the default text colour, and form controls stay light.\n\n```html\n<div style=\"color-scheme: dark; background: light-dark(white, black)\"></div>\n```\n\n```diff\n- A white box\n+ A black box\n```\n"
+    filename: color-scheme.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Parse each style sheet on its own\n\n`StyleSheet::parse_list` and its variants parse each sheet separately, as Chrome does, so an unclosed comment or block in one `<style>` element no longer swallows the sheets after it. Their rules still apply in order, and `@layer` order still carries from one sheet to the next.\n"
+    filename: style-sheet-isolation.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A registered custom property in a cycle with `font-size` takes its inherited value\n\nA registered custom property whose font-relative units form a cycle with `font-size` or `line-height` now takes the parent's value when it inherits, as in Chrome, instead of its initial value.\n"
+    filename: registered-cycle-unset.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `OffsetRotate::resolve` takes and returns degrees\n\n`OffsetRotate::resolve` now takes the path's tangent in degrees and returns an `Angle`, so rotation along a path keeps the degrees you write, as Chrome does.\n\n#### Migration\n\n```diff\n- let radians = offset_rotate.resolve(tangent_radians);\n+ let radians = (*offset_rotate.resolve(tangent_radians.to_degrees())).to_radians();\n```\n"
+    filename: offset-rotate-degrees.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Rounded borders no longer show a hairline at their corners\n\nWhen a box has `border-radius` and an opaque border on every side that is neither dotted nor dashed, it now paints as Chrome does:\n\n- Its `background` stops inside the border, halfway in or a sixth of the way for a double border, so no arc of it shows along the outer edge.\n- A cell of a table with `border-collapse: collapse` keeps its whole background, since it paints no border of its own.\n- An outer `box-shadow` under an opaque `background-color` reaches a pixel under the border, so what sits behind the shadow no longer shows at the border's edge.\n"
+    filename: rounded-border-bleed.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Animations read the animated font size and colour\n\nAnimations that run together now read each other's `font-size`, `color`, and `color-scheme`, as in Chrome, and an animated element takes an `em` font size from its parent.\n"
+    filename: animated-font-and-colour.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# `font-size` and font family serialization\n\n`font-size` now ignores a negative length and `auto`, in `font` too, and accepts `-webkit-xxx-large`. A font family named like a generic family, a CSS-wide keyword, or `default`, or one that is not an identifier, serializes quoted as in Chrome.\n"
+    filename: font-size-validation.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Cascade layers, collapsed tables, box shadows, and universal custom properties render as in Chrome\n\n- `@layer` orders its layers as a tree: a layer's own rules outrank its sublayers, the sublayers of one layer stay together, and each anonymous `@layer` block is a layer of its own.\n- A table with `border-collapse: collapse` keeps its whole rounded `background`, since it paints no border of its own.\n- A `box-shadow` with no offset, blur, or spread no longer paints.\n- A registered custom property with `syntax: '*'` that is left without a value, through `initial`, an invalid `var()`, or a cycle, falls back in `var()` instead of taking its parent's or initial value.\n- An animated length that mixes a container query unit with another unit resolves against its container.\n"
+    filename: cascade-layer-tree.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Font size keywords follow the default font size\n\n`font-size: medium` and the other absolute size keywords take their sizes from the default font size, as browsers do, instead of from the root element's font size.\n\n```css\nhtml {\n  font-size: 20px;\n}\np {\n  font-size: medium;\n}\n/* Before: the paragraph's text is 20px */\n/* After: the paragraph's text is 16px, and `small` is 13px */\n```\n"
+    filename: font-size-keywords.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# A `currentColor` text decoration follows the text's stroke and fill colours\n\nAs in Chrome, a text decoration whose color is `currentColor` takes the stroke colour of stroked text, unless the stroke is `currentColor` or transparent, and the `-webkit-text-fill-color` otherwise. `-webkit-text-stroke-width` also takes `thin`, `medium`, and `thick`.\n"
+    filename: text-decoration-stroke-fallback.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `@scope`\n\nStyle rules in `@scope` apply only from the elements its root selector matches down to, but not into, the ones its `to (…)` limit matches, as in Chrome. `:scope` matches the root, declarations written directly in the rule apply to the root, and a rule from a closer root wins over an equally specific one from a farther root or from no scope. Nested in a style rule, its root selector is relative to the rule's elements, and `&` stands for them. Nested in another `@scope`, its root selector is relative to that scope's root. Without a root selector, it roots at the parent of the `<style>` element that holds it or the `<link>` element that loads it, nested or not. An `@media`, `@supports`, `@container`, or `@layer` rule inside `@scope` holds rules only, and drops declarations written directly in it, as Chrome does.\n\n```css\n.list {\n  @scope (& > .card) to (.footer) {\n    padding: 8px;\n    p {\n      margin: 0;\n    }\n  }\n}\n```\n"
+    filename: css-scope.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep `!important` on shorthands and list values in stylesheets\n\nA stylesheet or `style` attribute declaration such as `background: red !important`, `border-bottom: 1px solid red !important`, or `transform: scale(2) !important` now applies and wins over normal declarations, as in a browser. It used to be dropped.\n"
+    filename: important-multi-token-values.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Custom properties that read a substituted keyword\n\nA custom property that reads one whose `var()` substituted `inherit`, `initial`, or `unset` now reads the value it resolved to, as in Chrome, where it copied the keyword.\n"
+    filename: custom-property-keyword-dependents.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Rotations past a full turn animate\n\nAn angle now keeps the degrees you write, as in Chrome, so animations interpolate the number itself instead of the shorter way round. `rotate(360deg)` turns once and `rotate(720deg)` turns twice, where both used to stand still. The same applies to `rotate`, `skew()`, `hue-rotate()`, and `offset-rotate`.\n\n`animate-spin` now uses Tailwind's own keyframes, a single `to { transform: rotate(360deg) }`.\n\n`font-style: oblique 350deg` is now invalid, as in Chrome, instead of reading as `-10deg`.\n\n```css\n@keyframes turn {\n  to {\n    transform: rotate(360deg);\n  }\n}\n/* Before: no rotation at any point */\n/* After: 90deg a quarter of the way through */\n```\n\n#### Migration\n\nWrite an oblique angle within ±90deg.\n\n```diff\n- font-style: oblique 350deg;\n+ font-style: oblique -10deg;\n```\n"
+    filename: angle-specified-degrees.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Animations sample their keyframes as browsers do\n\n- A property that a middle keyframe leaves out interpolates between the keyframes that declare it, instead of passing through the element's own value.\n- An `animation-timing-function` declared in a keyframe eases the interval that keyframe starts.\n- A repeating animation shows the start of its next iteration at a boundary, so `1s infinite` at 1000ms draws its first keyframe.\n- A zero-duration animation applies only with `animation-fill-mode: forwards` or `both`.\n- A keyframe declaration marked `!important` is invalid, so the animation leaves that property alone.\n- An animation with `animation-play-state: paused` stays at its start whatever `timeMs` is. To hold a fixed frame, pick it with a negative `animation-delay`.\n- `steps()` in a reversed animation lands on the step Chrome shows before it starts and after it ends.\n- `animation-iteration-count: 0` with `forwards` fill shows the first keyframe instead of the last.\n- Two keyframes at one offset with different timing functions each ease only the properties they declare.\n- `@keyframes` names match case-sensitively, so `animation-name: Fade` no longer runs `@keyframes fade`.\n\n```css\n@keyframes grow {\n  0% {\n    width: 0;\n    opacity: 0;\n  }\n  50% {\n    opacity: 1;\n  }\n  100% {\n    width: 100px;\n    opacity: 0;\n  }\n}\n/* At 25%, before: width eases toward the element's own width */\n/* At 25%, after: width is 25px */\n```\n"
+    filename: keyframe-sampling.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
+  - id: npm:takumi-paint
+    updated: true
   - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/cli-linux-x64
+  - changelogIds:
+      - node-tree-memory.md
+      - pdf-wrapped-rtl-kerning.md
+      - pdf-hard-stop-gradients.md
+      - hono-jsx.md
+      - page-area-whole-px.md
+    id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - node-tree-memory.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - hono-jsx.md
+    id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - attribute-selectors.md
+      - lang-attribute.md
+      - jsx-boolean-attributes.md
+      - html-directionality.md
+      - node-tree-memory.md
+      - css-length-validation.md
+      - bidi-isolate-presets.md
+      - lang-and-select.md
+      - hono-jsx.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:@takumi-rs/bindings-js
+    updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:@takumi-rs/cli
+    updated: true
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:@takumi-rs/cli-linux-arm64
     updated: true
   - id: npm:@takumi-rs/cli-darwin-arm64
     updated: true
   - id: npm:@takumi-rs/cli-win32-x64
     updated: true
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:@takumi-rs/cli-linux-arm64
+  - id: npm:@takumi-rs/cli-linux-x64
     updated: true
   - id: npm:@takumi-rs/cli-win32-arm64
     updated: true
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:@takumi-rs/cli
-    updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/bindings-js
-    updated: false
-  - changelogIds:
-      - pdf-paint-nitro-nuxt.md
-    id: npm:takumi-paint
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: false
-  - id: npm:takumi-js
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: false
-  - changelogIds:
-      - pdf-render-array-buffer.md
-      - pdf-paint-nitro-nuxt.md
-    id: npm:takumi-pdf
-    updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: false
   - id: npm:@takumi-rs/cli-darwin-x64
     updated: true
-  - id: cargo:takumi-core
-    updated: false
-  - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-raster
-    updated: false
   - changelogIds:
-      - pdf-render-array-buffer.md
-      - pdf-paint-nitro-nuxt.md
+      - attribute-selectors.md
+      - lang-attribute.md
+      - color-value-resolution.md
+      - css-container-queries.md
+      - tailwind-preference-variants.md
+      - tailwind-breakpoints-and-order.md
+      - html-directionality.md
+      - color-mix-light-dark.md
+      - css-revert.md
+      - custom-property-substituted-keyword.md
+      - relative-colors-and-color-mix.md
+      - decimated-blur.md
+      - tailwind-container-direction.md
+      - one-sided-border-bleed.md
+      - color-scheme.md
+      - style-sheet-isolation.md
+      - registered-cycle-unset.md
+      - offset-rotate-degrees.md
+      - rounded-border-bleed.md
+      - css-length-validation.md
+      - animated-font-and-colour.md
+      - font-size-validation.md
+      - pdf-wrapped-rtl-kerning.md
+      - cascade-layer-tree.md
+      - bidi-isolate-presets.md
+      - lang-and-select.md
+      - font-size-keywords.md
+      - text-decoration-stroke-fallback.md
+      - css-scope.md
+      - important-multi-token-values.md
+      - custom-property-keyword-dependents.md
+      - angle-specified-degrees.md
+      - page-area-whole-px.md
+      - keyframe-sampling.md
+    id: cargo:takumi-core
+    updated: true
+  - id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - node-tree-memory.md
+      - pdf-wrapped-rtl-kerning.md
+      - pdf-hard-stop-gradients.md
+      - hono-jsx.md
+      - page-area-whole-px.md
     id: cargo:takumi-pdf
     updated: true
-  - id: cargo:takumi
-    updated: false
+  - changelogIds:
+      - page-area-whole-px.md
+    id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - color-value-resolution.md
+    id: cargo:takumi
+    updated: true
   - id: cargo:takumi-cli
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/cli-linux-x64
-  - id: npm:@takumi-rs/cli-darwin-arm64
-  - id: npm:@takumi-rs/cli-win32-x64
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:@takumi-rs/cli-linux-arm64
-  - id: npm:@takumi-rs/cli-win32-arm64
-  - id: npm:example-satori-html
-  - id: npm:pdf-bench
-  - id: npm:waku-ssr
-  - id: npm:example-liquid-glass
-  - id: npm:example-nextjs
-  - id: npm:example-e-invoice
-  - id: npm:svelte
-  - id: npm:example-tanstack-start
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-generate-invoice
-  - id: npm:example-twitter-images
-  - id: npm:ffplay
-  - id: npm:example-css-library-integration
-  - id: npm:@takumi-rs/cli
-  - id: npm:docs
-  - id: npm:@takumi-rs/bindings-js
   - id: npm:takumi-paint
+  - id: npm:@takumi-rs/wasm
+  - id: npm:docs
+  - id: npm:takumi-pdf
   - id: npm:@takumi-rs/core
   - id: npm:takumi-js
   - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/bindings-js
   - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/cli
+  - id: npm:example-e-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:example-twitter-images
+  - id: npm:example-tanstack-start
+  - id: npm:pdf-bench
+  - id: npm:example-liquid-glass
+  - id: npm:svelte
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-nextjs
+  - id: npm:example-generate-invoice
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-satori-html
+  - id: npm:waku-ssr
+  - id: npm:ffplay
+  - id: npm:@takumi-rs/cli-linux-arm64
+  - id: npm:@takumi-rs/cli-darwin-arm64
+  - id: npm:@takumi-rs/cli-win32-x64
+  - id: npm:@takumi-rs/cli-linux-x64
+  - id: npm:@takumi-rs/cli-win32-arm64
   - id: npm:@takumi-rs/cli-darwin-x64

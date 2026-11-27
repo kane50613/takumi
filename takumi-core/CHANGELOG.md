@@ -1,3 +1,404 @@
+## takumi-core@0.40.0
+
+### `[dir]` and `img[src]` match elements parsed from HTML
+
+Attribute selectors on `dir` and on an `<img>`'s `src` used to match only nodes built with JSX. `dir="auto"` in JSX also no longer fails the render.
+
+```tsx
+<div dir="auto">{name}</div>
+// Before: the render fails with `unknown variant auto`
+// After: it renders, with its direction taken from its text
+```
+
+### `lang` keeps the text it is written with
+
+An element keeps its `lang` attribute as written, so `[lang]` selectors and `attr(lang)` read the same text as in a browser. A `lang` that is not a language tag takumi reads, such as `lang=""`, stays an attribute instead of being dropped or failing the render. A number `id` or `lang` in JSX is written as text, as React DOM writes it.
+
+An empty or invalid `lang` also stops the language inherited from the parent, as in Chrome. `:lang()` takes one identifier, so `:lang(en, fr)` and `:lang("en")` drop their rule, and it never matches a malformed `lang` such as `en-`.
+
+```html
+<p lang="EN_us">Hello</p>
+<!-- Before: `[lang="EN_us"]` misses it, and `attr(lang)` reads `en-US` -->
+<!-- After: both read `EN_us` -->
+```
+
+### `color-mix()` and relative colours can read `currentColor`, and system colours render
+
+These declarations used to be dropped as invalid and now render as they do in Chrome:
+
+- `color-mix()` and relative colours with `currentColor`, which resolve against the colour of the element that uses them. In `color` itself, `currentColor` is the parent's colour.
+- System colours such as `Canvas`, `CanvasText`, `ButtonFace` and `LinkText`, with Chromium's light and dark values.
+
+A relative colour whose origin is `light-dark()` now takes the origin in the element's used color scheme instead of the light one.
+
+`color-mix()` percentages follow Chrome too. A number or a percentage below 0% or above 100% makes the declaration invalid, and percentages that sum to zero mix to transparent.
+
+### Migration
+
+`ColorInput` is no longer `Copy`, since `color-mix()` and relative colours keep their arguments, and neither are `Border`, `BoxShadow`, `TextShadow`, and `TextStroke`, which hold one. Clone a value you move twice.
+
+```diff
+- let fill = color;
++ let fill = color.clone();
+  let stroke = color;
+```
+
+### Support `@container` and `container-type`
+
+`container-type`, `container-name`, and the `container` shorthand make a box a query container, and `@container` rules read its size, as in Chrome:
+
+- A `size` or `inline-size` container takes no size from its content on the axes it contains, and starts a new formatting context, so its children's margins stay inside it. A non-atomic inline or a table is no size container, since size containment does not apply to it.
+- A query asks the nearest container that has its name and contains every axis it reads, and matches nothing without one.
+- A query of a name alone, such as `@container card`, holds inside any box of that name, whatever its `container-type`.
+- Conditions take `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, and `orientation`, with range syntax, as a comma-separated list, and an `em` reads the container's font size.
+- A condition with a feature it does not know, or with `style()` or `scroll-state()`, which takumi does not support yet, holds of no container, while the other conditions in its list still can.
+- `@container` also nests in a style rule.
+- Container units such as `cqw` and `cqi` read the nearest container that contains their axis, and the viewport without one. They resolve on the element that declares them, so a container's `letter-spacing: 1cqw` reads the container around it, and its children inherit the same pixels. A list item's marker reads the item's own size when the item is a container. `MeasuredNode::of` no longer takes a container size for them. `RenderNode::node_at_path_mut` is removed.
+
+```css
+.sidebar {
+  container: sidebar / inline-size;
+}
+@container sidebar (width > 300px) {
+  .card {
+    display: flex;
+  }
+}
+```
+
+### Tailwind preference variants and breakpoint order
+
+`motion-safe:`, `motion-reduce:`, `contrast-more:`, `contrast-less:`, `forced-colors:`, and `inverted-colors:` now apply as in a default Chrome, and `not-hover:`, `not-focus:`, and the other `not-` variants of a state no static render is in apply. `min-[900px]:` and `sm:` now sort by unit before width as Tailwind does, and `min-*` and `max-*` no longer both match at a fractional width.
+
+### Tailwind `max-*` and `min-*` breakpoints, and ties that sort by number
+
+The `tw` prop reads these as Tailwind does:
+
+- `max-md:`, `min-[600px]:`, and `max-[800px]:` compare the viewport width, and `sm:max-md:` applies only while both hold.
+- When two utilities set the same property, digit runs in their names compare as numbers, so `p-2 p-10` applies `p-10`.
+
+### `dir="auto"` takes one direction from its text, as in Chrome
+
+An element with `dir="auto"`, and a `<bdi>`, now takes its `direction` and `:dir()` from the first strong character of its text. It skips `<bdi>`, `<script>`, `<style>`, `<textarea>`, and descendants with a `dir` of `ltr`, `rtl`, or `auto`. Before, each paragraph inside it took its own direction, and `:dir()` read its parent's. A tel input keeps `ltr` under an `rtl` parent.
+
+### `color-mix()` follows `color-scheme` through `light-dark()`
+
+A `color-mix()` whose operands use `light-dark()` mixes the colours of the element's used color scheme, so a dark element mixes the dark colours.
+
+### Support `revert`, `revert-layer`, and `revert-rule`
+
+The three keywords roll a property back to a weaker declaration, as in Chrome, or to `unset` without one:
+
+- `revert` rolls back to the browser's default style.
+- `revert-layer` rolls back to the cascade layer below, whatever the declaration's importance.
+- `revert-rule` rolls back to the rule below, past both importance levels of its own rule.
+
+They work on custom properties and in `all` too.
+
+```css
+@layer base {
+  .card {
+    color: navy;
+  }
+}
+.card {
+  color: red;
+}
+.card.quiet {
+  color: revert-layer; /* navy */
+}
+```
+
+### CSS-wide keywords that `var()` substitutes into a custom property
+
+`--a: var(--none, inherit)` now inherits `--a` as in Chrome, and `initial` and `unset` apply the same way, where only the revert keywords did.
+
+### Relative colours keep their channels, and `color-mix()` defaults to Oklab
+
+- `hsl(from white 120 50 50)` keeps the hue it is written with and resolves to the same green as in Chrome, where a powerless origin hue had dropped it to zero.
+- `color-mix(red, blue)` mixes in Oklab as in Chrome, and a mix in Oklab serializes without the `in oklab,` it implies.
+
+### Blurs and shadows render faster
+
+These effects render faster, and their pixels can change after upgrading:
+
+- `filter: blur()` and `drop-shadow()`
+- `backdrop-filter`
+- `box-shadow` and `text-shadow`
+- SVG `feGaussianBlur`
+
+Review the diffs if you compare renders against pixel-exact snapshots.
+
+### Support Tailwind's `@container`, `@sm:`, `rtl:`, `ltr:`, `dark:`, and `print:`
+
+The `tw` prop now reads these Tailwind v4 utilities and variants, as Tailwind compiles them:
+
+- `@container` sets `container-type`, and `@container/name` also sets `container-name`.
+- `@sm:`, `@min-md:`, `@max-lg:`, and `@min-[400px]:` apply while the nearest inline-size container meets the width, `@sm/name:` asks the container with that name, and `@sm:@max-md:` applies within the range.
+- `rtl:` and `ltr:` follow the element's direction, including `dir="auto"`, and also apply anywhere inside an element with that `dir`, as in Tailwind.
+- `portrait:`, `landscape:`, `dark:`, and `print:` follow the render's viewport, color scheme, and output.
+
+```tsx
+<div tw="@container">
+  <div tw="flex flex-col @md:flex-row rtl:text-right">…</div>
+</div>
+```
+
+A named width such as `@md:` uses Tailwind's default `--container-md`, which a stylesheet's `--container-*` does not change.
+
+### A rounded background tucks under a one-sided border
+
+A rounded box with a border on only some sides now shrinks its background halfway under those borders, as Chrome does, so no background colour shows through the antialiased edge of the border.
+
+```css
+.bar {
+  border-radius: 4px;
+  border-bottom: 6px solid green;
+  background: blue;
+}
+/* Before: a thin blue fringe could show along the green border's rounded edge */
+/* After: the blue stops halfway under the green border */
+```
+
+### `light-dark()` and system colours follow `color-scheme`
+
+`light-dark()` and system colours take the colour of an element's used color scheme, as in a browser. The used scheme is:
+
+- the viewport's preferred scheme, when `color-scheme` lists it
+- otherwise the scheme `color-scheme` lists
+- light, under `normal`
+
+The canvas, the default text colour, and form controls stay light.
+
+```html
+<div style="color-scheme: dark; background: light-dark(white, black)"></div>
+```
+
+```diff
+- A white box
++ A black box
+```
+
+### Parse each style sheet on its own
+
+`StyleSheet::parse_list` and its variants parse each sheet separately, as Chrome does, so an unclosed comment or block in one `<style>` element no longer swallows the sheets after it. Their rules still apply in order, and `@layer` order still carries from one sheet to the next.
+
+### A registered custom property in a cycle with `font-size` takes its inherited value
+
+A registered custom property whose font-relative units form a cycle with `font-size` or `line-height` now takes the parent's value when it inherits, as in Chrome, instead of its initial value.
+
+### `OffsetRotate::resolve` takes and returns degrees
+
+`OffsetRotate::resolve` now takes the path's tangent in degrees and returns an `Angle`, so rotation along a path keeps the degrees you write, as Chrome does.
+
+### Migration
+
+```diff
+- let radians = offset_rotate.resolve(tangent_radians);
++ let radians = (*offset_rotate.resolve(tangent_radians.to_degrees())).to_radians();
+```
+
+### Rounded borders no longer show a hairline at their corners
+
+When a box has `border-radius` and an opaque border on every side that is neither dotted nor dashed, it now paints as Chrome does:
+
+- Its `background` stops inside the border, halfway in or a sixth of the way for a double border, so no arc of it shows along the outer edge.
+- A cell of a table with `border-collapse: collapse` keeps its whole background, since it paints no border of its own.
+- An outer `box-shadow` under an opaque `background-color` reaches a pixel under the border, so what sits behind the shadow no longer shows at the border's edge.
+
+### Validate and compute lengths as Chrome does
+
+CSS text now reads lengths the way Chrome does.
+
+- `letter-spacing: normal` and `word-spacing: normal` set no extra spacing. `auto` is invalid for them and for `text-indent`, so the declaration is dropped.
+- A negative `line-height` is invalid, also inside the `font` shorthand.
+- A `font-size` calculation that comes out negative is `0px`.
+- A unitless number other than `0` is no longer a length in px. `font-size: 12` and `text-indent: 5` are dropped. SVG attributes and the properties Chrome parses like them, such as `stroke-width`, `r`, and `stroke-dasharray`, still take one.
+- A gradient stop takes no unitless number other than `0`. Nor does a `blur()` radius, even in an SVG `filter` attribute. A `polygon()` vertex needs both coordinates.
+- `calc(10% + 2em)` computes its `em` part to px on the element that declares it, so children inherit `calc(10% + 32px)`. A percentage or calculated `line-height` computes to px against the element's own font size.
+- `lh` resolves against the element's own font size and line height, not its parent's.
+
+Numbers in a JSX style object still work. A number becomes px unless the property takes a bare number, as React writes it. The SVG serializer in `@takumi-rs/helpers` now writes `px` after a number in a `style` object, as React DOM does.
+
+```css
+.card {
+  font-size: 20px;
+  line-height: 1.5;
+  /* Before: 24px, from the parent's 16px font */
+  /* After: 30px */
+  height: 1lh;
+}
+```
+
+### Migration
+
+Write a unit after a length in CSS text, such as in `font-size` or `text-indent`, since a unitless length other than `0` now drops the declaration. SVG attributes and the SVG properties listed above still take a bare number.
+
+```diff
+- font-size: 12;
++ font-size: 12px;
+```
+
+### Animations read the animated font size and colour
+
+Animations that run together now read each other's `font-size`, `color`, and `color-scheme`, as in Chrome, and an animated element takes an `em` font size from its parent.
+
+### `font-size` and font family serialization
+
+`font-size` now ignores a negative length and `auto`, in `font` too, and accepts `-webkit-xxx-large`. A font family named like a generic family, a CSS-wide keyword, or `default`, or one that is not an identifier, serializes quoted as in Chrome.
+
+### Wrapped right-to-left text in fonts that kern the space glyph renders correctly
+
+When a right-to-left paragraph, such as Arabic text, wrapped onto a second line in a font that kerns the space glyph against letters, PDF output panicked with `byte index is not a char boundary`, and justified lines in images spread their space to the wrong places or not at all. Both now render as they do without kerning.
+
+### Cascade layers, collapsed tables, box shadows, and universal custom properties render as in Chrome
+
+- `@layer` orders its layers as a tree: a layer's own rules outrank its sublayers, the sublayers of one layer stay together, and each anonymous `@layer` block is a layer of its own.
+- A table with `border-collapse: collapse` keeps its whole rounded `background`, since it paints no border of its own.
+- A `box-shadow` with no offset, blur, or spread no longer paints.
+- A registered custom property with `syntax: '*'` that is left without a value, through `initial`, an invalid `var()`, or a cycle, falls back in `var()` instead of taking its parent's or initial value.
+- An animated length that mixes a container query unit with another unit resolves against its container.
+
+### Block elements isolate their bidi text
+
+`div`, `p`, headings, lists, table parts, `bdi`, `output`, and the other elements HTML's rendering rules list now isolate their bidi text, as they do in Chrome. A `<bdo>` from JSX now overrides the bidi of its text as one parsed from HTML does. An element made inline by CSS keeps its text apart from the bidi ordering of the text around it.
+
+```html
+<div>
+  שלום
+  <section style="display: inline">abc 123</section>
+  עולם
+</div>
+<!-- Before: the inline section's text is reordered with the Hebrew around it -->
+<!-- After: it stays one isolated run -->
+```
+
+### Element language and JSX `<select>` follow Chrome and React DOM
+
+- An SVG element with both `xml:lang` and `lang` takes its language from `xml:lang`, in either order, as Chrome does.
+- `:lang()` matches the render's `lang` option when no ancestor sets `lang`, as Chrome matches the document's language.
+- `:lang()` in an inline `<svg>` reads its HTML ancestors' `lang` as written, so a malformed `lang="en_US"` matches nothing, as in Chrome.
+- A JSX `<select>` with `value` or `defaultValue` marks the options it names as `selected`, as React DOM's server renderer does.
+
+```tsx
+<select defaultValue="b">
+  <option value="a">A</option>
+  <option value="b">B</option>
+</select>
+// Before: neither option has `selected`, so `option:checked` matches A
+// After: B has `selected`, so `option:checked` matches B
+```
+
+### Font size keywords follow the default font size
+
+`font-size: medium` and the other absolute size keywords take their sizes from the default font size, as browsers do, instead of from the root element's font size.
+
+```css
+html {
+  font-size: 20px;
+}
+p {
+  font-size: medium;
+}
+/* Before: the paragraph's text is 20px */
+/* After: the paragraph's text is 16px, and `small` is 13px */
+```
+
+### A `currentColor` text decoration follows the text's stroke and fill colours
+
+As in Chrome, a text decoration whose color is `currentColor` takes the stroke colour of stroked text, unless the stroke is `currentColor` or transparent, and the `-webkit-text-fill-color` otherwise. `-webkit-text-stroke-width` also takes `thin`, `medium`, and `thick`.
+
+### Support `@scope`
+
+Style rules in `@scope` apply only from the elements its root selector matches down to, but not into, the ones its `to (…)` limit matches, as in Chrome. `:scope` matches the root, declarations written directly in the rule apply to the root, and a rule from a closer root wins over an equally specific one from a farther root or from no scope. Nested in a style rule, its root selector is relative to the rule's elements, and `&` stands for them. Nested in another `@scope`, its root selector is relative to that scope's root. Without a root selector, it roots at the parent of the `<style>` element that holds it or the `<link>` element that loads it, nested or not. An `@media`, `@supports`, `@container`, or `@layer` rule inside `@scope` holds rules only, and drops declarations written directly in it, as Chrome does.
+
+```css
+.list {
+  @scope (& > .card) to (.footer) {
+    padding: 8px;
+    p {
+      margin: 0;
+    }
+  }
+}
+```
+
+### Keep `!important` on shorthands and list values in stylesheets
+
+A stylesheet or `style` attribute declaration such as `background: red !important`, `border-bottom: 1px solid red !important`, or `transform: scale(2) !important` now applies and wins over normal declarations, as in a browser. It used to be dropped.
+
+### Custom properties that read a substituted keyword
+
+A custom property that reads one whose `var()` substituted `inherit`, `initial`, or `unset` now reads the value it resolved to, as in Chrome, where it copied the keyword.
+
+### Rotations past a full turn animate
+
+An angle now keeps the degrees you write, as in Chrome, so animations interpolate the number itself instead of the shorter way round. `rotate(360deg)` turns once and `rotate(720deg)` turns twice, where both used to stand still. The same applies to `rotate`, `skew()`, `hue-rotate()`, and `offset-rotate`.
+
+`animate-spin` now uses Tailwind's own keyframes, a single `to { transform: rotate(360deg) }`.
+
+`font-style: oblique 350deg` is now invalid, as in Chrome, instead of reading as `-10deg`.
+
+```css
+@keyframes turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Before: no rotation at any point */
+/* After: 90deg a quarter of the way through */
+```
+
+### Migration
+
+Write an oblique angle within ±90deg.
+
+```diff
+- font-style: oblique 350deg;
++ font-style: oblique -10deg;
+```
+
+### Stop a box at the top of a page from painting a line on the page before
+
+A box that starts a page no longer paints a thin line along the bottom of the page before it when the page area is not a whole number of pixels, such as an A4 page of 793.7 × 1122.52 px.
+
+The page area now rounds up to whole pixels, as in Chromium:
+
+- Content lays out on the rounded area, and PDF pages clip to it. The PDF page size does not change.
+- Page images take the rounded size, so they can be a pixel larger.
+- Viewport units take the rounded area too, so `vh` can be a pixel taller than in Chromium.
+
+### Animations sample their keyframes as browsers do
+
+- A property that a middle keyframe leaves out interpolates between the keyframes that declare it, instead of passing through the element's own value.
+- An `animation-timing-function` declared in a keyframe eases the interval that keyframe starts.
+- A repeating animation shows the start of its next iteration at a boundary, so `1s infinite` at 1000ms draws its first keyframe.
+- A zero-duration animation applies only with `animation-fill-mode: forwards` or `both`.
+- A keyframe declaration marked `!important` is invalid, so the animation leaves that property alone.
+- An animation with `animation-play-state: paused` stays at its start whatever `timeMs` is. To hold a fixed frame, pick it with a negative `animation-delay`.
+- `steps()` in a reversed animation lands on the step Chrome shows before it starts and after it ends.
+- `animation-iteration-count: 0` with `forwards` fill shows the first keyframe instead of the last.
+- Two keyframes at one offset with different timing functions each ease only the properties they declare.
+- `@keyframes` names match case-sensitively, so `animation-name: Fade` no longer runs `@keyframes fade`.
+
+```css
+@keyframes grow {
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    width: 100px;
+    opacity: 0;
+  }
+}
+/* At 25%, before: width eases toward the element's own width */
+/* At 25%, after: width is 25px */
+```
+
 ## takumi-core@0.39.0
 
 ### `grid-row` and `grid-column` resolve named lines

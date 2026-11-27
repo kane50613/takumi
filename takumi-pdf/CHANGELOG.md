@@ -1,3 +1,53 @@
+## takumi-pdf@0.21.4
+
+### Node trees carrying large images use about the memory of HTML
+
+Rendering a node tree that carries large `data:` URIs, such as one from `fromHtml` or JSX, no longer peaks several times above rendering the same HTML string.
+
+### Wrapped right-to-left text in fonts that kern the space glyph renders correctly
+
+When a right-to-left paragraph, such as Arabic text, wrapped onto a second line in a font that kerns the space glyph against letters, PDF output panicked with `byte index is not a char boundary`, and justified lines in images spread their space to the wrong places or not at all. Both now render as they do without kerning.
+
+### Gradients with transparency draw as CSS does in PDFs
+
+Gradients with transparent or translucent stops now draw in PDFs as they do in browsers:
+
+- A gradient whose alpha changes interpolates premultiplied, as CSS does, so a fade toward `transparent` no longer darkens through black.
+- A linear gradient whose stops are each opaque or transparent, with the alpha changing only at hard stops, such as the highlighter `linear-gradient(transparent 55%, yellow 55%)`, draws without a soft mask. Apple's PDF renderer can draw a soft mask wrong.
+
+### Render Hono JSX and `html` templates
+
+`render`, `ImageResponse`, and takumi-pdf's `render` draw Hono JSX and Hono's `html` template as Hono's `c.html()` would send them.
+
+- Context reaches its consumers, and `Suspense` and `ErrorBoundary` behave as they do in Hono.
+- A JSX element whose tag is `image`, `text`, or `container`, such as an SVG `<image>`, is no longer taken for a node tree.
+
+```tsx
+/** @jsxImportSource hono/jsx */
+import { Suspense } from "hono/jsx/streaming";
+import { ImageResponse } from "takumi-js/response";
+
+const Title = async () => <h1>{await getTitle()}</h1>;
+
+new ImageResponse(
+  <Suspense fallback={<h1>Loading</h1>}>
+    <Title />
+  </Suspense>,
+);
+// Before: draws the markup as text, one character per node
+// After: draws the title
+```
+
+### Stop a box at the top of a page from painting a line on the page before
+
+A box that starts a page no longer paints a thin line along the bottom of the page before it when the page area is not a whole number of pixels, such as an A4 page of 793.7 × 1122.52 px.
+
+The page area now rounds up to whole pixels, as in Chromium:
+
+- Content lays out on the rounded area, and PDF pages clip to it. The PDF page size does not change.
+- Page images take the rounded size, so they can be a pixel larger.
+- Viewport units take the rounded area too, so `vh` can be a pixel taller than in Chromium.
+
 ## takumi-pdf@0.21.3
 
 ### `render()` returns bytes you can pass to `Response`

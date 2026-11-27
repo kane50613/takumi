@@ -1,3 +1,9 @@
+## @takumi-rs/core@2.23.0
+
+### Node trees carrying large images use about the memory of HTML
+
+Rendering a node tree that carries large `data:` URIs, such as one from `fromHtml` or JSX, no longer peaks several times above rendering the same HTML string.
+
 ## @takumi-rs/core@2.21.0
 
 ### Reuse downloaded bytes across renders, and load Google Fonts for known text
