@@ -173,7 +173,7 @@ impl<'a, 'b> GlyphPaintCtx<'a, 'b> {
   /// A stroke of `width` joined the way the text's `stroke-linejoin` asks.
   fn stroke_of(&self, width: f32) -> Stroke {
     let mut stroke = Stroke::new(width);
-    stroke.join = self.style.parent.misc_inherited_data.stroke_linejoin.into();
+    stroke.join = self.style.parent.misc_inherited_data.stroke_linejoin;
     stroke
   }
 
