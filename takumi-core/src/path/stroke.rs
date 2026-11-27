@@ -1,6 +1,5 @@
 //! Skia's stroker, `SkStroke` and `SkPathStroker` in `src/core/SkStroke.cpp` with the caps and
-//! joins of `src/core/SkStrokerPriv.cpp`: the outline a stroke of a path fills. Approximate: a
-//! closed rect strokes as any other path, where Skia's `strokeRect` builds its outline directly.
+//! joins of `src/core/SkStrokerPriv.cpp`: the outline a stroke of a path fills.
 
 use crate::math::{NEARLY_ZERO, eq_f32, hash_f32, nearly_zero};
 use std::{
@@ -9,11 +8,13 @@ use std::{
 };
 
 use super::{
-  Path, PathBuilder, PathVerb, Point, StrokeDash, chop_cubic_at,
+  Path, PathBuilder, PathVerb, Point, RectContour, StrokeDash, chop_cubic_at,
   conic::{CONIC_TOLERANCE, Conic, ROOT_2_OVER_2, can_normalize, with_length},
   eval_cubic_pos_at, eval_quad_at, find_unit_quad_roots,
 };
+use crate::geometry::Rect;
 use crate::style::{Affine, LineCap, LineJoin};
+use std::f32::consts::SQRT_2;
 
 /// The stroke of a path: its width, caps, joins, and miter limit.
 #[derive(Clone, Debug)]
@@ -83,14 +84,157 @@ pub fn resolution_scale(transform: Affine) -> f32 {
   1.0
 }
 
+/// `SkStroke::strokeRect`: the outline of a closed rect, grown by half the width with its corners
+/// joined, and the rect shrunk by it turning the other way where the stroke leaves a hole.
+fn stroke_rect(contour: RectContour, stroke: &Stroke) -> Option<Path> {
+  let radius = stroke.width / 2.0;
+  let RectContour {
+    rect, clockwise, ..
+  } = contour;
+  let outer = Rect {
+    left: rect.left - radius,
+    top: rect.top - radius,
+    right: rect.right + radius,
+    bottom: rect.bottom + radius,
+  };
+  let mut builder = PathBuilder::new();
+
+  match stroke.line_join {
+    LineJoin::Miter if stroke.miter_limit >= SQRT_2 => add_rect(&mut builder, outer, clockwise),
+    LineJoin::Round => add_round_rect(&mut builder, outer, radius, clockwise),
+    LineJoin::Miter | LineJoin::Bevel => {
+      // `addBevel`: the outer rect with its corners cut at the rect's edges.
+      let mut corners = [
+        Point::new(rect.left, outer.top),
+        Point::new(rect.right, outer.top),
+        Point::new(outer.right, rect.top),
+        Point::new(outer.right, rect.bottom),
+        Point::new(rect.right, outer.bottom),
+        Point::new(rect.left, outer.bottom),
+        Point::new(outer.left, rect.bottom),
+        Point::new(outer.left, rect.top),
+      ];
+
+      if !clockwise {
+        corners.reverse();
+      }
+
+      add_polygon(&mut builder, &corners);
+    }
+  }
+
+  if stroke.width < rect.width().min(rect.height()) {
+    let inner = Rect {
+      left: rect.left + radius,
+      top: rect.top + radius,
+      right: rect.right - radius,
+      bottom: rect.bottom - radius,
+    };
+
+    add_rect(&mut builder, inner, !clockwise);
+  }
+
+  builder.finish()
+}
+
+/// `SkPathBuilder::addPolygon`, closed.
+fn add_polygon(builder: &mut PathBuilder, points: &[Point<f32>]) {
+  builder.move_to(points[0].x, points[0].y);
+
+  for point in &points[1..] {
+    builder.line_to(point.x, point.y);
+  }
+
+  builder.close();
+}
+
+/// `SkPathBuilder::addRect` from the top left corner.
+fn add_rect(builder: &mut PathBuilder, rect: Rect<f32>, clockwise: bool) {
+  let (top_right, bottom_left) = (
+    Point::new(rect.right, rect.top),
+    Point::new(rect.left, rect.bottom),
+  );
+  let (second, fourth) = if clockwise {
+    (top_right, bottom_left)
+  } else {
+    (bottom_left, top_right)
+  };
+
+  add_polygon(
+    builder,
+    &[
+      Point::new(rect.left, rect.top),
+      second,
+      Point::new(rect.right, rect.bottom),
+      fourth,
+    ],
+  );
+}
+
+/// `SkPathBuilder::addRRect` of `SkRRect::MakeRectXY(rect, radius, radius)` from its default start,
+/// the bottom of its left side clockwise and the top of it counterclockwise.
+fn add_round_rect(builder: &mut PathBuilder, rect: Rect<f32>, radius: f32, clockwise: bool) {
+  let Rect {
+    left,
+    top,
+    right,
+    bottom,
+  } = rect;
+  // `SkPath_RRectPointIterator`, clockwise from the left end of the top side.
+  let ends = [
+    Point::new(left + radius, top),
+    Point::new(right - radius, top),
+    Point::new(right, top + radius),
+    Point::new(right, bottom - radius),
+    Point::new(right - radius, bottom),
+    Point::new(left + radius, bottom),
+    Point::new(left, bottom - radius),
+    Point::new(left, top + radius),
+  ];
+  // `SkPath_RectPointIterator`, clockwise from the top left.
+  let corners = [
+    Point::new(left, top),
+    Point::new(right, top),
+    Point::new(right, bottom),
+    Point::new(left, bottom),
+  ];
+  let (start, corner_start, end_step, corner_step) = if clockwise {
+    (6, 3, 1, 1)
+  } else {
+    (7, 0, 7, 3)
+  };
+  let end = |index: usize| ends[(start + index * end_step) % 8];
+  let corner = |index: usize| corners[(corner_start + index * corner_step) % 4];
+
+  builder.move_to(end(0).x, end(0).y);
+
+  for side in 0..4 {
+    let (line_end, corner, conic_end) = (end(2 * side + 1), corner(side + 1), end(2 * side + 2));
+
+    builder.line_to(line_end.x, line_end.y);
+    builder.conic_to_within(
+      corner.x,
+      corner.y,
+      conic_end.x,
+      conic_end.y,
+      ROOT_2_OVER_2,
+      CONIC_TOLERANCE,
+    );
+  }
+
+  builder.close();
+}
+
 impl Path {
   /// `SkStroke::strokePath`: the outline `stroke` draws around the path, approximated to
   /// `resolution_scale`. None where the stroke has no width or draws nothing.
   pub fn stroke(&self, stroke: &Stroke, resolution_scale: f32) -> Option<Path> {
-    if let Some(dash) = &stroke.dash {
-      return self
-        .dash(dash, resolution_scale)?
-        .stroke_outline(stroke, resolution_scale);
+    if let Some(dashed) = stroke
+      .dash
+      .as_ref()
+      .and_then(|dash| self.dashes(dash, resolution_scale))
+    {
+      return dashed?.stroke_outline(stroke, resolution_scale);
     }
 
     self.stroke_outline(stroke, resolution_scale)
@@ -103,6 +247,10 @@ impl Path {
     // Also refuses a NaN width.
     if radius.partial_cmp(&0.0) != Some(Ordering::Greater) {
       return None;
+    }
+
+    if let Some(contour) = self.rect_contour().filter(|contour| contour.closed) {
+      return stroke_rect(contour, stroke);
     }
 
     let mut stroker = Stroker::new(self, radius, stroke, resolution_scale);

@@ -1,4 +1,4 @@
-use super::{Path, PathBuilder, Stroke, StrokeDash};
+use super::{Path, PathBuilder, RectContour, Stroke, StrokeDash};
 use crate::geometry::{Point, Rect};
 use crate::style::{LineCap, LineJoin};
 
@@ -91,6 +91,22 @@ fn a_dash_cuts_a_line_into_its_on_intervals() {
 }
 
 #[test]
+fn a_path_past_the_dash_limit_strokes_undashed() {
+  let line = line((0.0, 0.0), (3_000_000.0, 0.0));
+  let stroke = Stroke {
+    width: 2.0,
+    dash: StrokeDash::new(vec![1.0, 1.0], 0.0),
+    ..Stroke::default()
+  };
+
+  assert!(line.dash(stroke.dash.as_ref().unwrap(), 1.0).is_none());
+  assert_eq!(
+    line.stroke(&stroke, 1.0).unwrap().bounds(),
+    Rect::from_ltrb(0.0, -1.0, 3_000_000.0, 1.0).unwrap(),
+  );
+}
+
+#[test]
 fn an_invalid_dash_pattern_is_rejected() {
   assert!(StrokeDash::new(vec![4.0], 0.0).is_none());
   assert!(StrokeDash::new(vec![4.0, -1.0], 0.0).is_none());
@@ -163,4 +179,94 @@ fn appending_a_builder_replaces_a_pending_move_and_continues_its_contour() {
     path.points()[path.points().len() - 2],
     Point::new(20.0, 0.0)
   );
+}
+
+#[test]
+fn a_rect_traced_through_collinear_points_and_an_implicit_close_is_a_rect() {
+  let contour = |points: &[(f32, f32)], close: bool| {
+    let mut builder = PathBuilder::new();
+
+    builder.move_to(points[0].0, points[0].1);
+
+    for &(x, y) in &points[1..] {
+      builder.line_to(x, y);
+    }
+
+    if close {
+      builder.close();
+    }
+
+    builder.finish().unwrap().rect_contour()
+  };
+  let rect = Rect::from_ltrb(0.0, 0.0, 10.0, 8.0).unwrap();
+
+  assert_eq!(
+    contour(
+      &[(0.0, 0.0), (4.0, 0.0), (10.0, 0.0), (10.0, 8.0), (0.0, 8.0)],
+      true
+    ),
+    Some(RectContour {
+      rect,
+      closed: true,
+      clockwise: true,
+    })
+  );
+  assert_eq!(
+    contour(
+      &[(0.0, 0.0), (0.0, 8.0), (0.0, 8.0), (10.0, 8.0), (10.0, 0.0)],
+      false
+    ),
+    Some(RectContour {
+      rect,
+      closed: false,
+      clockwise: false,
+    })
+  );
+  assert_eq!(
+    contour(&[(0.0, 0.0), (10.0, 0.0), (10.0, 8.0), (1.0, 8.0)], true),
+    None
+  );
+  assert_eq!(
+    contour(&[(0.0, 0.0), (10.0, 0.0), (0.0, 0.0), (10.0, 0.0)], true),
+    None
+  );
+}
+
+#[test]
+fn a_closed_rect_strokes_to_its_outer_and_inner_rects() {
+  let rect = Path::from_rect(Rect::from_ltrb(10.0, 10.0, 30.0, 20.0).unwrap());
+  let outline = |width: f32, line_join: LineJoin| {
+    rect
+      .stroke(
+        &Stroke {
+          width,
+          line_join,
+          ..Stroke::default()
+        },
+        1.0,
+      )
+      .unwrap()
+  };
+  let mitered = outline(4.0, LineJoin::Miter);
+
+  assert_eq!(
+    mitered.points(),
+    [
+      (8.0, 8.0),
+      (32.0, 8.0),
+      (32.0, 22.0),
+      (8.0, 22.0),
+      (12.0, 12.0),
+      (12.0, 18.0),
+      (28.0, 18.0),
+      (28.0, 12.0),
+    ]
+    .map(|(x, y)| Point::new(x, y))
+  );
+  assert_eq!(outline(4.0, LineJoin::Bevel).points().len(), 12);
+  assert_eq!(
+    outline(4.0, LineJoin::Round).points()[0],
+    Point::new(8.0, 20.0)
+  );
+  assert_eq!(outline(12.0, LineJoin::Miter).points().len(), 4);
 }
