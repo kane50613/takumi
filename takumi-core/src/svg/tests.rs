@@ -1095,3 +1095,16 @@ fn a_root_and_attributes_with_declared_prefixes_resolve() {
 
   assert_eq!(fills(&ops), [red(), red()]);
 }
+
+/// Blink's `Element::ComputeInheritedLanguage` reads `xml:lang` before `lang`, in either order.
+#[test]
+fn xml_lang_takes_precedence_over_lang() {
+  let ops = ops(
+    r#"<style>rect { fill: blue } rect:lang(fr) { fill: red }</style>
+       <rect xml:lang="fr" lang="en" width="10" height="10"/>
+       <rect lang="en" xml:lang="fr" width="10" height="10"/>
+       <rect lang="fr" width="10" height="10"/>"#,
+  );
+
+  assert_eq!(fills(&ops), [red(), red(), red()]);
+}

@@ -11,7 +11,7 @@ use crate::{
   context::RenderContext,
   geometry::Size,
   layout::node::Node,
-  matching::{NodeMatchedDeclarations, match_stylesheets_view},
+  matching::{NodeMatchedDeclarations, match_stylesheets_in_containers},
   resources::{cache::Cache, font::Fonts},
   style::{Color, ComputedStyle, LonghandId, SizingContext},
   viewport::Viewport,
@@ -84,11 +84,13 @@ impl<'a> StyleResolver<'a> {
           .stylesheet(Arc::clone(&document.stylesheet))
           .build();
 
-        let matched = match_stylesheets_view(
+        let matched = match_stylesheets_in_containers(
           &document.root,
           &[&document.stylesheet],
           viewport,
           root_context.cache().tailwind(),
+          None,
+          None,
         );
 
         (root_context, matched, false)
@@ -111,11 +113,13 @@ impl<'a> StyleResolver<'a> {
           .time_ms(host.time_ms())
           .build();
 
-        let matched = match_stylesheets_view(
+        let matched = match_stylesheets_in_containers(
           &document.root,
           &[page, &document.stylesheet],
           host.sizing.viewport,
           root_context.cache().tailwind(),
+          None,
+          host.style.inherited_language(),
         );
 
         (root_context, matched, true)

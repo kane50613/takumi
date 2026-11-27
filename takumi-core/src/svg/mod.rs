@@ -344,6 +344,7 @@ impl TreeBuilder {
     let mut node = Node::container([]).with_tag_name(self.names.get(name));
     let mut attributes = BTreeMap::new();
     let mut href = None;
+    let (mut xml_lang, mut lang) = (None, None);
 
     for (namespace, name, value) in markup.attributes() {
       match (namespace, name) {
@@ -367,10 +368,11 @@ impl TreeBuilder {
         (Some(XML_NAMESPACE), "space") => {
           attributes.insert(self.names.get("xml:space"), value.into());
         }
-        (Some(XML_NAMESPACE), "lang") | (None, "lang") => {
-          if let Ok(lang) = Lang::parse(value) {
-            node = node.with_lang(lang);
-          }
+        (Some(XML_NAMESPACE), "lang") => {
+          xml_lang = Some(value);
+        }
+        (None, "lang") => {
+          lang = Some(value);
         }
         (None, name) => {
           attributes.insert(self.names.get(name), value.into());
@@ -381,6 +383,19 @@ impl TreeBuilder {
 
     if let Some(href) = href {
       attributes.insert(self.names.get("href"), href.into());
+    }
+
+    // Blink's `Element::ComputeInheritedLanguage` reads `xml:lang` before `lang`.
+    // Approximate: the element keeps only the one it reads, so `[lang]` sees an `xml:lang` too.
+    if let Some(text) = xml_lang.or(lang) {
+      let (lang, keeps_text) = Lang::from_attribute(text);
+
+      if let Some(lang) = lang {
+        node = node.with_lang(lang);
+      }
+      if keeps_text {
+        attributes.insert(self.names.get("lang"), text.into());
+      }
     }
 
     if let Some(preset) = kind.preset(parent.is_none()) {

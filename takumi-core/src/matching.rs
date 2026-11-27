@@ -41,6 +41,9 @@ struct StyleArena<'a> {
   form_controls: OnceCell<FormControls>,
   /// Each node's directionality, built on the first `:dir()` query, as Blink caches it on the node.
   directionality: OnceCell<Box<[Direction]>>,
+  /// The language past the root, Blink's `Document::ContentLanguage`, or the inherited language of
+  /// an inline `svg` element's host.
+  document_lang: Option<&'a str>,
 }
 
 /// Checkedness and selectedness the whole tree decides, by arena index.
@@ -163,11 +166,12 @@ impl<'a> StyleArena<'a> {
     directions.into()
   }
 
-  fn new(root: &'a Node) -> Self {
+  fn new(root: &'a Node, document_lang: Option<&'a str>) -> Self {
     let mut arena = StyleArena {
       nodes: Vec::new(),
       form_controls: OnceCell::new(),
       directionality: OnceCell::new(),
+      document_lang,
     };
     arena.add_node(root, None, None);
     arena
@@ -662,7 +666,8 @@ impl Element for ArenaElement<'_> {
       PseudoClass::Other(_) => return false,
     };
 
-    // The nearest `lang`, as HTML determines the language. With none, `:lang()` never matches.
+    // The nearest `lang`, then the document's, as Blink's `Element::ComputeInheritedLanguage` reads
+    // them. With none, `:lang()` never matches.
     let mut current = Some(*self);
     while let Some(element) = current {
       if let Some(lang) = element.style_node().node.attribute("lang") {
@@ -670,7 +675,10 @@ impl Element for ArenaElement<'_> {
       }
       current = element.parent_element();
     }
-    false
+    self
+      .tree
+      .document_lang
+      .is_some_and(|lang| lang_matches(lang, range))
   }
   fn match_pseudo_element(
     &self,
@@ -1034,25 +1042,28 @@ struct SheetPlacement<'a> {
   layer_offset: usize,
 }
 
-/// The declaration blocks of `stylesheets` that apply to each node under `root`, in tree order.
-/// Approximate: same-named layers of different sheets stay apart.
+/// [`match_stylesheets_in_containers`] in a document without a language or query containers.
+#[cfg(test)]
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheets: &[&'a StyleSheet],
   viewport: Viewport,
   tailwind: &TailwindCache,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
-  match_stylesheets_in_containers(root, stylesheets, viewport, tailwind, None)
+  match_stylesheets_in_containers(root, stylesheets, viewport, tailwind, None, None)
 }
 
-/// [`match_stylesheets_view`] with the query containers `@container` rules read, by their place in
+/// The declaration blocks of `stylesheets` that apply to each node under `root`, in tree order, in a
+/// document of `document_lang`, with the query containers `@container` rules read, by their place in
 /// `root`, without which no container query holds.
+/// Approximate: same-named layers of different sheets stay apart.
 pub(crate) fn match_stylesheets_in_containers<'a>(
   root: &Node,
   stylesheets: &[&'a StyleSheet],
   viewport: Viewport,
   tailwind: &TailwindCache,
   containers: Option<&QueryContainers>,
+  document_lang: Option<&str>,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
   let mut placements = Vec::with_capacity(stylesheets.len());
   let (mut rule_offset, mut layer_offset) = (0, 0);
@@ -1073,7 +1084,7 @@ pub(crate) fn match_stylesheets_in_containers<'a>(
     .last()
     .map_or(&no_breakpoints, |sheet| &sheet.breakpoints);
 
-  let arena = StyleArena::new(root);
+  let arena = StyleArena::new(root, document_lang);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
   let tw_order = tw_rule_order(&arena, tailwind);
