@@ -33,9 +33,9 @@ pub(crate) struct PixmapMut<'a> {
 }
 
 impl Pixmap {
-  /// A transparent `width` by `height` pixmap, none where it is empty or too large.
-  pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
-    let size = Size::checked_new(width, height)?;
+  /// A transparent `size` pixmap, none where it is empty or too large.
+  pub(crate) fn new(size: Size<u32>) -> Option<Self> {
+    let size = Size::checked_new(size.width, size.height)?;
 
     Some(Self {
       data: vec![0; byte_len(size, 4)?],
@@ -98,9 +98,9 @@ impl Pixmap {
 }
 
 impl<'a> PixmapRef<'a> {
-  /// A `width` by `height` pixmap over `data`, none where its length does not match.
-  pub(crate) fn from_bytes(data: &'a [u8], width: u32, height: u32) -> Option<Self> {
-    let size = Size::checked_new(width, height)?;
+  /// A `size` pixmap over `data`, none where its length does not match.
+  pub(crate) fn from_bytes(data: &'a [u8], size: Size<u32>) -> Option<Self> {
+    let size = Size::checked_new(size.width, size.height)?;
 
     (Some(data.len()) == byte_len(size, 4)).then_some(Self { data, size })
   }
@@ -127,7 +127,7 @@ impl<'a> PixmapRef<'a> {
   /// A copy of the pixels `rect` covers, clipped to the pixmap.
   pub(crate) fn clone_rect(self, rect: Rect<i32>) -> Option<Pixmap> {
     let rect = Rect::checked_from_size(0, 0, self.width(), self.height())?.intersection(&rect)?;
-    let mut copy = Pixmap::new(rect.width(), rect.height())?;
+    let mut copy = Pixmap::new(rect.size())?;
     let row = rect.width() as usize * 4;
 
     for (y, target) in copy.data.chunks_exact_mut(row).enumerate() {
@@ -141,9 +141,9 @@ impl<'a> PixmapRef<'a> {
 }
 
 impl<'a> PixmapMut<'a> {
-  /// A `width` by `height` pixmap over `data`, none where its length does not match.
-  pub(crate) fn from_bytes(data: &'a mut [u8], width: u32, height: u32) -> Option<Self> {
-    let size = Size::checked_new(width, height)?;
+  /// A `size` pixmap over `data`, none where its length does not match.
+  pub(crate) fn from_bytes(data: &'a mut [u8], size: Size<u32>) -> Option<Self> {
+    let size = Size::checked_new(size.width, size.height)?;
 
     (Some(data.len()) == byte_len(size, 4)).then_some(Self { data, size })
   }
@@ -176,7 +176,7 @@ impl<'a> TryFrom<&'a ImageBuffer> for PixmapRef<'a> {
   type Error = ();
 
   fn try_from(buffer: &'a ImageBuffer) -> Result<Self, Self::Error> {
-    PixmapRef::from_bytes(buffer.data(), buffer.width(), buffer.height()).ok_or(())
+    PixmapRef::from_bytes(buffer.data(), Size::new(buffer.width(), buffer.height())).ok_or(())
   }
 }
 
@@ -196,9 +196,9 @@ pub(crate) struct Mask {
 }
 
 impl Mask {
-  /// An uncovered `width` by `height` mask, none where it is empty or too large.
-  pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
-    let size = Size::checked_new(width, height)?;
+  /// An uncovered `size` mask, none where it is empty or too large.
+  pub(crate) fn new(size: Size<u32>) -> Option<Self> {
+    let size = Size::checked_new(size.width, size.height)?;
 
     Some(Self {
       data: vec![0; byte_len(size, 1)?],

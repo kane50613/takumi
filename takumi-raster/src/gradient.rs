@@ -2,7 +2,13 @@
 //! high-precision raster pipeline runs them. Approximate: a shaded pixel rounds to 8 bits before it
 //! blends, where Skia blends a gradient's pixels in floats.
 
-use takumi_core::{geometry::Point, paint::SpreadMethod, style::Affine};
+use crate::blend::unorm_to_byte;
+use takumi_core::{
+  geometry::Point,
+  math::{NEARLY_ZERO, nearly_zero},
+  paint::SpreadMethod,
+  style::Affine,
+};
 
 /// How many pixels [`Gradient::shade_row`] carries through each stage at once.
 const SHADE_CHUNK: usize = 64;
@@ -21,13 +27,13 @@ pub(crate) struct GradientStop {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum GradientShape {
   /// From `start` (t = 0) to `end` (t = 1), Skia's `SkLinearGradient`.
-  Linear { start: [f32; 2], end: [f32; 2] },
+  Linear { start: Point<f32>, end: Point<f32> },
   /// From the circle at `start` of `start_radius` to the one at `end` of `end_radius`, Skia's
   /// two-point conical gradient.
   Conical {
-    start: [f32; 2],
+    start: Point<f32>,
     start_radius: f32,
-    end: [f32; 2],
+    end: Point<f32>,
     end_radius: f32,
   },
 }
@@ -74,7 +80,7 @@ impl Focal {
     let mut swapped = false;
     let mut focal_x = r0 / (r0 - r1);
 
-    if nearly_zero(focal_x - 1.0) {
+    if nearly_zero(focal_x - 1.0, NEARLY_ZERO) {
       *matrix = Affine::scale(-1.0, 1.0) * Affine::translation(-1.0, 0.0) * *matrix;
       std::mem::swap(&mut r0, &mut r1);
       focal_x = 0.0;
@@ -108,7 +114,7 @@ impl Focal {
   }
 
   fn is_focal_on_circle(self) -> bool {
-    nearly_zero(1.0 - self.r1)
+    nearly_zero(1.0 - self.r1, NEARLY_ZERO)
   }
 
   fn is_well_behaved(self) -> bool {
@@ -116,7 +122,7 @@ impl Focal {
   }
 
   fn is_natively_focal(self) -> bool {
-    nearly_zero(self.focal_x)
+    nearly_zero(self.focal_x, NEARLY_ZERO)
   }
 
   /// The stages from `xy_to_2pt_conical_*` to `alter_2pt_conical_unswap`: `t` at `(x, y)`, or
@@ -175,13 +181,13 @@ impl Gradient {
     let degenerate = || Err(Some(degenerate_color(stops, spread)));
     let (local_to_unit, kind) = match shape {
       GradientShape::Linear { start, end } => {
-        let (dx, dy) = (end[0] - start[0], end[1] - start[1]);
+        let (dx, dy) = (end.x - start.x, end.y - start.y);
         let length = dx.hypot(dy);
 
         if !length.is_finite() {
           return Err(None);
         }
-        if nearly_zero_within(length, DEGENERATE_THRESHOLD) {
+        if nearly_zero(length, DEGENERATE_THRESHOLD) {
           return degenerate();
         }
 
@@ -197,12 +203,12 @@ impl Gradient {
           return Err(None);
         }
 
-        let concentric = nearly_zero_within(
-          (start[0] - end[0]).hypot(start[1] - end[1]),
+        let concentric = nearly_zero(
+          (start.x - end.x).hypot(start.y - end.y),
           DEGENERATE_THRESHOLD,
         );
 
-        if concentric && nearly_zero_within(start_radius - end_radius, DEGENERATE_THRESHOLD) {
+        if concentric && nearly_zero(start_radius - end_radius, DEGENERATE_THRESHOLD) {
           // The interpolation region shrinks to a ring at the radius: the first color inside it and
           // the last outside, under `Pad`.
           if spread != SpreadMethod::Pad || end_radius <= DEGENERATE_THRESHOLD {
@@ -227,7 +233,7 @@ impl Gradient {
 
           return Self::radial(start, end_radius, &ring, spread, device_to_local);
         }
-        if concentric && nearly_zero_within(start_radius, DEGENERATE_THRESHOLD) {
+        if concentric && nearly_zero(start_radius, DEGENERATE_THRESHOLD) {
           return Self::radial(start, end_radius, stops, spread, device_to_local);
         }
 
@@ -245,18 +251,18 @@ impl Gradient {
 
   /// `SkShaders::RadialGradient` around `center` of `radius`.
   fn radial(
-    center: [f32; 2],
+    center: Point<f32>,
     radius: f32,
     stops: &[GradientStop],
     spread: SpreadMethod,
     device_to_local: Affine,
   ) -> Result<Self, Option<[u8; 4]>> {
-    if nearly_zero_within(radius, DEGENERATE_THRESHOLD) {
+    if nearly_zero(radius, DEGENERATE_THRESHOLD) {
       return Err(Some(degenerate_color(stops, spread)));
     }
 
     let local_to_unit =
-      Affine::scale(1.0 / radius, 1.0 / radius) * Affine::translation(-center[0], -center[1]);
+      Affine::scale(1.0 / radius, 1.0 / radius) * Affine::translation(-center.x, -center.y);
 
     Ok(Self::from_parts(
       local_to_unit * device_to_local,
@@ -271,15 +277,17 @@ impl Gradient {
 
   /// `SkConicalGradient::Create` for centers that differ or radii that are not degenerate.
   fn conical(
-    start: [f32; 2],
+    start: Point<f32>,
     start_radius: f32,
-    end: [f32; 2],
+    end: Point<f32>,
     end_radius: f32,
   ) -> Result<(Affine, Kind), Option<[u8; 4]>> {
-    let distance = (start[0] - end[0]).hypot(start[1] - end[1]);
+    let distance = (start.x - end.x).hypot(start.y - end.y);
 
-    if nearly_zero(distance) {
-      if nearly_zero(start_radius.max(end_radius)) || nearly_equal(start_radius, end_radius) {
+    if nearly_zero(distance, NEARLY_ZERO) {
+      if nearly_zero(start_radius.max(end_radius), NEARLY_ZERO)
+        || nearly_equal(start_radius, end_radius)
+      {
         return Err(None);
       }
 
@@ -288,7 +296,7 @@ impl Gradient {
       let radius_span = end_radius - start_radius;
 
       return Ok((
-        Affine::scale(scale, scale) * Affine::translation(-end[0], -end[1]),
+        Affine::scale(scale, scale) * Affine::translation(-end.x, -end.y),
         Kind::Radial {
           scale: start_radius.max(end_radius) / radius_span,
           bias: -start_radius / radius_span,
@@ -298,7 +306,7 @@ impl Gradient {
 
     let mut matrix = map_to_unit_x(start, end)?;
 
-    if nearly_zero(end_radius - start_radius) {
+    if nearly_zero(end_radius - start_radius, NEARLY_ZERO) {
       let scaled = start_radius / distance;
 
       return Ok((
@@ -412,16 +420,16 @@ impl Gradient {
 }
 
 /// `SkLinearGradient`'s `pts_to_unit_matrix`: `start` to the origin and `end` to `(1, 0)`.
-fn points_to_unit(start: [f32; 2], end: [f32; 2]) -> Result<Affine, Option<[u8; 4]>> {
-  let length = Point::new(end[0] - start[0], end[1] - start[1]).length();
+fn points_to_unit(start: Point<f32>, end: Point<f32>) -> Result<Affine, Option<[u8; 4]>> {
+  let length = Point::new(end.x - start.x, end.y - start.y).length();
 
   if length == 0.0 || !length.is_finite() {
     return Err(None);
   }
 
   let inverse = 1.0 / length;
-  let (cos, sin) = ((end[0] - start[0]) * inverse, (end[1] - start[1]) * inverse);
-  let [x, y] = start;
+  let (cos, sin) = ((end.x - start.x) * inverse, (end.y - start.y) * inverse);
+  let Point { x, y } = start;
   let one_minus_cos = 1.0 - cos;
 
   // `setSinCos(-sin, cos, x, y)`, then `postTranslate(-x, -y)` and `postScale(inverse, inverse)`.
@@ -437,15 +445,15 @@ fn points_to_unit(start: [f32; 2], end: [f32; 2]) -> Result<Affine, Option<[u8; 
 
 /// `SkConicalGradient::MapToUnitX`: `start` to the origin and `end` to `(1, 0)`, through
 /// `SkMatrix::PolyToPoly`'s `Poly2Proc` maps of both pairs of points.
-fn map_to_unit_x(start: [f32; 2], end: [f32; 2]) -> Result<Affine, Option<[u8; 4]>> {
-  let (dx, dy) = (end[0] - start[0], end[1] - start[1]);
+fn map_to_unit_x(start: Point<f32>, end: Point<f32>) -> Result<Affine, Option<[u8; 4]>> {
+  let (dx, dy) = (end.x - start.x, end.y - start.y);
   let centers = Affine {
     a: dy,
     b: -dx,
     c: dx,
     d: dy,
-    x: start[0],
-    y: start[1],
+    x: start.x,
+    y: start.y,
   };
   let unit = Affine {
     a: 0.0,
@@ -572,28 +580,12 @@ fn average_color(stops: &[GradientStop]) -> [f32; 4] {
 /// `premul` then `store_8888`: an unpremultiplied float color as premultiplied bytes, each
 /// `to_unorm`'s `trunc(clamp(v, 0, 1) * 255 + 0.5)`.
 fn premultiplied([red, green, blue, alpha]: [f32; 4]) -> [u8; 4] {
-  let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-
-  [
-    byte(red * alpha),
-    byte(green * alpha),
-    byte(blue * alpha),
-    byte(alpha),
-  ]
-}
-
-/// `SkScalarNearlyZero` at its default tolerance.
-fn nearly_zero(value: f32) -> bool {
-  nearly_zero_within(value, 1.0 / (1 << 12) as f32)
-}
-
-fn nearly_zero_within(value: f32, tolerance: f32) -> bool {
-  value.abs() <= tolerance
+  [red * alpha, green * alpha, blue * alpha, alpha].map(unorm_to_byte)
 }
 
 /// `SkScalarNearlyEqual` at its default tolerance.
 fn nearly_equal(a: f32, b: f32) -> bool {
-  nearly_zero(a - b)
+  nearly_zero(a - b, NEARLY_ZERO)
 }
 
 #[cfg(test)]
@@ -618,8 +610,8 @@ mod tests {
   fn a_linear_gradient_interpolates_between_its_stops() {
     let gradient = Gradient::new(
       GradientShape::Linear {
-        start: [0.0, 0.0],
-        end: [10.0, 0.0],
+        start: Point::new(0.0, 0.0),
+        end: Point::new(10.0, 0.0),
       },
       &[stop(0.0, RED), stop(1.0, BLUE)],
       SpreadMethod::Pad,
@@ -637,8 +629,8 @@ mod tests {
   fn pad_paints_the_first_stop_before_a_hard_stop_at_the_start() {
     let gradient = Gradient::new(
       GradientShape::Linear {
-        start: [5.0, 0.0],
-        end: [10.0, 0.0],
+        start: Point::new(5.0, 0.0),
+        end: Point::new(10.0, 0.0),
       },
       &[stop(0.0, RED), stop(0.0, BLUE), stop(1.0, BLUE)],
       SpreadMethod::Pad,
@@ -654,8 +646,8 @@ mod tests {
   #[test]
   fn spreads_repeat_and_reflect_past_the_ends() {
     let shape = GradientShape::Linear {
-      start: [0.0, 0.0],
-      end: [4.0, 0.0],
+      start: Point::new(0.0, 0.0),
+      end: Point::new(4.0, 0.0),
     };
     let stops = [stop(0.0, RED), stop(1.0, BLUE)];
     let repeat = Gradient::new(shape, &stops, SpreadMethod::Repeat, Affine::IDENTITY).unwrap();
@@ -668,8 +660,8 @@ mod tests {
   #[test]
   fn a_degenerate_gradient_paints_one_color() {
     let shape = GradientShape::Linear {
-      start: [3.0, 3.0],
-      end: [3.0, 3.0],
+      start: Point::new(3.0, 3.0),
+      end: Point::new(3.0, 3.0),
     };
     let stops = [stop(0.0, RED), stop(1.0, BLUE)];
 
@@ -687,9 +679,9 @@ mod tests {
   fn a_radial_gradient_follows_the_distance_from_its_center() {
     let gradient = Gradient::new(
       GradientShape::Conical {
-        start: [5.0, 5.0],
+        start: Point::new(5.0, 5.0),
         start_radius: 0.0,
-        end: [5.0, 5.0],
+        end: Point::new(5.0, 5.0),
         end_radius: 5.0,
       },
       &[stop(0.0, RED), stop(1.0, BLUE)],
@@ -718,8 +710,8 @@ mod tests {
       return [0; 4];
     };
     let (px, py) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
-    let (cx, cy) = (f64::from(start[0]), f64::from(start[1]));
-    let (dx, dy) = (f64::from(end[0]) - cx, f64::from(end[1]) - cy);
+    let (cx, cy) = (f64::from(start.x), f64::from(start.y));
+    let (dx, dy) = (f64::from(end.x) - cx, f64::from(end.y) - cy);
     let (r0, dr) = (
       f64::from(start_radius),
       f64::from(end_radius - start_radius),
@@ -772,14 +764,7 @@ mod tests {
       std::array::from_fn(|lane| from.color[lane] + (to.color[lane] - from.color[lane]) * weight)
     };
     let alpha = color[3];
-    let unorm = |value: f32| (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-
-    [
-      unorm(color[0] * alpha),
-      unorm(color[1] * alpha),
-      unorm(color[2] * alpha),
-      unorm(alpha),
-    ]
+    [color[0] * alpha, color[1] * alpha, color[2] * alpha, alpha].map(unorm_to_byte)
   }
 
   #[test]
@@ -791,17 +776,17 @@ mod tests {
     ];
     let cases = [
       // Well behaved: the focal circle inside the end circle.
-      ([16.0, 16.0], 2.0, [20.0, 18.0], 14.0),
+      (Point::new(16.0, 16.0), 2.0, Point::new(20.0, 18.0), 14.0),
       // Focal point on the end circle.
-      ([4.0, 16.0], 0.0, [16.0, 16.0], 12.0),
+      (Point::new(4.0, 16.0), 0.0, Point::new(16.0, 16.0), 12.0),
       // Start circle outside the end circle, where only a cone is defined.
-      ([2.0, 16.0], 3.0, [26.0, 16.0], 6.0),
+      (Point::new(2.0, 16.0), 3.0, Point::new(26.0, 16.0), 6.0),
       // Swapped radii.
-      ([26.0, 16.0], 6.0, [2.0, 16.0], 3.0),
+      (Point::new(26.0, 16.0), 6.0, Point::new(2.0, 16.0), 3.0),
       // Equal radii: the strip.
-      ([4.0, 10.0], 5.0, [24.0, 20.0], 5.0),
+      (Point::new(4.0, 10.0), 5.0, Point::new(24.0, 20.0), 5.0),
       // Concentric with an inner radius.
-      ([16.0, 16.0], 4.0, [16.0, 16.0], 12.0),
+      (Point::new(16.0, 16.0), 4.0, Point::new(16.0, 16.0), 12.0),
     ];
 
     for (start, start_radius, end, end_radius) in cases {

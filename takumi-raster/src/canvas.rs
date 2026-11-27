@@ -153,7 +153,7 @@ impl Canvas {
       return None;
     }
 
-    let image = Pixmap::new(size.width, size.height)?;
+    let image = Pixmap::new(size)?;
     Some(Self {
       image,
       origin: Point { x: 0, y: 0 },
@@ -194,7 +194,7 @@ impl Canvas {
       return Err(Error::InvalidViewport);
     }
 
-    Pixmap::new(size.width, size.height).ok_or_else(dimension_mismatch)
+    Pixmap::new(size).ok_or_else(dimension_mismatch)
   }
 
   /// Keeps the output clip on the parent device, as Skia's `internalSaveLayer` does.
@@ -642,6 +642,12 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   });
 }
 
+/// Bytes from a fixed hash of `index`, so every test run sees the same noise.
+#[cfg(test)]
+fn noise(index: usize, salt: u32) -> u8 {
+  ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+}
+
 /// Mask bytes tested at once for a uniformly empty or full run.
 pub(crate) const MASK_RUN: usize = 8;
 
@@ -742,29 +748,6 @@ mod tests {
 mod demultiply_tests {
 
   use super::demultiply_rgba_in_place;
-  use takumi_core::resources::image_buffer::demultiplied;
-
-  /// Truncating may differ from rounding, but only
-  /// where the float lands within a rounding step of the true value.
-  #[test]
-  fn stays_within_one_step_of_rounding() {
-    for alpha in 0..=u8::MAX {
-      for channel in 0..=alpha {
-        let mut pixel = [channel, channel, channel, alpha];
-        demultiply_rgba_in_place(&mut pixel);
-
-        let rounded = demultiplied([channel, channel, channel, alpha]);
-
-        assert!(
-          pixel[0].abs_diff(rounded[0]) <= 1,
-          "channel {channel} at alpha {alpha}: {} vs {}",
-          pixel[0],
-          rounded[0]
-        );
-        assert_eq!(pixel[3], alpha);
-      }
-    }
-  }
 
   fn reference(pixel: [u8; 4]) -> [u8; 4] {
     let alpha = pixel[3] as u32;

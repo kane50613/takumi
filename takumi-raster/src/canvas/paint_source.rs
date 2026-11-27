@@ -238,17 +238,6 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
   }
 }
 
-#[inline(always)]
-pub(super) fn sample_paint_source(
-  source: ResolvedSource<'_>,
-  algorithm: ImageScalingAlgorithm,
-  x: f32,
-  y: f32,
-  footprint: SamplingFootprint,
-) -> Option<[u8; 4]> {
-  interpolate_with_footprint(source, algorithm, x, y, footprint)
-}
-
 /// One axis of a bilinear lookup, casts included, so every sampler matches byte for byte.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BilinearAxis {
@@ -582,7 +571,7 @@ fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8
     return Some(p00);
   }
 
-  let [r, g, b, a] = mix_taps(
+  Some(mix_taps(
     [
       p00,
       tap(column.ceil, row.floor),
@@ -590,9 +579,7 @@ fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8
       tap(column.ceil, row.ceil),
     ],
     column.weights(row),
-  );
-
-  Some([r, g, b, a])
+  ))
 }
 
 fn interpolate_box(
@@ -708,10 +695,11 @@ fn box_average(
 #[cfg(test)]
 mod tests {
   use crate::pixmap::Pixmap;
+  use takumi_core::geometry::Size;
 
   use super::{
     BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
-    interpolate_bilinear, interpolate_with_footprint, sample_paint_source,
+    interpolate_bilinear, interpolate_with_footprint,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
 
@@ -749,7 +737,7 @@ mod tests {
 
   /// A 97x61 pixmap of legal premultiplied noise.
   fn noisy_pixmap() -> Pixmap {
-    let mut pixmap = Pixmap::new(97, 61).unwrap();
+    let mut pixmap = Pixmap::new(Size::new(97, 61)).unwrap();
 
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
@@ -790,7 +778,7 @@ mod tests {
 
         rows.fill(y, &mut row);
         for &pixel in &row {
-          let expected = sample_paint_source(
+          let expected = interpolate_with_footprint(
             source,
             ImageScalingAlgorithm::Auto,
             sample_x,
@@ -824,7 +812,7 @@ mod tests {
 
         rows.fill(y as f32 + 0.5, &mut row);
         for &pixel in &row {
-          let expected = sample_paint_source(
+          let expected = interpolate_with_footprint(
             source,
             ImageScalingAlgorithm::Auto,
             sample_x,
@@ -844,7 +832,7 @@ mod tests {
   /// must read a texel exactly, not blend two of them.
   #[test]
   fn sampling_a_pixel_centre_reads_that_pixel() -> Result<(), &'static str> {
-    let mut pixmap = Pixmap::new(2, 1).ok_or("failed to create pixmap")?;
+    let mut pixmap = Pixmap::new(Size::new(2, 1)).ok_or("failed to create pixmap")?;
     let pixels = pixmap.pixels_mut();
     pixels[0] = [0, 0, 0, 255];
     pixels[1] = [255, 255, 255, 255];
@@ -866,7 +854,7 @@ mod tests {
 
   #[test]
   fn minified_sampling_averages_high_frequency_content() -> Result<(), &'static str> {
-    let mut pixmap = Pixmap::new(8, 1).ok_or("failed to create pixmap")?;
+    let mut pixmap = Pixmap::new(Size::new(8, 1)).ok_or("failed to create pixmap")?;
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let value = if index % 2 == 0 { 0 } else { 255 };
       *pixel = [value, value, value, 255];

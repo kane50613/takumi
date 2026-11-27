@@ -4,6 +4,7 @@
 use std::sync::OnceLock;
 
 use super::{BYTE_TO_FLOAT, ColorSpace};
+use crate::blend::unorm_to_byte;
 use takumi_core::{
   filter::ColorMatrixChain,
   style::{Color, TransferTable},
@@ -127,7 +128,7 @@ impl Lanes {
 
   fn store(&self, pixels: &mut [[u8; 4]]) {
     for (index, pixel) in pixels.iter_mut().enumerate() {
-      *pixel = std::array::from_fn(|channel| to_byte(self.channels[channel][index]));
+      *pixel = std::array::from_fn(|channel| unorm_to_byte(self.channels[channel][index]));
     }
   }
 }
@@ -214,7 +215,7 @@ impl ColorFilter {
         {
           if let Some(table) = table {
             for value in channel.iter_mut() {
-              *value = f32::from(table[usize::from(to_byte(*value))]) * BYTE_TO_FLOAT;
+              *value = f32::from(table[usize::from(unorm_to_byte(*value))]) * BYTE_TO_FLOAT;
             }
           }
         }
@@ -243,7 +244,12 @@ pub(super) fn convert_color(space: ColorSpace, Color([red, green, blue, alpha]):
       let [red, green, blue, _] = SRGB_TO_LINEAR
         .on_colors([red, green, blue, alpha].map(|channel| f32::from(channel) * BYTE_TO_FLOAT));
 
-      Color([to_byte(red), to_byte(green), to_byte(blue), alpha])
+      Color([
+        unorm_to_byte(red),
+        unorm_to_byte(green),
+        unorm_to_byte(blue),
+        alpha,
+      ])
     }
   }
 }
@@ -332,11 +338,6 @@ fn approx_pow2(x: f32) -> f32 {
   approx = approx.max(0.0).min(0x7f80_0000_u32 as f32);
 
   f32::from_bits(approx.round_ties_even() as u32)
-}
-
-/// A channel as `store_8888` writes it: clamped to `0..=1` and rounded.
-fn to_byte(channel: f32) -> u8 {
-  (channel.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
 #[cfg(test)]

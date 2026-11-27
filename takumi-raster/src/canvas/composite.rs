@@ -7,7 +7,7 @@ use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
   blit::{OverlayBounds, apply_mask_row, blend_row_masked, composite_run_over},
   mask::MaskRow,
-  paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
+  paint_source::{ResolvedSource, ScaledRows, interpolate_with_footprint},
   whole_pixel_translation,
 };
 use crate::{
@@ -451,7 +451,7 @@ impl PixelSampler<'_> {
         let sampled = if mask_alpha == 0 {
           None
         } else {
-          sample_paint_source(self.resolved, self.algorithm, sample_x, sample_y, footprint)
+          interpolate_with_footprint(self.resolved, self.algorithm, sample_x, sample_y, footprint)
         };
 
         sample_x += self.transform.a;
@@ -549,7 +549,7 @@ mod scaled_rows_tests {
   use crate::style::ImageScalingAlgorithm;
 
   fn source() -> Pixmap {
-    let mut source = Pixmap::new(7, 5).unwrap();
+    let mut source = Pixmap::new(Size::new(7, 5)).unwrap();
 
     for (i, pixel) in source.pixels_mut().iter_mut().enumerate() {
       let alpha = [255u8, 200, 90, 0, 255][i % 5];
@@ -567,7 +567,7 @@ mod scaled_rows_tests {
 
   fn render(scaled: bool, transform: Affine, mode: BlendMode) -> Vec<u8> {
     let source = source();
-    let mut canvas = Pixmap::new(40, 30).unwrap();
+    let mut canvas = Pixmap::new(Size::new(40, 30)).unwrap();
 
     for (i, pixel) in canvas.pixels_mut().iter_mut().enumerate() {
       *pixel = [0, (i % 100) as u8, 20, 120];
@@ -672,12 +672,7 @@ mod tests {
   use takumi_core::geometry::{Point, Size};
 
   use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
-  use crate::{Placement, style::BlendMode};
-
-  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
-  fn noise(index: usize, salt: u32) -> u8 {
-    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
-  }
+  use crate::{Placement, canvas::noise, style::BlendMode};
 
   /// Coverage that runs empty or full, as glyph and clip masks do.
   fn coverage(index: usize, salt: u32) -> u8 {

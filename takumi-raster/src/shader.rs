@@ -3,7 +3,7 @@
 
 use takumi_core::{paint::SpreadMethod, style::Affine};
 
-use crate::blend::scale_premultiplied_pixel;
+use crate::blend::{scale_premultiplied_pixel, unorm_to_byte};
 #[cfg(feature = "svg")]
 use crate::gradient::Gradient;
 use crate::pixmap::PixmapRef;
@@ -71,7 +71,7 @@ impl<'a> ImageShader<'a> {
       device_to_image: transform.invert()?,
       spread,
       filter,
-      alpha: (opacity.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
+      alpha: unorm_to_byte(opacity),
     })
   }
 
@@ -161,12 +161,13 @@ impl<'a> ImageShader<'a> {
 #[cfg(all(test, feature = "svg"))]
 mod tests {
   use super::*;
+  use takumi_core::geometry::Size;
 
   #[test]
   fn nearest_sampling_on_a_texel_edge_takes_the_texel_before_it() {
     let (red, blue) = ([255, 0, 0, 255], [0, 0, 255, 255]);
     let pixels = [red, blue, red, blue];
-    let Some(image) = PixmapRef::from_bytes(pixels.as_flattened(), 4, 1) else {
+    let Some(image) = PixmapRef::from_bytes(pixels.as_flattened(), Size::new(4, 1)) else {
       unreachable!("four pixels make a 4 by 1 image");
     };
     let Some(shader) = ImageShader::new(

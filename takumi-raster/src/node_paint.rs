@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::pixmap::Pixmap;
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
@@ -30,9 +30,9 @@ use super::{
 };
 
 use crate::{
-  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
-  Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
-  cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Error, MaskSamplingOptions, PlacedMask, Placement, Result, Style,
+  alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes, cached_glyph_mask,
+  checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   placement_overlap, render_mask, render_rect_mask,
   style::{Affine, BlendMode},
@@ -423,7 +423,7 @@ impl<'c> CanvasDevice<'c> {
   fn draw_shadow_of(
     &mut self,
     shadow: SizedShadow,
-    commands: &[Command],
+    commands: &[PathCommand],
     style: Style,
     transform: Affine,
   ) {

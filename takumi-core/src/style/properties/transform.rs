@@ -4,7 +4,10 @@ use std::{
   ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
-use crate::math::{NEARLY_ZERO, hash_f32};
+use crate::{
+  geometry::Rect,
+  math::{NEARLY_ZERO, hash_f32},
+};
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
@@ -307,6 +310,23 @@ impl Affine {
       self.a * x + self.c * y + self.x,
       self.b * x + self.d * y + self.y,
     )
+  }
+
+  /// `rect` under the transform where it stays a rect, as `SkMatrix::rectStaysRect` and `mapRect` do.
+  pub fn map_rect(self, rect: Rect<f32>) -> Option<Rect<f32>> {
+    if !(self.b == 0.0 && self.c == 0.0 || self.a == 0.0 && self.d == 0.0) {
+      return None;
+    }
+
+    let (x0, y0) = self.transform_point(rect.left, rect.top);
+    let (x1, y1) = self.transform_point(rect.right, rect.bottom);
+
+    Some(Rect {
+      left: x0.min(x1),
+      right: x0.max(x1),
+      top: y0.min(y1),
+      bottom: y0.max(y1),
+    })
   }
 
   /// Skia's `SkMatrix::mapVector`: `(x, y)` under the linear part alone, translation left out.

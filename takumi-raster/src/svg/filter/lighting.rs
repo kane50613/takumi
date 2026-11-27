@@ -1,4 +1,5 @@
 use super::{BYTE_TO_FLOAT, DiffuseLighting, LightSource, SpecularLighting};
+use crate::blend::unorm_to_byte;
 use takumi_core::{geometry::Rect, style::Color};
 
 /// How far past its cutoff a spotlight fades in, Skia's `kConeAAThreshold`.
@@ -212,7 +213,7 @@ impl Lighting {
               .color
               .map(|channel| (coefficient * channel).clamp(0.0, 1.0));
 
-            *pixel = to_bytes([red, green, blue, 1.0]);
+            *pixel = [red, green, blue, 1.0].map(unorm_to_byte);
           }
         }
         Material::Specular { shininess } => {
@@ -223,7 +224,7 @@ impl Lighting {
               .color
               .map(|channel| (coefficient * channel).clamp(0.0, 1.0));
 
-            *pixel = to_bytes([red, green, blue, red.max(green).max(blue)]);
+            *pixel = [red, green, blue, red.max(green).max(blue)].map(unorm_to_byte);
           }
         }
       }
@@ -259,10 +260,6 @@ fn alpha_row(
       .and_then(|x| line.get(x))
       .map_or(0.0, |pixel| f32::from(pixel[3]) * BYTE_TO_FLOAT);
   }
-}
-
-fn to_bytes(color: [f32; 4]) -> [u8; 4] {
-  color.map(|channel| (channel * 255.0 + 0.5) as u8)
 }
 
 fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {

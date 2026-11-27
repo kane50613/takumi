@@ -394,7 +394,7 @@ impl Backdrop {
       return Ok(None);
     };
     let Some(mut backdrop_pixmap) =
-      PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
+      PixmapMut::from_bytes(&mut padded.raw, Size::new(padded.width, padded.height))
     else {
       return Ok(None);
     };
@@ -663,7 +663,7 @@ mod tests {
       .build();
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), Size::new(width, height)).unwrap();
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
@@ -705,7 +705,7 @@ mod tests {
     let mut image = Bitmap::new(16, 16);
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), Size::new(width, height)).unwrap();
 
     let shadow = SizedShadow {
       offset_x: 1.0,

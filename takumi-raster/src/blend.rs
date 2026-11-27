@@ -1,5 +1,11 @@
 use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
 
+/// A unit-range value as a byte, rounded and saturating, with NaN as 0, as Skia's `store_8888` does.
+#[inline(always)]
+pub(crate) fn unorm_to_byte(value: f32) -> u8 {
+  (value * 255.0 + 0.5) as u8
+}
+
 #[inline(always)]
 fn composited_alpha(bottom_alpha: u8, top_alpha: u8) -> u32 {
   u32::from(top_alpha) + u32::from(bottom_alpha) - u32::from(mul_div_255(bottom_alpha, top_alpha))
@@ -507,17 +513,14 @@ fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {
 }
 
 #[inline(always)]
-pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: [u8; 4]) {
+pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8; 4], src: [u8; 4]) {
   let src_a = src[3];
   if src_a == 0 {
     return;
   }
 
   if src_a == u8::MAX {
-    dst[0] = src[0];
-    dst[1] = src[1];
-    dst[2] = src[2];
-    dst[3] = src_a;
+    *dst = src;
     return;
   }
 
@@ -528,8 +531,8 @@ pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: [u8; 4]) {
   dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
 }
 
-pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[[u8; 4]]) {
-  for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
+pub(crate) fn composite_premultiplied_over_span(dst: &mut [[u8; 4]], pixels: &[[u8; 4]]) {
+  for (dst_pixel, src_pixel) in dst.iter_mut().zip(pixels) {
     let src_a = src_pixel[3];
     let inv_src_a = u8::MAX - src_a;
     dst_pixel[0] = src_pixel[0].saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
@@ -539,24 +542,20 @@ pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[[u8; 4
   }
 }
 
-pub(crate) fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
-  bytemuck::cast_slice_mut::<u8, [u8; 4]>(dst).fill(pixel);
-}
-
-pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
-  for dst_pixel in dst.as_chunks_mut::<4>().0 {
+pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [[u8; 4]], pixel: [u8; 4]) {
+  for dst_pixel in dst {
     blend_premultiplied_pixel_normal(dst_pixel, pixel);
   }
 }
 
-pub(crate) fn composite_repeated_premultiplied_pixel_normal(dst: &mut [u8], pixel: [u8; 4]) {
+pub(crate) fn composite_repeated_premultiplied_pixel_normal(dst: &mut [[u8; 4]], pixel: [u8; 4]) {
   let alpha = pixel[3];
   if alpha == 0 {
     return;
   }
 
   if alpha == u8::MAX {
-    fill_repeated_premultiplied_pixel(dst, pixel);
+    dst.fill(pixel);
   } else {
     blend_repeated_premultiplied_pixel(dst, pixel);
   }

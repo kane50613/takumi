@@ -46,7 +46,7 @@ trait GradientRows {
   fn fill_tile_row(&self, x_start: u32, y: u32, out: &mut [[u8; 4]]);
   fn overlay_tile(
     &self,
-    data: &mut [u8],
+    pixels: &mut [[u8; 4]],
     bottom_width: u32,
     bottom_height: u32,
     offset: Point<f32>,
@@ -64,12 +64,12 @@ impl<T: GradientOverlayTile> GradientRows for T {
 
   fn overlay_tile(
     &self,
-    data: &mut [u8],
+    pixels: &mut [[u8; 4]],
     bottom_width: u32,
     bottom_height: u32,
     offset: Point<f32>,
   ) {
-    self.overlay_unconstrained(data, bottom_width, bottom_height, offset);
+    self.overlay_unconstrained(pixels, bottom_width, bottom_height, offset);
   }
 }
 
@@ -84,8 +84,7 @@ fn overlay_gradient_tile(
   let bottom_height = pixmap.height();
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
-    let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    gradient.overlay_tile(bottom_data, bottom_width, bottom_height, offset);
+    gradient.overlay_tile(pixmap.pixels_mut(), bottom_width, bottom_height, offset);
     return;
   }
 
@@ -97,7 +96,7 @@ fn overlay_gradient_tile(
     return;
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   let x_start = (bounds.x_min - bounds.offset_x) as u32;
   blit_rows(
     pixels,
@@ -110,7 +109,7 @@ fn overlay_gradient_tile(
 }
 
 fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
-  data: &mut [u8],
+  pixels: &mut [[u8; 4]],
   bottom_width: u32,
   bottom_height: u32,
   gradient: &LinearGradientTile,
@@ -125,15 +124,15 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   };
 
   let Some(fast_path) = gradient.fast_path() else {
-    return overlay_linear_gradient_row_lanes(data, bottom_width, bounds, gradient);
+    return overlay_linear_gradient_row_lanes(pixels, bottom_width, bounds, gradient);
   };
 
-  let row_stride = bottom_width as usize * 4;
+  let row_stride = bottom_width as usize;
   let row_count = (bounds.y_max - bounds.y_min) as usize;
   let segment_pixel_count = (bounds.x_max - bounds.x_min) as usize;
-  let dest_byte_start = bounds.x_min as usize * 4;
-  let dest_byte_end = dest_byte_start + segment_pixel_count * 4;
-  let rows = &mut data[bounds.y_min as usize * row_stride..bounds.y_max as usize * row_stride];
+  let dest_start = bounds.x_min as usize;
+  let dest_end = dest_start + segment_pixel_count;
+  let rows = &mut pixels[bounds.y_min as usize * row_stride..bounds.y_max as usize * row_stride];
 
   match fast_path.kind {
     LinearGradientFastPathKind::Horizontal => {
@@ -151,13 +150,12 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
 
       if fast_path.fully_opaque {
         for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
-          let scanline: &[u8] = bytemuck::cast_slice(variant(src_y_start + row_offset));
-          row[dest_byte_start..dest_byte_end].copy_from_slice(scanline);
+          row[dest_start..dest_end].copy_from_slice(variant(src_y_start + row_offset));
         }
       } else {
         for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
           composite_premultiplied_over_span(
-            &mut row[dest_byte_start..dest_byte_end],
+            &mut row[dest_start..dest_end],
             variant(src_y_start + row_offset),
           );
         }
@@ -171,8 +169,8 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
         for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
           let src_y = src_y_start + row_offset;
           let pattern = &fast_path.axis_samples[src_y * 8..src_y * 8 + 8];
-          let row_segment = &mut row[dest_byte_start..dest_byte_end];
-          for (i, dst) in row_segment.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+          let row_segment = &mut row[dest_start..dest_end];
+          for (i, dst) in row_segment.iter_mut().enumerate() {
             let pixel = pattern[(src_x_start + i) & 7];
             if fast_path.fully_opaque {
               *dst = pixel;
@@ -185,10 +183,10 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
         let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
 
         for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
-          let row_segment = &mut row[dest_byte_start..dest_byte_end];
+          let row_segment = &mut row[dest_start..dest_end];
           let pixel = src_pixels[row_offset];
           if fast_path.fully_opaque {
-            fill_repeated_premultiplied_pixel(row_segment, pixel);
+            row_segment.fill(pixel);
           } else {
             blend_repeated_premultiplied_pixel(row_segment, pixel);
           }
@@ -204,7 +202,7 @@ const ROW_LANES: usize = 4;
 
 /// Four rows at a time, each keeping the generic path's per-pixel projection recurrence.
 fn overlay_linear_gradient_row_lanes(
-  data: &mut [u8],
+  pixels: &mut [[u8; 4]],
   bottom_width: u32,
   bounds: OverlayBounds,
   gradient: &LinearGradientTile,
@@ -214,10 +212,12 @@ fn overlay_linear_gradient_row_lanes(
   }
 
   if gradient.fully_opaque {
-    linear_gradient_row_lanes(data, bottom_width, bounds, gradient, |dst, src| *dst = src);
+    linear_gradient_row_lanes(pixels, bottom_width, bounds, gradient, |dst, src| {
+      *dst = src
+    });
   } else {
     linear_gradient_row_lanes(
-      data,
+      pixels,
       bottom_width,
       bounds,
       gradient,
@@ -231,7 +231,7 @@ fn overlay_linear_gradient_row_lanes(
 /// Hands `write` each pixel of `bounds` with the gradient's colour there, four rows at a time.
 #[inline(always)]
 fn linear_gradient_row_lanes(
-  data: &mut [u8],
+  pixels: &mut [[u8; 4]],
   bottom_width: u32,
   bounds: OverlayBounds,
   gradient: &LinearGradientTile,
@@ -250,7 +250,6 @@ fn linear_gradient_row_lanes(
     src_x_start * gradient.dir_x + src_y * gradient.dir_y + gradient.projection_bias
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   let row_pixels = bottom_width as usize;
   let (x_min, x_max) = (bounds.x_min as usize, bounds.x_max as usize);
   let mut dest_y = bounds.y_min;
@@ -330,7 +329,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
   offset: Point<f32>,
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
-  try_fast_path: impl FnOnce(&mut [u8], u32, u32, &T, Point<f32>) -> bool,
+  try_fast_path: impl FnOnce(&mut [[u8; 4]], u32, u32, &T, Point<f32>) -> bool,
 ) where
   T: GradientOverlayTile,
 {
@@ -340,7 +339,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
   if mode == BlendMode::Normal
     && combined_mask.is_none()
     && try_fast_path(
-      bytemuck::cast_slice_mut(pixmap.pixels_mut()),
+      pixmap.pixels_mut(),
       bottom_width,
       bottom_height,
       gradient,
@@ -354,7 +353,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
 }
 
 fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
-  data: &mut [u8],
+  pixels: &mut [[u8; 4]],
   bottom_width: u32,
   bottom_height: u32,
   gradient: &RadialGradientTile,
@@ -381,13 +380,13 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
     return true;
   }
 
-  let row_stride = bottom_width as usize * 4;
+  let row_stride = bottom_width as usize;
   let dither = gradient.dither_active();
   // The exterior reuses the outermost LUT entry, so a dithered fill has to
   // quantize it per pixel like the generic path or the ellipse edge seams.
-  let fill_outer = |span: &mut [u8], span_x_start: u32, src_y: u32| {
+  let fill_outer = |span: &mut [[u8; 4]], span_x_start: u32, src_y: u32| {
     if dither {
-      for (i, pixel) in span.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+      for (i, pixel) in span.iter_mut().enumerate() {
         let src = gradient.sample_dithered_at(lut_len - 1, span_x_start + i as u32, src_y);
         blend_premultiplied_pixel_normal(pixel, src);
       }
@@ -406,22 +405,20 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
       return false;
     };
 
-    let row_start = dest_y as usize * row_stride + bounds.x_min as usize * 4;
-    let row_end = row_start + (bounds.x_max - bounds.x_min) as usize * 4;
-    let row = &mut data[row_start..row_end];
+    let row_start = dest_y as usize * row_stride + bounds.x_min as usize;
+    let row_end = row_start + (bounds.x_max - bounds.x_min) as usize;
+    let row = &mut pixels[row_start..row_end];
 
     let left_pixels = (active_x_start - src_x_start) as usize;
     if left_pixels > 0 {
-      fill_outer(&mut row[..left_pixels * 4], src_x_start, src_y);
+      fill_outer(&mut row[..left_pixels], src_x_start, src_y);
     }
 
     let center_pixels = (active_x_end - active_x_start) as usize;
     if center_pixels > 0 {
-      let center_byte_start = left_pixels * 4;
-      let center_byte_end = center_byte_start + center_pixels * 4;
-      let center_row = &mut row[center_byte_start..center_byte_end];
+      let center_row = &mut row[left_pixels..left_pixels + center_pixels];
       let mut row_state = gradient.begin_row(active_x_start, src_y, lut_len);
-      for (i, pixel) in center_row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+      for (i, pixel) in center_row.iter_mut().enumerate() {
         let lut_idx = gradient.next_lut_index(&mut row_state);
         let src = if dither {
           gradient.sample_dithered_at(lut_idx, active_x_start + i as u32, src_y)
@@ -434,8 +431,8 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
 
     let right_pixels = (src_x_end - active_x_end) as usize;
     if right_pixels > 0 {
-      let right_byte_start = row.len() - right_pixels * 4;
-      fill_outer(&mut row[right_byte_start..], active_x_end, src_y);
+      let right_start = row.len() - right_pixels;
+      fill_outer(&mut row[right_start..], active_x_end, src_y);
     }
   }
 
@@ -635,8 +632,12 @@ mod tests {
           }
 
           generic.with_pixmap(|pixmap| {
-            let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            tile.overlay_unconstrained(data, canvas_size.width, canvas_size.height, offset);
+            tile.overlay_unconstrained(
+              pixmap.pixels_mut(),
+              canvas_size.width,
+              canvas_size.height,
+              offset,
+            );
           });
           assert_eq!(
             fast.into_inner()?.as_raw(),
@@ -693,7 +694,7 @@ mod tests {
           // opaque pixels.
           for canvas in [&mut fast, &mut generic] {
             canvas.with_pixmap(|pixmap| {
-              let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+              let pixels = pixmap.pixels_mut();
 
               for (index, pixel) in pixels.iter_mut().enumerate() {
                 let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
@@ -713,8 +714,12 @@ mod tests {
           }
 
           generic.with_pixmap(|pixmap| {
-            let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            tile.overlay_unconstrained(data, canvas_size.width, canvas_size.height, offset);
+            tile.overlay_unconstrained(
+              pixmap.pixels_mut(),
+              canvas_size.width,
+              canvas_size.height,
+              offset,
+            );
           });
           assert_eq!(
             fast.into_inner()?.as_raw(),

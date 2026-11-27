@@ -184,7 +184,7 @@ impl<'a, 'b> Target<'a, 'b> {
       skip_scope(ops);
       return;
     };
-    let Some(mut layer) = Pixmap::new(bounds.width(), bounds.height()) else {
+    let Some(mut layer) = Pixmap::new(bounds.size()) else {
       skip_scope(ops);
       return;
     };
@@ -280,7 +280,7 @@ impl<'a, 'b> Target<'a, 'b> {
   /// their unpremultiplied color times their alpha, rounded up.
   fn mask(&self, ops: &[SvgOp], luminance: bool) -> Option<Mask> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
-    let mut drawn = Pixmap::new(width, height)?;
+    let mut drawn = Pixmap::new(Size::new(width, height))?;
 
     draw(ops, self.transform, &mut drawn.as_mut());
 
@@ -379,26 +379,16 @@ impl<'a, 'b> Target<'a, 'b> {
   /// Fills the rect `path` outlines with `shader` as Skia's `SkDraw::drawRect` does: through
   /// `SkScan::AntiFillRect` where the transform keeps it a rect, and as a path otherwise.
   fn fill_rect(&mut self, path: &Path, shader: &Shader) {
-    let Affine {
-      a: sx,
-      b: ky,
-      c: kx,
-      d: sy,
-      x: tx,
-      y: ty,
-    } = self.transform;
-
-    // `SkMatrix::rectStaysRect`: axis aligned, or turned a quarter.
-    if !(kx == 0.0 && ky == 0.0 || sx == 0.0 && sy == 0.0) {
+    let Some(Rect {
+      left,
+      top,
+      right,
+      bottom,
+    }) = self.transform.map_rect(path.bounds())
+    else {
       self.fill(path, FillRule::NonZero, shader, true);
       return;
-    }
-
-    let map = |x: f32, y: f32| (x * sx + y * kx + tx, x * ky + y * sy + ty);
-    let rect = path.bounds();
-    let ((x0, y0), (x1, y1)) = (map(rect.left, rect.top), map(rect.right, rect.bottom));
-    let (left, right) = (x0.min(x1), x0.max(x1));
-    let (top, bottom) = (y0.min(y1), y0.max(y1));
+    };
     let Some(bounds) =
       Rect::from_ltrb(left, top, right, bottom).and_then(|device| self.device_bounds(device))
     else {
@@ -545,8 +535,8 @@ fn shader_of<'t>(
       gradient: stops,
     } => gradient(
       GradientShape::Linear {
-        start: [start.x, start.y],
-        end: [end.x, end.y],
+        start: *start,
+        end: *end,
       },
       stops,
     ),
@@ -558,9 +548,9 @@ fn shader_of<'t>(
       gradient: stops,
     } => gradient(
       GradientShape::Conical {
-        start: [focal.x, focal.y],
+        start: *focal,
         start_radius: *focal_radius,
-        end: [center.x, center.y],
+        end: *center,
         end_radius: *radius,
       },
       stops,
@@ -581,7 +571,7 @@ fn shader_of<'t>(
         return None;
       }
 
-      let mut pixmap = Pixmap::new(tile_width, tile_height)?;
+      let mut pixmap = Pixmap::new(Size::new(tile_width, tile_height))?;
 
       draw(ops, Affine::scale(scale_x, scale_y), &mut pixmap.as_mut());
 
@@ -621,7 +611,7 @@ impl SvgRasterizer for SvgPixmapRasterizer {
     width: u32,
     height: u32,
   ) -> Option<ImageBuffer> {
-    let mut pixmap = Pixmap::new(width, height)?;
+    let mut pixmap = Pixmap::new(Size::new(width, height))?;
 
     draw(ops, transform, &mut pixmap.as_mut());
     ImageBuffer::from_premultiplied_rgba(pixmap.take(), width, height)
@@ -635,7 +625,7 @@ pub(crate) fn draw(ops: &[SvgOp], transform: Affine, pixmap: &mut PixmapMut) {
   }
 }
 
-/// Draws `source` over `target` with its top left at `origin`, at `opacity` and inside `clip` when
+/// Draws `source` over `target` with its top left at `(x, y)`, at `opacity` and inside `clip` when
 /// there is one, in integers.
 pub(crate) fn draw_over(
   target: &mut PixmapMut,
@@ -690,8 +680,8 @@ pub(crate) fn draw_over(
   }
 }
 
-/// Blends `source` into `target` under `mode` with its top left at `origin`, at `opacity` and inside
-/// `clip` when there is one.
+/// Blends `source` into `target` under `mode` with its top left at `(x, y)`, at `opacity` and
+/// inside `clip` when there is one.
 fn draw_blended(
   target: &mut PixmapMut,
   source: PixmapRef,
@@ -1089,14 +1079,14 @@ mod tests {
     else {
       panic!("expected a filter op");
     };
-    let mut root = Pixmap::new(10, 10).unwrap();
+    let mut root = Pixmap::new(Size::new(10, 10)).unwrap();
     let mut root_view = root.as_mut();
     let root_target = Target::root(&mut root_view, Affine::IDENTITY).unwrap();
     let bounds = root_target.layer_bounds(None, Some(filters)).unwrap();
 
     assert_eq!(bounds, Rect::checked_from_size(-20, -20, 50, 50).unwrap());
 
-    let mut layer = Pixmap::new(bounds.width(), bounds.height()).unwrap();
+    let mut layer = Pixmap::new(bounds.size()).unwrap();
     let mut layer_view = layer.as_mut();
     let nested = Target {
       pixmap: &mut layer_view,
@@ -1113,7 +1103,7 @@ mod tests {
 
   #[test]
   fn an_isolation_layer_covers_its_paint_bounds() {
-    let mut pixmap = Pixmap::new(100, 100).unwrap();
+    let mut pixmap = Pixmap::new(Size::new(100, 100)).unwrap();
     let mut view = pixmap.as_mut();
     let target = Target::root(&mut view, Affine::IDENTITY).unwrap();
 

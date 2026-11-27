@@ -344,10 +344,10 @@ pub trait GradientOverlayTile {
     false
   }
 
-  /// Overlays the tile onto `data` with source-over blending, no clip.
+  /// Overlays the tile onto `pixels` with source-over blending, no clip.
   fn overlay_unconstrained(
     &self,
-    data: &mut [u8],
+    pixels: &mut [[u8; 4]],
     bottom_width: u32,
     bottom_height: u32,
     offset: Point<f32>,
@@ -369,7 +369,6 @@ pub trait GradientOverlayTile {
       return;
     }
 
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
     let row_pixels = bottom_width as usize;
     let dest_x_min_usize = dest_x_min as usize;
     let dest_x_max_usize = dest_x_max as usize;

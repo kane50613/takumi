@@ -6,7 +6,10 @@
 
 use std::{f32::consts::SQRT_2, rc::Rc};
 
-use crate::pixmap::{Pixmap, PixmapRef};
+use crate::{
+  blend::unorm_to_byte,
+  pixmap::{Pixmap, PixmapRef},
+};
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
@@ -18,7 +21,7 @@ use super::{
 };
 use takumi_core::{
   blur::{MIN_SIGMA, blur_rgba_axes},
-  geometry::{Point, Rect},
+  geometry::{Point, Rect, Size},
   math::ApproxEq,
   resources::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
@@ -124,7 +127,7 @@ impl Image {
 
   /// A transparent pixmap as large as the image.
   fn blank_like(&self) -> Option<Pixmap> {
-    Pixmap::new(self.pixmap.width(), self.pixmap.height())
+    Pixmap::new(Size::new(self.pixmap.width(), self.pixmap.height()))
   }
 
   /// The image with its colors black, as `SourceAlpha` is.
@@ -169,7 +172,7 @@ struct Run<'a> {
 /// filter that cannot run clears the layer.
 pub(crate) fn apply(filter: &SvgFilter, transform: Affine, layer: &mut Pixmap) {
   let (width, height) = (layer.width(), layer.height());
-  let Some(blank) = Pixmap::new(width, height) else {
+  let Some(blank) = Pixmap::new(Size::new(width, height)) else {
     return;
   };
   let source = std::mem::replace(layer, blank);
@@ -264,7 +267,7 @@ pub(crate) fn apply_to_layer(
     return None;
   }
 
-  let mut sub = Pixmap::new(window.width(), window.height())?;
+  let mut sub = Pixmap::new(window.size())?;
   let transform = Affine::translation(
     -filter.region.left - window.left as f32,
     -filter.region.top - window.top as f32,
@@ -272,14 +275,14 @@ pub(crate) fn apply_to_layer(
 
   draw(
     &mut sub,
-    PixmapRef::from_bytes(layer, width, height)?,
+    PixmapRef::from_bytes(layer, Size::new(width, height))?,
     dx - window.left,
     dy - window.top,
     Layer::Over,
   );
   apply(filter, transform, &mut sub);
 
-  let mut out = Pixmap::new(width, height)?;
+  let mut out = Pixmap::new(Size::new(width, height))?;
 
   draw(
     &mut out,
@@ -424,7 +427,7 @@ impl Run<'_> {
         let Color([red, green, blue, _]) = *color;
         let mut pixmap = self.blank()?;
         let width = pixmap.width() as usize;
-        let flood = premultiply_pixel([red, green, blue, (opacity * 255.0 + 0.5) as u8]);
+        let flood = premultiply_pixel([red, green, blue, unorm_to_byte(*opacity)]);
 
         for row in
           pixmap.pixels_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
@@ -630,7 +633,7 @@ impl Run<'_> {
 
   /// A transparent pixmap of the filter region.
   fn blank(&self) -> Option<Pixmap> {
-    Pixmap::new(self.region.width(), self.region.height())
+    Pixmap::new(self.region.size())
   }
 
   /// The lengths along the axes of the filter's user space as lengths of the layer.
@@ -652,7 +655,7 @@ impl Run<'_> {
     blur(&mut shadow_pixmap, sigma);
 
     let Color([red, green, blue, _]) = shadow.color;
-    let opacity = (shadow.opacity * 255.0 + 0.5) as u8;
+    let opacity = unorm_to_byte(shadow.opacity);
 
     for pixel in shadow_pixmap.pixels_mut() {
       *pixel = premultiply_pixel([red, green, blue, mul_div_255(pixel[3], opacity)]);

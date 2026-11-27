@@ -1,4 +1,5 @@
 use super::{BYTE_TO_FLOAT, ConvolveMatrix, EdgeMode};
+use crate::blend::unorm_to_byte;
 use takumi_core::geometry::Rect;
 
 /// Kernels with fewer cells keep their entries whole, Skia's `kMaxUniformKernelSize`. Larger ones
@@ -90,7 +91,7 @@ pub(super) fn apply(
         color[2].clamp(0.0, color[3]),
         color[3],
       ]
-      .map(|channel| (channel * 255.0 + 0.5) as u8);
+      .map(unorm_to_byte);
     }
   }
 }

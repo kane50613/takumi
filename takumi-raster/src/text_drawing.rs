@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::{
-  geometry::{Point, Rect, Size},
+  geometry::{PathCommand, Point, Rect, Size},
   paint::SpreadMethod,
   path::{Path, Stroke},
 };
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Style,
-  checked_area, coverage, cull_bounds,
+  Canvas, CanvasViewport, Placement, Result, SamplingOptions, SizedFontStyle, Style, checked_area,
+  coverage, cull_bounds,
   pixmap::PixmapRef,
   render_mask,
   resources::{
@@ -78,7 +78,7 @@ impl GlyphBucket {
     hasher.digest()
   }
 
-  fn render_mask(self, paths: &[Command], stroke: Option<&Stroke>) -> (Vec<u8>, Placement) {
+  fn render_mask(self, paths: &[PathCommand], stroke: Option<&Stroke>) -> (Vec<u8>, Placement) {
     render_mask(
       paths,
       Some(self.mask_transform),
@@ -105,7 +105,7 @@ fn split_subpixel(value: f32, steps: i64) -> (i32, f32) {
 fn draw_mask_with_cache(
   canvas: &mut Canvas,
   glyph_signature: u64,
-  paths: &[Command],
+  paths: &[PathCommand],
   transform: Affine,
   stroke: Option<&Stroke>,
   color: Color,
@@ -133,7 +133,7 @@ fn draw_mask_with_cache(
 pub(crate) fn cached_glyph_mask(
   glyphs: &GlyphCache,
   glyph_signature: u64,
-  paths: &[Command],
+  paths: &[PathCommand],
   transform: Affine,
   stroke: Option<&Stroke>,
 ) -> (Arc<Vec<u8>>, Placement) {
@@ -151,7 +151,7 @@ struct GlyphPaintCtx<'a, 'b> {
   /// The run's own `-webkit-text-stroke`, which a span may set for itself.
   stroke: (f32, Color),
   transform: Affine,
-  paths: &'b [Command],
+  paths: &'b [PathCommand],
   glyph_signature: u64,
 }
 
@@ -378,10 +378,10 @@ mod tests {
   #[test]
   fn bucket_zero_mask_matches_untransformed_render() {
     let paths = vec![
-      Command::MoveTo(Point::new(1.5, 1.0)),
-      Command::LineTo(Point::new(9.0, 2.25)),
-      Command::QuadTo(Point::new(11.0, 7.0), Point::new(4.0, 10.5)),
-      Command::Close,
+      PathCommand::MoveTo(Point::new(1.5, 1.0)),
+      PathCommand::LineTo(Point::new(9.0, 2.25)),
+      PathCommand::QuadTo(Point::new(11.0, 7.0), Point::new(4.0, 10.5)),
+      PathCommand::Close,
     ];
 
     let (untransformed, untransformed_placement) = render_mask(&paths, None, None, None);

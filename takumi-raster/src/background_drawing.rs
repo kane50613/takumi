@@ -178,7 +178,7 @@ pub(crate) fn rasterize_layers(
     return Ok(None);
   };
   let mut composed = vec![0; composed_len];
-  let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
+  let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size) else {
     return Ok(None);
   };
 
@@ -522,7 +522,7 @@ impl BackgroundTile {
       return pixmap.clone_rect(part);
     }
 
-    let mut cut = Pixmap::new(part.width(), part.height())?;
+    let mut cut = Pixmap::new(part.size())?;
     let rows = self.rows(self.width());
     let mut row = vec![0; self.width() as usize * 4];
     let start = part.left as usize * 4;
@@ -853,7 +853,7 @@ fn rasterize_pattern(
 /// as Skia's repeat tiling filters across the seam, and transparent on one with spacing.
 fn padded_tile(source: PixmapRef<'_>, spacing: Size<f32>) -> Option<Pixmap> {
   let (width, height) = (source.width() as usize, source.height() as usize);
-  let mut padded = Pixmap::new(width as u32 + 2, height as u32 + 2)?;
+  let mut padded = Pixmap::new(Size::new(width as u32 + 2, height as u32 + 2))?;
   let pixels = source.pixels();
   let target = padded.pixels_mut();
   let wrap = |index: usize, len: usize, gap: f32| match index {
