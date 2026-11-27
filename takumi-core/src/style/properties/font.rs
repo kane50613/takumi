@@ -4,7 +4,7 @@ use cssparser::{Parser, Token};
 
 use crate::style::{
   FontFamily, FontSize, FontStretch, FontStyle, FontVariantCaps, FontWeight, FromCss, LineHeight,
-  ParseResult, unexpected_token,
+  ParseMode, ParseResult, unexpected_token,
 };
 
 /// The `font` shorthand: the values it sets, the other font longhands taking their initial values.
@@ -28,7 +28,7 @@ pub struct FontShorthand {
 }
 
 impl<'i> FromCss<'i> for FontShorthand {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut style = None;
     let mut caps = None;
     let mut weight = None;
@@ -91,9 +91,9 @@ impl<'i> FromCss<'i> for FontShorthand {
       break;
     }
 
-    let size = FontSize::from_css(input)?;
+    let size = FontSize::from_css_in(input, mode)?;
     let line_height = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-      LineHeight::from_css(input)?
+      LineHeight::from_css_in(input, mode)?
     } else {
       LineHeight::default()
     };

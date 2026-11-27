@@ -8,7 +8,7 @@ use cssparser::Parser;
 use crate::style::{
   Animatable, Color, MakeComputed, SizingContext, ToCss, lerp, parse_number_value,
   parse_percentage_value,
-  properties::{FromCss, ParseResult},
+  properties::{FromCss, ParseMode, ParseResult},
   tw::TailwindPropertyParser,
 };
 
@@ -68,7 +68,7 @@ impl TailwindPropertyParser for PercentageNumber {
 }
 
 impl<'i> FromCss<'i> for PercentageNumber {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     input
       .try_parse(parse_number_value)
       .or_else(|_| parse_percentage_value(input))

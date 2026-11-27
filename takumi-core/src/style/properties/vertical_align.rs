@@ -81,12 +81,12 @@ impl Default for ResolvedVerticalAlign {
 }
 
 impl<'i> FromCss<'i> for VerticalAlign {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(VerticalAlignKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
 
-    Ok(Self::Length(Length::from_css(input)?))
+    Ok(Self::Length(Length::from_css_in(input, mode)?))
   }
 
   const VALID_TOKENS: &'static [&'static str] = &[

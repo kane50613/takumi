@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
-use crate::style::{Angle, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{Angle, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -25,12 +25,10 @@ const MAX_OBLIQUE_ANGLE: f32 = 90.0;
 
 impl MakeComputed for FontStyle {}
 
-/// An `oblique` angle in degrees, signed where `Angle` keeps a turn in [0, 360), and within
-/// ±90deg.
+/// An `oblique` angle in degrees, within ±90deg.
 pub(crate) fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let start = input.state();
   let angle = *Angle::from_css(input)?;
-  let angle = if angle > 180.0 { angle - 360.0 } else { angle };
 
   if (-MAX_OBLIQUE_ANGLE..=MAX_OBLIQUE_ANGLE).contains(&angle) {
     return Ok(angle);
@@ -44,7 +42,7 @@ pub(crate) fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> 
 }
 
 impl<'i> FromCss<'i> for FontStyle {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! { ident,
@@ -147,5 +145,9 @@ mod tests {
       Ok(FontStyle::oblique(100.0))
     );
     assert!(FontStyle::from_css_str("123").is_err());
+    assert_ne!(
+      FontStyle::from_css_str("oblique 350deg"),
+      Ok(FontStyle::oblique(-10.0))
+    );
   }
 }

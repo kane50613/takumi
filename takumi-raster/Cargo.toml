@@ -10,7 +10,6 @@ rust-version = "1.91"
 
 [dependencies]
 png.workspace = true
-rustc-hash.workspace = true
 gif.workspace = true
 jpeg-encoder.workspace = true
 color.workspace = true

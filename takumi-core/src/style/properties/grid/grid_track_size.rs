@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::style::{
-  FromCss, GridLength, GridMinMaxSize, Length, MakeComputed, ParseResult, SizingContext, ToCss,
-  tw::TailwindPropertyParser,
+  FromCss, GridLength, GridMinMaxSize, Length, MakeComputed, ParseMode, ParseResult, SizingContext,
+  ToCss, parse_nested_block, tw::TailwindPropertyParser,
 };
 use cssparser::{Parser, match_ignore_ascii_case};
 
@@ -10,9 +10,9 @@ use cssparser::{Parser, match_ignore_ascii_case};
 pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
 
 impl<'i> FromCss<'i> for GridTrackSizes {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut components: Vec<GridTrackSize> = Vec::new();
-    while let Ok(size) = input.try_parse(GridTrackSize::from_css) {
+    while let Ok(size) = input.try_parse(|input| GridTrackSize::from_css_in(input, mode)) {
       components.push(size);
     }
 
@@ -47,19 +47,19 @@ impl TailwindPropertyParser for GridTrackSize {
 }
 
 impl<'i> FromCss<'i> for GridTrackSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_function_matching("minmax"))
       .is_ok()
     {
-      return input.parse_nested_block(|input| {
-        let min = GridLength::from_css(input)?;
+      return parse_nested_block(input, |input| {
+        let min = GridLength::from_css_in(input, mode)?;
 
         if matches!(min, GridLength::Fr(_)) {
           return Err(input.new_error_for_next_token());
         }
         input.expect_comma()?;
-        let max = GridLength::from_css(input)?;
+        let max = GridLength::from_css_in(input, mode)?;
         Ok(GridTrackSize::MinMax(GridMinMaxSize { min, max }))
       });
     }
@@ -67,11 +67,12 @@ impl<'i> FromCss<'i> for GridTrackSize {
       .try_parse(|input| input.expect_function_matching("fit-content"))
       .is_ok()
     {
-      return input
-        .parse_nested_block(|input| Ok(GridTrackSize::FitContent(Length::from_css(input)?)));
+      return parse_nested_block(input, |input| {
+        Ok(GridTrackSize::FitContent(Length::from_css_in(input, mode)?))
+      });
     }
 
-    let length = GridLength::from_css(input)?;
+    let length = GridLength::from_css_in(input, mode)?;
     Ok(GridTrackSize::Fixed(length))
   }
 

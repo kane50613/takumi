@@ -121,3 +121,39 @@ describe("#backend resolution by import condition", () => {
     expect(code).not.toContain("@takumi-rs/wasm/node");
   });
 });
+
+// Wrangler loads a bare `.wasm` import as a `WebAssembly.Module`. A `?url` or
+// `?module` suffix, or a `new URL` reference, would not load under workerd.
+describe("takumi-js/response under workerd", () => {
+  test.each([[["workerd"]], [["workerd", "worker"]]])(
+    "%p imports the bare WASM binary",
+    (conditions) => {
+      const responseDir = mkdtempSync(join(import.meta.dir, "..", "node_modules", ".workerd-"));
+      const responseEntry = join(responseDir, "entry.mjs");
+
+      writeFileSync(
+        responseEntry,
+        "import { ImageResponse } from 'takumi-js/response';\nglobalThis.__keep = ImageResponse;\n",
+      );
+
+      try {
+        const built = Bun.spawnSync([
+          "bun",
+          "build",
+          responseEntry,
+          "--external=*.wasm",
+          ...conditions.map((condition) => `--conditions=${condition}`),
+        ]);
+        const code = built.stdout.toString();
+
+        expect(built.exitCode).toBe(0);
+        expect(code).toMatch(/import \w+ from "[^"]*takumi_wasm_bg\.wasm"/);
+        expect(code).not.toContain("takumi_wasm_bg.wasm?");
+        expect(code).not.toContain('new URL("../pkg/takumi_wasm_bg.wasm"');
+      } finally {
+        rmSync(responseDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+});

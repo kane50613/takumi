@@ -9,7 +9,7 @@ use crate::html::{dom::NodeData, markup::parse_svg_image};
 
 use crate::{
   geometry::Size,
-  style::{FontUnits, FromCssStr, IntrinsicSizing, Length, SizingContext},
+  style::{FontUnits, IntrinsicSizing, Length, SizingContext},
   viewport::Viewport,
 };
 
@@ -86,7 +86,7 @@ impl SvgSize {
   ) -> Result<Self, SvgSizeError> {
     let length = |name| {
       attribute(name)
-        .and_then(|text| Length::from_css_str(text).ok())
+        .and_then(Length::from_svg_attribute)
         .filter(|length| !matches!(length, Length::Auto))
     };
     let sizing = SizingContext::builder()

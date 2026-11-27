@@ -3,7 +3,9 @@ use std::fmt;
 use cssparser::Parser;
 
 use super::{parse_line_names, write_space_separated};
-use crate::style::{FromCss, GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss};
+use crate::style::{
+  FromCss, GridTrackSize, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss,
+};
 
 /// Represents a grid repeat track
 #[derive(Debug, Clone, PartialEq)]
@@ -25,14 +27,14 @@ impl MakeComputed for GridRepeatTrack {
 }
 
 impl<'i> FromCss<'i> for GridRepeatTrack {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut names: Vec<String> = Vec::new();
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);
     }
 
-    let size = GridTrackSize::from_css(input)?;
+    let size = GridTrackSize::from_css_in(input, mode)?;
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);

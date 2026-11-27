@@ -1,7 +1,7 @@
 use cssparser::{Parser, Token};
 
 use super::{GridTemplate, at_value_end, track_listing};
-use crate::style::{FromCss, GridAutoFlow, GridDirection, GridTrackSizes, ParseResult};
+use crate::style::{FromCss, GridAutoFlow, GridDirection, GridTrackSizes, ParseMode, ParseResult};
 
 /// Represents the `grid` shorthand.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -19,9 +19,9 @@ pub struct Grid {
 impl<'i> FromCss<'i> for Grid {
   /// Blink's `Grid::ParseShorthand`: a `grid-template` value, or one axis's explicit tracks and the
   /// other's implicit ones.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(template) = input.try_parse(|input| {
-      let template = GridTemplate::from_css(input)?;
+      let template = GridTemplate::from_css_in(input, mode)?;
 
       if !at_value_end(input) {
         return Err(input.new_error_for_next_token());
@@ -39,7 +39,7 @@ impl<'i> FromCss<'i> for Grid {
       let auto_rows = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
         None
       } else {
-        let auto_rows = auto_track_list(input)?;
+        let auto_rows = auto_track_list(input, mode)?;
 
         input.expect_delim('/')?;
         Some(auto_rows)
@@ -47,7 +47,7 @@ impl<'i> FromCss<'i> for Grid {
 
       return Ok(Self {
         template: GridTemplate {
-          columns: track_listing(input)?,
+          columns: track_listing(input, mode)?,
           ..GridTemplate::default()
         },
         auto_flow: GridAutoFlow {
@@ -59,7 +59,7 @@ impl<'i> FromCss<'i> for Grid {
       });
     }
 
-    let rows = track_listing(input)?;
+    let rows = track_listing(input, mode)?;
 
     input.expect_delim('/')?;
 
@@ -75,7 +75,7 @@ impl<'i> FromCss<'i> for Grid {
         dense,
       },
       auto_rows: None,
-      auto_columns: input.try_parse(auto_track_list).ok(),
+      auto_columns: input.try_parse(|input| auto_track_list(input, mode)).ok(),
     })
   }
 
@@ -115,8 +115,8 @@ fn implicit_auto_flow<'i>(input: &mut Parser<'i>) -> ParseResult<'i, bool> {
 }
 
 /// A `grid-auto-rows` or `grid-auto-columns` value: one or more track sizes.
-fn auto_track_list<'i>(input: &mut Parser<'i>) -> ParseResult<'i, GridTrackSizes> {
-  let sizes = GridTrackSizes::from_css(input)?;
+fn auto_track_list<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, GridTrackSizes> {
+  let sizes = GridTrackSizes::from_css_in(input, mode)?;
 
   if sizes.is_empty() {
     return Err(input.new_error_for_next_token());

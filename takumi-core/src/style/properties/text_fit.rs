@@ -4,7 +4,7 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum, unexpected_token,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, impl_css_enum, unexpected_token,
 };
 
 /// Controls whether inline contents are scaled to fit their line box.
@@ -26,7 +26,7 @@ impl Animatable for TextFit {}
 impl<'i> FromCss<'i> for TextFit {
   // Syntax: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?
   // The type keyword is mandatory and must appear first, matching the spec and Chromium.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mode = TextFitMode::from_css(input)?;
 
     let target = input.try_parse(TextFitTarget::from_css).unwrap_or_default();

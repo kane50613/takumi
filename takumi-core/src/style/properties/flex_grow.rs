@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, lerp,
   parse_calc_number_expression, tw::TailwindPropertyParser,
 };
 
@@ -27,7 +27,7 @@ impl Animatable for FlexGrow {
 }
 
 impl<'i> FromCss<'i> for FlexGrow {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(number) = input.try_parse(Parser::expect_number) {
       return Ok(FlexGrow(number));
     }

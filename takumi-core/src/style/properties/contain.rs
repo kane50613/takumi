@@ -5,7 +5,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token, write_keywords,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token,
+  write_keywords,
 };
 
 /// A `contain` value: `none | content | [ layout || style || paint ]`.
@@ -40,7 +41,7 @@ impl Animatable for Contain {}
 impl<'i> FromCss<'i> for Contain {
   const VALID_TOKENS: &'static [&'static str] = &["none", "content", "layout", "style", "paint"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut flags = Self::NONE;
 
     loop {

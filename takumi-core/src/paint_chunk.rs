@@ -149,52 +149,43 @@ enum Entered {
 
 /// Moves a [`PropertySink`] from one chunk's state to the next, as Blink's `ConversionContext`
 /// does, entering and leaving as few clips and effects as it can.
-pub struct ConversionContext<'t, S> {
+pub struct ConversionContext<'t> {
   trees: &'t PropertyTrees,
-  sink: S,
   clip: Option<ClipId>,
   effect: Option<EffectId>,
   stack: Vec<Entered>,
 }
 
-impl<'t, S: PropertySink> ConversionContext<'t, S> {
+impl<'t> ConversionContext<'t> {
   /// Starts outside every clip and effect of `trees`.
-  pub fn new(trees: &'t PropertyTrees, sink: S) -> Self {
+  pub fn new(trees: &'t PropertyTrees) -> Self {
     Self {
       trees,
-      sink,
       clip: None,
       effect: None,
       stack: Vec::new(),
     }
   }
 
-  /// The sink.
-  pub fn sink(&mut self) -> &mut S {
-    &mut self.sink
+  /// Enters `state` on `sink`: its effect first, then its clip.
+  pub fn switch_to(&mut self, state: PropertyState, sink: &mut dyn PropertySink) {
+    self.switch_to_effect(state.effect, sink);
+    self.switch_to_clip(state.clip, sink);
   }
 
-  /// Enters `state`: its effect first, then its clip.
-  pub fn switch_to(&mut self, state: PropertyState) {
-    self.switch_to_effect(state.effect);
-    self.switch_to_clip(state.clip);
-  }
-
-  /// Leaves every clip and effect and returns the sink.
-  pub fn finish(mut self) -> S {
+  /// Leaves every clip and effect on `sink`.
+  pub fn finish(mut self, sink: &mut dyn PropertySink) {
     while let Some(entered) = self.stack.pop() {
       match entered {
-        Entered::Clip { id, .. } => self.sink.pop_clip(self.trees.clip(id)),
-        Entered::Effect { .. } => self.sink.end_effect(),
+        Entered::Clip { id, .. } => sink.pop_clip(self.trees.clip(id)),
+        Entered::Effect { .. } => sink.end_effect(),
       }
     }
-
-    self.sink
   }
 
   /// Blink's `SwitchToClip`. A clip the current effect opened inside stays: a chunk cannot leave
   /// the clips its effect composites under.
-  fn switch_to_clip(&mut self, target: Option<ClipId>) {
+  fn switch_to_clip(&mut self, target: Option<ClipId>, sink: &mut dyn PropertySink) {
     if target == self.clip {
       return;
     }
@@ -202,7 +193,7 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
     let common = self.trees.common_clip(target, self.clip);
 
     while self.clip != common && matches!(self.stack.last(), Some(Entered::Clip { .. })) {
-      self.end_clip();
+      self.end_clip(sink);
     }
 
     if target == self.clip {
@@ -216,7 +207,7 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
       .collect();
 
     for id in pending.into_iter().rev() {
-      self.sink.push_clip(id, self.trees.clip(id));
+      sink.push_clip(id, self.trees.clip(id));
       self.stack.push(Entered::Clip {
         id,
         previous: self.clip,
@@ -226,7 +217,7 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
   }
 
   /// Blink's `SwitchToEffect`.
-  fn switch_to_effect(&mut self, target: Option<EffectId>) {
+  fn switch_to_effect(&mut self, target: Option<EffectId>, sink: &mut dyn PropertySink) {
     if target == self.effect {
       return;
     }
@@ -234,13 +225,13 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
     let common = self.trees.common_effect(target, self.effect);
 
     while self.effect != common {
-      self.end_clips();
+      self.end_clips(sink);
 
       if self.stack.is_empty() {
         break;
       }
 
-      self.end_effect();
+      self.end_effect(sink);
     }
 
     let pending: Vec<EffectId> = self
@@ -250,21 +241,21 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
       .collect();
 
     for id in pending.into_iter().rev() {
-      self.start_effect(id);
+      self.start_effect(id, sink);
     }
   }
 
   /// Blink's `StartEffect`: enters the effect's output clip, or leaves every clip when it has
   /// none, then opens the group.
-  fn start_effect(&mut self, id: EffectId) {
+  fn start_effect(&mut self, id: EffectId, sink: &mut dyn PropertySink) {
     let effect = self.trees.effect(id);
 
     match effect.output_clip {
-      Some(clip) => self.switch_to_clip(Some(clip)),
-      None => self.end_clips(),
+      Some(clip) => self.switch_to_clip(Some(clip), sink),
+      None => self.end_clips(sink),
     }
 
-    self.sink.begin_effect(id, effect);
+    sink.begin_effect(id, effect);
     self.stack.push(Entered::Effect {
       previous_clip: self.clip,
       previous: self.effect,
@@ -272,26 +263,26 @@ impl<'t, S: PropertySink> ConversionContext<'t, S> {
     self.effect = Some(id);
   }
 
-  fn end_clip(&mut self) {
+  fn end_clip(&mut self, sink: &mut dyn PropertySink) {
     if let Some(Entered::Clip { id, previous }) = self.stack.pop() {
-      self.sink.pop_clip(self.trees.clip(id));
+      sink.pop_clip(self.trees.clip(id));
       self.clip = previous;
     }
   }
 
-  fn end_clips(&mut self) {
+  fn end_clips(&mut self, sink: &mut dyn PropertySink) {
     while matches!(self.stack.last(), Some(Entered::Clip { .. })) {
-      self.end_clip();
+      self.end_clip(sink);
     }
   }
 
-  fn end_effect(&mut self) {
+  fn end_effect(&mut self, sink: &mut dyn PropertySink) {
     if let Some(Entered::Effect {
       previous_clip,
       previous,
     }) = self.stack.pop()
     {
-      self.sink.end_effect();
+      sink.end_effect();
       self.clip = previous_clip;
       self.effect = previous;
     }
@@ -442,13 +433,15 @@ mod tests {
   }
 
   fn run(trees: &PropertyTrees, states: &[PropertyState]) -> Vec<String> {
-    let mut conversion = ConversionContext::new(trees, Log::default());
+    let mut conversion = ConversionContext::new(trees);
+    let mut log = Log::default();
 
     for &state in states {
-      conversion.switch_to(state);
+      conversion.switch_to(state, &mut log);
     }
 
-    conversion.finish().0
+    conversion.finish(&mut log);
+    log.0
   }
 
   fn state(clip: Option<ClipId>, effect: Option<EffectId>) -> PropertyState {

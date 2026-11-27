@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>animation_rotation_turns</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      @keyframes turn {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes double-turn {
+        to {
+          rotate: 720deg;
+        }
+      }
+      @keyframes hue-turns {
+        to {
+          filter: hue-rotate(720deg);
+        }
+      }
+      .row {
+        display: flex;
+        gap: 24px;
+        padding: 24px;
+      }
+      .arrow {
+        width: 48px;
+        height: 48px;
+        background: rgb(59, 130, 246);
+        border-top: 12px solid rgb(239, 68, 68);
+        box-sizing: border-box;
+      }
+      .turn {
+        animation: turn 1000ms linear -250ms paused;
+      }
+      .double-turn {
+        animation: double-turn 1000ms linear -125ms paused;
+      }
+      .hue-turns {
+        animation: hue-turns 1000ms linear -125ms paused;
+      }
+    </style>
+  </head>
+  <body style="width: 264px; height: 96px">
+    <div class="row">
+      <div class="arrow turn"></div>
+      <div class="arrow double-turn"></div>
+      <div class="arrow hue-turns"></div>
+    </div>
+  </body>
+</html>

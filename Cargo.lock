@@ -2003,7 +2003,6 @@ dependencies = [
  "libz-rs-sys",
  "png",
  "rayon",
- "rustc-hash",
  "serde",
  "serde_json",
  "skrifa",

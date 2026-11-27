@@ -42,23 +42,22 @@ impl<'s> ScenePaint<'s> {
 
   /// Paints the chunks reaching `canvas`'s viewport.
   pub(crate) fn paint(&self, canvas: &mut Canvas) -> Result<()> {
-    let mut conversion = ConversionContext::new(
-      self.scene.properties,
-      ScenePainter {
-        scene: self.scene,
-        canvas,
-        owners: &self.owners,
-        effects: Vec::new(),
-        error: None,
-      },
-    );
+    let mut conversion = ConversionContext::new(self.scene.properties);
+    let mut painter = ScenePainter {
+      scene: self.scene,
+      canvas,
+      owners: &self.owners,
+      effects: Vec::new(),
+      error: None,
+    };
 
     for chunk in &self.chunks {
-      conversion.switch_to(chunk.state());
-      conversion.sink().paint(chunk);
+      conversion.switch_to(chunk.state(), &mut painter);
+      painter.paint(chunk);
     }
 
-    conversion.finish().error.map_or(Ok(()), Err)
+    conversion.finish(&mut painter);
+    painter.error.map_or(Ok(()), Err)
   }
 }
 
