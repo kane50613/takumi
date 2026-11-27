@@ -125,6 +125,8 @@ impl TableDecorations {
         let layout = results.fragment_layout(node_id, fragment_index)?;
         let (grid_offset, grid_size) = fragment.grid_rect;
 
+        // TODO: position the background in the grids of every fragment stitched together, as
+        // Blink's `OffsetInStitchedTableGrid` does, not in this fragment's grid alone.
         Self::Table {
           grid: ComputedLayout {
             location: layout.location

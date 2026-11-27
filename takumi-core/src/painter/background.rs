@@ -8,6 +8,7 @@ use crate::{
     background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
     decoration::{ClipBox, ContourOrigin},
+    tree::StitchedFragment,
   },
   painter::{FillShape, SnappedBox},
   style::{BackgroundClip, BorderStyle, Color, Sides},
@@ -152,6 +153,23 @@ impl<'c> BoxBackground<'c> {
     border: BorderProperties,
     paint_offset: Point<f32>,
   ) -> Self {
+    Self::of_fragment(
+      context,
+      StitchedFragment::unbroken(layout),
+      border,
+      paint_offset,
+    )
+  }
+
+  /// Resolves the background of `fragment`, its corners from `border`, its border box at
+  /// `paint_offset` in the space its background snaps to pixels in.
+  pub(crate) fn of_fragment(
+    context: &'c RenderContext,
+    fragment: StitchedFragment,
+    border: BorderProperties,
+    paint_offset: Point<f32>,
+  ) -> Self {
+    let layout = fragment.layout;
     let style = &context.style;
     let color = style
       .background_data
@@ -170,7 +188,7 @@ impl<'c> BoxBackground<'c> {
           .background_image
           .as_deref()
           .unwrap_or_default(),
-        &BoxBackgroundPaintContext::new(style, layout, &border, paint_offset),
+        &BoxBackgroundPaintContext::of_fragment(style, fragment, &border, paint_offset),
         context,
       ),
     }

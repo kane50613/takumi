@@ -2139,6 +2139,96 @@ fn content_clip_extents(scene: &Scene, id: &str) -> Vec<(f32, f32)> {
     .collect()
 }
 
+/// A box painting a background image keeps its pages open until it ends, since its whole height
+/// places the image on every page. A background colour leaves them alone.
+#[test]
+fn a_background_image_keeps_its_pages_open_until_it_ends() {
+  for (background, finalized) in [
+    ("linear-gradient(red, blue)", [0, 0, 0, 4]),
+    ("red", [1, 2, 3, 4]),
+  ] {
+    let tree = render(
+      root([Node::container([block("child", "tall")]).with_class_name("block painted")]),
+      &format!(".painted {{ background: {background} }} .tall {{ height: 400px }}"),
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{background}"
+    );
+  }
+}
+
+/// An absolute box the page areas go on laying out keeps its pages open until it ends when it
+/// paints a background image or clips to rounded corners, as an in-flow box does. One painting a
+/// colour leaves them alone.
+#[test]
+fn a_resumed_absolute_box_keeps_its_pages_open_until_it_ends() {
+  for (painted, finalized) in [
+    ("background: linear-gradient(red, blue)", [0, 0, 3, 4, 5]),
+    ("overflow: hidden; border-radius: 50%", [0, 0, 3, 4, 5]),
+    ("background: red", [1, 2, 3, 4, 5]),
+  ] {
+    let tree = render(
+      root([block("absolute", "absolute"), block("flow", "flow")]),
+      &format!(
+        ".absolute {{ position: absolute; top: 0; width: 100px; height: 300px; {painted} }} \
+         .flow {{ height: 500px }}"
+      ),
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "{painted}"
+    );
+  }
+}
+
+/// A block inside a span paints a background image, its continuation carried by the line's break
+/// token: in flow, or in an absolute box the page areas resume. It keeps its pages open until it
+/// ends, as a block among blocks does. One painting a colour leaves them alone.
+#[test]
+fn a_block_in_inline_keeps_its_pages_open_until_it_ends() {
+  let in_span = |background: &str| {
+    Node::container([block("painted", &format!("painted {background}"))]).with_class_name("inline")
+  };
+
+  for (background, finalized) in [("gradient", [0, 0, 3]), ("red", [1, 2, 3])] {
+    let tree = render(
+      root([Node::container([in_span(background)]).with_class_name("block")]),
+      BLOCK_IN_INLINE_BACKGROUND_CSS,
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "in flow, {background}"
+    );
+  }
+  for (background, finalized) in [("gradient", [0, 0, 3, 4, 5]), ("red", [1, 2, 3, 4, 5])] {
+    let tree = render(
+      root([
+        Node::container([in_span(background)]).with_class_name("block absolute"),
+        block("flow", "flow"),
+      ]),
+      BLOCK_IN_INLINE_BACKGROUND_CSS,
+    );
+
+    assert_eq!(
+      finalized_after_each_page(&tree, 100.0),
+      finalized,
+      "resumed, {background}"
+    );
+  }
+}
+
+const BLOCK_IN_INLINE_BACKGROUND_CSS: &str = ".inline { display: inline } \
+  .painted { height: 300px } .gradient { background: linear-gradient(red, blue) } \
+  .red { background: red } .absolute { position: absolute; top: 0; width: 100px } \
+  .flow { height: 500px }";
+
 /// A box clipping to rounded corners keeps its pages open until it ends, since its whole height
 /// shapes the corners on every page. A square clip leaves them alone.
 #[test]

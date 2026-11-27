@@ -319,6 +319,11 @@ impl<'r> PagedLayout<'r> {
     if let Some(token) = &self.break_token {
       self.pin_pending_boxes(token, &mut chain, &mut pinned);
     }
+    if let Some(token) = self.page_areas.break_token() {
+      for child in token.child_block_break_tokens() {
+        self.pin_stitched_boxes(child, &mut chain, &mut pinned);
+      }
+    }
     pinned
   }
 
@@ -342,8 +347,9 @@ impl<'r> PagedLayout<'r> {
   }
 
   // A box a containing block holds back, or placed from the block's start in a later fragment,
-  // keeps the block's first page open until it is laid out. A box clipping to rounded corners keeps
-  // its own first page open until it ends.
+  // keeps the block's first page open until it is laid out. A box clipping to rounded corners, or
+  // painting a background image, keeps its own first page open until it ends, and so does a block
+  // in an inline, which its line's break token resumes.
   fn pin_pending_boxes(
     &self,
     token: &BlockBreakToken,
@@ -357,24 +363,55 @@ impl<'r> PagedLayout<'r> {
     if self
       .pending
       .is_containing_block(self.tree.render_node(token.node).context.box_id())
-      || self.clips_to_rounded_box(token.node)
+      || self.paints_by_stitched_box(token.node)
     {
       *pinned = (*pinned).min(self.start_page(chain));
     }
 
     for child in &token.child_break_tokens {
-      let BreakToken::Block(child) = child else {
-        continue;
-      };
-
-      if child.held_static_position.is_some() {
-        *pinned = (*pinned).min(self.start_page(chain));
-      } else {
-        chain.push(child.node);
-        self.pin_pending_boxes(child, chain, pinned);
-        chain.pop();
+      match child {
+        BreakToken::Block(child) if child.held_static_position.is_some() => {
+          *pinned = (*pinned).min(self.start_page(chain));
+        }
+        BreakToken::Block(child) => {
+          chain.push(child.node);
+          self.pin_pending_boxes(child, chain, pinned);
+          chain.pop();
+        }
+        BreakToken::Inline(line) => {
+          if let Some(block) = line.block_break_token.as_deref() {
+            self.pin_stitched_boxes(block, chain, pinned);
+          }
+        }
       }
     }
+  }
+
+  /// Keeps the first page of the box `token` resumes, and of each box inside it, open until the box
+  /// ends when its stitched box shapes its paint.
+  fn pin_stitched_boxes(
+    &self,
+    token: &BlockBreakToken,
+    chain: &mut Vec<NodeId>,
+    pinned: &mut usize,
+  ) {
+    if token.is_break_before {
+      return;
+    }
+    chain.push(token.node);
+    if self.paints_by_stitched_box(token.node) {
+      *pinned = (*pinned).min(self.start_page(chain));
+    }
+    for child in token.child_block_break_tokens() {
+      self.pin_stitched_boxes(child, chain, pinned);
+    }
+    chain.pop();
+  }
+
+  /// Whether the height of `node`'s stitched box, unknown until its last fragment, shapes what it
+  /// paints on every page.
+  fn paints_by_stitched_box(&self, node: NodeId) -> bool {
+    self.clips_to_rounded_box(node) || self.paints_background_image(node)
   }
 
   /// Whether `node` clips its content to rounded corners, which the height of its stitched box,
@@ -393,6 +430,18 @@ impl<'r> PagedLayout<'r> {
       ]
       .into_iter()
       .any(|radius| radius != square)
+  }
+
+  /// Whether `node` paints a background image in its stitched box, whose height, unknown until its
+  /// last fragment, places the image on every page. A table positions its own in each fragment's
+  /// grid.
+  fn paints_background_image(&self, node: NodeId) -> bool {
+    let render_node = self.tree.render_node(node);
+    let style = &render_node.context.style;
+
+    render_node.paints_own_box()
+      && !style.base_data.display.is_table()
+      && style.has_background_image()
   }
 
   fn update_pending(&mut self) {

@@ -7,7 +7,7 @@ use crate::{
   Canvas, CanvasDevice, DeferredOutline, RenderContext, Result, SizedFontStyle, draw_box_shell,
   layout::inline::{InlineBoxItem, InlineBoxKind, ProcessedInlineSpan, VisualInlineBox},
   node_paint::draw_image_node_content,
-  painter::{OwnContent, PaintedInline},
+  painter::{BoxPainter, OwnContent, PaintedInline},
   style::Affine,
 };
 
@@ -30,7 +30,7 @@ pub(crate) fn draw_inline_box(
   let mut context = node.context.clone();
 
   context.transform = transform * Affine::translation(layout.location.x, layout.location.y);
-  draw_box_shell(&context, canvas, layout, None, true)?;
+  draw_box_shell(&BoxPainter::new(&context, layout), canvas, None, true)?;
   draw_own_content(
     OwnContent::of(node),
     &node.image_context(&context),

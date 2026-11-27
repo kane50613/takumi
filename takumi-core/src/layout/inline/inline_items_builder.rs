@@ -11,8 +11,7 @@ use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
   style::{
-    BackgroundImage, ComputedStyle, Direction as TextDirection, UnicodeBidi, VerticalAlign,
-    WhiteSpaceCollapse,
+    ComputedStyle, Direction as TextDirection, UnicodeBidi, VerticalAlign, WhiteSpaceCollapse,
   },
   text::character::{
     CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
@@ -119,11 +118,6 @@ impl RenderNode {
   /// Blink's `HasBoxDecorationBackground`: a background, a border, or a shadow.
   pub(crate) fn has_box_decoration_background(&self) -> bool {
     let style = &self.context.style;
-    let has_background_image = style
-      .background_data
-      .background_image
-      .as_deref()
-      .is_some_and(|images| images.iter().any(BackgroundImage::paints));
 
     style
       .background_data
@@ -131,7 +125,7 @@ impl RenderNode {
       .resolve(self.context.current_color)
       .0[3]
       != 0
-      || has_background_image
+      || style.has_background_image()
       || BorderProperties::from_context(&self.context, Size::ZERO, self.border_px())
         .has_visible_sides()
       || style

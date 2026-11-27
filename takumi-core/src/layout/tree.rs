@@ -492,6 +492,8 @@ pub(crate) struct StitchedFragment {
   /// The first fragment's layout, grown to the stitched block size and the box's block-end edge.
   pub(crate) stitched: ComputedLayout,
   pub(crate) block_offset: f32,
+  /// Whether a page broke its box. A repeated fragment, as a table header on each page, is unbroken.
+  pub(crate) is_broken: bool,
 }
 
 impl StitchedFragment {
@@ -501,6 +503,7 @@ impl StitchedFragment {
       layout,
       stitched: layout,
       block_offset: 0.0,
+      is_broken: false,
     }
   }
 }
@@ -562,6 +565,7 @@ impl BoxFragment {
         .checked_sub(1)
         .and_then(|previous| fragments[previous].break_token)
         .map_or(0.0, |token| token.consumed_block_size.to_float()),
+      is_broken: true,
     }
   }
 }

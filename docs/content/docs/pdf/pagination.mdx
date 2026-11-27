@@ -71,7 +71,7 @@ const pdf = await render(
 
 ## Split decorations
 
-A box that crosses a page break slices its border and background by default, but `box-decoration-break: clone` gives each fragment complete decorations:
+A box that crosses a page break slices its border and background by default. A background image or gradient then runs once down the whole box, and each page shows the part of it that falls there, as in Chromium. A table's own background and a `background-clip: text` background still start again on each page. `box-decoration-break: clone` gives each fragment complete decorations, and starts the background again at the top of each page, still sized to the whole box:
 
 ```tsx twoslash title="Split decorations"
 import { render } from "takumi-pdf";
