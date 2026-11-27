@@ -9,8 +9,7 @@ use takumi_bindings_common::{
   input::{decode_images, retain_svg},
   options::Draw,
   registrations::Retention,
-  source::read_source,
-  source_cache::SourceCache,
+  source::{JsSourceCache, read_source},
   stylesheet,
   warning::WarningLog,
 };
@@ -33,7 +32,7 @@ use crate::{helper::map_error, model::*};
 pub struct Renderer {
   fonts: FontStore,
   cache: Cache,
-  sources: SourceCache,
+  sources: JsSourceCache,
 }
 
 fn raster_options<'fonts>(
@@ -87,7 +86,7 @@ impl Renderer {
     Ok(Renderer {
       fonts: FontStore::new(cache.clone()).map_err(map_error)?,
       cache,
-      sources: SourceCache::default(),
+      sources: JsSourceCache::default(),
     })
   }
 
