@@ -6,7 +6,7 @@ use std::fmt;
 use cssparser::{Parser, Token, serialize_identifier};
 
 use crate::style::{
-  Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, impl_css_enum,
   properties::is_reserved_custom_ident, unexpected_token,
 };
 
@@ -80,7 +80,7 @@ impl Animatable for ContainerName {}
 impl<'i> FromCss<'i> for ContainerName {
   const VALID_TOKENS: &'static [&'static str] = &["none", "<custom-ident>"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -127,7 +127,7 @@ pub struct Container {
 impl<'i> FromCss<'i> for Container {
   const VALID_TOKENS: &'static [&'static str] = &["none", "<custom-ident>", "/"];
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let name = ContainerName::from_css(input)?;
     let container_type = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
       ContainerType::from_css(input)?

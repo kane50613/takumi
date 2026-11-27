@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, impl_css_enum,
-  parse_comma_list,
+  Animatable, FromCss, ListInterpolationStrategy, MakeComputed, ParseMode, ParseResult, ToCss,
+  impl_css_enum, parse_comma_list,
 };
 
 /// Per-axis repeat style.
@@ -67,7 +67,7 @@ impl BackgroundRepeat {
 }
 
 impl<'i> FromCss<'i> for BackgroundRepeat {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let state = input.state();
     let ident = input.expect_ident()?;
 
@@ -100,7 +100,7 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
 pub type BackgroundRepeats = Box<[BackgroundRepeat]>;
 
 impl<'i> FromCss<'i> for BackgroundRepeats {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_comma_list(input, BackgroundRepeat::from_css)
   }
 

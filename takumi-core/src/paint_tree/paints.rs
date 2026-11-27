@@ -358,7 +358,7 @@ impl Paint {
     let resolved = gradient.resolve_stops(&context.sizing, context.current_color);
     let (x, y) = gradient.resolve_center(width, height, &context.sizing);
     let center = PaintPoint { x, y };
-    let from = gradient.from_angle.to_radians() - FRAC_PI_2;
+    let from = gradient.from_angle.normalized().to_radians() - FRAC_PI_2;
 
     Some(
       match GradientStops::of(

@@ -44,6 +44,7 @@ test("serializeSvg preserves style objects and converts camelCase style keys", (
   const component = (
     <svg xmlns="http://www.w3.org/2000/svg">
       <rect style={{ strokeWidth: 2, strokeDasharray: "4 2" }} />
+      <text style={{ fontSize: 12, lineHeight: 1.5, letterSpacing: 0 }} />
     </svg>
   );
 

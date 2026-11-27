@@ -7,7 +7,7 @@ use cssparser::Parser;
 
 use super::{Scope, SvgLayout, chunk::TextTree};
 use crate::{
-  style::{FromCss, Length},
+  style::{FromCss, Length, ParseMode},
   svg::length::LengthAxis,
 };
 
@@ -147,7 +147,7 @@ fn length_list(text: &str) -> Box<[Length]> {
   let mut lengths = Vec::new();
 
   while !parser.is_exhausted() {
-    let Ok(length) = Length::from_css(&mut parser) else {
+    let Ok(length) = Length::from_css_in(&mut parser, ParseMode::SvgAttribute) else {
       return Box::default();
     };
 

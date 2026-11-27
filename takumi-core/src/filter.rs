@@ -255,8 +255,7 @@ impl ColorMatrix {
       [0.143, 0.140, -0.283],
       [-0.787, 0.715, 0.072],
     ];
-    // `Angle` derefs to its degree value, so the conversion runs on the f32.
-    let (sin, cos) = f32::to_radians(*angle).sin_cos();
+    let (sin, cos) = angle.normalized().to_radians().sin_cos();
     let mut matrix = IDENTITY;
 
     for (index, row) in matrix.rows.iter_mut().take(3).enumerate() {
@@ -355,7 +354,18 @@ impl TransferFunction {
 #[cfg(test)]
 mod tests {
   use super::{ColorMatrix, ColorMatrixChain, TransferFunction};
-  use crate::style::{Filter, PercentageNumber};
+  use crate::style::{Angle, Filter, PercentageNumber};
+
+  #[test]
+  fn a_hue_rotation_past_a_turn_matches_its_normalized_angle() {
+    for (degrees, normalized) in [(400.0, 40.0), (-90.0, 270.0), (720.0, 0.0)] {
+      assert_eq!(
+        ColorMatrix::hue_rotate(Angle::new(degrees)),
+        ColorMatrix::hue_rotate(Angle::new(normalized)),
+        "{degrees}deg"
+      );
+    }
+  }
 
   #[test]
   fn transfer_tables_follow_blink() {

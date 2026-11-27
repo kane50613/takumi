@@ -4,8 +4,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   Animatable, ConicGradient, FromCss, LinearGradient, ListInterpolationStrategy, MakeComputed,
-  ParseResult, RadialGradient, SizingContext, ToCss, parse_comma_list, tw::TailwindPropertyParser,
-  unexpected_token,
+  ParseMode, ParseResult, RadialGradient, SizingContext, ToCss, parse_comma_list,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Background image variants supported by Takumi.
@@ -59,7 +59,7 @@ impl TailwindPropertyParser for BackgroundImage {
 }
 
 impl<'i> FromCss<'i> for BackgroundImage {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, BackgroundImage> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, BackgroundImage> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -77,9 +77,9 @@ impl<'i> FromCss<'i> for BackgroundImage {
     input.reset(&start);
 
     match_ignore_ascii_case! {&function,
-      "linear-gradient" | "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css(input)?)),
-      "radial-gradient" | "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css(input)?)),
-      "conic-gradient" | "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css(input)?)),
+      "linear-gradient" | "repeating-linear-gradient" => Ok(BackgroundImage::Linear(LinearGradient::from_css_in(input, mode)?)),
+      "radial-gradient" | "repeating-radial-gradient" => Ok(BackgroundImage::Radial(RadialGradient::from_css_in(input, mode)?)),
+      "conic-gradient" | "repeating-conic-gradient" => Ok(BackgroundImage::Conic(ConicGradient::from_css_in(input, mode)?)),
       _ => Err(unexpected_token!(&Token::Function(function))),
     }
   }
@@ -100,8 +100,8 @@ impl<'i> FromCss<'i> for BackgroundImage {
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    parse_comma_list(input, BackgroundImage::from_css)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    parse_comma_list(input, |input| BackgroundImage::from_css_in(input, mode))
   }
 
   const VALID_TOKENS: &'static [&'static str] = BackgroundImage::VALID_TOKENS;

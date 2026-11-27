@@ -2274,7 +2274,7 @@ fn test_gradient_directions_and_interpolation_modifiers_as_tailwind_writes_them(
     ),
     (
       "-bg-linear-45",
-      "linear-gradient".to_owned() + &stops("315deg in oklab"),
+      "linear-gradient".to_owned() + &stops("-45deg in oklab"),
     ),
     (
       "bg-linear-[to_right]",

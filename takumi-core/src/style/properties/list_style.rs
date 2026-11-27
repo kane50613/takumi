@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, Direction, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
-  merge_token_lists, merged_token_len, unexpected_token,
+  Animatable, BackgroundImage, Direction, FromCss, MakeComputed, ParseMode, ParseResult, ToCss,
+  impl_css_enum, merge_token_lists, merged_token_len, unexpected_token,
 };
 
 /// The `list-style-type` property.
@@ -55,8 +55,8 @@ impl MakeComputed for ListStyleImage {}
 impl Animatable for ListStyleImage {}
 
 impl<'i> FromCss<'i> for ListStyleImage {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let image = BackgroundImage::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let image = BackgroundImage::from_css_in(input, mode)?;
 
     Ok(Self(image.paints().then(|| Arc::new(image))))
   }
@@ -248,7 +248,7 @@ const LIST_STYLE_TYPE_TOKENS: &[&str] = &[
 ];
 
 impl<'i> FromCss<'i> for ListStyleType {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?.clone();
 
     match token {
@@ -293,7 +293,7 @@ const LIST_STYLE_TOKENS: [&str; merged_token_len(LIST_STYLE_TOKEN_LISTS)] =
   merge_token_lists(LIST_STYLE_TOKEN_LISTS);
 
 impl<'i> FromCss<'i> for ListStyleShorthand {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut style_type = None;
     let mut position = None;
     let mut image = None;
@@ -314,7 +314,7 @@ impl<'i> FromCss<'i> for ListStyleShorthand {
       }
 
       if image.is_none()
-        && let Ok(parsed) = input.try_parse(ListStyleImage::from_css)
+        && let Ok(parsed) = input.try_parse(|input| ListStyleImage::from_css_in(input, mode))
       {
         image = Some(parsed);
         continue;

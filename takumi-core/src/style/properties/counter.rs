@@ -5,7 +5,10 @@ use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_identifier};
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, parse_nested_block,
+  unexpected_token,
+};
 
 /// One counter an element changes, and the integer it changes the counter by or to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +43,7 @@ impl<const DEFAULT: i32, const REVERSIBLE: bool> CounterChanges<DEFAULT, REVERSI
   fn change<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CounterChange> {
     let (name, reversed) = match input.next()?.clone() {
       Token::Function(function) if REVERSIBLE && function.eq_ignore_ascii_case("reversed") => {
-        (input.parse_nested_block(counter_name::<Self>)?, true)
+        (parse_nested_block(input, counter_name::<Self>)?, true)
       }
       token @ Token::Ident(_) => (name_of::<Self>(&token)?, false),
       token => return Err(unexpected_token!(Self, &token)),
@@ -68,7 +71,7 @@ impl<const DEFAULT: i32, const REVERSIBLE: bool> Animatable
 impl<'i, const DEFAULT: i32, const REVERSIBLE: bool> FromCss<'i>
   for CounterChanges<DEFAULT, REVERSIBLE>
 {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()

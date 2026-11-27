@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseMode, ParseResult, ToCss};
 
 /// Represents the direction of the grid auto flow.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -54,7 +54,7 @@ impl GridAutoFlow {
 }
 
 impl<'i> FromCss<'i> for GridAutoFlow {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let mut direction = GridDirection::default();
     let mut dense = false;
 

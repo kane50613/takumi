@@ -23,6 +23,13 @@ const cssClosingBrackets = new Map([
   ["{", "}"],
 ]);
 
+// React DOM's `unitlessNumbers`, the style properties whose numbers it writes without `px`.
+const unitlessNumbers = new Set(
+  "animationIterationCount aspectRatio borderImageOutset borderImageSlice borderImageWidth boxFlex boxFlexGroup boxOrdinalGroup columnCount columns flex flexGrow flexPositive flexShrink flexNegative flexOrder gridArea gridRow gridRowEnd gridRowSpan gridRowStart gridColumn gridColumnEnd gridColumnSpan gridColumnStart fontWeight lineClamp lineHeight opacity order orphans scale tabSize widows zIndex zoom fillOpacity floodOpacity stopOpacity strokeDasharray strokeDashoffset strokeMiterlimit strokeOpacity strokeWidth MozAnimationIterationCount MozBoxFlex MozBoxFlexGroup MozLineClamp msAnimationIterationCount msFlex msZoom msFlexGrow msFlexNegative msFlexOrder msFlexPositive msFlexShrink msGridColumn msGridColumnSpan msGridRow msGridRowSpan WebkitAnimationIterationCount WebkitBoxFlex WebKitBoxFlexGroup WebkitBoxOrdinalGroup WebkitColumnCount WebkitColumns WebkitFlex WebkitFlexGrow WebkitFlexPositive WebkitFlexShrink WebkitLineClamp".split(
+    " ",
+  ),
+);
+
 /** The prefixes of the attribute names a serialized subtree writes. */
 type Prefixes = Set<string>;
 
@@ -113,7 +120,13 @@ function serializeStyle(style: object): string {
   return Object.entries(style)
     .map(([key, value]) => {
       const property = camelToKebab(key);
-      const text = String(value).trim();
+      const text =
+        typeof value === "number" &&
+        value !== 0 &&
+        !key.startsWith("--") &&
+        !unitlessNumbers.has(key)
+          ? `${value}px`
+          : String(value).trim();
 
       if (!cssPropertyName.test(property)) {
         throw new Error(`Invalid SVG style property: ${JSON.stringify(key)}`);

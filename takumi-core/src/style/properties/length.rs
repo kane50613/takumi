@@ -7,8 +7,9 @@ use crate::{
   layout::layout_style::LayoutLength,
   layout_unit::LayoutUnit,
   style::{
-    AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseResult, SizingContext, ToCss,
-    calc::{CalcTerms, CalcUnit},
+    AspectRatio, FromCss, FromCssStr, MakeComputed, MathExpr, ParseMode, ParseResult,
+    SizingContext, ToCss,
+    calc::{CalcFormula, CalcTerms, CalcUnit},
     is_math_function, parse_length,
     tw::Namespace,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
@@ -374,7 +375,7 @@ impl From<f32> for Length {
 }
 
 impl<'i> FromCss<'i> for Length {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -385,13 +386,15 @@ impl<'i> FromCss<'i> for Length {
       Token::Function(function) if is_math_function(function) => {
         let function = function.clone();
 
-        parse_length(&function, input)
+        parse_length(&function, input, mode)
       }
       Token::Dimension { value, unit, .. } => {
         length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
       }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
-      Token::Number { value, .. } => Ok(Self::Px(*value)),
+      Token::Number { value, .. } if *value == 0.0 || mode == ParseMode::SvgAttribute => {
+        Ok(Self::Px(*value))
+      }
       _ => Err(unexpected_token!(token)),
     }
   }
@@ -400,6 +403,44 @@ impl<'i> FromCss<'i> for Length {
 }
 
 impl Length {
+  /// Blink's `ConsumeLengthOrPercent`: a `<length-percentage>`, which `auto` is not.
+  pub(crate) fn parse_length_percentage<'i>(
+    input: &mut Parser<'i>,
+    mode: ParseMode,
+  ) -> ParseResult<'i, Self> {
+    let state = input.state();
+    let token = input.next()?.clone();
+
+    if matches!(&token, Token::Ident(ident) if ident.eq_ignore_ascii_case("auto")) {
+      return Err(unexpected_token!(&token));
+    }
+
+    input.reset(&state);
+    Self::from_css_in(input, mode)
+  }
+
+  /// Blink's `ParseSpacing` for `letter-spacing` and `word-spacing`, with `normal` as the zero
+  /// it computes to.
+  pub(crate) fn parse_spacing<'i>(
+    input: &mut Parser<'i>,
+    mode: ParseMode,
+  ) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("normal"))
+      .is_ok()
+    {
+      return Ok(Self::zero());
+    }
+
+    Self::parse_length_percentage(input, mode)
+  }
+
+  /// The length an SVG attribute writes, none when it is malformed.
+  #[cfg(feature = "svg-sizing")]
+  pub(crate) fn from_svg_attribute(text: &str) -> Option<Self> {
+    Self::from_css_in(&mut Parser::new(text), ParseMode::SvgAttribute).ok()
+  }
+
   fn to_px_pre_dpr(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
     match self {
       Length::Auto => 0.0,
@@ -586,6 +627,7 @@ impl MakeComputed for Length {
       return;
     }
 
+    // Blink's `CSSMathFunctionValue::ToCalcValue` resolves every unit but the percentage, so the boxes that inherit `calc(10% + 2em)` inherit `calc(10% + 40px)`.
     if let Self::Calc(formula) = *self {
       let linear = formula.resolve(sizing);
 
@@ -596,6 +638,12 @@ impl MakeComputed for Length {
 
       if is_near_zero(linear.px) {
         *self = Self::Percentage(linear.percent * 100.0);
+        return;
+      }
+
+      if let Some(terms) = CalcFormula::linear(sizing.to_css(linear.px), linear.percent).compress()
+      {
+        *self = Self::Calc(terms);
       }
     }
   }
@@ -653,7 +701,11 @@ mod tests {
   use std::assert_matches;
 
   use super::*;
-  use crate::{geometry::Size, style::calc::CalcFormula, viewport::Viewport};
+  use crate::{geometry::Size, viewport::Viewport};
+
+  fn svg_attribute_length(css: &str) -> ParseResult<'_, Length> {
+    Length::from_css_in(&mut Parser::new(css), ParseMode::SvgAttribute)
+  }
 
   fn sizing() -> SizingContext {
     SizingContext::builder()
@@ -725,9 +777,12 @@ mod tests {
   }
 
   #[test]
-  fn parse_calc_number_expression_becomes_px() {
-    let parsed = Length::from_css_str("calc(1 + 2)");
-    assert_eq!(parsed, Ok(Length::Px(3.0)));
+  fn a_unitless_number_is_a_length_only_when_zero_or_in_svg_attribute_mode() {
+    assert_eq!(Length::from_css_str("0"), Ok(Length::Px(0.0)));
+    assert!(Length::from_css_str("5").is_err());
+    assert!(Length::from_css_str("calc(1 + 2)").is_err());
+    assert_eq!(svg_attribute_length("5"), Ok(Length::Px(5.0)));
+    assert_eq!(svg_attribute_length("calc(1 + 2)"), Ok(Length::Px(3.0)));
   }
 
   #[test]
@@ -822,6 +877,25 @@ mod tests {
         .compress()
         .unwrap()
       )
+    );
+  }
+
+  #[test]
+  fn make_computed_resolves_the_font_relative_terms_of_a_mixed_formula() {
+    let mut value = Length::Calc(
+      CalcFormula {
+        percent: 0.1,
+        em: 2.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
+
+    value.make_computed(&sizing());
+    assert_eq!(
+      value,
+      Length::Calc(CalcFormula::linear(10.0, 0.1).compress().unwrap())
     );
   }
 
@@ -1102,22 +1176,23 @@ mod tests {
 
   #[test]
   fn parse_calc_supports_constants() {
+    // A constant is a number, which is a length only in SVG attribute mode.
     assert_eq!(
-      Length::from_css_str("calc(pi)").as_ref(),
+      svg_attribute_length("calc(pi)").as_ref(),
       Ok(&Length::Px(std::f32::consts::PI))
     );
     assert_eq!(
-      Length::from_css_str("calc(e)").as_ref(),
+      svg_attribute_length("calc(e)").as_ref(),
       Ok(&Length::Px(std::f32::consts::E))
     );
 
-    let inf = Length::from_css_str("calc(infinity)");
+    let inf = svg_attribute_length("calc(infinity)");
     assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
-    let neg_inf = Length::from_css_str("calc(-infinity)");
+    let neg_inf = svg_attribute_length("calc(-infinity)");
     assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
-    let nan = Length::from_css_str("calc(nan)");
+    let nan = svg_attribute_length("calc(nan)");
     assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
   }
 

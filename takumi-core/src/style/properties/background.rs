@@ -44,7 +44,7 @@ fn parse_attachment<'i>(input: &mut Parser<'i>) -> ParseResult<'i, ()> {
 }
 
 impl<'i> FromCss<'i> for Background {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut color = None;
     let mut image = None;
     let mut position = None;
@@ -65,14 +65,14 @@ impl<'i> FromCss<'i> for Background {
 
       if position.is_none()
         && let Ok(value) =
-          input.try_parse(|input| PositionValue::parse(input, PositionSyntax::Background))
+          input.try_parse(|input| PositionValue::parse(input, PositionSyntax::Background, mode))
       {
         position = Some(value);
 
         size = input
           .try_parse(|input| {
             input.expect_delim('/')?;
-            BackgroundSize::from_css(input)
+            BackgroundSize::from_css_in(input, mode)
           })
           .ok();
 
@@ -80,7 +80,7 @@ impl<'i> FromCss<'i> for Background {
       }
 
       if image.is_none()
-        && let Ok(value) = input.try_parse(BackgroundImage::from_css)
+        && let Ok(value) = input.try_parse(|input| BackgroundImage::from_css_in(input, mode))
       {
         image = Some(value);
         continue;

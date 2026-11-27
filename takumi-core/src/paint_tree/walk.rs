@@ -98,26 +98,25 @@ impl Walker {
       .iter()
       .map(|chunk| (chunk.node.path.as_slice(), chunk.node))
       .collect();
-    let mut conversion = ConversionContext::new(
-      &scene.properties,
-      StepWriter {
-        walker: self,
-        scene,
-        prefix,
-        owners: &owners,
-        paints: &paints,
-        boxes: FxHashMap::default(),
-        open: Vec::new(),
-        error: None,
-      },
-    );
+    let mut conversion = ConversionContext::new(&scene.properties);
+    let mut writer = StepWriter {
+      walker: self,
+      scene,
+      prefix,
+      owners: &owners,
+      paints: &paints,
+      boxes: FxHashMap::default(),
+      open: Vec::new(),
+      error: None,
+    };
 
     for chunk in &chunks {
-      conversion.switch_to(chunk.state());
-      conversion.sink().chunk(chunk);
+      conversion.switch_to(chunk.state(), &mut writer);
+      writer.chunk(chunk);
     }
 
-    conversion.finish().error.map_or(Ok(()), Err)
+    conversion.finish(&mut writer);
+    writer.error.map_or(Ok(()), Err)
   }
 
   /// Records a box as a node without steps, its background shown through `text_clip` when it has

@@ -2,7 +2,7 @@ use std::{fmt, str};
 
 use cssparser::{ParseError as CssParseError, Parser, Token, serialize_string};
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss};
 
 /// `font-language-override`: the OpenType language system glyphs are picked under, in place of
 /// the one the content language maps to.
@@ -22,7 +22,7 @@ impl MakeComputed for FontLanguageOverride {}
 impl Animatable for FontLanguageOverride {}
 
 impl<'i> FromCss<'i> for FontLanguageOverride {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let token = input.next()?.clone();
 
     match &token {

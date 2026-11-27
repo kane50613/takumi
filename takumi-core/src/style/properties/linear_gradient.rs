@@ -15,8 +15,8 @@ use super::gradient_utils::{
 use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, parse_angle,
-  tw::TailwindPropertyParser, unexpected_token,
+  ParseMode, ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
+  parse_nested_block, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -82,7 +82,7 @@ impl LinearGradient {
         keyword_direction.to_angle()
       }
     };
-    let degrees = angle.0.rem_euclid(360.0);
+    let degrees = angle.normalized();
 
     // Blink's `EndPointsFromAngle` takes the four axis angles exactly.
     if degrees == 0.0 {
@@ -476,18 +476,12 @@ pub struct ResolvedGradientStop {
 }
 
 impl<'i> FromCss<'i> for StopPosition {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
-    if let Ok(num) = input.try_parse(Parser::expect_number) {
-      return Ok(StopPosition(Length::Percentage(
-        num.clamp(0.0, 1.0) * 100.0,
-      )));
-    }
-
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, StopPosition> {
     if let Ok(unit_value) = input.try_parse(Parser::expect_percentage) {
       return Ok(StopPosition(Length::Percentage(unit_value * 100.0)));
     }
 
-    let Ok(length) = input.try_parse(Length::from_css) else {
+    let Ok(length) = input.try_parse(|input| Length::from_css_in(input, mode)) else {
       return Err(unexpected_token!(input.next()?,));
     };
 
@@ -499,7 +493,7 @@ impl<'i> FromCss<'i> for StopPosition {
 
 impl<'i> FromCss<'i> for GradientStop {
   /// Parses a gradient hint from the input.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, GradientStop> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, GradientStop> {
     if let Ok(hint) = input.try_parse(StopPosition::from_css) {
       return Ok(GradientStop::Hint(hint));
     };
@@ -538,10 +532,7 @@ impl Animatable for Angle {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    let from_degrees = **from;
-    let to_degrees = **to;
-    let delta = (to_degrees - from_degrees + 180.0).rem_euclid(360.0) - 180.0;
-    *self = Angle::new(from_degrees + delta * progress);
+    *self = Angle::new(lerp(**from, **to, progress));
   }
 }
 
@@ -578,9 +569,17 @@ impl Angle {
     Angle(0.0)
   }
 
-  /// Creates a new angle value, normalizing it to the range [0, 360).
-  pub fn new(value: f32) -> Self {
-    Angle(value.rem_euclid(360.0))
+  /// Creates a new angle value, keeping the degrees as specified.
+  pub const fn new(value: f32) -> Self {
+    Angle(value)
+  }
+
+  /// The direction the angle points in, as degrees in [0, 360). Approximate: rotation, skew,
+  /// `hue-rotate()`, and `offset-rotate` take their sines, cosines, and tangents from this, where
+  /// Blink's `SinCosDegrees` and `tan` read the specified degrees, so an angle past a turn can
+  /// differ from Chrome in the last bits of the matrix.
+  pub fn normalized(self) -> f32 {
+    self.0.rem_euclid(360.0)
   }
 }
 
@@ -686,7 +685,7 @@ impl GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for GradientKeywordDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     input.expect_ident_matching("to")?;
 
     if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
@@ -717,7 +716,7 @@ impl<'i> FromCss<'i> for GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for LinearGradientDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(direction) = input.try_parse(GradientKeywordDirection::from_css) {
       return Ok(Self::Keyword(direction));
     }
@@ -759,10 +758,10 @@ impl LinearGradient {
 }
 
 impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, LinearGradient> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut direction = LinearGradientDirection::default();
       let mut interpolation = None;
       let mut saw_direction = false;
@@ -788,7 +787,8 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       input.try_parse(Parser::expect_comma).ok();
 
-      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
+      let (stops, modern) =
+        parse_gradient_stops(input, |input| StopPosition::from_css_in(input, mode))?;
 
       Ok(LinearGradient {
         repeating,
@@ -803,7 +803,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 }
 
 impl<'i> FromCss<'i> for Angle {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Angle> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Angle> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -1015,26 +1015,57 @@ mod tests {
     }
   }
 
+  /// Blink's `CSSAngleInterpolationType` blends the specified degrees as a number.
   #[test]
-  fn test_angle_interpolate_uses_shortest_path_across_zero() {
-    let from = Angle::new(0.0);
-    let to = Angle::new(-3.0);
-    let mut interpolated = from;
+  fn an_angle_interpolates_its_specified_degrees() {
+    for (from, to, progress, expected) in [
+      (0.0, 360.0, 0.25, 90.0),
+      (0.0, 720.0, 0.5, 360.0),
+      (0.0, -3.0, 0.5, -1.5),
+      (-3.0, 0.0, 0.5, -1.5),
+    ] {
+      let interpolated = Angle::interpolated(
+        &Angle::new(from),
+        &Angle::new(to),
+        progress,
+        &sizing(),
+        Color::transparent(),
+      );
 
-    interpolated.interpolate(&from, &to, 0.5, &sizing(), Color::transparent());
-
-    assert!((*interpolated - 358.5).abs() < 0.001);
+      assert_eq!(
+        *interpolated, expected,
+        "{from}deg to {to}deg at {progress}"
+      );
+    }
   }
 
   #[test]
-  fn test_angle_interpolate_uses_shortest_path_forward_across_zero() {
-    let from = Angle::new(-3.0);
-    let to = Angle::new(0.0);
-    let mut interpolated = from;
+  fn an_angle_keeps_its_specified_degrees() {
+    assert_eq!(Angle::from_css_str("720deg").map(|angle| *angle), Ok(720.0));
+    assert_eq!(
+      Angle::from_css_str("-1turn").map(|angle| *angle),
+      Ok(-360.0)
+    );
+    assert_eq!(Angle::new(-90.0).to_css_string(), "-90deg");
+  }
 
-    interpolated.interpolate(&from, &to, 0.5, &sizing(), Color::transparent());
+  /// Blink's `Gradient::EndPointsFromAngle` wraps the angle into [0, 360).
+  #[test]
+  fn a_gradient_angle_past_a_turn_points_as_its_normalized_angle() {
+    for (angle, normalized) in [(450.0, 90.0), (-90.0, 270.0), (720.0, 0.0), (405.0, 45.0)] {
+      let gradient = |degrees| {
+        LinearGradient::builder()
+          .direction(LinearGradientDirection::Angle(Angle::new(degrees)))
+          .stops([])
+          .build()
+      };
 
-    assert!((*interpolated - 358.5).abs() < 0.001);
+      assert_eq!(
+        gradient(angle).direction_components(40.0, 30.0),
+        gradient(normalized).direction_components(40.0, 30.0),
+        "{angle}deg"
+      );
+    }
   }
 
   #[test]
@@ -1292,7 +1323,7 @@ mod tests {
         vertical: Some(VerticalKeyword::Top)
       }
       .to_angle(),
-      Angle::new(315.0)
+      Angle::new(-45.0)
     );
     assert_eq!(
       GradientKeywordDirection {
@@ -1553,7 +1584,6 @@ mod tests {
   #[test]
   fn test_stop_position_parsing() {
     for (input, expected) in [
-      ("0.25", StopPosition(Length::Percentage(25.0))),
       ("75%", StopPosition(Length::Percentage(75.0))),
       ("50%", StopPosition(Length::Percentage(50.0))),
       ("12px", StopPosition(Length::Px(12.0))),
@@ -1565,6 +1595,8 @@ mod tests {
         "input: {input}"
       );
     }
+
+    assert!(StopPosition::from_css_str("0.25").is_err());
   }
 
   #[test]
