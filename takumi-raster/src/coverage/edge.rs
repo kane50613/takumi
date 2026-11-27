@@ -2,7 +2,7 @@
 //! `SkAnalyticEdge` (`src/core/SkAnalyticEdge.{h,cpp}`) over the 16.16 `SkFixed` and 26.6
 //! `SkFDot6` arithmetic of `SkFixed.h` and `SkFDot6.h`.
 
-use tiny_skia_path::Point;
+use takumi_core::path::Point;
 
 pub(super) type Fixed = i32;
 pub(super) type FDot6 = i32;

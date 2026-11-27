@@ -5,7 +5,7 @@
 //! the same spans.
 
 use crate::path::Fill;
-use tiny_skia_path::{Path, Point, Rect};
+use takumi_core::path::{Path, Point, Rect};
 
 use super::{
   blitter::IntBounds,

@@ -2,6 +2,8 @@
 //! in font units with the y-axis pointing up, as the COLR table defines them. Colors stay palette
 //! indices until a backend draws them, since the text color resolves the foreground index.
 
+use crate::path::{Path, PathBuilder, Point, Rect};
+use crate::style::Affine;
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
   color::{Brush, ColorPainter, ColorStop as SkrifaColorStop, CompositeMode, Extend},
@@ -9,7 +11,6 @@ use skrifa::{
   outline::{DrawSettings, OutlinePen},
   raw::types::BoundingBox,
 };
-use tiny_skia_path::{Path, PathBuilder, Point, Rect, Transform};
 
 use crate::resources::glyph::draw_outline;
 
@@ -79,7 +80,7 @@ pub enum ColorPaint {
     /// What the gradient paints past its ends.
     extend: Extend,
     /// The transform the gradient is defined under.
-    transform: Transform,
+    transform: Affine,
   },
   /// A gradient between two circles.
   Radial {
@@ -96,7 +97,7 @@ pub enum ColorPaint {
     /// What the gradient paints past its ends.
     extend: Extend,
     /// The transform the gradient is defined under.
-    transform: Transform,
+    transform: Affine,
   },
   /// A gradient around `center`, in degrees clockwise from the positive x-axis. skrifa swaps
   /// COLR's counterclockwise angles, and may reverse the stops to do it.
@@ -112,7 +113,7 @@ pub enum ColorPaint {
     /// What the gradient paints past its ends.
     extend: Extend,
     /// The transform the gradient is defined under.
-    transform: Transform,
+    transform: Affine,
   },
 }
 
@@ -139,7 +140,7 @@ struct Recorder<'a> {
   stack: Vec<(Vec<ColorInstruction>, bool)>,
   bounds: Option<Rect>,
   layers: Vec<CompositeMode>,
-  transforms: Vec<Transform>,
+  transforms: Vec<Affine>,
   error: bool,
 }
 
@@ -158,7 +159,7 @@ impl<'a> Recorder<'a> {
       stack: vec![(vec![], true)],
       bounds: None,
       layers: vec![],
-      transforms: vec![Transform::identity()],
+      transforms: vec![Affine::IDENTITY],
       error: false,
     }
   }
@@ -283,14 +284,15 @@ impl ColorPainter for Recorder<'_> {
       self.error = true;
       return;
     };
-    let next = last.pre_concat(Transform::from_row(
-      transform.xx,
-      transform.yx,
-      transform.xy,
-      transform.yy,
-      transform.dx,
-      transform.dy,
-    ));
+    let next = *last
+      * Affine {
+        a: transform.xx,
+        b: transform.yx,
+        c: transform.xy,
+        d: transform.yy,
+        x: transform.dx,
+        y: transform.dy,
+      };
 
     self.transforms.push(next);
   }

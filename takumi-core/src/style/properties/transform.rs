@@ -4,7 +4,6 @@ use std::{
 };
 
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
-use tiny_skia_path::Transform as TinyTransform;
 
 use crate::style::{
   Angle, Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
@@ -110,32 +109,6 @@ pub struct Affine {
   pub x: f32,
   /// Vertical translation (always orthogonal regardless of rotation)
   pub y: f32,
-}
-
-impl From<Affine> for TinyTransform {
-  fn from(transform: Affine) -> Self {
-    TinyTransform::from_row(
-      transform.a,
-      transform.b,
-      transform.c,
-      transform.d,
-      transform.x,
-      transform.y,
-    )
-  }
-}
-
-impl From<TinyTransform> for Affine {
-  fn from(transform: TinyTransform) -> Self {
-    Self {
-      a: transform.sx,
-      b: transform.ky,
-      c: transform.kx,
-      d: transform.sy,
-      x: transform.tx,
-      y: transform.ty,
-    }
-  }
 }
 
 impl Mul<Affine> for Affine {
@@ -313,8 +286,8 @@ impl Affine {
   /// Transforms a point by the transform
   #[inline(always)]
   pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
-    // Fast path: If the transform is only a translation, we can just add the translation to the point
-    if self.only_translation() {
+    // Exact, as Skia's type mask is, so a skew too small for `only_translation` still applies.
+    if self.a == 1.0 && self.b == 0.0 && self.c == 0.0 && self.d == 1.0 {
       return (x + self.x, y + self.y);
     }
 

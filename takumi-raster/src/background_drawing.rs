@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::path::Fill;
 use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
 use smallvec::SmallVec;
+use takumi_core::path::{IntRect, IntSize, PathBuilder, Rect as TinyRect};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
@@ -11,7 +12,6 @@ use takumi_core::{
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::{BoxBackground, SnappedBox},
 };
-use tiny_skia_path::{IntRect, IntSize, PathBuilder, Rect as TinyRect};
 
 use crate::resources::image::RenderedImage;
 #[cfg(feature = "svg")]

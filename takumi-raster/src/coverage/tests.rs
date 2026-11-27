@@ -1,5 +1,5 @@
 use crate::path::Fill;
-use tiny_skia_path::{IntSize, Path, PathBuilder, Rect};
+use takumi_core::path::{IntSize, Path, PathBuilder, PathSegment, Rect};
 
 use super::{fill_path, fill_path_aliased};
 
@@ -12,6 +12,18 @@ fn polygon(points: &[(f32, f32)]) -> Path {
   }
   builder.close();
   builder.finish().unwrap()
+}
+
+/// Adds a circle of four cubics, the usual quarter-circle approximation.
+fn push_circle(builder: &mut PathBuilder, cx: f32, cy: f32, radius: f32) {
+  let k = 0.552_284_8 * radius;
+
+  builder.move_to(cx + radius, cy);
+  builder.cubic_to(cx + radius, cy + k, cx + k, cy + radius, cx, cy + radius);
+  builder.cubic_to(cx - k, cy + radius, cx - radius, cy + k, cx - radius, cy);
+  builder.cubic_to(cx - radius, cy - k, cx - k, cy - radius, cx, cy - radius);
+  builder.cubic_to(cx + k, cy - radius, cx + radius, cy - k, cx + radius, cy);
+  builder.close();
 }
 
 fn fill(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
@@ -75,7 +87,12 @@ fn rect_fill_rounds_edges_to_256ths() {
 /// edge pixels may move, by under a quarter.
 #[test]
 fn clipped_path_matches_its_unclipped_crop() {
-  let circle = |cx: f32| PathBuilder::from_circle(cx, 40.0, 37.3).unwrap();
+  let circle = |cx: f32| {
+    let mut builder = PathBuilder::new();
+
+    push_circle(&mut builder, cx, 40.0, 37.3);
+    builder.finish().unwrap()
+  };
   let clipped = fill(&circle(10.5), Fill::NonZero, 40, 80);
   let whole = fill(&circle(50.5), Fill::NonZero, 90, 80);
   let mut total = 0u32;
@@ -155,17 +172,27 @@ fn whole_pixel_square_covers_its_edges_fully() {
 /// tiny-skia's aliased fill, a port of an older `SkScan::FillPath`, as the oracle.
 fn tiny_skia_aliased(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
   let mut mask = tiny_skia::Mask::new(width, height).unwrap();
+  let mut builder = tiny_skia::PathBuilder::new();
+
+  for segment in path.segments() {
+    match segment {
+      PathSegment::MoveTo(to) => builder.move_to(to.x, to.y),
+      PathSegment::LineTo(to) => builder.line_to(to.x, to.y),
+      PathSegment::QuadTo(control, to) => builder.quad_to(control.x, control.y, to.x, to.y),
+      PathSegment::CubicTo(first, second, to) => {
+        builder.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
+      }
+      PathSegment::Close => builder.close(),
+    }
+  }
+
+  let path = builder.finish().unwrap();
   let fill_rule = match fill_rule {
     Fill::NonZero => tiny_skia::FillRule::Winding,
     Fill::EvenOdd => tiny_skia::FillRule::EvenOdd,
   };
 
-  mask.fill_path(
-    path,
-    fill_rule,
-    false,
-    tiny_skia_path::Transform::identity(),
-  );
+  mask.fill_path(&path, fill_rule, false, tiny_skia::Transform::identity());
   mask.data().to_vec()
 }
 
@@ -199,7 +226,7 @@ fn aliased_polygons_match_skias_fill() {
 fn aliased_curves_match_skias_fill() {
   let mut builder = PathBuilder::new();
 
-  builder.push_circle(30.3, 25.7, 19.6);
+  push_circle(&mut builder, 30.3, 25.7, 19.6);
   builder.move_to(2.0, 40.0);
   builder.quad_to(30.0, -10.0, 60.0, 44.5);
   builder.close();

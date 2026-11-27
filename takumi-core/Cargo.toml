@@ -18,7 +18,6 @@ data-url.workspace = true
 color.workspace = true
 serde_bytes.workspace = true
 thiserror.workspace = true
-tiny-skia-path.workspace = true
 typed-builder.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true

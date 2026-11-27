@@ -12,7 +12,7 @@ mod rect;
 mod scan;
 
 use crate::path::Fill;
-use tiny_skia_path::{IntSize, Path};
+use takumi_core::path::{IntSize, Path};
 
 use blitter::{Coverage, IntBounds, round_out};
 

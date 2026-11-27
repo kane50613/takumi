@@ -5,7 +5,7 @@
 
 use crate::path::Fill;
 use smallvec::SmallVec;
-use tiny_skia_path::{Path, Rect};
+use takumi_core::path::{Path, Rect};
 
 use super::{
   blitter::{

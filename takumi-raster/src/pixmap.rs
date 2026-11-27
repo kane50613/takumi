@@ -1,7 +1,7 @@
 //! Premultiplied RGBA8 pixmaps and A8 coverage masks, owned and borrowed.
 
+use takumi_core::path::{IntRect, IntSize};
 use takumi_core::resources::image_buffer::ImageBuffer;
-use tiny_skia_path::{IntRect, IntSize};
 
 /// The byte length of a `size` buffer of `bytes_per_pixel` pixels, none where a row's byte count
 /// leaves `i32`, as Skia's `SkImageInfo::validRowBytes` requires.

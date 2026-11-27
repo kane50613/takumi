@@ -7,7 +7,7 @@
 use std::{f32::consts::SQRT_2, rc::Rc};
 
 use crate::pixmap::{Pixmap, PixmapRef};
-use tiny_skia_path::{IntRect, Transform};
+use takumi_core::path::IntRect;
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
@@ -167,14 +167,14 @@ struct Run<'a> {
 
 /// Applies the filter to a layer, which `transform` maps the user space of the filter onto. A
 /// filter that cannot run clears the layer.
-pub(crate) fn apply(filter: &SvgFilter, transform: Transform, layer: &mut Pixmap) {
+pub(crate) fn apply(filter: &SvgFilter, transform: Affine, layer: &mut Pixmap) {
   let (width, height) = (layer.width(), layer.height());
   let Some(blank) = Pixmap::new(width, height) else {
     return;
   };
   let source = std::mem::replace(layer, blank);
 
-  if let Some((image, region)) = run(filter, transform.into(), source) {
+  if let Some((image, region)) = run(filter, transform, source) {
     if region == Rect::from_size(0, 0, width, height) {
       *layer = image.take();
     } else {
@@ -256,7 +256,7 @@ pub(crate) fn apply_to_layer(
   let dy = (-filter.region.top).round() as i32;
   let window = filter
     .region
-    .transformed(Transform::from_translate(-filter.region.left, -filter.region.top).into())
+    .transformed(Affine::translation(-filter.region.left, -filter.region.top))
     .and_then(pixel_bounds)?
     .intersection(&Rect::from_size(dx, dy, width, height))?;
 
@@ -265,7 +265,7 @@ pub(crate) fn apply_to_layer(
   }
 
   let mut sub = Pixmap::new(window.width(), window.height())?;
-  let transform = Transform::from_translate(
+  let transform = Affine::translation(
     -filter.region.left - window.left as f32,
     -filter.region.top - window.top as f32,
   );
@@ -523,14 +523,14 @@ impl Run<'_> {
 
         draw_svg(
           ops,
-          Transform::from_row(
-            sx,
-            0.0,
-            0.0,
-            sy,
-            (subregion.left - self.region.left) as f32,
-            (subregion.top - self.region.top) as f32,
-          ),
+          Affine {
+            a: sx,
+            b: 0.0,
+            c: 0.0,
+            d: sy,
+            x: (subregion.left - self.region.left) as f32,
+            y: (subregion.top - self.region.top) as f32,
+          },
           &mut pixmap.as_mut(),
         );
         Some(Image::new(pixmap, ColorSpace::Srgb))
