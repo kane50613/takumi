@@ -209,7 +209,7 @@ fn run(filter: &SvgFilter, transform: Affine, source: Pixmap) -> Option<(Image, 
   let alpha = filter
     .primitives
     .iter()
-    .any(|primitive| inputs(&primitive.kind).contains(&&Input::SourceAlpha))
+    .any(|primitive| primitive.kind.inputs().contains(&&Input::SourceAlpha))
     .then(|| graphic.alpha());
   let mut run = Run {
     transform,
@@ -359,7 +359,7 @@ impl Run<'_> {
     let read_later = |input: &Input| {
       later
         .iter()
-        .any(|primitive| inputs(&primitive.kind).contains(&input))
+        .any(|primitive| primitive.kind.inputs().contains(&input))
     };
 
     if !read_later(&Input::SourceGraphic) {
@@ -374,7 +374,9 @@ impl Run<'_> {
 
       (keep_last && index - 1 == last)
         || later.iter().any(|primitive| {
-          inputs(&primitive.kind)
+          primitive
+            .kind
+            .inputs()
             .iter()
             .any(|input| input.names(&result.name))
         })
@@ -389,7 +391,9 @@ impl Run<'_> {
       primitive.kind,
       Kind::ColorMatrix { .. } | Kind::ComponentTransfer { .. }
     );
-    let mut inputs = inputs(&primitive.kind)
+    let mut inputs = primitive
+      .kind
+      .inputs()
       .into_iter()
       .map(|input| {
         let image = self.input(input)?;
@@ -878,28 +882,6 @@ impl Run<'_> {
   }
 }
 
-/// The inputs the primitive reads, in the order it takes them.
-fn inputs(kind: &Kind) -> Vec<&Input> {
-  match kind {
-    Kind::Blend { input1, input2, .. } | Kind::Composite { input1, input2, .. } => {
-      vec![input1, input2]
-    }
-    Kind::DisplacementMap(fe) => vec![&fe.input1, &fe.input2],
-    Kind::Merge { inputs } => inputs.iter().collect(),
-    Kind::ColorMatrix { input, .. }
-    | Kind::ComponentTransfer { input, .. }
-    | Kind::GaussianBlur { input, .. }
-    | Kind::Morphology { input, .. }
-    | Kind::Offset { input, .. }
-    | Kind::Tile { input } => vec![input],
-    Kind::ConvolveMatrix(fe) => vec![&fe.input],
-    Kind::DiffuseLighting(fe) => vec![&fe.input],
-    Kind::SpecularLighting(fe) => vec![&fe.input],
-    Kind::DropShadow(fe) => vec![&fe.input],
-    Kind::Flood { .. } | Kind::Image(_) | Kind::Turbulence(_) => Vec::new(),
-  }
-}
-
 /// Pixmap bytes as RGBA pixels.
 trait PixmapPixels {
   fn rgba(&self) -> &[[u8; 4]];
@@ -961,7 +943,8 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
 }
 
 /// The pixels `bounds` covers, none unless it has area: the floor of the origin and the ceiling of
-/// the size.
+/// the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds. Approximate: Skia rounds a decal crop
+/// out, so `[0.75, 1.75)` covers `[0, 2)` there and `[0, 1)` here.
 fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
   if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
     return None;

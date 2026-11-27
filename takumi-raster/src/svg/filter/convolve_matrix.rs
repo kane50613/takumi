@@ -20,10 +20,13 @@ pub(super) fn apply(
   }
 
   let kernel = skia_kernel(matrix);
-  let (columns, rows) = (matrix.kernel.columns as usize, matrix.kernel.rows as usize);
+  let (columns, rows) = (
+    matrix.kernel.columns() as usize,
+    matrix.kernel.rows() as usize,
+  );
   let (target_x, target_y) = (
-    matrix.kernel.target_x as isize,
-    matrix.kernel.target_y as isize,
+    matrix.kernel.target_x() as isize,
+    matrix.kernel.target_y() as isize,
   );
   let gain = 1.0 / matrix.divisor;
   let padded_width = span + columns - 1;
@@ -95,7 +98,7 @@ pub(super) fn apply(
 /// The entries as Skia reads them: reversed, as Blink hands them over, and through Skia's 8-bit
 /// texture when there are too many for uniforms.
 fn skia_kernel(matrix: &ConvolveMatrix) -> Vec<f32> {
-  let mut kernel: Vec<f32> = matrix.kernel.data.iter().rev().copied().collect();
+  let mut kernel: Vec<f32> = matrix.kernel.data().iter().rev().copied().collect();
 
   if kernel.len() < MAX_UNIFORM_CELLS {
     return kernel;

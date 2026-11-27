@@ -10,20 +10,22 @@ Code that turns an SVG `ImageSource` into pixels through `takumi-core` now passe
 
 - `SvgSource::rasterize_cached` takes the rasterizer that draws a picture the cache does not hold yet.
 - `ImageSource::render_for_layout` returns `ImageError::SvgParseNotSupported` for an SVG.
-- `apply_svg_filter` is gone from `takumi_core::resources::image`. `takumi-raster` applies a referenced SVG filter itself.
+- `apply_svg_filter` is gone from `takumi_core::resources::image`, and nothing public replaces it. `takumi-raster` applies a referenced SVG filter itself when it draws the element.
 
 #### Migration
 
 ```diff
 - let rendered = image.render_for_layout(width, height, algorithm, 0, &host)?;
-+ if let ImageSource::Svg(svg) = &image {
-+   let buffer = svg.rasterize_cached(
++ let rendered = if let ImageSource::Svg(svg) = &image {
++   let viewport = Size::new(width as f32, height as f32);
++
++   RenderedImage::Rasterized(svg.rasterize_cached(
 +     SvgRaster::whole(viewport, width, height),
 +     algorithm,
 +     &host,
 +     &takumi_raster::SvgPixmapRasterizer,
-+   )?;
++   )?)
 + } else {
-+   let rendered = image.render_for_layout(width, height, algorithm, 0, &host)?;
-+ }
++   image.render_for_layout(width, height, algorithm, 0, &host)?
++ };
 ```

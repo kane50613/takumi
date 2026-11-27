@@ -41,6 +41,28 @@ impl Primitive {
 }
 
 impl Kind {
+  /// The inputs the primitive reads, in the order it takes them.
+  pub fn inputs(&self) -> Vec<&Input> {
+    match self {
+      Self::Blend { input1, input2, .. } | Self::Composite { input1, input2, .. } => {
+        vec![input1, input2]
+      }
+      Self::DisplacementMap(fe) => vec![&fe.input1, &fe.input2],
+      Self::Merge { inputs } => inputs.iter().collect(),
+      Self::ColorMatrix { input, .. }
+      | Self::ComponentTransfer { input, .. }
+      | Self::GaussianBlur { input, .. }
+      | Self::Morphology { input, .. }
+      | Self::Offset { input, .. }
+      | Self::Tile { input } => vec![input],
+      Self::ConvolveMatrix(fe) => vec![&fe.input],
+      Self::DiffuseLighting(fe) => vec![&fe.input],
+      Self::SpecularLighting(fe) => vec![&fe.input],
+      Self::DropShadow(fe) => vec![&fe.input],
+      Self::Flood { .. } | Self::Image(_) | Self::Turbulence(_) => Vec::new(),
+    }
+  }
+
   /// The bytes the primitive's kind owns outside itself.
   fn estimated_bytes(&self) -> usize {
     match self {
@@ -139,9 +161,9 @@ pub enum Kind {
   DropShadow(DropShadow),
   /// `feFlood`.
   Flood {
-    /// The flood colour.
+    /// The flood colour at full alpha, since `opacity` holds the authored alpha.
     color: Color,
-    /// The flood opacity in `0..=1`.
+    /// The authored colour's alpha times `flood-opacity`, in `0..=1`.
     opacity: f32,
   },
   /// `feGaussianBlur`.
@@ -263,16 +285,11 @@ pub struct ConvolveMatrix {
 /// The kernel of a convolution: `columns` by `rows` entries, with the target among them.
 #[derive(Debug)]
 pub struct Kernel {
-  /// The column of the target.
-  pub target_x: u32,
-  /// The row of the target.
-  pub target_y: u32,
-  /// The number of columns.
-  pub columns: u32,
-  /// The number of rows.
-  pub rows: u32,
-  /// The entries, row by row.
-  pub data: Vec<f32>,
+  target_x: u32,
+  target_y: u32,
+  columns: u32,
+  rows: u32,
+  data: Vec<f32>,
 }
 
 impl Kernel {
@@ -294,6 +311,31 @@ impl Kernel {
       data,
     })
   }
+
+  /// The column of the target.
+  pub fn target_x(&self) -> u32 {
+    self.target_x
+  }
+
+  /// The row of the target.
+  pub fn target_y(&self) -> u32 {
+    self.target_y
+  }
+
+  /// The number of columns.
+  pub fn columns(&self) -> u32 {
+    self.columns
+  }
+
+  /// The number of rows.
+  pub fn rows(&self) -> u32 {
+    self.rows
+  }
+
+  /// The entries, row by row.
+  pub fn data(&self) -> &[f32] {
+    &self.data
+  }
 }
 
 /// How a convolution reads past the input's edge.
@@ -314,7 +356,7 @@ pub struct DisplacementMap {
   pub input1: Input,
   /// The map, `in2`.
   pub input2: Input,
-  /// The displacement at a full channel, in user units.
+  /// The coefficient of `channel - 0.5` that gives the displacement, in user units.
   pub scale: f32,
   /// The channel that moves pixels horizontally.
   pub x_channel: ColorChannel,
@@ -348,9 +390,9 @@ pub struct DropShadow {
   pub std_dev_x: f32,
   /// The vertical standard deviation in user units.
   pub std_dev_y: f32,
-  /// The shadow colour.
+  /// The shadow colour at full alpha, since `opacity` holds the authored alpha.
   pub color: Color,
-  /// The shadow opacity in `0..=1`.
+  /// The authored colour's alpha times `flood-opacity`, in `0..=1`.
   pub opacity: f32,
 }
 
@@ -402,7 +444,7 @@ pub enum LightSource {
     x: f32,
     /// The y position in user units.
     y: f32,
-    /// The height above the surface in user units.
+    /// The z position in user units, from which the surface height is subtracted.
     z: f32,
   },
   /// `feSpotLight`.
@@ -416,7 +458,7 @@ pub struct SpotLight {
   pub x: f32,
   /// The y position in user units.
   pub y: f32,
-  /// The height above the surface in user units.
+  /// The z position in user units, from which the surface height is subtracted.
   pub z: f32,
   /// The x of the point it aims at.
   pub points_at_x: f32,
