@@ -123,7 +123,6 @@ impl ImageBuffer {
   }
 }
 
-/// A zero-copy view, or `Err` when the image is empty.
 /// Byte length of a `width` x `height` RGBA buffer, or `None` when it overflows `usize`.
 pub fn rgba_len(width: u32, height: u32) -> Option<usize> {
   (width as usize)

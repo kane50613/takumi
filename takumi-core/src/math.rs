@@ -1,4 +1,5 @@
-//! Float math that renders the same on every platform, unlike libm, for finite pixel-scale inputs.
+//! Float helpers shared across the crate: Skia's nearly-zero tolerance, hashing and approximate
+//! comparison of floats, and an angle polynomial that renders the same on every platform.
 
 use std::hash::{Hash, Hasher};
 

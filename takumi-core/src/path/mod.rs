@@ -198,7 +198,7 @@ impl PathBuilder {
   }
 
   /// The last point added.
-  pub fn last_point(&self) -> Option<Point<f32>> {
+  pub(crate) fn last_point(&self) -> Option<Point<f32>> {
     self.points.last().copied()
   }
 
@@ -252,14 +252,7 @@ impl PathBuilder {
     self.points.push(Point::new(x, y));
   }
 
-  /// Adds a conic through `x1`, `y1` to `x`, `y` pulled by `weight`, as `SkPathBuilder::conicTo`
-  /// takes it. Approximate: the conic is split into quads here, within a quarter of a unit, where
-  /// `SkEdgeBuilder` splits it in device space.
-  pub fn conic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32) {
-    self.conic_to_within(x1, y1, x, y, weight, conic::CONIC_TOLERANCE);
-  }
-
-  /// [`Self::conic_to`], split into quads within `tolerance`.
+  /// `SkPathBuilder::conicTo`, split into quads within `tolerance`.
   fn conic_to_within(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32, tolerance: f32) {
     self.inject_move_to_if_needed();
 
@@ -284,7 +277,7 @@ impl PathBuilder {
   }
 
   /// Moves the last point to `point`, or starts a contour there when there is none.
-  pub fn set_last_point(&mut self, point: Point<f32>) {
+  pub(crate) fn set_last_point(&mut self, point: Point<f32>) {
     match self.points.last_mut() {
       Some(last) => *last = point,
       None => self.move_to(point.x, point.y),
@@ -292,12 +285,12 @@ impl PathBuilder {
   }
 
   /// The points added so far.
-  pub fn points(&self) -> &[Point<f32>] {
+  pub(crate) fn points(&self) -> &[Point<f32>] {
     &self.points
   }
 
   /// Empties the builder.
-  pub fn clear(&mut self) {
+  pub(crate) fn clear(&mut self) {
     self.verbs.clear();
     self.points.clear();
     self.last_move_to_index = 0;
@@ -305,7 +298,7 @@ impl PathBuilder {
   }
 
   /// Appends `other`'s verbs and points, `SkPathBuilder::addPath` in append mode.
-  pub fn push_builder(&mut self, other: &Self) {
+  pub(crate) fn push_builder(&mut self, other: &Self) {
     if other.is_empty() {
       return;
     }
@@ -324,7 +317,7 @@ impl PathBuilder {
 
   /// `SkPathBuilder::privateReversePathTo`: continues with `other`'s last contour walked backwards
   /// to its start.
-  pub fn push_reversed(&mut self, other: &Self) {
+  pub(crate) fn push_reversed(&mut self, other: &Self) {
     let mut end = other.points.len();
 
     for verb in other.verbs.iter().rev() {

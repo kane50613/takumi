@@ -2,10 +2,7 @@
 //! caps and joins with, and their split into the quads a [`Path`](super::Path) holds.
 
 use super::Point;
-use crate::style::Affine;
-
-/// `SK_ScalarNearlyZero`.
-pub(crate) use crate::math::NEARLY_ZERO;
+use crate::{math::NEARLY_ZERO, style::Affine};
 
 /// `SK_ScalarRoot2Over2`, the weight of a quarter circle.
 pub(crate) const ROOT_2_OVER_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
