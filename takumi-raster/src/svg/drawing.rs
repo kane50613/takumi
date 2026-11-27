@@ -1,7 +1,7 @@
 //! Draws flattened SVG ops onto a pixmap. A layer covers its supplied paint bounds, or a
 //! filter layer's region when it has none.
 
-use std::slice::Iter;
+use std::{ops::Range, slice::Iter};
 
 use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
 use crate::style::FillRule;
@@ -10,6 +10,7 @@ use takumi_core::path::{Path, PathBuilder, resolution_scale};
 
 use super::filter::apply as apply_filter;
 use crate::{
+  MASK_RUN,
   blend::{blend_premultiplied_pixel, scale_premultiplied_pixel},
   coverage,
   gradient::{Gradient, GradientShape, GradientStop},
@@ -447,20 +448,32 @@ impl<'a, 'b> Target<'a, 'b> {
 
     for (index, y) in (bounds.top..bounds.bottom).enumerate() {
       let start = y as usize * canvas_width + bounds.left as usize;
+      let alphas = &coverage[index * span..][..span];
 
-      shader.shade_row(bounds.left, y, &mut row);
+      // A pixel the coverage leaves out keeps its color, so only the covered spans shade.
+      for covered in covered_spans(alphas) {
+        let row = &mut row[covered.clone()];
+        let dst = &mut pixels[start + covered.start..start + covered.end];
 
-      for (offset, pixel) in row.iter_mut().enumerate() {
-        let mut alpha = coverage[index * span + offset];
-
-        if let Some(clip) = clip {
-          alpha = mul_div_255(alpha, clip[start + offset]);
+        shader.shade_row(bounds.left + covered.start as i32, y, row);
+        match clip {
+          Some(clip) => {
+            for ((pixel, &alpha), &clip) in row
+              .iter_mut()
+              .zip(&alphas[covered.clone()])
+              .zip(&clip[start + covered.start..start + covered.end])
+            {
+              *pixel = scale_premultiplied_pixel(*pixel, mul_div_255(alpha, clip));
+            }
+          }
+          None => {
+            for (pixel, &alpha) in row.iter_mut().zip(&alphas[covered.clone()]) {
+              *pixel = scale_premultiplied_pixel(*pixel, alpha);
+            }
+          }
         }
-
-        *pixel = scale_premultiplied_pixel(*pixel, alpha);
+        composite_premultiplied_over_row(dst, row);
       }
-
-      composite_premultiplied_over_row(&mut pixels[start..start + span], &row);
     }
   }
 
@@ -848,6 +861,36 @@ fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
       }
     })
     .collect()
+}
+
+/// The ranges of `alphas` that hold coverage, a [`MASK_RUN`] at a time, so a run that is clear
+/// throughout drops out.
+fn covered_spans(alphas: &[u8]) -> impl Iterator<Item = Range<usize>> + '_ {
+  let runs = alphas.len().div_ceil(MASK_RUN);
+  let clear = move |run: usize| {
+    alphas[run * MASK_RUN..((run + 1) * MASK_RUN).min(alphas.len())]
+      .iter()
+      .all(|&alpha| alpha == 0)
+  };
+  let mut run = 0;
+
+  std::iter::from_fn(move || {
+    while run < runs && clear(run) {
+      run += 1;
+    }
+
+    if run == runs {
+      return None;
+    }
+
+    let first = run;
+
+    while run < runs && !clear(run) {
+      run += 1;
+    }
+
+    Some(first * MASK_RUN..(run * MASK_RUN).min(alphas.len()))
+  })
 }
 
 fn to_u8(opacity: f32) -> u8 {
