@@ -129,3 +129,16 @@ pub fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
 
   [ab, bc, cd, abc, bcd, lerp(abc, bcd, t)]
 }
+
+/// `SkChopCubicAt` into seven points.
+pub fn chop_cubic_at(cubic: &[Point; 4], t: f32) -> [Point; 7] {
+  if t == 1.0 {
+    return [
+      cubic[0], cubic[1], cubic[2], cubic[3], cubic[3], cubic[3], cubic[3],
+    ];
+  }
+
+  let [ab, _, cd, abc, bcd, abcd] = cubic_split(cubic, t);
+
+  [cubic[0], ab, abc, abcd, bcd, cd, cubic[3]]
+}
