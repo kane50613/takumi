@@ -1,7 +1,7 @@
 //! Free blitters and the image/mask overlay dispatchers that paint onto a
 //! [`DrawTarget`].
 
-use std::{array, ops::Range};
+use std::ops::Range;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PixmapRef, PremultipliedColorU8};
 
@@ -380,7 +380,9 @@ pub(super) fn blit_paint_source_translation(
   }
 }
 
-/// Composites `source` at `offset` and `opacity` exactly as tiny-skia's high-precision pipeline does.
+/// Composites `source` at `offset` and `opacity` as Skia's 8-bit pipeline draws an image under a
+/// paint alpha: `scale_1_float`, then `srcover`. Approximate: `div255` rounds to nearest on every
+/// target, as Skia does only on NEON, where elsewhere Skia's `(v + 255) / 256` can come out one higher.
 pub(super) fn blit_translucent_translation(
   pixmap: &mut PixmapMut<'_>,
   source: PixmapRef<'_>,
@@ -399,42 +401,25 @@ pub(super) fn blit_translucent_translation(
   let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
   let source_width = source.width() as usize;
   let width = (bounds.x_max - bounds.x_min) as usize;
+  let alpha = (opacity.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
   for dest_y in bounds.y_min..bounds.y_max {
     let source_start = (dest_y - bounds.offset_y) as usize * source_width
       + (bounds.x_min - bounds.offset_x) as usize;
     let dest_start = dest_y as usize * canvas_width + bounds.x_min as usize;
 
-    for (dest, &source) in pixels[dest_start..dest_start + width]
-      .iter_mut()
-      .zip(&source_pixels[source_start..source_start + width])
+    for (dest, source) in pixels[dest_start..dest_start + width]
+      .chunks_mut(MASK_RUN)
+      .zip(source_pixels[source_start..source_start + width].chunks(MASK_RUN))
     {
-      *dest = source_over_at_opacity(*dest, source, opacity);
+      composite_run_over(
+        dest,
+        source
+          .iter()
+          .map(|&pixel| scale_premultiplied_pixel(pixel, alpha)),
+      );
     }
   }
-}
-
-/// One pixel of [`blit_translucent_translation`].
-#[inline(always)]
-fn source_over_at_opacity(dest: [u8; 4], source: [u8; 4], opacity: f32) -> [u8; 4] {
-  const UNIT: f32 = 1.0 / 255.0;
-
-  let source = source.map(|channel| f32::from(channel) * UNIT * opacity);
-  let behind = 1.0 - source[3];
-
-  array::from_fn(|channel| {
-    let blended = f32::from(dest[channel]) * UNIT * behind + source[channel];
-
-    round_ties_even_byte(blended.clamp(0.0, 1.0) * 255.0)
-  })
-}
-
-/// `value.round_ties_even() as u8` by adding and subtracting 2^23, which vectorizes on SSE2.
-#[inline(always)]
-fn round_ties_even_byte(value: f32) -> u8 {
-  const SHIFT: f32 = 8_388_608.0;
-
-  ((value + SHIFT) - SHIFT) as u8
 }
 
 fn blit_solid_translation(
@@ -706,10 +691,7 @@ pub(crate) fn overlay_sampled_paint_source(
 mod tests {
   use crate::Bitmap;
   use takumi_core::geometry::Size;
-  use tiny_skia::{
-    BlendMode as TinyBlendMode, FilterQuality, Mask as TinyMask, Pixmap, PixmapPaint, PixmapRef,
-    PremultipliedColorU8, Transform,
-  };
+  use tiny_skia::{Mask as TinyMask, Pixmap, PixmapRef, PremultipliedColorU8};
 
   use super::*;
   use crate::{
@@ -880,20 +862,8 @@ mod tests {
   }
 
   #[test]
-  fn byte_rounding_breaks_ties_to_even() {
-    for step in 0..=255 * 1024 {
-      let value = step as f32 / 1024.0;
-
-      assert_eq!(
-        round_ties_even_byte(value),
-        value.round_ties_even() as u8,
-        "{value}"
-      );
-    }
-  }
-
-  #[test]
-  fn translucent_blit_matches_tiny_skia() {
+  fn translucent_blit_scales_then_composites_as_skia_neon_does() {
+    let rounded = |v: u32| ((v + 127) / 255) as u8;
     let source = noisy_pixmap(37, 23, 7);
 
     for (offset, opacity) in [
@@ -903,23 +873,36 @@ mod tests {
       (Point { x: 30, y: 30 }, 0.731),
       (Point { x: 0, y: 0 }, 0.999),
     ] {
-      let mut ours = noisy_pixmap(50, 40, 11);
-      let mut theirs = ours.clone();
+      let before = noisy_pixmap(50, 40, 11);
+      let mut ours = before.clone();
+      let alpha = u32::from((opacity * 255.0 + 0.5) as u8);
 
       blit_translucent_translation(&mut ours.as_mut(), source.as_ref(), offset, opacity);
-      theirs.draw_pixmap(
-        offset.x,
-        offset.y,
-        source.as_ref(),
-        &PixmapPaint {
-          opacity,
-          blend_mode: TinyBlendMode::SourceOver,
-          quality: FilterQuality::Nearest,
-        },
-        Transform::identity(),
-        None,
-      );
-      assert!(ours.data() == theirs.data(), "differs at opacity {opacity}");
+
+      for y in 0..40 {
+        for x in 0..50 {
+          let index = (y * 50 + x) as usize * 4;
+          let dest = &before.data()[index..index + 4];
+          let (source_x, source_y) = (x - offset.x, y - offset.y);
+          let expected: [u8; 4] = if (0..37).contains(&source_x) && (0..23).contains(&source_y) {
+            let at = (source_y * 37 + source_x) as usize * 4;
+            let scaled: [u8; 4] =
+              std::array::from_fn(|lane| rounded(u32::from(source.data()[at + lane]) * alpha));
+
+            std::array::from_fn(|lane| {
+              scaled[lane] + rounded(u32::from(dest[lane]) * u32::from(255 - scaled[3]))
+            })
+          } else {
+            [dest[0], dest[1], dest[2], dest[3]]
+          };
+
+          assert_eq!(
+            &ours.data()[index..index + 4],
+            expected,
+            "({x}, {y}) at {opacity}"
+          );
+        }
+      }
     }
   }
 

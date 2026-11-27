@@ -17,7 +17,7 @@ use crate::{
     TextDecorationSkipInk, TextDecorationStyle, TextUnderlinePosition,
   },
 };
-use std::iter::repeat_n;
+use std::{iter::repeat_n, ops::Range};
 
 use super::runs::ShapedRun;
 
@@ -129,7 +129,7 @@ pub(crate) struct DecoratedLeaf {
   pub(crate) text: bool,
   /// Whether it is a forced line break.
   pub(crate) line_break: bool,
-  pub(crate) width: f32,
+  pub(crate) width: LayoutUnit,
   pub(crate) decorations: AppliedTextDecorations,
   /// The box whose text it holds, which its other fragments share.
   pub(crate) object: Option<BoxId>,
@@ -175,11 +175,11 @@ impl DecoratedLeaves {
     };
     let (start, end) = if applied.box_decoration_break == BoxDecorationBreak::Slice {
       let (before, after) = self.run_metrics(index, decoration, &applied);
-      let total = before + leaf.width + after;
+      let total = (before + leaf.width + after).to_float();
 
       (
-        inset_for_fragment(start.resolve(total), before),
-        inset_for_fragment(end.resolve(total), after),
+        inset_for_fragment(start.resolve(total), before.to_float()),
+        inset_for_fragment(end.resolve(total), after.to_float()),
       )
     } else {
       let has_previous = self.same_on_line(index.checked_sub(1), leaf.line, decoration, &applied);
@@ -193,12 +193,12 @@ impl DecoratedLeaves {
         if has_previous {
           0.0
         } else {
-          start.resolve(leaf.width)
+          start.resolve(leaf.width.to_float())
         },
         if has_next {
           0.0
         } else {
-          end.resolve(leaf.width)
+          end.resolve(leaf.width.to_float())
         },
       )
     };
@@ -214,26 +214,17 @@ impl DecoratedLeaves {
     index: usize,
     decoration: usize,
     applied: &AppliedTextDecoration,
-  ) -> (f32, f32) {
+  ) -> (LayoutUnit, LayoutUnit) {
     let continues = |leaf: &&DecoratedLeaf| leaf.continues(decoration, applied);
-    let before: f32 = self.0[..index]
-      .iter()
-      .rev()
-      .take_while(continues)
-      .map(|leaf| leaf.width)
-      .sum();
-    let after: f32 = self.0[index + 1..]
-      .iter()
-      .take_while(continues)
-      .map(|leaf| leaf.width)
-      .sum();
+    let before = total_width(self.0[..index].iter().rev().take_while(continues));
+    let after = total_width(self.0[index + 1..].iter().take_while(continues));
     let object = self.0[index].object;
-    let in_node = |leaves: &[DecoratedLeaf]| -> f32 {
-      leaves
-        .iter()
-        .filter(|leaf| object.is_some() && leaf.object == object)
-        .map(|leaf| leaf.width)
-        .sum()
+    let in_node = |leaves: &[DecoratedLeaf]| {
+      total_width(
+        leaves
+          .iter()
+          .filter(|leaf| object.is_some() && leaf.object == object),
+      )
     };
 
     (
@@ -253,7 +244,7 @@ impl DecoratedLeaves {
     index
       .and_then(|index| self.0.get(index))
       .filter(|leaf| leaf.line == line && leaf.text && !leaf.line_break)
-      .is_some_and(|leaf| leaf.continues(decoration, applied) && leaf.width > 0.0)
+      .is_some_and(|leaf| leaf.continues(decoration, applied) && leaf.width > LayoutUnit::ZERO)
   }
 }
 
@@ -262,6 +253,11 @@ impl DecoratedLeaf {
   fn continues(&self, decoration: usize, applied: &AppliedTextDecoration) -> bool {
     self.text && self.decorations.as_slice().get(decoration) == Some(applied)
   }
+}
+
+/// The summed width of `leaves`, in `LayoutUnit` as Blink's `ComputeDecoratedRunMetrics` sums it.
+fn total_width<'a>(leaves: impl Iterator<Item = &'a DecoratedLeaf>) -> LayoutUnit {
+  leaves.fold(LayoutUnit::ZERO, |sum, leaf| sum + leaf.width)
 }
 
 /// Blink's `ResolveInsetForFragment`: what of an inset is left past `preceding` of the run.
@@ -430,11 +426,12 @@ pub(crate) struct DecorationPlacement {
 
 impl DecorationPlacement {
   /// Blink's `TextDecorationInfo` for `run`, whose glyphs `glyphs` maps into the content box at
-  /// `content`, its text in `text_font` scaled by `scale`: each of its decorations against the
+  /// `content`, its text in `text_font` scaled by `scale`, decorated across `span` of the line as
+  /// Blink decorates its text fragment's `LineRelativeRect`: each of its decorations against the
   /// root box, or the spans of `spans`, outermost first, that decorate it. Each box comes with
   /// its baseline.
   pub(super) fn for_run(
-    run: &ShapedRun,
+    (run, span): (&ShapedRun, Range<f32>),
     glyphs: Affine,
     content: Point<f32>,
     (text_font, scale): (BoxFont, f32),
@@ -458,9 +455,8 @@ impl DecorationPlacement {
     });
     let text = DecorationFont::of(text_font, scale, run);
     let baseline = content.y + run.baseline;
-    let left = content.x + run.offset;
-    let (left, _) = glyphs.transform_point(left, 0.0);
-    let (right, _) = glyphs.transform_point(content.x + run.offset + run.advance, 0.0);
+    let (left, _) = glyphs.transform_point(content.x + span.start, 0.0);
+    let (right, _) = glyphs.transform_point(content.x + span.end, 0.0);
 
     Self {
       glyphs,
@@ -663,7 +659,7 @@ mod tests {
       line,
       text: true,
       line_break: false,
-      width,
+      width: LayoutUnit::from_float(width),
       decorations: decoration.into_iter().collect(),
       object: None,
       rtl: false,

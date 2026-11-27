@@ -5,7 +5,7 @@
   <rect x="127" y="66" width="44" height="4" fill="#dc2626"/>
   <rect x="182" y="66" width="230" height="4" fill="#dc2626"/>
   <rect x="427" y="66" width="7" height="4" fill="#dc2626"/>
-  <rect x="458" y="66" width=".6" height="4" fill="#dc2626"/>
+  <rect x="458" y="66" width=".609" height="4" fill="#dc2626"/>
   <g fill="#0f172a">
     <use href="#g0" x="24" y="64"/>
     <use href="#g1" x="46.96" y="64"/>
@@ -36,13 +36,13 @@
   </g>
   <rect x="184" y="144" width="9" height="4" fill="#dc2626"/>
   <rect x="233" y="144" width="4" height="4" fill="#dc2626"/>
-  <rect x="248" y="144" width="13.28" height="4" fill="#dc2626"/>
+  <rect x="248" y="144" width="13.281" height="4" fill="#dc2626"/>
   <g fill="#0f172a">
     <use href="#g0" x="194" y="142"/>
     <use href="#g1" x="216.96" y="142"/>
     <use href="#g2" x="237.48" y="142"/>
   </g>
-  <rect x="24" y="162" width="262.48" height="12" fill="#dc2626"/>
+  <rect x="24" y="162" width="262.484" height="12" fill="#dc2626"/>
   <g fill="#0f172a">
     <use href="#g19" x="24" y="214"/>
     <use href="#g20" x="49.96" y="214"/>
@@ -59,7 +59,7 @@
     <use href="#g23" x="275.8" y="214"/>
   </g>
   <clipPath id="cp0">
-    <path d="M34 287h57v11h-57Zm66 0h15v11h-15Zm29 0h16v11h-16Zm39 0h1v11h-1Zm16 0h5v11h-5Zm14 0h35v11h-35Zm49 0h6.32v11h-6.32Z"/>
+    <path d="M34 287h57v11h-57Zm66 0h15v11h-15Zm29 0h16v11h-16Zm39 0h1v11h-1Zm16 0h5v11h-5Zm14 0h35v11h-35Zm49 0h6.33v11h-6.33Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <path d="M9 292.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#dc2626" stroke-width="3"/>
@@ -82,14 +82,14 @@
   <rect x="168" y="360" width="1" height="3" fill="#dc2626"/>
   <rect x="183" y="360" width="6" height="3" fill="#dc2626"/>
   <rect x="198" y="360" width="35" height="3" fill="#dc2626"/>
-  <rect x="247" y="360" width="6.32" height="3" fill="#dc2626"/>
+  <rect x="247" y="360" width="6.328" height="3" fill="#dc2626"/>
   <rect x="34" y="364" width="57" height="3" fill="#dc2626"/>
   <rect x="100" y="364" width="15" height="3" fill="#dc2626"/>
   <rect x="129" y="364" width="16" height="3" fill="#dc2626"/>
   <rect x="168" y="364" width="1" height="3" fill="#dc2626"/>
   <rect x="183" y="364" width="6" height="3" fill="#dc2626"/>
   <rect x="198" y="364" width="35" height="3" fill="#dc2626"/>
-  <rect x="247" y="364" width="6.32" height="3" fill="#dc2626"/>
+  <rect x="247" y="364" width="6.328" height="3" fill="#dc2626"/>
   <g fill="#0f172a">
     <use href="#g13" x="24" y="358"/>
     <use href="#g27" x="33.6" y="358"/>

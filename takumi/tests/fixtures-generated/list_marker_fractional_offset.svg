@@ -30,12 +30,12 @@
     <use href="#g7" x="145.77" y="65.8"/>
     <use href="#g8" x="159" y="65.8"/>
   </g>
-  <rect x="20.391" y="99" width="25.536" height="2" fill="#0f172a"/>
+  <rect x="20.391" y="99" width="25.547" height="2" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g14" x="20.39" y="96.8"/>
     <use href="#g1" x="35.1" y="96.8"/>
   </g>
-  <rect x="45.938" y="99" width="105.432" height="2" fill="#0f172a"/>
+  <rect x="45.938" y="99" width="105.438" height="2" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g5" x="45.94" y="96.8"/>
     <use href="#g15" x="54.96" y="96.8"/>

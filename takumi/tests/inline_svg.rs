@@ -74,7 +74,8 @@ fn lang_matches_an_ancestors_lang_as_written() {
 fn the_root_opacity_applies_once() {
   let html = format!(r#"<div style="background: white">{RECT}</div>"#);
 
-  assert_eq!(center(&html, "svg { opacity: 0.5 }"), [128, 128, 128, 255]);
+  // Skia's 8-bit pipeline scales by `from_float(0.5)`, 128, so white keeps 255 * 127 / 255.
+  assert_eq!(center(&html, "svg { opacity: 0.5 }"), [127, 127, 127, 255]);
 }
 
 /// The columns of a 120×40 render of `html` that hold ink.

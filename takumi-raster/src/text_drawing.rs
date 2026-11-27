@@ -24,8 +24,7 @@ struct GlyphBucket {
 
 impl GlyphBucket {
   /// Snaps the origin to a quarter pixel along the baseline and a whole pixel across it, on the
-  /// axis Skia's `computeAxisAlignmentForHText` picks. Approximate: halves round away from zero,
-  /// where Skia rounds up.
+  /// axis Skia's `computeAxisAlignmentForHText` picks.
   fn of(transform: Affine) -> Self {
     let (x_steps, y_steps) = if transform.b == 0.0 {
       (4, 1)
@@ -83,9 +82,11 @@ impl GlyphBucket {
   }
 }
 
-/// `value` rounded to `1 / steps` of a pixel, as whole pixels and the remaining fraction.
+/// `value` rounded to `1 / steps` of a pixel, as whole pixels and the remaining fraction: Skia's
+/// `SkGlyphPositionRoundingSpec` adds half a step (`kSubpixelRounding`, or half a pixel off the
+/// subpixel axis) and floors, so halves round up.
 fn split_subpixel(value: f32, steps: i64) -> (i32, f32) {
-  let scaled = (value * steps as f32).round() as i64;
+  let scaled = (value * steps as f32 + 0.5).floor() as i64;
 
   (
     scaled.div_euclid(steps) as i32,
@@ -348,6 +349,14 @@ pub(crate) fn bitmap_coverage(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn subpixel_halves_round_up_as_skia_does() {
+    assert_eq!(split_subpixel(-0.125, 4), (0, 0.0));
+    assert_eq!(split_subpixel(-0.5, 1), (0, 0.0));
+    assert_eq!(split_subpixel(0.125, 4), (0, 0.25));
+    assert_eq!(split_subpixel(2.5, 1), (3, 0.0));
+  }
 
   #[test]
   fn bucket_zero_mask_matches_untransformed_render() {

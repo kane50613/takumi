@@ -2,7 +2,7 @@
   <rect x="0" y="0" width="420" height="240" fill="#f8fafc"/>
   <g>
     <clipPath id="cp0">
-      <path d="M20 79h52v11h-52Zm64 0h56.01v11h-56.01Z"/>
+      <path d="M20 79h52v11h-52Zm64 0h56.02v11h-56.02Z"/>
     </clipPath>
     <g clip-path="url(#cp0)">
       <path d="M5 84.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#dc2626" stroke-width="3"/>
@@ -19,7 +19,7 @@
     </g>
   </g>
   <clipPath id="cp1">
-    <path d="M20 59h52v11h-52Zm64 0h56.01v11h-56.01Z"/>
+    <path d="M20 59h52v11h-52Zm64 0h56.02v11h-56.02Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
     <path d="M5 64.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#2563eb" stroke-width="3"/>
@@ -79,7 +79,7 @@
     <rect x="26" y="206" width="67" height="3" fill="#dc2626"/>
     <rect x="121" y="206" width="2" height="3" fill="#dc2626"/>
     <rect x="132" y="206" width="22" height="3" fill="#dc2626"/>
-    <rect x="165" y="206" width="4.36" height="3" fill="#dc2626"/>
+    <rect x="165" y="206" width="4.375" height="3" fill="#dc2626"/>
     <g fill="#dc2626">
       <use href="#g13" x="26" y="204"/>
       <use href="#g9" x="40.28" y="204"/>
@@ -96,7 +96,7 @@
   <rect x="20" y="188" width="67" height="3" fill="#2563eb"/>
   <rect x="115" y="188" width="2" height="3" fill="#2563eb"/>
   <rect x="126" y="188" width="22" height="3" fill="#2563eb"/>
-  <rect x="159" y="188" width="4.36" height="3" fill="#2563eb"/>
+  <rect x="159" y="188" width="4.375" height="3" fill="#2563eb"/>
   <g fill="#000">
     <use href="#g13" x="20" y="186"/>
     <use href="#g9" x="34.28" y="186"/>

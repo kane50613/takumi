@@ -2436,6 +2436,7 @@ css/css-text-decor/text-decoration-skip-ink-upright-001.html
 css/css-text-decor/text-decoration-skip-ink-vertical-001.html
 css/css-text-decor/text-decoration-style-multiple.html
 css/css-text-decor/text-decoration-subelements-001.html
+css/css-text-decor/text-decoration-subelements-002.html
 css/css-text-decor/text-decoration-subelements-004.html
 css/css-text-decor/text-decoration-subelements-005.html
 css/css-text-decor/text-decoration-thickness-001.html

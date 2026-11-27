@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
   <rect x="0" y="0" width="640" height="300" fill="#fff"/>
   <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha" x="0" y="0" width="640" height="300">
-    <rect x="20" y="73" width="234.96" height="4" fill="#000"/>
+    <rect x="20" y="73" width="234.969" height="4" fill="#000"/>
     <g fill="#000">
       <use href="#g0" x="20" y="71"/>
       <use href="#g1" x="50.93" y="71"/>

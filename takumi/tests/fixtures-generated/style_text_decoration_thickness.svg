@@ -7,7 +7,7 @@
   <rect x="745" y="91" width="84" height="4" fill="#f00"/>
   <rect x="842" y="91" width="39" height="4" fill="#f00"/>
   <rect x="900" y="91" width="125" height="4" fill="#f00"/>
-  <rect x="1054" y="91" width="77.262" height="4" fill="#f00"/>
+  <rect x="1054" y="91" width="77.266" height="4" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="68.73" y="88"/>
     <use href="#g1" x="94.7" y="88"/>
@@ -58,7 +58,7 @@
   <rect x="641" y="172" width="89" height="2" fill="#f00"/>
   <rect x="739" y="172" width="44" height="2" fill="#f00"/>
   <rect x="798" y="172" width="128" height="2" fill="#f00"/>
-  <rect x="951" y="172" width="79.427" height="2" fill="#f00"/>
+  <rect x="951" y="172" width="79.438" height="2" fill="#f00"/>
   <g fill="#000">
     <use href="#g27" x="169.55" y="170"/>
     <use href="#g23" x="187.07" y="170"/>
@@ -103,7 +103,7 @@
   <rect x="674" y="253" width="50" height="2" fill="#f00"/>
   <rect x="733" y="253" width="128" height="2" fill="#f00"/>
   <rect x="871" y="253" width="6" height="2" fill="#f00"/>
-  <rect x="886" y="253" width="79.853" height="2" fill="#f00"/>
+  <rect x="886" y="253" width="79.859" height="2" fill="#f00"/>
   <g fill="#000">
     <use href="#g30" x="234.14" y="252"/>
     <use href="#g12" x="263.85" y="252"/>
@@ -141,7 +141,7 @@
   <rect x="580" y="337" width="83" height="5" fill="#f00"/>
   <rect x="677" y="337" width="39" height="5" fill="#f00"/>
   <rect x="735" y="337" width="125" height="5" fill="#f00"/>
-  <rect x="889" y="337" width="77.017" height="5" fill="#f00"/>
+  <rect x="889" y="337" width="77.031" height="5" fill="#f00"/>
   <g fill="#000">
     <use href="#g31" x="233.97" y="334"/>
     <use href="#g12" x="264.02" y="334"/>
@@ -179,7 +179,7 @@
   <rect x="594" y="421" width="74" height="10" fill="#f00"/>
   <rect x="692" y="421" width="29" height="10" fill="#f00"/>
   <rect x="749" y="421" width="118" height="10" fill="#f00"/>
-  <rect x="902" y="421" width="73.885" height="10" fill="#f00"/>
+  <rect x="902" y="421" width="73.891" height="10" fill="#f00"/>
   <g fill="#000">
     <use href="#g8" x="224.11" y="416"/>
     <use href="#g9" x="242.06" y="416"/>
