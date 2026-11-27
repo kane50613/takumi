@@ -467,6 +467,8 @@ impl FragmentItems {
         .get(group_end)
         .map_or(total_advance, |next| next.advance);
 
+      let (first, last) = (group_start == 0, group_end == glyphs.len());
+
       group_start = group_end;
 
       let Some(font_data) = font_data else {
@@ -538,9 +540,9 @@ impl FragmentItems {
       // A fragment's own ends are its `LayoutUnit` rect's, as Blink decorates the whole fragment;
       // only a boundary between two of its fonts falls between glyphs. The rect is in the line's
       // space, which `text-fit` scales the glyphs into.
-      let decorated_start = if start_x <= 0.0 { 0.0 } else { start_x };
+      let decorated_start = if first { 0.0 } else { start_x };
       // A zero `text-fit` scale collapses the fragment to a point, which any finite end maps to.
-      let decorated_end = if end_x >= total_advance && scale != 0.0 {
+      let decorated_end = if last && scale != 0.0 {
         child.inline_size.to_float() / scale
       } else {
         end_x
@@ -555,7 +557,7 @@ impl FragmentItems {
         // The fragment's ends pull in, which its first and last runs hold.
         insets
           .iter()
-          .map(|inset| inset.for_run(start_x <= 0.0, end_x >= total_advance))
+          .map(|inset| inset.for_run(first, last))
           .collect(),
       );
 
