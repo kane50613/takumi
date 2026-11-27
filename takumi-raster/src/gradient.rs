@@ -4,6 +4,9 @@
 
 use takumi_core::{geometry::Point, resources::image::SvgSpreadMethod, style::Affine};
 
+/// How many pixels [`Gradient::shade_row`] carries through each stage at once.
+const SHADE_CHUNK: usize = 64;
+
 /// Skia's `SkGradientBaseShader::kDegenerateThreshold`.
 const DEGENERATE_THRESHOLD: f32 = 1.0 / (1 << 15) as f32;
 
@@ -341,15 +344,45 @@ impl Gradient {
   }
 
   pub(crate) fn shade_row(&self, x: i32, y: i32, out: &mut [[u8; 4]]) {
-    for (offset, pixel) in out.iter_mut().enumerate() {
-      let (ux, uy) = self
-        .device_to_unit
-        .transform_point(x as f32 + offset as f32 + 0.5, y as f32 + 0.5);
+    for (chunk, pixels) in out.chunks_mut(SHADE_CHUNK).enumerate() {
+      let first = x as f32 + (chunk * SHADE_CHUNK) as f32;
+      let mut ts = [0.0; SHADE_CHUNK];
+      let mut defined = [true; SHADE_CHUNK];
+      let ts = &mut ts[..pixels.len()];
 
-      *pixel = match self.t(ux, uy) {
-        Some(t) => premultiplied(self.color_at(self.tile(t))),
-        None => [0; 4],
-      };
+      // Each stage runs over the whole chunk, so its kind and spread are matched once.
+      for (offset, (t, defined)) in ts.iter_mut().zip(&mut defined).enumerate() {
+        let (ux, uy) = self
+          .device_to_unit
+          .transform_point(first + offset as f32 + 0.5, y as f32 + 0.5);
+
+        match self.t(ux, uy) {
+          Some(value) => *t = value,
+          None => *defined = false,
+        }
+      }
+
+      self.tile_all(ts);
+
+      for ((pixel, &t), &defined) in pixels.iter_mut().zip(&*ts).zip(&defined) {
+        *pixel = if defined {
+          premultiplied(self.color_at(t))
+        } else {
+          [0; 4]
+        };
+      }
+    }
+  }
+
+  /// [`Self::tile`] of every `t`, with the spread matched once.
+  fn tile_all(&self, ts: &mut [f32]) {
+    match self.spread {
+      SvgSpreadMethod::Pad => {}
+      SvgSpreadMethod::Repeat | SvgSpreadMethod::Reflect => {
+        for t in ts {
+          *t = self.tile(*t);
+        }
+      }
     }
   }
 
