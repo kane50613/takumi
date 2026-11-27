@@ -198,22 +198,26 @@ impl Affine {
     ((x * x + y * y) / 2.0).sqrt()
   }
 
-  /// Blink's `AffineTransform::Inverse` where `IsInvertible` holds: a normal determinant.
+  /// Blink's `AffineTransform::Inverse` where `IsInvertible` holds: a normal determinant. It
+  /// divides in double precision as Blink does. Approximate: the result rounds to `f32`, so a scale
+  /// times its inverse can miss one by an ulp, and the determinant is tested after an `f32` cast
+  /// where Blink tests the double.
   #[cfg(feature = "svg")]
   pub(crate) fn normal_inverse(self) -> Option<Self> {
-    let det = self.determinant();
+    let [a, b, c, d, x, y] = [self.a, self.b, self.c, self.d, self.x, self.y].map(f64::from);
+    let det = a * d - b * c;
 
-    if !det.is_normal() {
+    if !(det as f32).is_normal() {
       return None;
     }
 
     Some(Self {
-      a: self.d / det,
-      b: -self.b / det,
-      c: -self.c / det,
-      d: self.a / det,
-      x: (self.c * self.y - self.d * self.x) / det,
-      y: (self.b * self.x - self.a * self.y) / det,
+      a: (d / det) as f32,
+      b: (-b / det) as f32,
+      c: (-c / det) as f32,
+      d: (a / det) as f32,
+      x: ((c * y - d * x) / det) as f32,
+      y: ((b * x - a * y) / det) as f32,
     })
   }
 
@@ -696,6 +700,18 @@ mod tests {
   use crate::style::FromCssStr;
   #[cfg(feature = "svg")]
   use crate::viewport::Viewport;
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_scale_and_its_normal_inverse_multiply_back_to_identity() {
+    let scale = Affine::scale(0.2, 0.2);
+    let inverse = scale.normal_inverse().expect("a scale inverts");
+
+    assert_eq!(
+      (scale * inverse).to_cols_array(),
+      Affine::IDENTITY.to_cols_array()
+    );
+  }
 
   #[cfg(feature = "svg")]
   fn svg_matrix(text: &str) -> Option<[f32; 6]> {
