@@ -16,7 +16,7 @@ pub(super) const MIN_S32: i32 = -i32::MAX;
 /// `SkAnalyticEdge::kDefaultAccuracy`: y snaps to a quarter pixel.
 pub(super) const ACCURACY: u32 = 2;
 /// `MAX_COEFF_SHIFT` in `SkAnalyticEdge.cpp`.
-const MAX_COEFF_SHIFT: i32 = 6;
+pub(super) const MAX_COEFF_SHIFT: i32 = 6;
 
 /// `SkLeftShift`.
 pub(super) const fn left_shift(value: i32, shift: u32) -> i32 {
@@ -157,14 +157,14 @@ const fn cheap_distance(dx: FDot6, dy: FDot6) -> FDot6 {
 }
 
 /// `diff_to_shift` in `SkAnalyticEdge.cpp`.
-const fn diff_to_shift(dx: FDot6, dy: FDot6, shift_aa: u32) -> i32 {
+pub(super) const fn diff_to_shift(dx: FDot6, dy: FDot6, shift_aa: u32) -> i32 {
   let dist = (cheap_distance(dx, dy) + (1 << (2 + shift_aa))) >> (3 + shift_aa);
 
   (32 - dist.leading_zeros() as i32) >> 1
 }
 
 /// `cubic_delta_from_line` in `SkAnalyticEdge.cpp`.
-const fn cubic_delta_from_line(a: FDot6, b: FDot6, c: FDot6, d: FDot6) -> FDot6 {
+pub(super) const fn cubic_delta_from_line(a: FDot6, b: FDot6, c: FDot6, d: FDot6) -> FDot6 {
   let one_third = ((a * 8 - b * 15 + 6 * c + d) * 19) >> 9;
   let two_third = ((a + 6 * b - c * 15 + d * 8) * 19) >> 9;
 

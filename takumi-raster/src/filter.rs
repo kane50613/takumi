@@ -291,19 +291,15 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
     match filter.categorize() {
       FilterCategory::Pixel(f) => pending_pixel_filters.push(f),
       FilterCategory::Complex(f) => {
-        apply_batched_pixel_filters(
-          bytemuck::cast_slice_mut(pixmap.pixels_mut()),
-          &pending_pixel_filters,
-        );
+        apply_batched_pixel_filters(pixmap.data_mut(), &pending_pixel_filters);
         pending_pixel_filters.clear();
 
         match f {
           Filter::Blur(blur) => {
             let width = pixmap.width();
             let height = pixmap.height();
-            let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
             apply_blur_rgba_bytes(
-              raw,
+              pixmap.data_mut(),
               width,
               height,
               blur.to_px(sizing, 1.0),
@@ -338,10 +334,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
     }
   }
 
-  apply_batched_pixel_filters(
-    bytemuck::cast_slice_mut(pixmap.pixels_mut()),
-    &pending_pixel_filters,
-  );
+  apply_batched_pixel_filters(pixmap.data_mut(), &pending_pixel_filters);
 
   Ok(())
 }
@@ -552,7 +545,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     return Ok(());
   }
 
-  let canvas_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let canvas_data = pixmap.data_mut();
   for y in start_y..end_y {
     let shadow_y = (y - dest_top) as u32;
     for x in start_x..end_x {

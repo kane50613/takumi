@@ -5,7 +5,6 @@ use std::ops::{Add, Sub};
 use kurbo::PathSeg;
 use xxhash_rust::xxh3::Xxh3;
 
-#[cfg(feature = "svg")]
 use crate::{
   layout_unit::LayoutUnit,
   path::{Path, PathBuilder as SkPathBuilder},

@@ -113,10 +113,6 @@ impl<'a> PixmapRef<'a> {
     self.size.height
   }
 
-  pub(crate) fn data(self) -> &'a [u8] {
-    self.data
-  }
-
   pub(crate) fn pixels(self) -> &'a [[u8; 4]] {
     self.data.as_chunks().0
   }
@@ -160,7 +156,6 @@ impl<'a> PixmapMut<'a> {
     self.size.height
   }
 
-  #[cfg(feature = "svg")]
   pub(crate) fn data_mut(&mut self) -> &mut [u8] {
     self.data
   }

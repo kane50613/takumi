@@ -31,7 +31,7 @@ use takumi_core::{
 };
 
 use crate::{
-  blend::{blend_premultiplied_pixel, composite_premultiplied_over},
+  blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
   svg::drawing::{draw as draw_svg, draw_over},
 };
 
@@ -104,7 +104,8 @@ impl Image {
     let mut pixmap = Rc::unwrap_or_clone(self.pixmap);
     let width = pixmap.width() as usize;
 
-    for line in pixmap.rgba_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
+    for line in
+      pixmap.pixels_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
     {
       filters.apply(&mut line[window.left..window.right]);
     }
@@ -130,7 +131,7 @@ impl Image {
   fn alpha(&self) -> Self {
     let mut pixmap = (*self.pixmap).clone();
 
-    for pixel in pixmap.rgba_mut() {
+    for pixel in pixmap.pixels_mut() {
       pixel[..3].fill(0);
     }
 
@@ -426,7 +427,7 @@ impl Run<'_> {
         let flood = premultiply_pixel([red, green, blue, (opacity * 255.0 + 0.5) as u8]);
 
         for row in
-          pixmap.rgba_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
+          pixmap.pixels_mut()[window.top * width..window.bottom * width].chunks_exact_mut(width)
         {
           row[window.left..window.right].fill(flood);
         }
@@ -480,9 +481,9 @@ impl Run<'_> {
 
           composite::arithmetic(
             [k1, k2, k3, k4],
-            top.pixmap.rgba(),
-            bottom.pixmap.rgba(),
-            pixmap.rgba_mut(),
+            top.pixmap.pixels(),
+            bottom.pixmap.pixels(),
+            pixmap.pixels_mut(),
           );
           return Some(Image::new(pixmap, space));
         }
@@ -653,7 +654,7 @@ impl Run<'_> {
     let Color([red, green, blue, _]) = shadow.color;
     let opacity = (shadow.opacity * 255.0 + 0.5) as u8;
 
-    for pixel in shadow_pixmap.rgba_mut() {
+    for pixel in shadow_pixmap.pixels_mut() {
       *pixel = premultiply_pixel([red, green, blue, mul_div_255(pixel[3], opacity)]);
     }
 
@@ -692,8 +693,8 @@ impl Run<'_> {
     let mut pixmap = self.blank()?;
     let width = pixmap.width() as i32;
     let source_width = input.pixmap.width() as i32;
-    let source = input.pixmap.rgba();
-    let target = pixmap.rgba_mut();
+    let source = input.pixmap.pixels();
+    let target = pixmap.pixels_mut();
 
     for (index, pixel) in target.iter_mut().enumerate() {
       let (x, y) = (index as i32 % width, index as i32 / width);
@@ -717,7 +718,13 @@ impl Run<'_> {
     let mut pixmap = input.blank_like()?;
     let width = pixmap.width() as usize;
 
-    convolve_matrix::apply(fe, input.pixmap.rgba(), width, window, pixmap.rgba_mut());
+    convolve_matrix::apply(
+      fe,
+      input.pixmap.pixels(),
+      width,
+      window,
+      pixmap.pixels_mut(),
+    );
     Some(Image::new(pixmap, space))
   }
 
@@ -732,7 +739,7 @@ impl Run<'_> {
     let radius = self.scaled(radius.0, radius.1);
     let width = pixmap.width() as usize;
 
-    morphology::apply(operator, radius.x, radius.y, pixmap.rgba_mut(), width);
+    morphology::apply(operator, radius.x, radius.y, pixmap.pixels_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
@@ -754,9 +761,9 @@ impl Run<'_> {
       [sx, sy],
       pixmap.width() as usize,
       window,
-      source.pixmap.rgba(),
-      map.pixmap.rgba(),
-      pixmap.rgba_mut(),
+      source.pixmap.pixels(),
+      map.pixmap.pixels(),
+      pixmap.pixels_mut(),
     );
     Some(Image::new(pixmap, space))
   }
@@ -788,7 +795,7 @@ impl Run<'_> {
       fe,
       &canvas,
       (tile.width(), tile.height()),
-      pixmap.rgba_mut(),
+      pixmap.pixels_mut(),
       width,
       window,
     );
@@ -828,11 +835,11 @@ impl Run<'_> {
     let (light, depth) = self.light_source(light);
 
     lighting(light, convert_color(space, lighting_color), depth).apply(
-      input.pixmap.rgba(),
+      input.pixmap.pixels(),
       width,
       window,
       edges,
-      pixmap.rgba_mut(),
+      pixmap.pixels_mut(),
     );
     Some(Image::new(pixmap, space))
   }
@@ -875,22 +882,6 @@ impl Run<'_> {
   }
 }
 
-/// Pixmap bytes as RGBA pixels.
-trait PixmapPixels {
-  fn rgba(&self) -> &[[u8; 4]];
-  fn rgba_mut(&mut self) -> &mut [[u8; 4]];
-}
-
-impl PixmapPixels for Pixmap {
-  fn rgba(&self) -> &[[u8; 4]] {
-    self.data().as_chunks().0
-  }
-
-  fn rgba_mut(&mut self) -> &mut [[u8; 4]] {
-    self.data_mut().as_chunks_mut().0
-  }
-}
-
 /// How [`draw`] joins a source to the target below it: source-over, the Porter-Duff operators of
 /// `feComposite`, or a blend mode.
 #[derive(Clone, Copy)]
@@ -917,8 +908,8 @@ fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, layer: Layer) {
   let right = (x + source_width).min(target_width);
   let top = y.max(0);
   let bottom = (y + source_height).min(target.height() as i32);
-  let target_pixels: &mut [[u8; 4]] = target.data_mut().as_chunks_mut().0;
-  let source_pixels: &[[u8; 4]] = source.data().as_chunks().0;
+  let target_pixels = target.pixels_mut();
+  let source_pixels = source.pixels();
 
   for row in top..bottom {
     for column in left..right {
@@ -933,8 +924,8 @@ fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, layer: Layer) {
           composite_premultiplied_over(&mut over, source);
           over
         }
-        Layer::In => source.map(|channel| mul_div_255(channel, destination_alpha)),
-        Layer::Out => source.map(|channel| mul_div_255(channel, 255 - destination_alpha)),
+        Layer::In => scale_premultiplied_pixel(source, destination_alpha),
+        Layer::Out => scale_premultiplied_pixel(source, 255 - destination_alpha),
         Layer::Atop => std::array::from_fn(|lane| {
           div_255(
             u16::from(source[lane]) * u16::from(destination_alpha)
@@ -962,7 +953,7 @@ fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, layer: Layer) {
 fn blur(pixmap: &mut Pixmap, sigma: Point<f32>) {
   let (width, height) = (pixmap.width() as usize, pixmap.height() as usize);
 
-  blur_rgba_axes(pixmap.rgba_mut(), width, height, sigma);
+  blur_rgba_axes(pixmap.pixels_mut(), width, height, sigma);
 }
 
 /// Clears the pixels outside `keep`.
@@ -972,7 +963,7 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
   let row = |y: i32| y.clamp(0, height as i32) as usize;
   let (left, right) = (column(keep.left), column(keep.right));
   let (top, bottom) = (row(keep.top), row(keep.bottom));
-  let pixels = pixmap.rgba_mut();
+  let pixels = pixmap.pixels_mut();
 
   pixels[..top * width].fill([0; 4]);
   pixels[bottom * width..].fill([0; 4]);

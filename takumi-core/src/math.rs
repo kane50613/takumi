@@ -51,7 +51,6 @@ impl ApproxEq for f32 {
   }
 }
 
-
 #[cfg(test)]
 mod tests {
   use std::f32::consts::TAU;

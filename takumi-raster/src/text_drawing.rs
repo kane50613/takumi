@@ -1,23 +1,24 @@
 use std::sync::Arc;
 
-use crate::pixmap::PixmapRef;
-use crate::style::FillRule;
 use skrifa::color::ColorPalette;
-use takumi_core::geometry::{Point, Rect, Size};
-use takumi_core::path::Path;
+use takumi_core::{
+  geometry::{Point, Rect, Size},
+  path::{Path, Stroke},
+  resources::image::SvgSpreadMethod,
+};
 use xxhash_rust::xxh3::Xxh3;
-
-use takumi_core::{path::Stroke, resources::image::SvgSpreadMethod};
 
 use crate::{
   Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Style,
-  checked_area, coverage, cull_bounds, render_mask,
+  checked_area, coverage, cull_bounds,
+  pixmap::PixmapRef,
+  render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
     glyph_cache::GlyphCache,
   },
   shader::{ImageFilter, ImageShader, Shader},
-  style::{Affine, BlendMode, Color, PaintPhase, math::mul_div_255},
+  style::{Affine, BlendMode, Color, FillRule, PaintPhase, math::mul_div_255},
 };
 
 /// A glyph transform split into the cached mask's transform and the whole pixels it is blitted at.
@@ -340,10 +341,9 @@ pub(crate) fn bitmap_coverage(
   let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
   let size = Size::checked_new(placement.width, placement.height)?;
   let outline = Path::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local)?;
-  let coverage = coverage::fill_path_aliased(&outline, FillRule::NonZero, size)?;
+  let mut alpha = coverage::fill_path_aliased(&outline, FillRule::NonZero, size);
   let shader = Shader::Image(ImageShader::new(
-    bytemuck::cast_slice(source.data()),
-    (source.width(), source.height()),
+    source,
     local,
     SvgSpreadMethod::Pad,
     ImageFilter::Linear,
@@ -351,7 +351,6 @@ pub(crate) fn bitmap_coverage(
   )?);
   let span = placement.width as usize;
   let mut row = vec![[0; 4]; span];
-  let mut alpha = coverage;
 
   for (y, alpha) in alpha.chunks_exact_mut(span).enumerate() {
     shader.shade_row(0, y as i32, &mut row);

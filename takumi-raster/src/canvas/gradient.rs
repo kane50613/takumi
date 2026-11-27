@@ -276,10 +276,10 @@ fn linear_gradient_row_lanes(
         gradient.position_to_lut_scale,
         max_index,
       );
-      write(p0, premultiplied_from_pixel(lut[i0 as usize]));
-      write(p1, premultiplied_from_pixel(lut[i1 as usize]));
-      write(p2, premultiplied_from_pixel(lut[i2 as usize]));
-      write(p3, premultiplied_from_pixel(lut[i3 as usize]));
+      write(p0, lut[i0 as usize]);
+      write(p1, lut[i1 as usize]);
+      write(p2, lut[i2 as usize]);
+      write(p3, lut[i3 as usize]);
 
       for projection in &mut projections {
         *projection += gradient.dir_x;
@@ -301,7 +301,7 @@ fn linear_gradient_row_lanes(
         gradient.position_to_lut_scale,
         max_index,
       );
-      write(pixel, premultiplied_from_pixel(lut[index as usize]));
+      write(pixel, lut[index as usize]);
       projection += gradient.dir_x;
     }
   }

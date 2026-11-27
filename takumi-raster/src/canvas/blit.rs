@@ -148,7 +148,7 @@ fn blit_sampled_paint_source_translation(
     return;
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   let resolved = source.resolve();
 
   if let Some(rows) = ScaledRows::new(
@@ -350,14 +350,14 @@ pub(crate) fn blit_paint_source_translation(
     return;
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   let rows = source.rows(
     (bounds.x_min - bounds.offset_x) as u32,
     (bounds.x_max - bounds.x_min) as u32,
   );
   match rows {
     RowSource::Copy { source, x_start } if mode == BlendMode::Normal && combined_mask.is_none() => {
-      let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+      let source_pixels = source.pixels();
       let source_width = source.width() as usize;
       let copy_width = (bounds.x_max - bounds.x_min) as usize;
       for dest_y in bounds.y_min..bounds.y_max {
@@ -395,8 +395,8 @@ pub(super) fn blit_translucent_translation(
   ) else {
     return;
   };
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+  let pixels = pixmap.pixels_mut();
+  let source_pixels = source.pixels();
   let source_width = source.width() as usize;
   let width = (bounds.x_max - bounds.x_min) as usize;
   let alpha = (opacity.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
@@ -442,7 +442,7 @@ fn blit_solid_translation(
     return;
   };
 
-  let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let data = pixmap.data_mut();
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
     let row_stride = canvas_width as usize * 4;
@@ -614,7 +614,7 @@ pub(crate) fn overlay_sampled_paint_source(
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
-  use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapRef};
+  use crate::pixmap::{Mask, Pixmap, PixmapRef};
   use takumi_core::geometry::Size;
 
   use super::*;
@@ -679,7 +679,7 @@ mod tests {
   #[test]
   fn normal_rows_match_the_pixel_path() {
     let canvas = Size::new(29, 13);
-    let clip = TinyMask::from_vec(
+    let clip = Mask::from_vec(
       (0..24 * 11)
         .map(|index| match noise(index / 12, 1) % 3 {
           0 => 0,
@@ -687,7 +687,7 @@ mod tests {
           _ => noise(index, 2),
         })
         .collect(),
-      takumi_core::geometry::Size::checked_new(24, 11).unwrap(),
+      Size::checked_new(24, 11).unwrap(),
     )
     .unwrap();
     let view = MaskView {
@@ -952,7 +952,7 @@ mod tests {
       height: 10,
     });
 
-    let mut parent_mask = TinyMask::new(10, 10).unwrap();
+    let mut parent_mask = Mask::new(10, 10).unwrap();
     parent_mask.data_mut()[0..50].fill(255);
     canvas.push_mask(PlacedMask::covering(canvas.viewport(), parent_mask));
 

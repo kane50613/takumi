@@ -13,15 +13,12 @@ use takumi_core::{
 use super::{
   blitter::IntBounds,
   edge::{
-    FDot6, Fixed, fdot6_div, fdot6_round, fdot6_to_fixed, fixed_mul, fixed_to_fdot6, left_shift,
-    round_to_int, scalar_to_fdot6,
+    FDot6, Fixed, MAX_COEFF_SHIFT, cubic_delta_from_line, diff_to_shift, fdot6_div, fdot6_round,
+    fdot6_to_fixed, fixed_mul, fixed_to_fdot6, left_shift, round_to_int, scalar_to_fdot6,
   },
   edge_builder::{BuiltEdge, build_edges, is_convex},
   edge_clipper::EdgeClipper,
 };
-
-/// `MAX_COEFF_SHIFT` in `SkEdge.cpp`.
-const MAX_COEFF_SHIFT: i32 = 6;
 
 /// `kConservativeRoundBias` in `SkScan_Path.cpp`.
 const CONSERVATIVE_ROUND_BIAS: f64 = 0.5 + 1.5 / 64.0;
@@ -47,13 +44,9 @@ pub(super) fn fill_path(path: &Path, fill_rule: FillRule, bounds: IntBounds, mas
   let clipper = if contained {
     None
   } else {
-    Rect::from_ltrb(
-      clip.left as f32,
-      clip.top as f32,
-      clip.right as f32,
-      clip.bottom as f32,
-    )
-    .map(|rect| EdgeClipper::new(rect, !is_convex(path)))
+    clip
+      .to_rect()
+      .map(|rect| EdgeClipper::new(rect, !is_convex(path)))
   };
   let mut edges: Vec<Edge> = build_edges(path, clipper.as_ref());
 
@@ -255,23 +248,6 @@ impl Rows {
   }
 }
 
-/// `diff_to_steps` in `SkEdge.cpp`.
-fn diff_to_steps(dx: FDot6, dy: FDot6, accuracy: i32) -> i32 {
-  let (dx, dy) = (dx.abs(), dy.abs());
-  let distance = if dx > dy { dx + dy / 2 } else { dy + dx / 2 };
-  let distance = (distance + (1 << (2 + accuracy))) >> (3 + accuracy);
-
-  (32 - (distance as u32).leading_zeros() as i32) >> 1
-}
-
-/// `cubic_delta_from_line` in `SkEdge.cpp`.
-fn cubic_delta_from_line(a: FDot6, b: FDot6, c: FDot6, d: FDot6) -> FDot6 {
-  let one_third = ((a * 8 - b * 15 + 6 * c + d) * 19) >> 9;
-  let two_thirds = ((a + 6 * b - c * 15 + d * 8) * 19) >> 9;
-
-  one_third.abs().max(two_thirds.abs())
-}
-
 impl Edge {
   /// An edge along `curve` in the direction `winding` gives, moved onto its first line.
   fn curve(winding: i32, mut curve: Curve) -> Option<Self> {
@@ -330,7 +306,7 @@ impl BuiltEdge for Edge {
     }
 
     let shift =
-      diff_to_steps((2 * x1 - x0 - x2) >> 2, (2 * y1 - y0 - y2) >> 2, 0).clamp(1, MAX_COEFF_SHIFT);
+      diff_to_shift((2 * x1 - x0 - x2) >> 2, (2 * y1 - y0 - y2) >> 2, 0).clamp(1, MAX_COEFF_SHIFT);
     // `SkFDot6ToFixedDiv2`: A and B at half their value, so they fit in 16.16.
     let half = |value: FDot6| left_shift(value, 16 - 6 - 1);
     let (a_x, b_x) = (half(x0 - x1 - x1 + x2), fdot6_to_fixed(x1 - x0));
@@ -369,7 +345,7 @@ impl BuiltEdge for Edge {
       return None;
     }
 
-    let step_exponent = (diff_to_steps(
+    let step_exponent = (diff_to_shift(
       cubic_delta_from_line(x0, x1, x2, x3),
       cubic_delta_from_line(y0, y1, y2, y3),
       2,

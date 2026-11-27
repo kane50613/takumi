@@ -68,29 +68,27 @@ impl ColorFilters {
         continue;
       }
 
-      lanes.load(chunk);
-
-      for filter in &self.0 {
-        filter.apply(&mut lanes);
-      }
-
-      lanes.store(chunk);
+      self.run_chunk(&mut lanes, chunk);
     }
   }
 
   /// The filters over one premultiplied pixel.
   fn run(&self, pixel: [u8; 4]) -> [u8; 4] {
-    let mut lanes = Lanes::default();
     let mut pixels = [pixel];
 
-    lanes.load(&pixels);
+    self.run_chunk(&mut Lanes::default(), &mut pixels);
+    pixels[0]
+  }
+
+  /// The filters over at most a [`CHUNK`] of premultiplied pixels, through `lanes`.
+  fn run_chunk(&self, lanes: &mut Lanes, pixels: &mut [[u8; 4]]) {
+    lanes.load(pixels);
 
     for filter in &self.0 {
-      filter.apply(&mut lanes);
+      filter.apply(lanes);
     }
 
-    lanes.store(&mut pixels);
-    pixels[0]
+    lanes.store(pixels);
   }
 }
 
@@ -147,17 +145,14 @@ fn space_table(space: ColorSpace) -> &'static [[u8; 256]; 256] {
 
   cell.get_or_init(|| {
     let filters = ColorFilters(vec![ColorFilter::Space(space)]);
+    let mut lanes = Lanes::default();
     let mut table = Box::new([[0; 256]; 256]);
 
     for (alpha, row) in table.iter_mut().enumerate() {
       let mut pixels: [[u8; 4]; 256] = std::array::from_fn(|byte| [byte as u8, 0, 0, alpha as u8]);
 
       for chunk in pixels.chunks_mut(CHUNK) {
-        let mut lanes = Lanes::default();
-
-        lanes.load(chunk);
-        filters.0[0].apply(&mut lanes);
-        lanes.store(chunk);
+        filters.run_chunk(&mut lanes, chunk);
       }
 
       *row = pixels.map(|pixel| pixel[0]);

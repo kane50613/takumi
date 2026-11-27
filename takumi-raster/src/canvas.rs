@@ -291,22 +291,7 @@ impl Canvas {
     self.restore_subcanvas_state(origin, constraint_mask_stack);
     self.clip_layer(&mut isolated_image, offset);
 
-    // A fully opaque subcanvas lands whole-pixel over the parent, so it copies row by row.
-    if opacity == 1.0 && mode == BlendMode::Normal {
-      blit_paint_source_translation(
-        &mut self.image.as_mut(),
-        PaintSource::Pixmap(isolated_image.as_ref()),
-        Point {
-          x: offset.x as f32,
-          y: offset.y as f32,
-        },
-        mode,
-        None,
-      );
-      return;
-    }
-
-    if mode == BlendMode::Normal {
+    if mode == BlendMode::Normal && opacity != 1.0 {
       blit_translucent_translation(
         &mut self.image.as_mut(),
         isolated_image.as_ref(),
@@ -316,12 +301,15 @@ impl Canvas {
       return;
     }
 
-    let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
+    if mode != BlendMode::Normal {
+      let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
-    for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {
-      *pixel = scale_premultiplied_pixel(*pixel, alpha);
+      for pixel in isolated_image.pixels_mut() {
+        *pixel = scale_premultiplied_pixel(*pixel, alpha);
+      }
     }
 
+    // A fully opaque normal subcanvas lands whole-pixel over the parent, so it copies row by row.
     blit_paint_source_translation(
       &mut self.image.as_mut(),
       PaintSource::Pixmap(isolated_image.as_ref()),
@@ -346,7 +334,7 @@ impl Canvas {
       canvas_origin: self.origin,
     };
     let width = layer.width() as usize;
-    let pixels = bytemuck::cast_slice_mut::<_, [u8; 4]>(layer.data_mut());
+    let pixels = layer.pixels_mut();
 
     for (y, row) in pixels.chunks_exact_mut(width).enumerate() {
       let (first, alphas) = clip.row(offset.y + y as i32, offset.x).covered(width);

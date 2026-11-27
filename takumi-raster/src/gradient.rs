@@ -172,12 +172,7 @@ impl Gradient {
     let Some(device_to_local) = transform.invert() else {
       return Err(None);
     };
-    let degenerate = || {
-      Err(Some(match spread {
-        SvgSpreadMethod::Pad => premultiplied(last.color),
-        SvgSpreadMethod::Reflect | SvgSpreadMethod::Repeat => premultiplied(average_color(stops)),
-      }))
-    };
+    let degenerate = || Err(Some(degenerate_color(stops, spread)));
     let (local_to_unit, kind) = match shape {
       GradientShape::Linear { start, end } => {
         let (dx, dy) = (end[0] - start[0], end[1] - start[1]);
@@ -257,12 +252,7 @@ impl Gradient {
     device_to_local: Affine,
   ) -> Result<Self, Option<[u8; 4]>> {
     if nearly_zero_within(radius, DEGENERATE_THRESHOLD) {
-      let last = stops[stops.len() - 1].color;
-
-      return Err(Some(match spread {
-        SvgSpreadMethod::Pad => premultiplied(last),
-        SvgSpreadMethod::Reflect | SvgSpreadMethod::Repeat => premultiplied(average_color(stops)),
-      }));
+      return Err(Some(degenerate_color(stops, spread)));
     }
 
     let local_to_unit =
@@ -542,6 +532,15 @@ fn interval_equations(stops: &[GradientStop]) -> (Vec<f32>, Vec<[f32; 4]>, Vec<[
   biases.push(color_left);
 
   (ts, factors, biases)
+}
+
+/// The color `MakeDegenerateGradient` paints for `stops`, the last stop under `Pad` and their
+/// average under the other spreads.
+fn degenerate_color(stops: &[GradientStop], spread: SvgSpreadMethod) -> [u8; 4] {
+  match spread {
+    SvgSpreadMethod::Pad => premultiplied(stops[stops.len() - 1].color),
+    SvgSpreadMethod::Reflect | SvgSpreadMethod::Repeat => premultiplied(average_color(stops)),
+  }
 }
 
 /// `average_gradient_color`: the color a gradient averages to across `t` in [0, 1].

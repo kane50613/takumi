@@ -424,11 +424,6 @@ const DEMUL: [f32; 256] = {
   t
 };
 
-#[inline(always)]
-pub(crate) fn premultiplied_from_pixel(pixel: [u8; 4]) -> [u8; 4] {
-  pixel
-}
-
 /// `pixel` scaled by `alpha`, without a branch so a loop over pixels vectorizes.
 #[inline(always)]
 pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {

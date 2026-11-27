@@ -86,7 +86,7 @@ pub(super) fn constant(
   let Some(region) = DestRegion::new(Size::new(pixmap.width(), pixmap.height()), placement) else {
     return;
   };
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   if mode == BlendMode::Normal {
     match combined_mask {
       None => constant_normal(pixels, mask, color, region),
@@ -316,8 +316,8 @@ fn try_translation_blit(
   let bounds = region.bounds;
   let source_width = source_pixmap.width() as i32;
   let source_height = source_pixmap.height() as i32;
-  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source_pixmap.pixels());
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let source_pixels = source_pixmap.pixels();
+  let pixels = pixmap.pixels_mut();
   let sample_dx = sample_offset.x as i32;
   let sample_dy = sample_offset.y as i32;
   // The destination columns whose source column lies inside the source.
@@ -390,7 +390,7 @@ fn source_general(
     return;
   }
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
 
   PixelSampler {
     resolved,
@@ -482,7 +482,7 @@ fn source_scaled_rows(
   let bounds = region.bounds;
   let mut row = vec![[0u8; 4]; region.span()];
   let mut clip_alphas = vec![0u8; region.span()];
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
 
   for dest_y in bounds.y_min..bounds.y_max {
     let combined_row = options
@@ -615,7 +615,7 @@ mod scaled_rows_tests {
       .unwrap();
       source_scaled_rows(&mut pixmap, &mask, &rows, &options, region);
     } else {
-      let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+      let pixels = pixmap.pixels_mut();
       PixelSampler {
         resolved: PaintSource::Pixmap(source.as_ref()).resolve(),
         transform,

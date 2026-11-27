@@ -1,10 +1,9 @@
 use std::{array, cell::RefCell};
 
-use crate::pixmap::PixmapRef;
+use crate::pixmap::{Pixmap, PixmapRef};
 
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
-  blend::premultiplied_from_pixel,
   style::{Affine, ImageScalingAlgorithm},
 };
 
@@ -76,7 +75,7 @@ impl<'a> PaintSource<'a> {
           return [0; 4];
         }
         let index = (y * width + x) as usize;
-        pixmap.data().as_chunks::<4>().0[index]
+        pixmap.pixels()[index]
       }
       Self::BackgroundTile(tile) => tile.get_pixel(x, y),
       Self::ColorTile(tile) => tile.get_pixel(x, y),
@@ -137,10 +136,8 @@ impl<'a> PaintSource<'a> {
 
   pub(crate) fn premultiplied_constant(self) -> Option<[u8; 4]> {
     match self {
-      Self::ColorTile(tile) => Some(premultiplied_from_pixel(tile.get_pixel(0, 0))),
-      Self::BackgroundTile(BackgroundTile::Color(tile)) => {
-        Some(premultiplied_from_pixel(tile.get_pixel(0, 0)))
-      }
+      Self::ColorTile(tile) => Some(tile.get_pixel(0, 0)),
+      Self::BackgroundTile(BackgroundTile::Color(tile)) => Some(tile.get_pixel(0, 0)),
       _ => None,
     }
   }
@@ -197,16 +194,14 @@ impl RowSource<'_> {
     match self {
       Self::Copy { source, x_start } => {
         let start = y as usize * source.width() as usize + *x_start as usize;
-        dst.copy_from_slice(bytemuck::cast_slice(
-          &source.pixels()[start..start + dst.len()],
-        ));
+        dst.copy_from_slice(&source.pixels()[start..start + dst.len()]);
       }
       Self::Bilinear(rows) => rows.fill(y, dst),
       Self::Box(rows) => rows.fill(y, dst),
       Self::Constant(color) => dst.fill(*color),
       Self::Sampled { source, x_start } => {
         for (i, pixel) in dst.iter_mut().enumerate() {
-          *pixel = premultiplied_from_pixel(source.get_pixel(x_start + i as u32, y));
+          *pixel = source.get_pixel(x_start + i as u32, y);
         }
       }
     }
@@ -225,8 +220,8 @@ impl<'a> From<PixmapRef<'a>> for PaintSource<'a> {
   }
 }
 
-impl<'a> From<&'a crate::pixmap::Pixmap> for PaintSource<'a> {
-  fn from(value: &'a crate::pixmap::Pixmap) -> Self {
+impl<'a> From<&'a Pixmap> for PaintSource<'a> {
+  fn from(value: &'a Pixmap) -> Self {
     Self::Pixmap(value.as_ref())
   }
 }
@@ -251,7 +246,7 @@ pub(super) fn sample_paint_source(
   y: f32,
   footprint: SamplingFootprint,
 ) -> Option<[u8; 4]> {
-  interpolate_with_footprint(source, algorithm, x, y, footprint).map(premultiplied_from_pixel)
+  interpolate_with_footprint(source, algorithm, x, y, footprint)
 }
 
 /// One axis of a bilinear lookup, casts included, so every sampler matches byte for byte.
@@ -323,14 +318,14 @@ impl LerpedRows {
 
     let slot = usize::from(self.0[0].0 == Some(keep) && index != keep);
     let stride = source.width() as usize;
-    let pixels = &source.data().as_chunks::<4>().0[index * stride..][..stride];
+    let pixels = &source.pixels()[index * stride..][..stride];
     let (row, lerped) = &mut self.0[slot];
 
     *row = Some(index);
     lerped.clear();
     lerped.extend(columns.iter().map(|column| {
-      let left = premultiplied_from_pixel(pixels[column.floor]);
-      let right = premultiplied_from_pixel(pixels[column.ceil]);
+      let left = pixels[column.floor];
+      let right = pixels[column.ceil];
       let ratio = column.ratio as u16;
 
       array::from_fn(|channel| {
@@ -357,7 +352,7 @@ impl BilinearAxis {
 
   pub(crate) fn rows(self, source: PixmapRef<'_>) -> BilinearRow<'_> {
     let stride = source.width() as usize;
-    let pixels = source.data().as_chunks::<4>().0;
+    let pixels = source.pixels();
 
     BilinearRow {
       axis: self,
@@ -507,7 +502,7 @@ impl<'a> ScaledRows<'a> {
       ScaledColumns::Shift { start } => {
         let row = BilinearAxis::new(sample_y, self.source.height());
         let stride = self.source.width() as usize;
-        let source: &[[u8; 4]] = bytemuck::cast_slice(self.source.pixels());
+        let source = self.source.pixels();
 
         if row.ratio == 0 {
           out.copy_from_slice(&source[row.floor * stride + start..][..out.len()]);
@@ -659,14 +654,14 @@ impl BoxAxis {
   /// Box-averages `source` across this row span under each of `columns`, into `out`.
   pub(crate) fn fill_row(self, source: PixmapRef<'_>, columns: &[BoxAxis], out: &mut [[u8; 4]]) {
     let stride = source.width() as usize;
-    let pixels = source.data().as_chunks::<4>().0;
+    let pixels = source.pixels();
 
     for (dst, &column) in out.iter_mut().zip(columns) {
       let average = box_average(column, self, |x, y| {
         pixels[y as usize * stride + x as usize]
       });
 
-      *dst = premultiplied_from_pixel(average.unwrap_or([0; 4]));
+      *dst = average.unwrap_or([0; 4]);
     }
   }
 }

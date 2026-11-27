@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
+use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
 use crate::style::FillRule;
 use smallvec::SmallVec;
 use takumi_core::path::Path;
@@ -98,7 +98,7 @@ impl TileLayer {
   }
 
   /// A mask over a `size` pixmap, `offset` from the border box, keeping only `dest`.
-  fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<TinyMask> {
+  fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<Mask> {
     let dest = self.dest?;
     let size = Size::checked_new(size.width, size.height)?;
     let rect = Rect::from_ltrb(
@@ -107,9 +107,9 @@ impl TileLayer {
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage = coverage::fill_path_aliased(&Path::from_rect(rect), FillRule::NonZero, size)?;
+    let coverage = coverage::fill_path_aliased(&Path::from_rect(rect), FillRule::NonZero, size);
 
-    TinyMask::from_vec(coverage, size)
+    Mask::from_vec(coverage, size)
   }
 }
 
@@ -1029,7 +1029,6 @@ mod tests {
   use super::*;
   use crate::{
     Fonts, RenderOptions,
-    blend::premultiplied_from_pixel,
     layout::node::Node,
     render,
     resources::image::ImageSource,
@@ -1066,7 +1065,7 @@ mod tests {
         for (x, &pixel) in row.iter().enumerate() {
           assert_eq!(
             pixel,
-            premultiplied_from_pixel(view.sample(x as u32, y)),
+            view.sample(x as u32, y),
             "at {x},{y} drawn {logical_width}x{logical_height}"
           );
         }

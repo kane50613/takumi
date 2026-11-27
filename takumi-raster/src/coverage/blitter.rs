@@ -3,7 +3,7 @@
 //! the `SkBlitter` defaults it inherits (`src/core/SkBlitter.cpp`), and `MaskAdditiveBlitter`,
 //! `RunBasedAdditiveBlitter` and `SafeRLEAdditiveBlitter` (`src/core/SkScan_AAAPath.cpp`).
 
-use takumi_core::geometry::Rect;
+use takumi_core::geometry::{Rect, Size};
 
 /// An integer rect, `SkIRect`.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -15,6 +15,26 @@ pub(super) struct IntBounds {
 }
 
 impl IntBounds {
+  /// The bounds of a `size` mask at the origin.
+  pub(super) const fn of_size(size: Size<u32>) -> Self {
+    Self {
+      left: 0,
+      top: 0,
+      right: size.width as i32,
+      bottom: size.height as i32,
+    }
+  }
+
+  /// The bounds as a float rect, none where they are inverted.
+  pub(super) fn to_rect(self) -> Option<Rect<f32>> {
+    Rect::from_ltrb(
+      self.left as f32,
+      self.top as f32,
+      self.right as f32,
+      self.bottom as f32,
+    )
+  }
+
   /// `right - left`, saturated so bounds past the fixed-point range cannot wrap into a small width.
   pub(super) const fn width(self) -> i32 {
     saturating_span(self.left, self.right)
