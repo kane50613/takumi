@@ -830,9 +830,17 @@ impl GlyphDevice for CanvasDevice<'_> {
     let context = background.context;
     // The strip rasterizes on the device pixel grid, so its layers land where they snapped.
     let origin = background.strip.origin;
+    let device = if self.transform.only_translation() {
+      Point {
+        x: origin.x + self.transform.x,
+        y: origin.y + self.transform.y,
+      }
+    } else {
+      origin
+    };
     let fraction = Point {
-      x: origin.x - origin.x.floor(),
-      y: origin.y - origin.y.floor(),
+      x: device.x - device.x.floor(),
+      y: device.y - device.y.floor(),
     };
     let size = Size {
       width: (background.strip.layout.size.width + fraction.x).ceil() as u32,
@@ -845,7 +853,7 @@ impl GlyphDevice for CanvasDevice<'_> {
       fraction.x.to_bits(),
       fraction.y.to_bits(),
     );
-    let box_to_strip = Affine::translation(-origin.x.floor(), -origin.y.floor());
+    let box_to_strip = Affine::translation(fraction.x - origin.x, fraction.y - origin.y);
     let Some(fill) = self.visible_fill(clip, transform) else {
       return;
     };
