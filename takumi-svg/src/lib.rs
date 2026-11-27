@@ -65,7 +65,6 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
-use tiny_skia::PremultipliedColorU8;
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,8 +74,8 @@ impl Rgba {
   pub(crate) const TRANSPARENT: Self = Self([0, 0, 0, 0]);
 
   /// Unpremultiplies a tiny-skia pixel.
-  pub(crate) fn demultiplied(color: PremultipliedColorU8) -> Self {
-    let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+  pub(crate) fn demultiplied(color: [u8; 4]) -> Self {
+    let mut pixel = color;
 
     demultiply_pixel(&mut pixel);
     Self(pixel)

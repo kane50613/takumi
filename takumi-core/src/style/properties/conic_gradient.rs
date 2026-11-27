@@ -2,7 +2,6 @@ use std::{f32::consts::TAU, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use smallvec::SmallVec;
-use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -222,7 +221,7 @@ impl ConicGradientTile {
       lut_len as f32 / TAU
     };
 
-    let fully_opaque = lut.colors().iter().all(|p| p.alpha() == u8::MAX);
+    let fully_opaque = lut.colors().iter().all(|p| p[3] == u8::MAX);
 
     ConicGradientTile {
       width,
@@ -270,16 +269,16 @@ impl GradientOverlayTile for ConicGradientTile {
   }
 
   #[inline(always)]
-  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn sample_pixel(&self, x: u32, y: u32) -> [u8; 4] {
     match self.lut.len() {
-      0 => PremultipliedColorU8::TRANSPARENT,
+      0 => [0; 4],
       1 => self.lut.sample(0),
       _ => self.lut.sample(self.pixel_lut_index(x, y)),
     }
   }
 
   #[inline(always)]
-  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> [u8; 4] {
     if !self.lut.dither_active() {
       return self.sample_pixel(x, y);
     }
@@ -417,8 +416,8 @@ impl ToCss for ConicGradient {
 
 #[cfg(test)]
 mod tests {
+  use crate::resources::image_buffer::demultiplied;
   use color::{ColorSpaceTag, HueDirection};
-  use tiny_skia::ColorU8;
 
   use super::*;
   use crate::{
@@ -552,8 +551,8 @@ mod tests {
       .build();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
-    let color_top = tile.sample_pixel(50, 0).demultiply();
-    assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
+    let color_top = demultiplied(tile.sample_pixel(50, 0));
+    assert_eq!(color_top, [255, 0, 0, 255]);
   }
 
   #[test]
@@ -593,12 +592,12 @@ mod tests {
     let tile = ConicGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
     // Top-center should be red
-    let top = tile.sample_pixel(50, 0).demultiply();
-    assert_eq!(top, ColorU8::from_rgba(255, 0, 0, 255));
+    let top = demultiplied(tile.sample_pixel(50, 0));
+    assert_eq!(top, [255, 0, 0, 255]);
 
     // Bottom should be green (roughly 180deg = 50% of turn, within the 33%–66% green zone)
-    let bottom = tile.sample_pixel(50, 99).demultiply();
-    assert_eq!(bottom, ColorU8::from_rgba(0, 255, 0, 255));
+    let bottom = demultiplied(tile.sample_pixel(50, 99));
+    assert_eq!(bottom, [0, 255, 0, 255]);
   }
 
   #[test]
@@ -632,16 +631,16 @@ mod tests {
 
     assert_eq!(
       [
-        tile.sample_pixel(25, 15).demultiply(),
-        tile.sample_pixel(25, 25).demultiply(),
-        tile.sample_pixel(15, 25).demultiply(),
-        tile.sample_pixel(15, 15).demultiply(),
+        demultiplied(tile.sample_pixel(25, 15)),
+        demultiplied(tile.sample_pixel(25, 25)),
+        demultiplied(tile.sample_pixel(15, 25)),
+        demultiplied(tile.sample_pixel(15, 15)),
       ],
       [
-        ColorU8::from_rgba(255, 0, 0, 255),
-        ColorU8::from_rgba(0, 0, 255, 255),
-        ColorU8::from_rgba(255, 0, 0, 255),
-        ColorU8::from_rgba(0, 0, 255, 255),
+        [255, 0, 0, 255],
+        [0, 0, 255, 255],
+        [255, 0, 0, 255],
+        [0, 0, 255, 255],
       ]
     );
   }

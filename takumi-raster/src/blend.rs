@@ -1,5 +1,3 @@
-use tiny_skia::PremultipliedColorU8;
-
 use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
 
 #[inline(always)]
@@ -427,8 +425,8 @@ const DEMUL: [f32; 256] = {
 };
 
 #[inline(always)]
-pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
-  [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+pub(crate) fn premultiplied_from_pixel(pixel: [u8; 4]) -> [u8; 4] {
+  pixel
 }
 
 /// `pixel` scaled by `alpha`, without a branch so a loop over pixels vectorizes.
@@ -514,40 +512,34 @@ fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {
 }
 
 #[inline(always)]
-pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: PremultipliedColorU8) {
-  let src_a = src.alpha();
+pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: [u8; 4]) {
+  let src_a = src[3];
   if src_a == 0 {
     return;
   }
 
   if src_a == u8::MAX {
-    dst[0] = src.red();
-    dst[1] = src.green();
-    dst[2] = src.blue();
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
     dst[3] = src_a;
     return;
   }
 
   let inv_src_a = u8::MAX - src_a;
-  dst[0] = src.red().saturating_add(mul_div_255(dst[0], inv_src_a));
-  dst[1] = src.green().saturating_add(mul_div_255(dst[1], inv_src_a));
-  dst[2] = src.blue().saturating_add(mul_div_255(dst[2], inv_src_a));
+  dst[0] = src[0].saturating_add(mul_div_255(dst[0], inv_src_a));
+  dst[1] = src[1].saturating_add(mul_div_255(dst[1], inv_src_a));
+  dst[2] = src[2].saturating_add(mul_div_255(dst[2], inv_src_a));
   dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
 }
 
-pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
+pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[[u8; 4]]) {
   for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
-    let src_a = src_pixel.alpha();
+    let src_a = src_pixel[3];
     let inv_src_a = u8::MAX - src_a;
-    dst_pixel[0] = src_pixel
-      .red()
-      .saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
-    dst_pixel[1] = src_pixel
-      .green()
-      .saturating_add(mul_div_255(dst_pixel[1], inv_src_a));
-    dst_pixel[2] = src_pixel
-      .blue()
-      .saturating_add(mul_div_255(dst_pixel[2], inv_src_a));
+    dst_pixel[0] = src_pixel[0].saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
+    dst_pixel[1] = src_pixel[1].saturating_add(mul_div_255(dst_pixel[1], inv_src_a));
+    dst_pixel[2] = src_pixel[2].saturating_add(mul_div_255(dst_pixel[2], inv_src_a));
     dst_pixel[3] = src_a.saturating_add(mul_div_255(dst_pixel[3], inv_src_a));
   }
 }
@@ -556,26 +548,20 @@ pub(crate) fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) 
   bytemuck::cast_slice_mut::<u8, [u8; 4]>(dst).fill(pixel);
 }
 
-pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: PremultipliedColorU8) {
+pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
   for dst_pixel in dst.as_chunks_mut::<4>().0 {
     blend_premultiplied_pixel_normal(dst_pixel, pixel);
   }
 }
 
-pub(crate) fn composite_repeated_premultiplied_pixel_normal(
-  dst: &mut [u8],
-  pixel: PremultipliedColorU8,
-) {
-  let alpha = pixel.alpha();
+pub(crate) fn composite_repeated_premultiplied_pixel_normal(dst: &mut [u8], pixel: [u8; 4]) {
+  let alpha = pixel[3];
   if alpha == 0 {
     return;
   }
 
   if alpha == u8::MAX {
-    fill_repeated_premultiplied_pixel(
-      dst,
-      [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
-    );
+    fill_repeated_premultiplied_pixel(dst, pixel);
   } else {
     blend_repeated_premultiplied_pixel(dst, pixel);
   }

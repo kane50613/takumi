@@ -507,7 +507,7 @@ fn blend_sampled(
 
 #[cfg(test)]
 mod scaled_rows_tests {
-  use tiny_skia::{Pixmap, PremultipliedColorU8};
+  use tiny_skia::Pixmap;
 
   use super::*;
   use crate::style::ImageScalingAlgorithm;
@@ -518,7 +518,7 @@ mod scaled_rows_tests {
     for (i, pixel) in source.pixels_mut().iter_mut().enumerate() {
       let alpha = [255u8, 200, 90, 0, 255][i % 5];
       let channel = |k: usize| ((i * 37 + k * 11) % 256) as u8;
-      *pixel = PremultipliedColorU8::from_rgba(
+      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
         channel(1).min(alpha),
         channel(2).min(alpha),
         channel(3).min(alpha),
@@ -535,7 +535,7 @@ mod scaled_rows_tests {
     let mut canvas = Pixmap::new(40, 30).unwrap();
 
     for (i, pixel) in canvas.pixels_mut().iter_mut().enumerate() {
-      *pixel = PremultipliedColorU8::from_rgba(0, (i % 100) as u8, 20, 120).unwrap();
+      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(0, (i % 100) as u8, 20, 120).unwrap();
     }
 
     let mask: Vec<u8> = (0..36 * 26)

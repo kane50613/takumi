@@ -752,7 +752,6 @@ mod tests {
 
 #[cfg(test)]
 mod demultiply_tests {
-  use tiny_skia::PremultipliedColorU8;
 
   use super::demultiply_rgba_in_place;
 
@@ -765,7 +764,7 @@ mod demultiply_tests {
         let mut pixel = [channel, channel, channel, alpha];
         demultiply_rgba_in_place(&mut pixel);
 
-        let float = PremultipliedColorU8::from_rgba(channel, channel, channel, alpha)
+        let float = tiny_skia::PremultipliedColorU8::from_rgba(channel, channel, channel, alpha)
           .expect("a legal premultiplied colour")
           .demultiply();
 

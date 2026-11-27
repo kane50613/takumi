@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell};
 
-use tiny_skia::{PixmapRef, PremultipliedColorU8};
+use tiny_skia::PixmapRef;
 
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
@@ -67,16 +67,16 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  pub(crate) fn get_pixel(self, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn get_pixel(self, x: u32, y: u32) -> [u8; 4] {
     match self {
       Self::Pixmap(pixmap) => {
         let width = pixmap.width();
         let height = pixmap.height();
         if x >= width || y >= height {
-          return PremultipliedColorU8::TRANSPARENT;
+          return [0; 4];
         }
         let index = (y * width + x) as usize;
-        pixmap.pixels()[index]
+        pixmap.data().as_chunks::<4>().0[index]
       }
       Self::BackgroundTile(tile) => tile.get_pixel(x, y),
       Self::ColorTile(tile) => tile.get_pixel(x, y),
@@ -168,7 +168,7 @@ impl ResolvedSource<'_> {
     }
   }
 
-  pub(crate) fn get_pixel(self, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn get_pixel(self, x: u32, y: u32) -> [u8; 4] {
     match self {
       Self::Direct(source) => source.get_pixel(x, y),
       Self::Bitmap(view) => view.sample(x, y),
@@ -266,8 +266,8 @@ pub(crate) struct BilinearAxis {
 #[derive(Clone, Copy)]
 pub(crate) struct BilinearRow<'p> {
   axis: BilinearAxis,
-  top: &'p [PremultipliedColorU8],
-  bottom: &'p [PremultipliedColorU8],
+  top: &'p [[u8; 4]],
+  bottom: &'p [[u8; 4]],
 }
 
 /// Bilinear magnification one row at a time, each source row lerped once, matching
@@ -323,7 +323,7 @@ impl LerpedRows {
 
     let slot = usize::from(self.0[0].0 == Some(keep) && index != keep);
     let stride = source.width() as usize;
-    let pixels = &source.pixels()[index * stride..][..stride];
+    let pixels = &source.data().as_chunks::<4>().0[index * stride..][..stride];
     let (row, lerped) = &mut self.0[slot];
 
     *row = Some(index);
@@ -357,7 +357,7 @@ impl BilinearAxis {
 
   pub(crate) fn rows(self, source: PixmapRef<'_>) -> BilinearRow<'_> {
     let stride = source.width() as usize;
-    let pixels = source.pixels();
+    let pixels = source.data().as_chunks::<4>().0;
 
     BilinearRow {
       axis: self,
@@ -397,23 +397,16 @@ impl BilinearAxis {
 }
 
 #[inline(always)]
-fn mix_taps(taps: [PremultipliedColorU8; 4], weights: [u32; 4]) -> [u8; 4] {
-  let channel = |channel: fn(PremultipliedColorU8) -> u8| {
+fn mix_taps(taps: [[u8; 4]; 4], weights: [u32; 4]) -> [u8; 4] {
+  std::array::from_fn(|channel| {
     let sum: u32 = taps
       .iter()
       .zip(weights)
-      .map(|(tap, weight)| channel(*tap) as u32 * weight)
+      .map(|(tap, weight)| tap[channel] as u32 * weight)
       .sum();
 
     (sum >> 16) as u8
-  };
-
-  [
-    channel(PremultipliedColorU8::red),
-    channel(PremultipliedColorU8::green),
-    channel(PremultipliedColorU8::blue),
-    channel(PremultipliedColorU8::alpha),
-  ]
+  })
 }
 
 /// An axis-aligned, non-minifying scale: column taps derived once, row taps once per row.
@@ -547,7 +540,7 @@ pub(crate) fn interpolate_with_footprint(
   x: f32,
   y: f32,
   footprint: SamplingFootprint,
-) -> Option<PremultipliedColorU8> {
+) -> Option<[u8; 4]> {
   if matches!(algorithm, ImageScalingAlgorithm::Pixelated) {
     return interpolate_nearest(image, x, y);
   }
@@ -560,7 +553,7 @@ pub(crate) fn interpolate_with_footprint(
 }
 
 #[inline(always)]
-fn interpolate_nearest(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<PremultipliedColorU8> {
+fn interpolate_nearest(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
   let w = image.width();
   let h = image.height();
   if w == 0 || h == 0 {
@@ -576,7 +569,7 @@ fn interpolate_nearest(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<Prem
 }
 
 #[inline(always)]
-fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<PremultipliedColorU8> {
+fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8; 4]> {
   let w = image.width();
   let h = image.height();
 
@@ -604,7 +597,7 @@ fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<Pre
     column.weights(row),
   );
 
-  PremultipliedColorU8::from_rgba(r, g, b, a)
+  Some([r, g, b, a])
 }
 
 fn interpolate_box(
@@ -612,7 +605,7 @@ fn interpolate_box(
   x: f32,
   y: f32,
   footprint: SamplingFootprint,
-) -> Option<PremultipliedColorU8> {
+) -> Option<[u8; 4]> {
   let width = image.width();
   let height = image.height();
   if width == 0 || height == 0 {
@@ -666,14 +659,14 @@ impl BoxAxis {
   /// Box-averages `source` across this row span under each of `columns`, into `out`.
   pub(crate) fn fill_row(self, source: PixmapRef<'_>, columns: &[BoxAxis], out: &mut [[u8; 4]]) {
     let stride = source.width() as usize;
-    let pixels = source.pixels();
+    let pixels = source.data().as_chunks::<4>().0;
 
     for (dst, &column) in out.iter_mut().zip(columns) {
       let average = box_average(column, self, |x, y| {
         pixels[y as usize * stride + x as usize]
       });
 
-      *dst = premultiplied_from_pixel(average.unwrap_or(PremultipliedColorU8::TRANSPARENT));
+      *dst = premultiplied_from_pixel(average.unwrap_or([0; 4]));
     }
   }
 }
@@ -683,8 +676,8 @@ impl BoxAxis {
 fn box_average(
   columns: BoxAxis,
   rows: BoxAxis,
-  pixel: impl Fn(u32, u32) -> PremultipliedColorU8,
-) -> Option<PremultipliedColorU8> {
+  pixel: impl Fn(u32, u32) -> [u8; 4],
+) -> Option<[u8; 4]> {
   let mut sum = [0.0; 4];
   let mut total_weight = 0.0;
 
@@ -702,10 +695,10 @@ fn box_average(
 
       let weight = x_weight * y_weight;
       let pixel = pixel(source_x, source_y);
-      sum[0] += pixel.red() as f32 * weight;
-      sum[1] += pixel.green() as f32 * weight;
-      sum[2] += pixel.blue() as f32 * weight;
-      sum[3] += pixel.alpha() as f32 * weight;
+      sum[0] += pixel[0] as f32 * weight;
+      sum[1] += pixel[1] as f32 * weight;
+      sum[2] += pixel[2] as f32 * weight;
+      sum[3] += pixel[3] as f32 * weight;
       total_weight += weight;
     }
   }
@@ -714,17 +707,12 @@ fn box_average(
     return None;
   }
 
-  PremultipliedColorU8::from_rgba(
-    (sum[0] / total_weight).round() as u8,
-    (sum[1] / total_weight).round() as u8,
-    (sum[2] / total_weight).round() as u8,
-    (sum[3] / total_weight).round() as u8,
-  )
+  Some(sum.map(|channel| (channel / total_weight).round() as u8))
 }
 
 #[cfg(test)]
 mod tests {
-  use tiny_skia::{Pixmap, PremultipliedColorU8};
+  use tiny_skia::Pixmap;
 
   use super::{
     BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
@@ -772,7 +760,7 @@ mod tests {
       let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
       let alpha = byte(24);
 
-      *pixel = PremultipliedColorU8::from_rgba(
+      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
         byte(3) % (alpha.saturating_add(1)),
         byte(9) % (alpha.saturating_add(1)),
         byte(15) % (alpha.saturating_add(1)),
@@ -864,18 +852,18 @@ mod tests {
   fn sampling_a_pixel_centre_reads_that_pixel() -> Result<(), &'static str> {
     let mut pixmap = Pixmap::new(2, 1).ok_or("failed to create pixmap")?;
     let pixels = pixmap.pixels_mut();
-    pixels[0] = PremultipliedColorU8::from_rgba(0, 0, 0, 255).ok_or("black")?;
-    pixels[1] = PremultipliedColorU8::from_rgba(255, 255, 255, 255).ok_or("white")?;
+    pixels[0] = tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).ok_or("black")?;
+    pixels[1] = tiny_skia::PremultipliedColorU8::from_rgba(255, 255, 255, 255).ok_or("white")?;
 
     let centre = interpolate_bilinear(pixmap.as_ref().into(), 0.5, 0.5).ok_or("sampled")?;
-    assert_eq!(centre.red(), 0, "a pixel centre reads the pixel itself");
+    assert_eq!(centre[0], 0, "a pixel centre reads the pixel itself");
 
     let corner = interpolate_bilinear(pixmap.as_ref().into(), 0.0, 0.5).ok_or("sampled")?;
-    assert_eq!(corner.red(), 0, "clamped at the left edge");
+    assert_eq!(corner[0], 0, "clamped at the left edge");
 
     let between = interpolate_bilinear(pixmap.as_ref().into(), 1.0, 0.5).ok_or("sampled")?;
     assert!(
-      (between.red() as i16 - 128).abs() <= 1,
+      (between[0] as i16 - 128).abs() <= 1,
       "halfway between two pixels blends them"
     );
 
@@ -887,7 +875,7 @@ mod tests {
     let mut pixmap = Pixmap::new(8, 1).ok_or("failed to create pixmap")?;
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let value = if index % 2 == 0 { 0 } else { 255 };
-      *pixel = PremultipliedColorU8::from_rgba(value, value, value, 255)
+      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(value, value, value, 255)
         .ok_or("failed to create opaque grayscale pixel")?;
     }
 
@@ -900,10 +888,10 @@ mod tests {
     )
     .ok_or("failed to sample minified image")?;
 
-    assert!((sample.red() as i16 - 128).abs() <= 1);
-    assert!((sample.green() as i16 - 128).abs() <= 1);
-    assert!((sample.blue() as i16 - 128).abs() <= 1);
-    assert_eq!(sample.alpha(), 255);
+    assert!((sample[0] as i16 - 128).abs() <= 1);
+    assert!((sample[1] as i16 - 128).abs() <= 1);
+    assert!((sample[2] as i16 - 128).abs() <= 1);
+    assert_eq!(sample[3], 255);
     Ok(())
   }
 }
