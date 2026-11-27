@@ -2,7 +2,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::paint::SpreadMethod;
 use takumi_core::style::Affine;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
@@ -29,7 +29,7 @@ pub struct LinearGradient {
   /// A transform that should be applied to the linear gradient.
   pub transform: Affine,
   /// The spread method of the linear gradient.
-  pub spread_method: SvgSpreadMethod,
+  pub spread_method: SpreadMethod,
   /// The color stops of the linear gradient.
   ///
   /// Note that all stops need to be in the same color space.
@@ -74,7 +74,7 @@ pub struct RadialGradient {
   ///
   /// _Note_: The spread methods `Repeat`/`Reflect` are currently not supported
   /// for radial gradients, and will fall back to `Pad`.
-  pub spread_method: SvgSpreadMethod,
+  pub spread_method: SpreadMethod,
   /// The color stops of the radial gradient.
   ///
   /// Note that all stops need to be in the same color space.
@@ -116,7 +116,7 @@ pub struct SweepGradient {
   /// A transform that should be applied to the sweep gradient.
   pub transform: Affine,
   /// The spread method of the sweep gradient.
-  pub spread_method: SvgSpreadMethod,
+  pub spread_method: SpreadMethod,
   /// The color stops of the sweep gradient.
   ///
   /// Note that all stops need to be in the same color space.

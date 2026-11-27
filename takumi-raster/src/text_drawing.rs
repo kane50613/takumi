@@ -3,8 +3,8 @@ use std::sync::Arc;
 use skrifa::color::ColorPalette;
 use takumi_core::{
   geometry::{Point, Rect, Size},
+  paint::SpreadMethod,
   path::{Path, Stroke},
-  resources::image::SvgSpreadMethod,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -345,7 +345,7 @@ pub(crate) fn bitmap_coverage(
   let shader = Shader::Image(ImageShader::new(
     source,
     local,
-    SvgSpreadMethod::Pad,
+    SpreadMethod::Pad,
     ImageFilter::Linear,
     1.0,
   )?);

@@ -14,9 +14,9 @@ use crate::{
   resources::{
     cache::Cache,
     glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
-    image::{SvgImageData, SvgLineCap, SvgLineJoin},
+    image::SvgImageData,
   },
-  style::{Affine, Color, ImageScalingAlgorithm},
+  style::{Affine, Color, ImageScalingAlgorithm, LineCap, LineJoin},
   svg::layout::{
     budget::Budget,
     object::{LayoutObject, Paint, Picture, PictureContent, Shape},
@@ -216,8 +216,8 @@ impl TextPainter<'_> {
         opacity: fill.opacity,
         width,
         miter_limit: BOLD_MITER_LIMIT,
-        cap: SvgLineCap::Butt,
-        join: SvgLineJoin::Miter,
+        cap: LineCap::Butt,
+        join: LineJoin::Miter,
         dash: None,
         context: fill.context,
         user_space: None,

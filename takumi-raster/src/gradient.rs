@@ -2,7 +2,7 @@
 //! high-precision raster pipeline runs them. Approximate: a shaded pixel rounds to 8 bits before it
 //! blends, where Skia blends a gradient's pixels in floats.
 
-use takumi_core::{geometry::Point, resources::image::SvgSpreadMethod, style::Affine};
+use takumi_core::{geometry::Point, paint::SpreadMethod, style::Affine};
 
 /// How many pixels [`Gradient::shade_row`] carries through each stage at once.
 const SHADE_CHUNK: usize = 64;
@@ -38,7 +38,7 @@ pub(crate) struct Gradient {
   /// Maps a device pixel center into the space `kind` reads `t` from.
   device_to_unit: Affine,
   kind: Kind,
-  spread: SvgSpreadMethod,
+  spread: SpreadMethod,
   /// `ts[i]` starts interval `i`, whose colors are `factors[i] * t + biases[i]`, for `i >= 1`.
   /// Interval 0 holds the color before the first stop.
   ts: Vec<f32>,
@@ -158,7 +158,7 @@ impl Gradient {
   pub(crate) fn new(
     shape: GradientShape,
     stops: &[GradientStop],
-    spread: SvgSpreadMethod,
+    spread: SpreadMethod,
     transform: Affine,
   ) -> Result<Self, Option<[u8; 4]>> {
     let Some(&last) = stops.last() else {
@@ -205,7 +205,7 @@ impl Gradient {
         if concentric && nearly_zero_within(start_radius - end_radius, DEGENERATE_THRESHOLD) {
           // The interpolation region shrinks to a ring at the radius: the first color inside it and
           // the last outside, under `Pad`.
-          if spread != SvgSpreadMethod::Pad || end_radius <= DEGENERATE_THRESHOLD {
+          if spread != SpreadMethod::Pad || end_radius <= DEGENERATE_THRESHOLD {
             return degenerate();
           }
 
@@ -248,7 +248,7 @@ impl Gradient {
     center: [f32; 2],
     radius: f32,
     stops: &[GradientStop],
-    spread: SvgSpreadMethod,
+    spread: SpreadMethod,
     device_to_local: Affine,
   ) -> Result<Self, Option<[u8; 4]>> {
     if nearly_zero_within(radius, DEGENERATE_THRESHOLD) {
@@ -319,7 +319,7 @@ impl Gradient {
     device_to_unit: Affine,
     kind: Kind,
     stops: &[GradientStop],
-    spread: SvgSpreadMethod,
+    spread: SpreadMethod,
   ) -> Self {
     let (ts, factors, biases) = interval_equations(stops);
 
@@ -367,8 +367,8 @@ impl Gradient {
   /// [`Self::tile`] of every `t`, with the spread matched once.
   fn tile_all(&self, ts: &mut [f32]) {
     match self.spread {
-      SvgSpreadMethod::Pad => {}
-      SvgSpreadMethod::Repeat | SvgSpreadMethod::Reflect => {
+      SpreadMethod::Pad => {}
+      SpreadMethod::Repeat | SpreadMethod::Reflect => {
         for t in ts {
           *t = self.tile(*t);
         }
@@ -394,9 +394,9 @@ impl Gradient {
   /// hard, since the outer intervals hold the end colors.
   fn tile(&self, t: f32) -> f32 {
     match self.spread {
-      SvgSpreadMethod::Pad => t,
-      SvgSpreadMethod::Repeat => (t - t.floor()).clamp(0.0, 1.0),
-      SvgSpreadMethod::Reflect => (((t - 1.0) - 2.0 * ((t - 1.0) * 0.5).floor()) - 1.0)
+      SpreadMethod::Pad => t,
+      SpreadMethod::Repeat => (t - t.floor()).clamp(0.0, 1.0),
+      SpreadMethod::Reflect => (((t - 1.0) - 2.0 * ((t - 1.0) * 0.5).floor()) - 1.0)
         .abs()
         .clamp(0.0, 1.0),
     }
@@ -536,10 +536,10 @@ fn interval_equations(stops: &[GradientStop]) -> (Vec<f32>, Vec<[f32; 4]>, Vec<[
 
 /// The color `MakeDegenerateGradient` paints for `stops`, the last stop under `Pad` and their
 /// average under the other spreads.
-fn degenerate_color(stops: &[GradientStop], spread: SvgSpreadMethod) -> [u8; 4] {
+fn degenerate_color(stops: &[GradientStop], spread: SpreadMethod) -> [u8; 4] {
   match spread {
-    SvgSpreadMethod::Pad => premultiplied(stops[stops.len() - 1].color),
-    SvgSpreadMethod::Reflect | SvgSpreadMethod::Repeat => premultiplied(average_color(stops)),
+    SpreadMethod::Pad => premultiplied(stops[stops.len() - 1].color),
+    SpreadMethod::Reflect | SpreadMethod::Repeat => premultiplied(average_color(stops)),
   }
 }
 
@@ -622,7 +622,7 @@ mod tests {
         end: [10.0, 0.0],
       },
       &[stop(0.0, RED), stop(1.0, BLUE)],
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       Affine::IDENTITY,
     )
     .unwrap();
@@ -641,7 +641,7 @@ mod tests {
         end: [10.0, 0.0],
       },
       &[stop(0.0, RED), stop(0.0, BLUE), stop(1.0, BLUE)],
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       Affine::IDENTITY,
     )
     .unwrap();
@@ -658,8 +658,8 @@ mod tests {
       end: [4.0, 0.0],
     };
     let stops = [stop(0.0, RED), stop(1.0, BLUE)];
-    let repeat = Gradient::new(shape, &stops, SvgSpreadMethod::Repeat, Affine::IDENTITY).unwrap();
-    let reflect = Gradient::new(shape, &stops, SvgSpreadMethod::Reflect, Affine::IDENTITY).unwrap();
+    let repeat = Gradient::new(shape, &stops, SpreadMethod::Repeat, Affine::IDENTITY).unwrap();
+    let reflect = Gradient::new(shape, &stops, SpreadMethod::Reflect, Affine::IDENTITY).unwrap();
 
     assert_eq!(row(&repeat, 0, 8)[4], row(&repeat, 0, 8)[0]);
     assert_eq!(row(&reflect, 0, 8)[4], row(&reflect, 0, 8)[3]);
@@ -674,11 +674,11 @@ mod tests {
     let stops = [stop(0.0, RED), stop(1.0, BLUE)];
 
     assert_eq!(
-      Gradient::new(shape, &stops, SvgSpreadMethod::Pad, Affine::IDENTITY).err(),
+      Gradient::new(shape, &stops, SpreadMethod::Pad, Affine::IDENTITY).err(),
       Some(Some([0, 0, 255, 255]))
     );
     assert_eq!(
-      Gradient::new(shape, &stops, SvgSpreadMethod::Repeat, Affine::IDENTITY).err(),
+      Gradient::new(shape, &stops, SpreadMethod::Repeat, Affine::IDENTITY).err(),
       Some(Some([128, 0, 128, 255]))
     );
   }
@@ -693,7 +693,7 @@ mod tests {
         end_radius: 5.0,
       },
       &[stop(0.0, RED), stop(1.0, BLUE)],
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       Affine::IDENTITY,
     )
     .unwrap();
@@ -811,7 +811,7 @@ mod tests {
         end,
         end_radius,
       };
-      let gradient = Gradient::new(shape, &stops, SvgSpreadMethod::Pad, Affine::IDENTITY).unwrap();
+      let gradient = Gradient::new(shape, &stops, SpreadMethod::Pad, Affine::IDENTITY).unwrap();
 
       for y in 0..32 {
         let ours = row(&gradient, y, 32);

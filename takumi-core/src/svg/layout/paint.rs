@@ -9,8 +9,7 @@ use super::{
   paint_server::PaintServer,
 };
 use crate::{
-  resources::image::{SvgLineCap, SvgLineJoin},
-  style::{Color, FillRule, LineCap, LineJoin, SvgPaint},
+  style::{Color, FillRule, SvgPaint},
   svg::length::LengthAxis,
 };
 
@@ -80,16 +79,8 @@ impl SvgLayout<'_> {
       opacity: color_opacity * data.stroke_opacity.0.clamp(0.0, 1.0),
       width,
       miter_limit: data.stroke_miterlimit.get(),
-      cap: match data.stroke_linecap {
-        LineCap::Butt => SvgLineCap::Butt,
-        LineCap::Round => SvgLineCap::Round,
-        LineCap::Square => SvgLineCap::Square,
-      },
-      join: match style.misc_inherited_data.stroke_linejoin {
-        LineJoin::Miter => SvgLineJoin::Miter,
-        LineJoin::Round => SvgLineJoin::Round,
-        LineJoin::Bevel => SvgLineJoin::Bevel,
-      },
+      cap: data.stroke_linecap,
+      join: style.misc_inherited_data.stroke_linejoin,
       dash: self.dash_pattern(styled, scope).map(|dashes| {
         Rc::new((
           dashes,

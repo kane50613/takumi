@@ -6,8 +6,8 @@ use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
 use takumi_core::path::{Path, PathBuilder};
 use takumi_core::{
+  paint::SpreadMethod,
   path::Stroke as PathStroke,
-  resources::image::SvgSpreadMethod,
   style::{LineJoin, MaskType},
 };
 
@@ -755,7 +755,7 @@ impl Emitter<'_> {
               x: x + cx,
               y: y + cy,
             },
-          spread_method: SvgSpreadMethod::Pad,
+          spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
         }
@@ -788,7 +788,7 @@ impl Emitter<'_> {
           start_angle: 0.0,
           end_angle: 360.0,
           transform: pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
-          spread_method: SvgSpreadMethod::Pad,
+          spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
         }

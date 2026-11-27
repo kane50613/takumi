@@ -5,11 +5,11 @@ use skrifa::{
   color::{ColorPalette, CompositeMode, Extend},
   instance::LocationRef,
 };
+use takumi_core::paint::SpreadMethod;
 use takumi_core::path::Path;
 use takumi_core::resources::color_glyph::{
   ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
 };
-use takumi_core::resources::image::SvgSpreadMethod;
 use takumi_core::style::Affine;
 use takumi_core::style::{BlendMode, FillRule, MaskType};
 
@@ -207,11 +207,11 @@ impl Colors<'_> {
   }
 }
 
-fn spread_method(extend: Extend) -> SvgSpreadMethod {
+fn spread_method(extend: Extend) -> SpreadMethod {
   match extend {
-    Extend::Repeat => SvgSpreadMethod::Repeat,
-    Extend::Reflect => SvgSpreadMethod::Reflect,
-    Extend::Pad | Extend::Unknown => SvgSpreadMethod::Pad,
+    Extend::Repeat => SpreadMethod::Repeat,
+    Extend::Reflect => SpreadMethod::Reflect,
+    Extend::Pad | Extend::Unknown => SpreadMethod::Pad,
   }
 }
 

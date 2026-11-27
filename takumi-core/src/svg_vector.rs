@@ -6,8 +6,8 @@ use std::sync::Arc;
 use crate::svg::filter::SvgFilter;
 use crate::{
   geometry::{PathCommand, Point, Rect},
+  paint::SpreadMethod,
   path::{Stroke, StrokeDash},
-  resources::image::SvgSpreadMethod,
   resources::{image_buffer::ImageBuffer, image_decoder::decode_image},
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm, LineCap, LineJoin},
 };
@@ -226,9 +226,9 @@ pub struct SvgStrokeStyle {
   /// Miter limit.
   pub miter_limit: f32,
   /// Line cap.
-  pub cap: SvgLineCap,
+  pub cap: LineCap,
   /// Line join.
-  pub join: SvgLineJoin,
+  pub join: LineJoin,
   /// Dash pattern as `(array, offset)`.
   pub dash: Option<(Vec<f32>, f32)>,
 }
@@ -239,44 +239,14 @@ impl SvgStrokeStyle {
     Stroke {
       width: self.width,
       miter_limit: self.miter_limit,
-      line_cap: match self.cap {
-        SvgLineCap::Butt => LineCap::Butt,
-        SvgLineCap::Round => LineCap::Round,
-        SvgLineCap::Square => LineCap::Square,
-      },
-      line_join: match self.join {
-        SvgLineJoin::Miter => LineJoin::Miter,
-        SvgLineJoin::Round => LineJoin::Round,
-        SvgLineJoin::Bevel => LineJoin::Bevel,
-      },
+      line_cap: self.cap,
+      line_join: self.join,
       dash: self
         .dash
         .as_ref()
         .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
     }
   }
-}
-
-/// Line cap for [`SvgStrokeStyle`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SvgLineCap {
-  /// Flat edge at the endpoint.
-  Butt,
-  /// Semicircle past the endpoint.
-  Round,
-  /// Half-square past the endpoint.
-  Square,
-}
-
-/// Line join for [`SvgStrokeStyle`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SvgLineJoin {
-  /// Sharp corner, which becomes a bevel past the miter limit.
-  Miter,
-  /// Rounded corner.
-  Round,
-  /// Beveled corner.
-  Bevel,
 }
 
 /// Paint for fills and strokes.
@@ -325,7 +295,7 @@ pub struct SvgGradient {
   /// Extra gradient transform.
   pub transform: Affine,
   /// How the gradient extends past its bounds.
-  pub spread: SvgSpreadMethod,
+  pub spread: SpreadMethod,
   /// Color stops, offsets ascending in `0..=1`.
   pub stops: Vec<SvgGradientStop>,
 }

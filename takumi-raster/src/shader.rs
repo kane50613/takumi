@@ -1,7 +1,7 @@
 //! What a path fill paints with, after Skia's shaders: a solid color, a gradient, or an image as
 //! `SkImageShader` samples one.
 
-use takumi_core::{resources::image::SvgSpreadMethod, style::Affine};
+use takumi_core::{paint::SpreadMethod, style::Affine};
 
 use crate::blend::scale_premultiplied_pixel;
 #[cfg(feature = "svg")]
@@ -48,7 +48,7 @@ pub(crate) struct ImageShader<'a> {
   height: u32,
   /// Maps a device pixel center onto the image's pixel grid.
   device_to_image: Affine,
-  spread: SvgSpreadMethod,
+  spread: SpreadMethod,
   filter: ImageFilter,
   /// The paint alpha the samples scale by, `scale_1_float`.
   alpha: u8,
@@ -60,7 +60,7 @@ impl<'a> ImageShader<'a> {
   pub(crate) fn new(
     image: PixmapRef<'a>,
     transform: Affine,
-    spread: SvgSpreadMethod,
+    spread: SpreadMethod,
     filter: ImageFilter,
     opacity: f32,
   ) -> Option<Self> {
@@ -152,8 +152,8 @@ impl<'a> ImageShader<'a> {
   /// `coordinate` tiled across `size` texels as `spread` has it.
   fn tile(&self, coordinate: f32, size: u32) -> f32 {
     match self.spread {
-      SvgSpreadMethod::Repeat => coordinate - (coordinate / size as f32).floor() * size as f32,
-      SvgSpreadMethod::Pad | SvgSpreadMethod::Reflect => coordinate,
+      SpreadMethod::Repeat => coordinate - (coordinate / size as f32).floor() * size as f32,
+      SpreadMethod::Pad | SpreadMethod::Reflect => coordinate,
     }
   }
 }
@@ -172,7 +172,7 @@ mod tests {
     let Some(shader) = ImageShader::new(
       image,
       Affine::scale(0.5, 1.0),
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       ImageFilter::Nearest,
       1.0,
     ) else {

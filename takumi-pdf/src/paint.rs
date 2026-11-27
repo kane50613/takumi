@@ -5,7 +5,7 @@ use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "images")]
 use rustc_hash::FxHashMap;
-use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::paint::SpreadMethod;
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -184,11 +184,11 @@ impl RasterizedImages {
   }
 }
 
-pub(crate) const fn spread(repeating: bool) -> SvgSpreadMethod {
+pub(crate) const fn spread(repeating: bool) -> SpreadMethod {
   if repeating {
-    SvgSpreadMethod::Repeat
+    SpreadMethod::Repeat
   } else {
-    SvgSpreadMethod::Pad
+    SpreadMethod::Pad
   }
 }
 

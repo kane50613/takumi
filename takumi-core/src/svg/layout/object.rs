@@ -8,14 +8,12 @@ use std::sync::Arc;
 use crate::svg::filter::SvgFilter;
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
+  paint::SpreadMethod,
   resources::{
-    image::{
-      SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
-      SvgSpreadMethod,
-    },
+    image::{SvgGradient, SvgGradientStop, SvgImageData, SvgOp, SvgOpPaint},
     svg_size::ViewBox,
   },
-  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, LineCap, LineJoin},
 };
 
 use super::view_box::PreserveAspectRatio;
@@ -339,7 +337,7 @@ pub(super) struct GradientPaint {
   pub(super) geometry: GradientGeometry,
   pub(super) units: Units,
   pub(super) transform: Affine,
-  pub(super) spread: SvgSpreadMethod,
+  pub(super) spread: SpreadMethod,
   pub(super) stops: Vec<SvgGradientStop>,
 }
 
@@ -421,8 +419,8 @@ pub(super) struct Stroke {
   pub(super) opacity: f32,
   pub(super) width: f32,
   pub(super) miter_limit: f32,
-  pub(super) cap: SvgLineCap,
-  pub(super) join: SvgLineJoin,
+  pub(super) cap: LineCap,
+  pub(super) join: LineJoin,
   pub(super) dash: Option<Rc<(Vec<f32>, f32)>>,
   pub(super) context: Option<ContextSource>,
   /// The transform and bounds of the user space a non-scaling stroke's paint settles in, while it

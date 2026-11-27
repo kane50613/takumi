@@ -30,12 +30,14 @@ use crate::resources::svg_size::SvgSize;
 use crate::style::Affine;
 #[cfg(feature = "svg")]
 use crate::style::Color;
+#[cfg(feature = "svg-raster")]
+use crate::svg::filter::SvgFilter;
 #[cfg(feature = "svg")]
 use crate::svg::{HostReads, SvgDocument, SvgHost};
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
-  SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
-  SvgOpPaint, SvgRasterizer, SvgStrokeStyle,
+  SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgOp, SvgOpPaint,
+  SvgRasterizer, SvgStrokeStyle,
 };
 use crate::{
   context::RenderContext,
@@ -46,17 +48,6 @@ use crate::{
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
-
-/// Gradient spread method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SvgSpreadMethod {
-  /// Clamp to the edge stops.
-  Pad,
-  /// Mirror-repeat.
-  Reflect,
-  /// Repeat.
-  Repeat,
-}
 
 /// The most pixels an SVG raster or one of its filter buffers may hold.
 #[cfg(feature = "svg-raster")]
@@ -837,7 +828,7 @@ pub fn parse_svg_filter(
   filter_id: &str,
   width: u32,
   height: u32,
-) -> Result<Option<Arc<crate::svg::filter::SvgFilter>>, ImageError> {
+) -> Result<Option<Arc<SvgFilter>>, ImageError> {
   // The markup may come out of a document that declared `xlink` on an outer element.
   let document = SvgDocument::parse(&format!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">{markup}</svg>"#

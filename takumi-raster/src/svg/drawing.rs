@@ -18,6 +18,7 @@ use crate::{
 };
 use takumi_core::{
   geometry::PathCommand,
+  paint::SpreadMethod,
   resources::{
     image::within_raster_pixel_budget,
     image_buffer::{composite_premultiplied_over_row, premultiply_pixel},
@@ -25,7 +26,7 @@ use takumi_core::{
   resources::{
     image::{
       SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgRasterizer,
-      SvgSpreadMethod, SvgStrokeStyle,
+      SvgStrokeStyle,
     },
     image_buffer::ImageBuffer,
   },
@@ -493,7 +494,7 @@ impl<'a, 'b> Target<'a, 'b> {
     let Some(image) = ImageShader::new(
       source,
       image_to_device,
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       if rendering == ImageScalingAlgorithm::Pixelated {
         ImageFilter::Nearest
       } else {
@@ -591,7 +592,7 @@ fn shader_of<'t>(
       ImageShader::new(
         tile.as_ref(),
         tile_to_device,
-        SvgSpreadMethod::Repeat,
+        SpreadMethod::Repeat,
         ImageFilter::Linear,
         opacity,
       )

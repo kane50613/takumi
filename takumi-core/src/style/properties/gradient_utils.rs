@@ -636,6 +636,17 @@ fn interpolate_hi(
 /// matches another interpolation colour space such as Oklab.
 const SRGB_SAMPLED_STOPS: usize = 64;
 
+/// Gradient spread method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpreadMethod {
+  /// Clamp to the edge stops.
+  Pad,
+  /// Mirror-repeat.
+  Reflect,
+  /// Repeat.
+  Repeat,
+}
+
 /// A gradient stop in straight sRGB, placed along the gradient from 0 to 1.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SrgbStop {

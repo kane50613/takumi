@@ -2,7 +2,7 @@ use crate::writer::geom::{expand, rotation_at};
 use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::paint::SpreadMethod;
 use takumi_core::{geometry::Rect, style::Affine};
 
 use bumpalo::Bump;
@@ -60,7 +60,7 @@ pub(crate) struct PostScriptGradient {
   pub(crate) cy: f32,
   pub(crate) stops: Vec<Stop>,
   pub(crate) domain: Rect<f32>,
-  pub(crate) spread_method: SvgSpreadMethod,
+  pub(crate) spread_method: SpreadMethod,
   pub(crate) gradient_type: GradientType,
   pub(crate) anti_alias: bool,
 }
@@ -143,7 +143,7 @@ fn get_point_ts(start: Point<f32>, end: Point<f32>) -> (Affine, f32, f32) {
 
 impl GradientPropertiesExt for LinearGradient {
   fn gradient_properties(self, bbox: Rect<f32>) -> (GradientProperties, Affine) {
-    if self.spread_method == SvgSpreadMethod::Pad {
+    if self.spread_method == SpreadMethod::Pad {
       (
         GradientProperties::RadialAxialGradient(RadialAxialGradient {
           coords: vec![self.x1, self.y1, self.x2, self.y2],
@@ -630,11 +630,11 @@ fn encode_spread_method<'a>(
   max: f32,
   code: &mut Vec<PostScriptOp<'a>>,
   bump: &'a Bump,
-  spread_method: SvgSpreadMethod,
+  spread_method: SpreadMethod,
 ) {
   use pdf_writer::types::PostScriptOp::*;
 
-  if spread_method == SvgSpreadMethod::Pad {
+  if spread_method == SpreadMethod::Pad {
     return;
   }
 
@@ -695,7 +695,7 @@ fn encode_spread_method<'a>(
     Integer(0),
     Gt,
     // x length min o {(abs(i) % 2) > 0}
-    if spread_method == SvgSpreadMethod::Reflect {
+    if spread_method == SpreadMethod::Reflect {
       If(bump.alloc([Integer(2), Index, Exch, Sub]))
     } else {
       Pop
