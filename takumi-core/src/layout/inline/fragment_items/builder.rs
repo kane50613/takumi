@@ -535,8 +535,18 @@ impl FragmentItems {
           y: line.content.y + baseline,
         },
       };
+      // A fragment's own ends are its `LayoutUnit` rect's, as Blink decorates the whole fragment;
+      // only a boundary between two of its fonts falls between glyphs. The rect is in the line's
+      // space, which `text-fit` scales the glyphs into.
+      let decorated_start = if start_x <= 0.0 { 0.0 } else { start_x };
+      // A zero `text-fit` scale collapses the fragment to a point, which any finite end maps to.
+      let decorated_end = if end_x >= total_advance && scale != 0.0 {
+        child.inline_size.to_float() / scale
+      } else {
+        end_x
+      };
       let decoration_placement = DecorationPlacement::for_run(
-        &run,
+        (&run, origin.x + decorated_start..origin.x + decorated_end),
         line_scale.transform(Affine::IDENTITY),
         line.content,
         (text_font, scale),
@@ -662,7 +672,7 @@ impl DecoratedLeaf {
       line,
       text,
       line_break,
-      width: child.inline_size.to_float(),
+      width: child.inline_size,
       decorations: context
         .map(|context| context.text_decorations.clone())
         .unwrap_or_default(),
