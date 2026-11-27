@@ -199,6 +199,36 @@ pub fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
   }
 }
 
+/// `pixel` converted to straight alpha in floating point, where [`demultiply_pixel`] rounds an
+/// exact half up in integers.
+pub fn demultiplied(pixel: [u8; 4]) -> [u8; 4] {
+  let alpha = pixel[3];
+
+  if alpha == u8::MAX {
+    return pixel;
+  }
+
+  let scale = f64::from(alpha) / 255.0;
+  let channel = |value: u8| (f64::from(value) / scale + 0.5) as u8;
+
+  [
+    channel(pixel[0]),
+    channel(pixel[1]),
+    channel(pixel[2]),
+    alpha,
+  ]
+}
+
+/// `pixel` when it is a valid premultiplied color, no channel above its alpha, and transparent
+/// otherwise.
+pub fn premultiplied_or_transparent(pixel: [u8; 4]) -> [u8; 4] {
+  if pixel[..3].iter().all(|&channel| channel <= pixel[3]) {
+    pixel
+  } else {
+    [0; 4]
+  }
+}
+
 /// Converts one straight-alpha RGBA pixel to premultiplied alpha.
 #[inline(always)]
 pub fn premultiply_pixel([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {

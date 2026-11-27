@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{PixmapMut, PixmapRef, PremultipliedColorU8};
+use tiny_skia::{PixmapMut, PixmapRef};
 
 use super::{
   DrawTarget, MASK_RUN, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
@@ -15,7 +15,9 @@ use super::{
 use crate::{
   Placement,
   blend::*,
-  resources::image_buffer::{composite_premultiplied_over_row, premultiply_pixel},
+  resources::image_buffer::{
+    composite_premultiplied_over_row, premultiplied_or_transparent, premultiply_pixel,
+  },
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -355,7 +357,7 @@ pub(crate) fn blit_paint_source_translation(
   );
   match rows {
     RowSource::Copy { source, x_start } if mode == BlendMode::Normal && combined_mask.is_none() => {
-      let source_pixels = source.pixels();
+      let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
       let source_width = source.width() as usize;
       let copy_width = (bounds.x_max - bounds.x_min) as usize;
       for dest_y in bounds.y_min..bounds.y_max {
@@ -452,11 +454,7 @@ fn blit_solid_translation(
       if color[3] == u8::MAX {
         fill_repeated_premultiplied_pixel(row, color);
       } else {
-        blend_repeated_premultiplied_pixel(
-          row,
-          PremultipliedColorU8::from_rgba(color[0], color[1], color[2], color[3])
-            .unwrap_or(PremultipliedColorU8::TRANSPARENT),
-        );
+        blend_repeated_premultiplied_pixel(row, premultiplied_or_transparent(color));
       }
     }
     return;
@@ -617,7 +615,7 @@ pub(crate) fn overlay_sampled_paint_source(
 mod tests {
   use crate::Bitmap;
   use takumi_core::geometry::Size;
-  use tiny_skia::{Mask as TinyMask, Pixmap, PixmapRef, PremultipliedColorU8};
+  use tiny_skia::{Mask as TinyMask, Pixmap, PixmapRef};
 
   use super::*;
   use crate::{
@@ -761,7 +759,7 @@ mod tests {
       };
       let alpha = next();
 
-      *pixel = PremultipliedColorU8::from_rgba(
+      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
         next() % (alpha.saturating_add(1)),
         next() % (alpha.saturating_add(1)),
         next() % (alpha.saturating_add(1)),

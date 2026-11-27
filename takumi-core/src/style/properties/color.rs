@@ -11,12 +11,11 @@ use cssparser::{
   color::{parse_hash_color, parse_named_color},
   match_ignore_ascii_case,
 };
-use tiny_skia::{ColorU8, PremultipliedColorU8};
 
 use super::gradient_utils::interpolate_rgba_premultiplied;
 
 use crate::{
-  resources::image_buffer::premultiply_pixel,
+  resources::image_buffer::{demultiplied, premultiply_pixel},
   style::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseMode, ParseResult,
     SizingContext, ToCss, impl_css_enum,
@@ -587,13 +586,9 @@ impl Color {
     Color(color.to_alpha_color::<Srgb>().to_rgba8().to_u8_array())
   }
 
-  /// Premultiplies the straight-alpha colour into a `tiny_skia`
-  /// [`PremultipliedColorU8`].
-  pub fn premultiplied(self) -> PremultipliedColorU8 {
-    let [red, green, blue, alpha] = premultiply_pixel(self.0);
-
-    PremultipliedColorU8::from_rgba(red, green, blue, alpha)
-      .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+  /// The colour with its channels premultiplied by its alpha.
+  pub fn premultiplied(self) -> [u8; 4] {
+    premultiply_pixel(self.0)
   }
 
   /// Interpolates toward `other` in sRGB with premultiplied alpha.
@@ -606,10 +601,11 @@ impl Color {
       return other;
     }
 
-    let demul: ColorU8 =
-      interpolate_rgba_premultiplied(self.premultiplied(), other.premultiplied(), t).demultiply();
-
-    Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
+    Color(demultiplied(interpolate_rgba_premultiplied(
+      self.premultiplied(),
+      other.premultiplied(),
+      t,
+    )))
   }
 
   /// Interpolates toward `other` in the given color space and hue direction.

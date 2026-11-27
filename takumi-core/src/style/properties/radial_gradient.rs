@@ -2,7 +2,6 @@ use std::{f32::consts::SQRT_2, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use smallvec::SmallVec;
-use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -277,7 +276,7 @@ pub struct RadialGradientRowState {
 impl RadialGradientTile {
   /// Color of the outermost LUT entry, used outside the gradient ellipse.
   #[inline(always)]
-  pub fn outer_sample(&self) -> Option<PremultipliedColorU8> {
+  pub fn outer_sample(&self) -> Option<[u8; 4]> {
     self.lut.colors().last().copied()
   }
 
@@ -367,7 +366,7 @@ impl RadialGradientTile {
     let inv_radius_x = geometry.inv_radius_x;
     let inv_radius_y = geometry.inv_radius_y;
     let position_to_lut_scale = axis.position_to_lut_scale(lut_len);
-    let fully_opaque = lut.colors().iter().all(|p| p.alpha() == u8::MAX);
+    let fully_opaque = lut.colors().iter().all(|p| p[3] == u8::MAX);
 
     RadialGradientTile {
       width,
@@ -412,16 +411,16 @@ impl GradientOverlayTile for RadialGradientTile {
   }
 
   #[inline(always)]
-  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn sample_pixel(&self, x: u32, y: u32) -> [u8; 4] {
     match self.lut.len() {
-      0 => PremultipliedColorU8::TRANSPARENT,
+      0 => [0; 4],
       1 => self.lut.sample(0),
       _ => self.lut.sample(self.pixel_lut_index(x, y)),
     }
   }
 
   #[inline(always)]
-  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> [u8; 4] {
     if !self.lut.dither_active() {
       return self.sample_pixel(x, y);
     }
@@ -571,8 +570,8 @@ impl ToCss for RadialGradient {
 
 #[cfg(test)]
 mod tests {
+  use crate::resources::image_buffer::demultiplied;
   use color::{ColorSpaceTag, HueDirection};
-  use tiny_skia::ColorU8;
 
   use super::*;
   use crate::{
@@ -813,12 +812,12 @@ mod tests {
     let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
     // The pixel at (50, 50) samples its centre, half a pixel each way off the gradient's.
-    let color_center = tile.sample_pixel(50, 50).demultiply();
-    assert_eq!(color_center, ColorU8::from_rgba(253, 0, 2, 255));
+    let color_center = demultiplied(tile.sample_pixel(50, 50));
+    assert_eq!(color_center, [253, 0, 2, 255]);
 
     // Far outside (200, 200) should be clamped to blue
-    let color_far = tile.sample_pixel(200, 200).demultiply();
-    assert_eq!(color_far, ColorU8::from_rgba(0, 0, 255, 255));
+    let color_far = demultiplied(tile.sample_pixel(200, 200));
+    assert_eq!(color_far, [0, 0, 255, 255]);
   }
 
   #[test]
@@ -857,16 +856,16 @@ mod tests {
 
     assert_eq!(
       [
-        tile.sample_pixel(22, 20).demultiply(),
-        tile.sample_pixel(27, 20).demultiply(),
-        tile.sample_pixel(32, 20).demultiply(),
-        tile.sample_pixel(37, 20).demultiply(),
+        demultiplied(tile.sample_pixel(22, 20)),
+        demultiplied(tile.sample_pixel(27, 20)),
+        demultiplied(tile.sample_pixel(32, 20)),
+        demultiplied(tile.sample_pixel(37, 20)),
       ],
       [
-        ColorU8::from_rgba(255, 0, 0, 255),
-        ColorU8::from_rgba(0, 0, 255, 255),
-        ColorU8::from_rgba(255, 0, 0, 255),
-        ColorU8::from_rgba(0, 0, 255, 255),
+        [255, 0, 0, 255],
+        [0, 0, 255, 255],
+        [255, 0, 0, 255],
+        [0, 0, 255, 255],
       ]
     );
   }
