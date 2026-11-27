@@ -391,7 +391,14 @@ impl<'i> FromCss<'i> for Length {
       Token::Dimension { value, unit, .. } => {
         length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
       }
-      Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
+      // cssparser keeps a hundredth of the number, which `* 100` cannot always undo exactly.
+      Token::Percentage {
+        unit_value,
+        int_value,
+        ..
+      } => Ok(Self::Percentage(
+        int_value.map_or(*unit_value * 100.0, |value| value as f32),
+      )),
       Token::Number { value, .. } if *value == 0.0 || mode == ParseMode::SvgAttribute => {
         Ok(Self::Px(*value))
       }
