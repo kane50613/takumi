@@ -89,3 +89,37 @@ fn clipped_path_matches_its_unclipped_crop() {
   }
   assert!(total < 40 * 80, "mean difference {}", total as f32 / 3200.0);
 }
+
+#[test]
+fn huge_coordinates_stay_in_range() {
+  for extent in [1e9, 2.1e9, 3e9, i32::MAX as f32, 1e30] {
+    let triangle = polygon(&[(-extent, -extent), (extent, -extent), (0.0, extent)]);
+    let mask = fill(&triangle, FillRule::Winding, 10, 10);
+
+    assert_eq!(mask.len(), 100, "extent {extent}");
+    assert!(mask.iter().all(|alpha| *alpha == 255), "extent {extent}");
+  }
+}
+
+#[test]
+fn path_far_outside_the_clip_leaves_the_mask_empty() {
+  let far = polygon(&[(1e9, 1e9), (1e9 + 50.0, 1e9), (1e9, 1e9 + 50.0)]);
+
+  assert!(
+    fill(&far, FillRule::Winding, 10, 10)
+      .iter()
+      .all(|alpha| *alpha == 0)
+  );
+}
+
+#[test]
+fn non_finite_points_make_no_path() {
+  let mut builder = PathBuilder::new();
+
+  builder.move_to(0.0, 0.0);
+  builder.line_to(f32::NAN, 5.0);
+  builder.line_to(f32::INFINITY, 5.0);
+  builder.close();
+
+  assert!(builder.finish().is_none());
+}

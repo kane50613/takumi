@@ -59,6 +59,8 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
   let clipped_ir = ir.intersect(clip);
 
   // `rect_overflows_short_shift` with `SK_SUPERSAMPLE_SHIFT` 2, past which Skia fills aliased.
+  // Approximate: Skia tests the bounds cut to the device clip in device space, and this tests them
+  // cut to `clip` in mask space, so a fill near 8192 px can switch to aliased at another place.
   let overflows = [
     clipped_ir.left,
     clipped_ir.top,

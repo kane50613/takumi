@@ -13,12 +13,14 @@ pub(super) struct IntBounds {
 }
 
 impl IntBounds {
+  /// `right - left`, saturated so bounds past the fixed-point range cannot wrap into a small width.
   pub(super) const fn width(self) -> i32 {
-    self.right - self.left
+    saturating_span(self.left, self.right)
   }
 
+  /// `bottom - top`, saturated as [`width`](Self::width) is.
   pub(super) const fn height(self) -> i32 {
-    self.bottom - self.top
+    saturating_span(self.top, self.bottom)
   }
 
   pub(super) const fn contains(self, other: Self) -> bool {
@@ -190,13 +192,30 @@ impl Coverage {
   }
 }
 
-/// `SkRect::roundOut`.
+const fn saturating_span(start: i32, end: i32) -> i32 {
+  let span = end as i64 - start as i64;
+
+  if span > i32::MAX as i64 {
+    i32::MAX
+  } else if span < i32::MIN as i64 {
+    i32::MIN
+  } else {
+    span as i32
+  }
+}
+
+/// `safeRoundOut` in `SkScan_AntiPath.cpp`: `SkRect::roundOut`, pinned to the range a
+/// supersampled coordinate can hold.
 pub(super) fn round_out(rect: tiny_skia::Rect) -> IntBounds {
+  const LIMIT: i32 = i32::MAX >> 2;
+
+  let pin = |value: f32| (value as i32).clamp(-LIMIT, LIMIT);
+
   IntBounds {
-    left: rect.left().floor() as i32,
-    top: rect.top().floor() as i32,
-    right: rect.right().ceil() as i32,
-    bottom: rect.bottom().ceil() as i32,
+    left: pin(rect.left().floor()),
+    top: pin(rect.top().floor()),
+    right: pin(rect.right().ceil()),
+    bottom: pin(rect.bottom().ceil()),
   }
 }
 
