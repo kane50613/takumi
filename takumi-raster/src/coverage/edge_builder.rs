@@ -4,7 +4,7 @@
 //! `src/core/SkPathPriv.cpp` that pick the scan converter's fast paths.
 
 use takumi_core::{
-  geometry::{Point, Rect},
+  geometry::Point,
   path::{Path, PathVerb, chop_quad_at, cubic_split, find_cubic_extrema, find_quad_extrema},
 };
 
@@ -547,50 +547,4 @@ pub(super) fn is_convex(path: &Path) -> bool {
   }
 
   state.first_direction_known || state.reversals < 3
-}
-
-/// `trivial_rect` in `SkPathPriv.cpp`: the rect of a move, three lines and a close.
-///
-/// Approximate: `SkPathPriv::IsRectContour` also accepts rects with collinear or repeated points
-/// and implicit closes, which fall back to the general scan here.
-pub(super) fn trivial_rect(path: &Path) -> Option<Rect<f32>> {
-  let (verbs, points) = (path.verbs(), path.points());
-
-  if verbs
-    != [
-      PathVerb::Move,
-      PathVerb::Line,
-      PathVerb::Line,
-      PathVerb::Line,
-      PathVerb::Close,
-    ]
-    || points.len() != 4
-  {
-    return None;
-  }
-
-  let sides = [
-    points[1] - points[0],
-    points[2] - points[1],
-    points[3] - points[2],
-    points[0] - points[3],
-  ];
-  let axis_aligned = |v: Point<f32>| (v.x == 0.0) ^ (v.y == 0.0);
-  let orthogonal =
-    |a: Point<f32>, b: Point<f32>| ((a.x == 0.0) ^ (b.x == 0.0)) & ((a.y == 0.0) ^ (b.y == 0.0));
-
-  if !(axis_aligned(sides[0])
-    & orthogonal(sides[0], sides[1])
-    & orthogonal(sides[1], sides[2])
-    & orthogonal(sides[2], sides[3]))
-  {
-    return None;
-  }
-
-  Rect::from_ltrb(
-    points[0].x.min(points[2].x),
-    points[0].y.min(points[2].y),
-    points[0].x.max(points[2].x),
-    points[0].y.max(points[2].y),
-  )
 }

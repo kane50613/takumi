@@ -317,7 +317,7 @@ fn aliased_curves_agree_with_their_antialiased_coverage() {
 }
 
 #[test]
-fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
+fn an_aliased_fill_wider_than_the_clip_limit_fills_every_tile() {
   let width = 20_000;
   let path = polygon(&[
     (0.0, 0.0),
@@ -333,7 +333,31 @@ fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
 
   let row = width as usize;
 
-  // `clip_to_limit` leaves the pixels past 16383 unfilled, as in Skia.
-  assert_eq!([mask[0], mask[row], mask[row + 16_382]], [255; 3]);
-  assert_eq!([mask[16_383], mask[row + 16_383]], [0; 2]);
+  assert!(mask.iter().all(|&alpha| alpha == 255));
+  assert_eq!(mask.len(), row * 2);
+}
+
+#[test]
+fn an_antialiased_fill_wider_than_a_tile_stays_antialiased() {
+  let width = 20_000;
+  let path = polygon(&[
+    (0.0, 0.25),
+    (width as f32, 0.25),
+    (width as f32, 2.0),
+    (0.0, 2.0),
+  ]);
+  let mask = fill_path(
+    &path,
+    FillRule::NonZero,
+    Size::checked_new(width, 2).unwrap(),
+  );
+  let row = width as usize;
+
+  for column in [0, 8_190, 8_191, 16_382, 16_383, row - 1] {
+    assert_eq!(
+      [mask[column], mask[row + column]],
+      [191, 255],
+      "column {column}"
+    );
+  }
 }
