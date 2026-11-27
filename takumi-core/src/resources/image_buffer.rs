@@ -199,24 +199,10 @@ pub fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
   }
 }
 
-/// `pixel` converted to straight alpha in floating point, where [`demultiply_pixel`] rounds an
-/// exact half up in integers.
-pub fn demultiplied(pixel: [u8; 4]) -> [u8; 4] {
-  let alpha = pixel[3];
-
-  if alpha == u8::MAX {
-    return pixel;
-  }
-
-  let scale = f64::from(alpha) / 255.0;
-  let channel = |value: u8| (f64::from(value) / scale + 0.5) as u8;
-
-  [
-    channel(pixel[0]),
-    channel(pixel[1]),
-    channel(pixel[2]),
-    alpha,
-  ]
+/// `pixel` converted to straight alpha by [`demultiply_pixel`].
+pub fn demultiplied(mut pixel: [u8; 4]) -> [u8; 4] {
+  demultiply_pixel(&mut pixel);
+  pixel
 }
 
 /// `pixel` when it is a valid premultiplied color, no channel above its alpha, and transparent
@@ -284,7 +270,13 @@ pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-  use super::{demultiply_pixel, has_opaque_alpha};
+  use super::{demultiplied, demultiply_pixel, has_opaque_alpha};
+
+  #[test]
+  fn demultiplying_an_exact_half_rounds_up() {
+    // 86 × 255 / 172 is exactly 127.5, which a floating-point divide by 172 / 255 lands under.
+    assert_eq!(demultiplied([0, 86, 172, 172]), [0, 128, 255, 172]);
+  }
 
   #[test]
   fn demultiply_matches_rounded_division_for_every_byte() {
