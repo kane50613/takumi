@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use takumi::prelude::*;
+use takumi::{prelude::*, unstable::base::style::ComputedStyle};
 
 use crate::test_utils::{block, create_test_viewport, measure_with_css, measure_with_stylesheets};
 
@@ -2468,4 +2468,15 @@ fn tailwind_form_state_and_attribute_variants_match_the_element() {
   ] {
     assert_eq!(width(html), expected, "{html}");
   }
+}
+
+/// Every `ComputedStyle` field is public, so code outside takumi can build one by struct update.
+#[test]
+fn computed_style_takes_a_struct_update() {
+  let style = ComputedStyle {
+    lang: None,
+    ..ComputedStyle::default()
+  };
+
+  assert_eq!(style, ComputedStyle::default());
 }

@@ -633,11 +633,12 @@ mod tests {
     assert_eq!(matching_ids(&root, ":optional"), ["optional", "area"]);
   }
 
-  /// Asserts that matching `selector` against `tree(4 * n)` costs about four times as much as
-  /// against `tree(n)`, not the sixteen times a quadratic pass would.
+  /// Asserts that matching `selector` against `tree(16 * n)` costs about sixteen times as much as
+  /// against `tree(n)`, not the 256 times a quadratic pass would. The bound sits at their geometric
+  /// mean so a loaded CI machine cannot push a linear pass over it.
   fn assert_matches_linearly(tree: impl Fn(usize) -> Node, selector: &str) {
     fn fastest_match(root: &Node, selector: &str) -> Duration {
-      (0..3)
+      (0..5)
         .map(|_| {
           let start = Instant::now();
 
@@ -648,10 +649,10 @@ mod tests {
         .unwrap()
     }
 
-    let ratio = fastest_match(&tree(8_000), selector).as_secs_f64()
-      / fastest_match(&tree(2_000), selector).as_secs_f64();
+    let ratio = fastest_match(&tree(16_000), selector).as_secs_f64()
+      / fastest_match(&tree(1_000), selector).as_secs_f64();
 
-    assert!(ratio < 8.0, "4x the elements took {ratio:.1}x as long");
+    assert!(ratio < 64.0, "16x the elements took {ratio:.1}x as long");
   }
 
   #[test]

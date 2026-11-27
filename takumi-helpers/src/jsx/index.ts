@@ -81,6 +81,20 @@ const REACT_CONSUMER_TYPE = Symbol.for("react.consumer");
 
 const MAX_CONCURRENT_ITERABLE_RESOLUTION = 8;
 
+/** The elements whose descendants React DOM's `getChildFormatContext` gives no `<select>` value. */
+const selectValueBoundaries = new Set([
+  "noscript",
+  "picture",
+  "math",
+  "foreignObject",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "colgroup",
+  "tr",
+]);
+
 function emptyResult(): ConvertedNodes {
   return { nodes: [], css: [] };
 }
@@ -89,12 +103,16 @@ function nodeResult(node: Node): ConvertedNodes {
   return { nodes: [node], css: [] };
 }
 
-/** Converts React elements into Takumi nodes with the context values and hook ids of one traversal. */
+/**
+ * Converts React elements into Takumi nodes with the context values and hook ids of one traversal,
+ * and the value of the `<select>` it is inside.
+ */
 class NodeBuilder implements RenderEnv {
   constructor(
     private readonly metadata: NodeMetadataReader,
     readonly contexts: ReadonlyMap<unknown, unknown>,
     readonly ids: { current: number },
+    private readonly selectValue?: unknown,
   ) {}
 
   async build(element: ReactNode | ReactElementLike): Promise<ConvertedNodes> {
@@ -183,7 +201,7 @@ class NodeBuilder implements RenderEnv {
       return nodeResult(text({ text: textChildren, ...metadata }));
     }
 
-    const children = await this.children(element);
+    const children = await this.childBuilder(element.type, element.props).children(element);
 
     return {
       nodes: [container({ children: children.nodes, ...metadata })],
@@ -243,7 +261,36 @@ class NodeBuilder implements RenderEnv {
     const contexts = new Map(this.contexts);
     contexts.set(context, getProperty(element.props, "value"));
 
-    return new NodeBuilder(this.metadata, contexts, this.ids).children(element);
+    return new NodeBuilder(this.metadata, contexts, this.ids, this.selectValue).children(element);
+  }
+
+  /** The builder of the children of a `tag` element, with the `<select>` value they see. */
+  private childBuilder(tag: string, props: unknown): NodeBuilder {
+    if (tag === "select") {
+      const value = getProperty(props, "value") ?? getProperty(props, "defaultValue");
+
+      return new NodeBuilder(this.metadata, this.contexts, this.ids, value);
+    }
+
+    if (selectValueBoundaries.has(tag) && this.selectValue != null) {
+      return new NodeBuilder(this.metadata, this.contexts, this.ids);
+    }
+
+    return this;
+  }
+
+  /** Whether an `<option>` is selected, as React DOM's `pushStartOption` decides. */
+  private optionSelected(props: HtmlProps): boolean {
+    if (this.selectValue == null) {
+      return Boolean(props.selected);
+    }
+
+    const value = props.value == null ? optionText(props.children) : String(props.value);
+    const selectValues: unknown[] = Array.isArray(this.selectValue)
+      ? this.selectValue
+      : [this.selectValue];
+
+    return selectValues.some((selectValue) => String(selectValue) === value);
   }
 
   private consumer(element: ReactElementLike, context: unknown): Promise<ConvertedNodes> {
@@ -298,7 +345,7 @@ class NodeBuilder implements RenderEnv {
   }
 
   private elementMetadata(element: ReactElementLike): NodeMetadata {
-    const props = element.props as HtmlProps;
+    const props = this.attributeProps(element.type, element.props as HtmlProps);
     const style = props.style;
 
     return this.metadata.read(
@@ -307,6 +354,21 @@ class NodeBuilder implements RenderEnv {
       props.className ?? props.class,
       typeof style === "object" && style !== null ? style : undefined,
     );
+  }
+
+  /** The props of a `type` element React DOM writes attributes for, with `selected` as its `<select>` decides. */
+  private attributeProps(type: unknown, props: HtmlProps): HtmlProps {
+    if (type === "select") {
+      const { value: _value, defaultValue: _defaultValue, ...attributes } = props;
+
+      return attributes;
+    }
+
+    if (type === "option") {
+      return { ...props, selected: this.optionSelected(props) };
+    }
+
+    return props;
   }
 }
 
@@ -327,6 +389,23 @@ function pixels(value: number | string | undefined): number | undefined {
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   return getProperty(element.props, "children") as ReactNode | undefined;
+}
+
+/** An `<option>`'s children joined into its value, as React DOM's `flattenOptionChildren` joins them. */
+function optionText(children: unknown): string {
+  if (children == null || typeof children === "boolean") {
+    return "";
+  }
+
+  if (isIterable(children)) {
+    return Array.from(children, optionText).join("");
+  }
+
+  return String(children);
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return typeof value === "object" && value !== null && Symbol.iterator in value;
 }
 
 /** The text an element folds into itself, its children as one string unless that is only white space. */

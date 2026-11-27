@@ -32,6 +32,14 @@ impl ComputedStyle {
     style
   }
 
+  /// The inherited language text `:lang()` matches, Blink's `Element::ComputeInheritedLanguage`.
+  pub(crate) fn inherited_language(&self) -> Option<&str> {
+    self
+      .lang_text
+      .as_deref()
+      .or_else(|| self.lang.as_ref().map(Lang::as_str))
+  }
+
   /// Blink's `ResolvedIsColumnFlexDirection`, as a direction: a `-webkit-box` takes its axis from
   /// `-webkit-box-orient`.
   pub(crate) fn resolved_flex_direction(&self) -> FlexDirection {
