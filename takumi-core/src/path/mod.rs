@@ -16,6 +16,8 @@ pub use geometry::{
 };
 pub use stroke::{Stroke, resolution_scale};
 
+use skrifa::outline::OutlinePen;
+
 use crate::{
   geometry::{PathCommand, Point, Rect},
   style::Affine,
@@ -377,5 +379,28 @@ impl PathBuilder {
       verbs: self.verbs,
       points: self.points,
     })
+  }
+}
+
+/// Records a glyph outline as it is drawn, in the outline's own coordinates.
+impl OutlinePen for PathBuilder {
+  fn move_to(&mut self, x: f32, y: f32) {
+    PathBuilder::move_to(self, x, y);
+  }
+
+  fn line_to(&mut self, x: f32, y: f32) {
+    PathBuilder::line_to(self, x, y);
+  }
+
+  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+    PathBuilder::quad_to(self, cx0, cy0, x, y);
+  }
+
+  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+    self.cubic_to(cx0, cy0, cx1, cy1, x, y);
+  }
+
+  fn close(&mut self) {
+    PathBuilder::close(self);
   }
 }
