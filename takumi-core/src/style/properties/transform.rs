@@ -378,41 +378,38 @@ impl Affine {
       return Some(self);
     }
 
-    if b == 0.0 && c == 0.0 {
-      if a != 1.0 || d != 1.0 {
-        let (inv_x, inv_y) = (1.0 / a, 1.0 / d);
+    let inverse = if b == 0.0 && c == 0.0 {
+      let (inv_x, inv_y) = (1.0 / a, 1.0 / d);
 
-        return Some(Affine {
-          a: inv_x,
-          b: 0.0,
-          c: 0.0,
-          d: inv_y,
-          x: -x * inv_x,
-          y: -y * inv_y,
-        });
+      Affine {
+        a: inv_x,
+        b: 0.0,
+        c: 0.0,
+        d: inv_y,
+        x: -x * inv_x,
+        y: -y * inv_y,
+      }
+    } else {
+      let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
+      let nearly_zero = 1.0 / 4096.0_f32;
+
+      if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
+        return None;
       }
 
-      return Some(Affine::translation(-x, -y));
-    }
+      let inv_det = 1.0 / det;
+      let cross_scale = |p: f32, q: f32, r: f32, s: f32| {
+        ((f64::from(p) * f64::from(q) - f64::from(r) * f64::from(s)) * inv_det) as f32
+      };
 
-    let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
-    let nearly_zero = 1.0 / 4096.0_f32;
-
-    if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
-      return None;
-    }
-
-    let inv_det = 1.0 / det;
-    let cross_scale = |p: f32, q: f32, r: f32, s: f32| {
-      ((f64::from(p) * f64::from(q) - f64::from(r) * f64::from(s)) * inv_det) as f32
-    };
-    let inverse = Affine {
-      a: (f64::from(d) * inv_det) as f32,
-      b: (-f64::from(b) * inv_det) as f32,
-      c: (-f64::from(c) * inv_det) as f32,
-      d: (f64::from(a) * inv_det) as f32,
-      x: cross_scale(c, y, d, x),
-      y: cross_scale(b, x, a, y),
+      Affine {
+        a: (f64::from(d) * inv_det) as f32,
+        b: (-f64::from(b) * inv_det) as f32,
+        c: (-f64::from(c) * inv_det) as f32,
+        d: (f64::from(a) * inv_det) as f32,
+        x: cross_scale(c, y, d, x),
+        y: cross_scale(b, x, a, y),
+      }
     };
 
     inverse
@@ -763,6 +760,20 @@ mod tests {
     assert_eq!(
       (scale * inverse).to_cols_array(),
       Affine::IDENTITY.to_cols_array()
+    );
+  }
+
+  #[test]
+  fn a_zero_scale_has_no_skia_inverse() {
+    assert_eq!(Affine::scale(0.0, 1.0).skia_invert(), None);
+    assert_eq!(
+      Affine {
+        a: 1e-30,
+        x: 1e30,
+        ..Affine::IDENTITY
+      }
+      .skia_invert(),
+      None
     );
   }
 
