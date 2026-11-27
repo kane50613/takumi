@@ -14,56 +14,12 @@ pub use geometry::{
   chop_cubic_at, chop_quad_at, cubic_split, eval_cubic_pos_at, eval_quad_at, find_cubic_extrema,
   find_quad_extrema, find_unit_quad_roots, valid_unit_divide,
 };
-pub use rect::{IntRect, IntSize, Rect};
 pub use stroke::{Stroke, resolution_scale};
 
-use crate::style::Affine;
-
-/// A point, Skia's `SkPoint`.
-#[derive(Copy, Clone, Default, PartialEq, Debug)]
-pub struct Point {
-  /// The horizontal coordinate.
-  pub x: f32,
-  /// The vertical coordinate.
-  pub y: f32,
-}
-
-impl Point {
-  /// The point at `x`, `y`.
-  pub const fn from_xy(x: f32, y: f32) -> Self {
-    Self { x, y }
-  }
-
-  /// The origin.
-  pub const fn zero() -> Self {
-    Self { x: 0.0, y: 0.0 }
-  }
-
-  /// `SkPoint::Distance`: how far `other` is, through doubles only where the floats overflow.
-  pub fn distance(self, other: Self) -> f32 {
-    let (dx, dy) = (self.x - other.x, self.y - other.y);
-    let squared = dx * dx + dy * dy;
-
-    if squared.is_finite() {
-      squared.sqrt()
-    } else {
-      (f64::from(dx) * f64::from(dx) + f64::from(dy) * f64::from(dy)).sqrt() as f32
-    }
-  }
-
-  /// Whether both coordinates are finite.
-  pub fn is_finite(self) -> bool {
-    self.x.is_finite() && self.y.is_finite()
-  }
-}
-
-impl std::ops::Sub for Point {
-  type Output = Self;
-
-  fn sub(self, other: Self) -> Self {
-    Self::from_xy(self.x - other.x, self.y - other.y)
-  }
-}
+use crate::{
+  geometry::{Point, Rect},
+  style::Affine,
+};
 
 /// A path instruction, Skia's `SkPathVerb` without conics.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
@@ -84,13 +40,13 @@ pub enum PathVerb {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum PathSegment {
   /// Starts a contour.
-  MoveTo(Point),
+  MoveTo(Point<f32>),
   /// A line to a point.
-  LineTo(Point),
+  LineTo(Point<f32>),
   /// A quadratic through a control point to a point.
-  QuadTo(Point, Point),
+  QuadTo(Point<f32>, Point<f32>),
   /// A cubic through two control points to a point.
-  CubicTo(Point, Point, Point),
+  CubicTo(Point<f32>, Point<f32>, Point<f32>),
   /// Closes the contour.
   Close,
 }
@@ -99,8 +55,8 @@ pub enum PathSegment {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Path {
   verbs: Vec<PathVerb>,
-  points: Vec<Point>,
-  bounds: Rect,
+  points: Vec<Point<f32>>,
+  bounds: Rect<f32>,
 }
 
 impl Path {
@@ -115,7 +71,7 @@ impl Path {
   }
 
   /// The bounds of every point, control points included.
-  pub fn bounds(&self) -> Rect {
+  pub fn bounds(&self) -> Rect<f32> {
     self.bounds
   }
 
@@ -125,7 +81,7 @@ impl Path {
   }
 
   /// The points the verbs consume, in order.
-  pub fn points(&self) -> &[Point] {
+  pub fn points(&self) -> &[Point<f32>] {
     &self.points
   }
 
@@ -138,7 +94,7 @@ impl Path {
     for point in &mut self.points {
       let (x, y) = transform.transform_point(point.x, point.y);
 
-      *point = Point::from_xy(x, y);
+      *point = Point::new(x, y);
     }
 
     self.bounds = Rect::from_points(&self.points)?;
@@ -163,13 +119,13 @@ impl Path {
   }
 
   /// `SkPath::computeTightBounds`: the bounds of the outline itself, its curves at their extrema.
-  pub fn compute_tight_bounds(&self) -> Option<Rect> {
+  pub fn compute_tight_bounds(&self) -> Option<Rect<f32>> {
     let mut min = self.points[0];
     let mut max = self.points[0];
-    let mut last = Point::zero();
-    let mut extend = |point: Point| {
-      min = Point::from_xy(min.x.min(point.x), min.y.min(point.y));
-      max = Point::from_xy(max.x.max(point.x), max.y.max(point.y));
+    let mut last = Point::ZERO;
+    let mut extend = |point: Point<f32>| {
+      min = Point::new(min.x.min(point.x), min.y.min(point.y));
+      max = Point::new(max.x.max(point.x), max.y.max(point.y));
     };
 
     for segment in self.segments() {
@@ -219,7 +175,7 @@ impl Path {
 #[derive(Clone, Debug)]
 pub struct PathBuilder {
   verbs: Vec<PathVerb>,
-  points: Vec<Point>,
+  points: Vec<Point<f32>>,
   last_move_to_index: usize,
   move_to_required: bool,
 }
@@ -242,7 +198,7 @@ impl PathBuilder {
   }
 
   /// The closed outline of `rect`, clockwise from its top left.
-  pub fn from_rect(rect: Rect) -> Path {
+  pub fn from_rect(rect: Rect<f32>) -> Path {
     Path {
       verbs: vec![
         PathVerb::Move,
@@ -252,10 +208,10 @@ impl PathBuilder {
         PathVerb::Close,
       ],
       points: vec![
-        Point::from_xy(rect.left(), rect.top()),
-        Point::from_xy(rect.right(), rect.top()),
-        Point::from_xy(rect.right(), rect.bottom()),
-        Point::from_xy(rect.left(), rect.bottom()),
+        Point::new(rect.left, rect.top),
+        Point::new(rect.right, rect.top),
+        Point::new(rect.right, rect.bottom),
+        Point::new(rect.left, rect.bottom),
       ],
       bounds: rect,
     }
@@ -267,7 +223,7 @@ impl PathBuilder {
   }
 
   /// The last point added.
-  pub fn last_point(&self) -> Option<Point> {
+  pub fn last_point(&self) -> Option<Point<f32>> {
     self.points.last().copied()
   }
 
@@ -275,13 +231,13 @@ impl PathBuilder {
   pub fn move_to(&mut self, x: f32, y: f32) {
     if let Some(PathVerb::Move) = self.verbs.last() {
       if let Some(last) = self.points.last_mut() {
-        *last = Point::from_xy(x, y);
+        *last = Point::new(x, y);
       }
     } else {
       self.last_move_to_index = self.points.len();
       self.move_to_required = false;
       self.verbs.push(PathVerb::Move);
-      self.points.push(Point::from_xy(x, y));
+      self.points.push(Point::new(x, y));
     }
   }
 
@@ -301,24 +257,24 @@ impl PathBuilder {
   pub fn line_to(&mut self, x: f32, y: f32) {
     self.inject_move_to_if_needed();
     self.verbs.push(PathVerb::Line);
-    self.points.push(Point::from_xy(x, y));
+    self.points.push(Point::new(x, y));
   }
 
   /// Adds a quadratic through `x1`, `y1` to `x`, `y`.
   pub fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
     self.inject_move_to_if_needed();
     self.verbs.push(PathVerb::Quad);
-    self.points.push(Point::from_xy(x1, y1));
-    self.points.push(Point::from_xy(x, y));
+    self.points.push(Point::new(x1, y1));
+    self.points.push(Point::new(x, y));
   }
 
   /// Adds a cubic through `x1`, `y1` and `x2`, `y2` to `x`, `y`.
   pub fn cubic_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
     self.inject_move_to_if_needed();
     self.verbs.push(PathVerb::Cubic);
-    self.points.push(Point::from_xy(x1, y1));
-    self.points.push(Point::from_xy(x2, y2));
-    self.points.push(Point::from_xy(x, y));
+    self.points.push(Point::new(x1, y1));
+    self.points.push(Point::new(x2, y2));
+    self.points.push(Point::new(x, y));
   }
 
   /// Adds a conic through `x1`, `y1` to `x`, `y` pulled by `weight`, as `SkPathBuilder::conicTo`
@@ -342,7 +298,7 @@ impl PathBuilder {
     } else {
       let start = self.last_point().unwrap_or_default();
       let conic = conic::Conic {
-        points: [start, Point::from_xy(x1, y1), Point::from_xy(x, y)],
+        points: [start, Point::new(x1, y1), Point::new(x, y)],
         weight,
       };
 
@@ -353,7 +309,7 @@ impl PathBuilder {
   }
 
   /// Moves the last point to `point`, or starts a contour there when there is none.
-  pub fn set_last_point(&mut self, point: Point) {
+  pub fn set_last_point(&mut self, point: Point<f32>) {
     match self.points.last_mut() {
       Some(last) => *last = point,
       None => self.move_to(point.x, point.y),
@@ -361,7 +317,7 @@ impl PathBuilder {
   }
 
   /// The points added so far.
-  pub fn points(&self) -> &[Point] {
+  pub fn points(&self) -> &[Point<f32>] {
     &self.points
   }
 

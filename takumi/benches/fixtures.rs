@@ -51,7 +51,7 @@ fn emoji_social_fixture() -> Node {
         .border_radius(BorderRadius::from_css_str("40px").unwrap()),
     ),
     Node::container([
-      Node::text("Ship faster with tiny-skia".to_string()).with_style(
+      Node::text("Ship faster with takumi".to_string()).with_style(
         Style::default()
           .display(Display::Flex)
           .font_size(76.0.px())

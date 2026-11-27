@@ -9,14 +9,15 @@ use takumi_core::path::{Path, PathBuilder};
 use takumi_core::resources::color_glyph::{
   ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
 };
+use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::style::Affine;
+use takumi_core::style::{BlendMode, FillRule, MaskType};
 
 use crate::writer::{
-  blend::BlendMode,
   color::rgb,
-  geom::{Path as PdfPath, Transform},
-  mask::{Mask, MaskType},
+  mask::Mask,
   num::NormalizedF32,
-  paint::{Fill, FillRule, LinearGradient, RadialGradient, SpreadMethod, Stop, SweepGradient},
+  paint::{Fill, LinearGradient, RadialGradient, Stop, SweepGradient},
   surface::Surface,
 };
 
@@ -41,7 +42,7 @@ pub(crate) fn draw(
   };
   let bounds = PathBuilder::from_rect(bounds);
 
-  surface.push_transform(&Transform::from_scale(1.0, -1.0));
+  surface.push_transform(&Affine::scale(1.0, -1.0));
   interpret(instructions, &bounds, surface);
   surface.pop();
 
@@ -144,7 +145,7 @@ impl Colors<'_> {
           y2: p1.y,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_affine(transform),
+          transform,
           anti_alias: false,
         }
         .into(),
@@ -168,7 +169,7 @@ impl Colors<'_> {
           cr: r1,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_affine(transform),
+          transform,
           anti_alias: false,
         }
         .into(),
@@ -190,7 +191,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_affine(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
+          transform: (transform * Affine::scale(1.0, -1.0)),
           anti_alias: false,
         }
         .into(),
@@ -206,11 +207,11 @@ impl Colors<'_> {
   }
 }
 
-fn spread_method(extend: Extend) -> SpreadMethod {
+fn spread_method(extend: Extend) -> SvgSpreadMethod {
   match extend {
-    Extend::Repeat => SpreadMethod::Repeat,
-    Extend::Reflect => SpreadMethod::Reflect,
-    Extend::Pad | Extend::Unknown => SpreadMethod::Pad,
+    Extend::Repeat => SvgSpreadMethod::Repeat,
+    Extend::Reflect => SvgSpreadMethod::Reflect,
+    Extend::Pad | Extend::Unknown => SvgSpreadMethod::Pad,
   }
 }
 
@@ -256,7 +257,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         // clipped area whole leaves artifacts in Chrome's PDF viewer when zooming.
         let filled = clips.pop().unwrap_or_else(|| bounds.clone());
 
-        let clips: Vec<PdfPath> = clips.into_iter().map(PdfPath).collect();
+        let clips: Vec<Path> = clips.into_iter().collect();
         let clip_count = clips.len();
 
         for path in &clips {
@@ -268,7 +269,7 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
 
         surface.set_fill(Some(*fill));
         surface.set_stroke(None);
-        surface.draw_path(&PdfPath(filled));
+        surface.draw_path(&filled);
         surface.set_fill(old_fill);
         surface.set_stroke(old_stroke);
 

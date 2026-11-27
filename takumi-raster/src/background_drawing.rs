@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::path::Fill;
 use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
+use crate::style::FillRule;
 use smallvec::SmallVec;
-use takumi_core::path::{IntRect, IntSize, PathBuilder, Rect as TinyRect};
+use takumi_core::path::PathBuilder;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
@@ -58,10 +58,10 @@ impl TileLayer {
   }
 
   /// The part of the tile at `(x, y)` inside `area`, in the tile's pixels, or `None` when no part is.
-  pub(crate) fn visible_part(&self, x: f32, y: f32, area: Rect<f32>) -> Option<IntRect> {
+  pub(crate) fn visible_part(&self, x: f32, y: f32, area: Rect<f32>) -> Option<Rect<i32>> {
     let (width, height) = self.tile.dimensions();
 
-    IntRect::from_ltrb(
+    Rect::checked_from_edges(
       (area.left - x).max(0.0).round() as i32,
       (area.top - y).max(0.0).round() as i32,
       (area.right - x).min(width as f32).round() as i32,
@@ -100,14 +100,15 @@ impl TileLayer {
   /// A mask over a `size` pixmap, `offset` from the border box, keeping only `dest`.
   fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<TinyMask> {
     let dest = self.dest?;
-    let size = IntSize::from_wh(size.width, size.height)?;
-    let rect = TinyRect::from_ltrb(
+    let size = Size::checked_new(size.width, size.height)?;
+    let rect = Rect::from_ltrb(
       dest.left + offset.x,
       dest.top + offset.y,
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage = coverage::fill_path_aliased(&PathBuilder::from_rect(rect), Fill::NonZero, size)?;
+    let coverage =
+      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), FillRule::NonZero, size)?;
 
     TinyMask::from_vec(coverage, size)
   }
@@ -139,7 +140,7 @@ fn should_rasterize_repeated_tile(
 
 fn rasterize_tile(tile: BackgroundTile) -> Result<BackgroundTile> {
   let (width, height) = tile.dimensions();
-  let Some(size) = IntSize::from_wh(width, height) else {
+  let Some(size) = Size::checked_new(width, height) else {
     return Ok(tile);
   };
   let Some(len) = checked_area(width, height, 4) else {
@@ -171,7 +172,7 @@ pub(crate) fn rasterize_layers(
     return Ok(None);
   }
 
-  let Some(pixmap_size) = IntSize::from_wh(size.width, size.height) else {
+  let Some(pixmap_size) = Size::checked_new(size.width, size.height) else {
     return Ok(None);
   };
   let Some(composed_len) = checked_area(size.width, size.height, 4) else {
@@ -517,7 +518,7 @@ impl BackgroundTile {
   }
 
   /// The tile's pixels inside `part`.
-  pub(crate) fn cut(&self, part: IntRect) -> Option<Pixmap> {
+  pub(crate) fn cut(&self, part: Rect<i32>) -> Option<Pixmap> {
     if let Self::Pixmap(pixmap) = self {
       return pixmap.clone_rect(part);
     }
@@ -525,14 +526,14 @@ impl BackgroundTile {
     let mut cut = Pixmap::new(part.width(), part.height())?;
     let rows = self.rows(self.width());
     let mut row = vec![0; self.width() as usize * 4];
-    let start = part.x() as usize * 4;
+    let start = part.left as usize * 4;
 
     for (y, dst) in cut
       .data_mut()
       .chunks_exact_mut(part.width() as usize * 4)
       .enumerate()
     {
-      rows.fill(part.y() as u32 + y as u32, &mut row);
+      rows.fill(part.top as u32 + y as u32, &mut row);
       dst.copy_from_slice(&row[start..start + dst.len()]);
     }
 
@@ -732,7 +733,7 @@ fn rasterize_pattern(
 ) -> Result<Option<Pixmap>> {
   let dest = tiling.dest;
   let (width, height) = (pixels.width, pixels.height);
-  let Some(size) = IntSize::from_wh(width, height) else {
+  let Some(size) = Size::checked_new(width, height) else {
     return Ok(None);
   };
   let Some(len) = checked_area(width, height, 4) else {
@@ -898,7 +899,7 @@ fn picture_tile(gradient: &impl GradientOverlayTile, tile: Size<f32>) -> Option<
     }
   }
 
-  Pixmap::from_vec(data, IntSize::from_wh(width, height)?)
+  Pixmap::from_vec(data, Size::checked_new(width, height)?)
 }
 
 /// A box's `mask-image` alpha over its snapped border box, `offset` from the border box.

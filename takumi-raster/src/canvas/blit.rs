@@ -687,7 +687,7 @@ mod tests {
           _ => noise(index, 2),
         })
         .collect(),
-      takumi_core::path::IntSize::from_wh(24, 11).unwrap(),
+      takumi_core::geometry::Size::checked_new(24, 11).unwrap(),
     )
     .unwrap();
     let view = MaskView {

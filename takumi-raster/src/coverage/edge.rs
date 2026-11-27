@@ -2,7 +2,7 @@
 //! `SkAnalyticEdge` (`src/core/SkAnalyticEdge.{h,cpp}`) over the 16.16 `SkFixed` and 26.6
 //! `SkFDot6` arithmetic of `SkFixed.h` and `SkFDot6.h`.
 
-use takumi_core::path::Point;
+use takumi_core::geometry::Point;
 
 pub(super) type Fixed = i32;
 pub(super) type FDot6 = i32;
@@ -260,7 +260,7 @@ impl Edge {
   }
 
   /// `SkAnalyticEdge::setLine`.
-  pub(super) fn line(p0: Point, p1: Point) -> Option<Self> {
+  pub(super) fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
     let multiplier = (1 << ACCURACY) as f32;
     let mut x0 = fdot6_to_fixed(scalar_to_fdot6(p0.x * multiplier, 0)) >> ACCURACY;
     let mut y0 = snap_y(fdot6_to_fixed(scalar_to_fdot6(p0.y * multiplier, 0)) >> ACCURACY);
@@ -379,7 +379,7 @@ impl Edge {
   }
 
   /// `SkAnalyticQuadraticEdge::setQuadratic` for a y-monotonic quad.
-  pub(super) fn quadratic(points: &[Point; 3]) -> Option<Self> {
+  pub(super) fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
     let shift = ACCURACY;
     let mut x0 = scalar_to_fdot6(points[0].x, shift);
     let mut y0 = scalar_to_fdot6(points[0].y, shift);
@@ -538,7 +538,7 @@ impl Edge {
   }
 
   /// `SkAnalyticCubicEdge::setCubic` for a y-monotonic cubic.
-  pub(super) fn cubic(points: &[Point; 4]) -> Option<Self> {
+  pub(super) fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
     let shift = ACCURACY;
     let mut x0 = scalar_to_fdot6(points[0].x, shift);
     let mut y0 = scalar_to_fdot6(points[0].y, shift);

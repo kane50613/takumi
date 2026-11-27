@@ -1,6 +1,8 @@
+use crate::writer::geom::{UNIT_RECT, expand, pdf_rect};
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::ops::DerefMut;
+use takumi_core::style::Affine;
 
 use pdf_writer::types::{FontFlags, UnicodeCmap};
 use pdf_writer::writers::WMode;
@@ -11,8 +13,6 @@ use super::{FontIdentifier, Type3Identifier};
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::PdfVersion;
-use crate::writer::geom::Path;
-use crate::writer::geom::{Rect, Transform};
 use crate::writer::graphics::paint::Fill;
 use crate::writer::graphics::xobject::XObject;
 use crate::writer::resource::ResourceDictionaryBuilder;
@@ -142,7 +142,7 @@ impl Type3Font {
     let mut stream_chunk = sc.new_chunk();
 
     let mut rd_builder = ResourceDictionaryBuilder::new();
-    let mut font_bbox = Rect::unit();
+    let mut font_bbox = UNIT_RECT;
 
     let glyph_streams = self
       .glyphs
@@ -157,7 +157,7 @@ impl Type3Font {
           self.font.clone(),
           glyph.context_color,
           glyph.glyph_id,
-          Transform::default(),
+          Affine::IDENTITY,
           &mut surface,
         );
 
@@ -180,7 +180,7 @@ impl Type3Font {
           if let Some(path) = glyph_path(self.font.clone(), glyph.glyph_id) {
             surface.set_fill(Some(Fill::default()));
             surface.set_stroke(None);
-            surface.draw_path(&Path(path));
+            surface.draw_path(&path);
           }
         };
 
@@ -194,7 +194,7 @@ impl Type3Font {
         content.start_color_glyph(self.widths[index]);
         let x_object = XObject::new(stream, false, false, None);
         if !x_object.is_empty() {
-          font_bbox.expand(&x_object.bbox());
+          expand(&mut font_bbox, &x_object.bbox());
           let x_name =
             rd_builder.register_resource(sc.register_resourceable(chunk_container, x_object));
           content.x_object(x_name.to_pdf_name());
@@ -238,8 +238,8 @@ impl Type3Font {
     flags.insert(FontFlags::SMALL_CAP);
 
     let italic_angle = self.font.italic_angle();
-    let ascender = font_bbox.bottom();
-    let descender = font_bbox.top();
+    let ascender = font_bbox.bottom;
+    let descender = font_bbox.top;
 
     let mut gids = self
       .glyph_set
@@ -255,7 +255,7 @@ impl Type3Font {
       font_descriptor
         .name(Name(base_font.as_bytes()))
         .flags(flags)
-        .bbox(font_bbox.to_pdf_rect())
+        .bbox(pdf_rect(font_bbox))
         .italic_angle(italic_angle)
         .ascent(ascender)
         .descent(descender)
@@ -321,14 +321,14 @@ impl Type3Font {
 
     // See https://github.com/typst/typst/issues/5067 as to why we write this.
     type3_font.name(Name(base_font.as_bytes()));
-    type3_font.bbox(font_bbox.to_pdf_rect());
+    type3_font.bbox(pdf_rect(font_bbox));
     type3_font.to_unicode(cmap_ref);
     type3_font.matrix(
-      Transform::from_scale(
+      Affine::scale(
         1.0 / (self.font.units_per_em()),
         1.0 / (self.font.units_per_em()),
       )
-      .to_pdf_transform(),
+      .to_cols_array(),
     );
     type3_font.first_char(0);
     type3_font.last_char(u8::try_from(self.glyphs.len().saturating_sub(1)).unwrap_or(u8::MAX));

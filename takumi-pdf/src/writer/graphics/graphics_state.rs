@@ -1,12 +1,12 @@
 use std::hash::Hash;
 use std::sync::Arc;
+use takumi_core::{geometry::Rect, style::Affine};
 
 use pdf_writer::types::BlendMode;
 use pdf_writer::{Finish, Name, Ref};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
-use crate::writer::geom::{Rect, Transform};
 use crate::writer::graphics::mask::Mask;
 use crate::writer::num::NormalizedF32;
 use crate::writer::resource;
@@ -164,7 +164,7 @@ impl Resourceable for ExtGState {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct GraphicsState {
   ext_g_state: ExtGState,
-  ctm: Transform,
+  ctm: Affine,
 }
 impl Eq for GraphicsState {}
 
@@ -179,7 +179,7 @@ impl Default for GraphicsState {
   fn default() -> Self {
     Self {
       ext_g_state: ExtGState::new(),
-      ctm: Transform::identity(),
+      ctm: Affine::IDENTITY,
     }
   }
 }
@@ -189,11 +189,11 @@ impl GraphicsState {
     self.ext_g_state.combine(other);
   }
 
-  pub(crate) fn concat_transform(&mut self, transform: Transform) {
-    self.ctm = self.ctm.pre_concat(transform);
+  pub(crate) fn concat_transform(&mut self, transform: Affine) {
+    self.ctm = self.ctm * transform;
   }
 
-  pub(crate) fn transform(&self) -> Transform {
+  pub(crate) fn transform(&self) -> Affine {
     self.ctm
   }
 
@@ -239,15 +239,15 @@ impl GraphicsStates {
     self.cur_mut().combine(other);
   }
 
-  pub(crate) fn transform(&mut self, transform: Transform) {
+  pub(crate) fn transform(&mut self, transform: Affine) {
     self.cur_mut().concat_transform(transform);
   }
 
-  pub(crate) fn transform_bbox(&self, bbox: Rect) -> Rect {
+  pub(crate) fn transform_bbox(&self, bbox: Rect<f32>) -> Rect<f32> {
     // Important: This does not take the root transform of the
     // corresponding ContentBuilder into account, because we
     // want it to be in writer coordinates, not in PDF
     // coordinates.
-    bbox.transform(self.cur().transform()).unwrap_or(bbox)
+    bbox.transformed(self.cur().transform()).unwrap_or(bbox)
   }
 }

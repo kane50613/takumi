@@ -1,30 +1,34 @@
 //! A low-level abstraction over a single content stream.
 
+use crate::writer::geom::{UNIT_RECT, expand};
+use crate::writer::graphics::paint::{line_cap_style, line_join_style};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::slice;
 use std::sync::Arc;
+#[cfg(feature = "images")]
+use takumi_core::geometry::Size;
+use takumi_core::style::{FillRule, LineCap, LineJoin};
+use takumi_core::{geometry::Rect, style::Affine};
 
 use float_cmp::approx_eq;
 use pdf_writer::types::TextRenderingMode;
 use pdf_writer::{Content, Finish, Name, Str, TextStr};
-use takumi_core::path::{Path, PathSegment, PathVerb, Point as CorePoint};
+use takumi_core::{
+  geometry::Point,
+  path::{Path, PathSegment, PathVerb},
+};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::ValidationError;
-#[cfg(feature = "images")]
-use crate::writer::geom::Size;
-use crate::writer::geom::{Point, Rect, Transform};
 use crate::writer::graphics::color::{Color, ColorSpace};
 use crate::writer::graphics::graphics_state::{ExtGState, GraphicsStates};
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
-use crate::writer::graphics::paint::{
-  Fill, FillRule, InnerPaint, LineCap, LineJoin, Paint, Stroke,
-};
+use crate::writer::graphics::paint::{Fill, InnerPaint, Paint, Stroke};
 use crate::writer::graphics::shading_function::{
   GradientProperties, GradientPropertiesExt, ShadingFunction,
 };
@@ -49,9 +53,9 @@ pub(crate) struct ContentBuilder {
   rd_builder: ResourceDictionaryBuilder,
   content: Content,
   validation_errors: HashSet<ValidationError>,
-  root_transform: Transform,
+  root_transform: Affine,
   graphics_states: GraphicsStates,
-  bbox: Option<Rect>,
+  bbox: Option<Rect<f32>>,
   uses_mask: bool,
   // Calculating the bbox of text is expensive, so we should avoid doing it if not needed.
   // The only time we really need it is if we are currently inside of an XObject, where we
@@ -72,11 +76,7 @@ enum ContentColorSpace {
 }
 
 impl ContentBuilder {
-  pub(crate) fn new(
-    root_transform: Transform,
-    bbox_important: bool,
-    sc: &SerializeContext,
-  ) -> Self {
+  pub(crate) fn new(root_transform: Affine, bbox_important: bool, sc: &SerializeContext) -> Self {
     Self {
       rd_builder: ResourceDictionaryBuilder::new(),
       validation_errors: HashSet::new(),
@@ -107,7 +107,7 @@ impl ContentBuilder {
 
     Stream::new(
       buf.into_vec(),
-      self.bbox.unwrap_or_else(Rect::unit),
+      self.bbox.unwrap_or(UNIT_RECT),
       self.validation_errors.into_iter().collect(),
       self.rd_builder.finish(),
       self.uses_mask,
@@ -150,15 +150,15 @@ impl ContentBuilder {
     self.active_marked_content = false;
   }
 
-  pub(crate) fn concat_transform(&mut self, transform: &Transform) {
+  pub(crate) fn concat_transform(&mut self, transform: &Affine) {
     self.graphics_states.transform(*transform);
   }
 
-  fn cur_transform_with_root_transform(&self) -> Transform {
-    self.root_transform.pre_concat(self.cur_transform())
+  fn cur_transform_with_root_transform(&self) -> Affine {
+    self.root_transform * self.cur_transform()
   }
 
-  pub(crate) fn cur_transform(&self) -> Transform {
+  pub(crate) fn cur_transform(&self) -> Affine {
     self.graphics_states.cur().transform()
   }
 
@@ -177,10 +177,10 @@ impl ContentBuilder {
     }
   }
 
-  pub(crate) fn expand_bbox(&mut self, new_bbox: Rect) {
+  pub(crate) fn expand_bbox(&mut self, new_bbox: Rect<f32>) {
     let new_bbox = self.graphics_states.transform_bbox(new_bbox);
     if let Some(bbox) = &mut self.bbox {
-      bbox.expand(&new_bbox);
+      expand(bbox, &new_bbox);
     } else {
       self.bbox = Some(new_bbox);
     }
@@ -203,7 +203,9 @@ impl ContentBuilder {
     // Zero-size geometry, don't draw.
     if bounds.width() == 0.0
       && bounds.height() == 0.0
-      && stroke.is_none_or(|stroke| stroke.width == 0.0 || stroke.line_cap != LineCap::Round)
+      && stroke.is_none_or(|stroke| {
+        stroke.outline.width == 0.0 || stroke.outline.line_cap != LineCap::Round
+      })
     {
       return;
     }
@@ -231,16 +233,16 @@ impl ContentBuilder {
 
     let stroke_bbox = |stroke: &Stroke| {
       if calculate_bbox(matches!(&stroke.paint.0, InnerPaint::Color(_))) {
-        calculate_stroke_bbox(stroke, path).unwrap_or(Rect::from_core(bounds))
+        calculate_stroke_bbox(stroke, path).unwrap_or(bounds)
       } else {
-        Rect::from_core(bounds)
+        bounds
       }
     };
 
     let fill_prep = |sb: &mut ContentBuilder, fill: &Fill| {
       let has_pattern = matches!(fill.paint.0, InnerPaint::Pattern(_));
       let fill_opacity = fill.opacity;
-      sb.expand_bbox(Rect::from_core(bounds));
+      sb.expand_bbox(bounds);
 
       // PDF viewers don't show patterns with fill/stroke opacities consistently.
       // Because of this, the opacity is accounted for in the pattern itself.
@@ -249,7 +251,7 @@ impl ContentBuilder {
       }
     };
 
-    let stroke_prep = |sb: &mut ContentBuilder, stroke: &Stroke, stroke_bbox: Rect| {
+    let stroke_prep = |sb: &mut ContentBuilder, stroke: &Stroke, stroke_bbox: Rect<f32>| {
       let is_pattern = matches!(stroke.paint.0, InnerPaint::Pattern(_));
       let stroke_opacity = stroke.opacity;
       sb.expand_bbox(stroke_bbox);
@@ -265,7 +267,7 @@ impl ContentBuilder {
                    chunk_container: &mut ChunkContainer,
                    fill: &Fill| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_core(bounds), fill, sc, chunk_container);
+      sb.content_set_fill_properties(bounds, fill, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
       match fill_rule {
@@ -278,7 +280,7 @@ impl ContentBuilder {
                      sc: &mut SerializeContext,
                      chunk_container: &mut ChunkContainer,
                      stroke: &Stroke,
-                     stroke_bbox: Rect| {
+                     stroke_bbox: Rect<f32>| {
       sb.content_set_stroke_properties(stroke_bbox, stroke, sc, chunk_container);
       sb.content_draw_path(path.segments());
       sb.content.stroke();
@@ -289,9 +291,9 @@ impl ContentBuilder {
                           chunk_container: &mut ChunkContainer,
                           fill: &Fill,
                           stroke: &Stroke,
-                          stroke_bbox: Rect| {
+                          stroke_bbox: Rect<f32>| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_core(bounds), fill, sc, chunk_container);
+      sb.content_set_fill_properties(bounds, fill, sc, chunk_container);
       sb.content_set_stroke_properties(stroke_bbox, stroke, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
@@ -351,7 +353,7 @@ impl ContentBuilder {
     self.content_save_state();
     match path
       .clone()
-      .transform(self.cur_transform_with_root_transform().to_affine())
+      .transform(self.cur_transform_with_root_transform())
     {
       Some(path) => self.content_draw_path(path.segments()),
       // A transform that overflows the path leaves nothing inside the clip.
@@ -375,7 +377,7 @@ impl ContentBuilder {
   #[allow(clippy::too_many_arguments)]
   pub(crate) fn draw_glyphs(
     &mut self,
-    start: Point,
+    start: Point<f32>,
     sc: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
     fill: Option<&Fill>,
@@ -407,7 +409,7 @@ impl ContentBuilder {
         sb.expand_bbox(bbox);
         bbox
       } else {
-        Rect::unit()
+        UNIT_RECT
       };
 
       sb.content_set_fill_properties(bbox, fill, sc, chunk_container)
@@ -423,7 +425,7 @@ impl ContentBuilder {
         sb.expand_bbox(bbox);
         bbox
       } else {
-        Rect::unit()
+        UNIT_RECT
       };
 
       sb.content_set_stroke_properties(bbox, stroke, sc, chunk_container);
@@ -536,9 +538,17 @@ impl ContentBuilder {
       .rd_builder
       .register_resource(sc.register_font_identifier(font_identifier));
     self.content.set_font(font_name.to_pdf_name(), size);
-    self
-      .content
-      .set_text_matrix(Transform::from_row(1.0, 0.0, 0.0, -1.0, *cur_x, cur_y).to_pdf_transform());
+    self.content.set_text_matrix(
+      Affine {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: -1.0,
+        x: *cur_x,
+        y: cur_y,
+      }
+      .to_cols_array(),
+    );
 
     for glyph in glyphs {
       if glyph.glyph_id() == GlyphId::new(0)
@@ -946,17 +956,23 @@ impl ContentBuilder {
   pub(crate) fn draw_image(
     &mut self,
     image: Image,
-    size: Size,
+    size: Size<f32>,
     sc: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
   ) {
     self.apply_isolated_op(
       |sb, _, _| {
         // Scale the image from 1x1 to the actual dimensions.
-        let transform =
-          Transform::from_row(size.width(), 0.0, 0.0, -size.height(), 0.0, size.height());
+        let transform = Affine {
+          a: size.width,
+          b: 0.0,
+          c: 0.0,
+          d: -size.height,
+          x: 0.0,
+          y: size.height,
+        };
         sb.concat_transform(&transform);
-        sb.expand_bbox(Rect::unit());
+        sb.expand_bbox(UNIT_RECT);
       },
       move |sb, sc, chunk_container| {
         let image_name = sb.rd_builder.register_resource(resource::XObject::new(
@@ -1017,8 +1033,8 @@ impl ContentBuilder {
 
     let transform = self.cur_transform_with_root_transform();
 
-    if transform != Transform::identity() {
-      self.content.transform(transform.to_pdf_transform());
+    if transform != Affine::IDENTITY {
+      self.content.transform(transform.to_cols_array());
     }
 
     let state = self.graphics_states.cur().ext_g_state().clone();
@@ -1039,7 +1055,7 @@ impl ContentBuilder {
   #[allow(clippy::too_many_arguments)]
   fn content_set_fill_stroke_properties(
     &mut self,
-    bounds: Rect,
+    bounds: Rect<f32>,
     paint: &Paint,
     opacity: NormalizedF32,
     sc: &mut SerializeContext,
@@ -1047,14 +1063,13 @@ impl ContentBuilder {
     mut set_pattern_fn: impl FnMut(&mut Content, String),
     mut set_solid_fn: impl FnMut(&mut Content, ContentColorSpace, &Color),
   ) {
-    let pattern_transform = |transform: Transform| -> Transform {
-      transform.post_concat(self.cur_transform_with_root_transform())
-    };
+    let pattern_transform =
+      |transform: Affine| -> Affine { self.cur_transform_with_root_transform() * transform };
 
     let mut write_gradient = |gradient_props: GradientProperties,
                               sc: &mut SerializeContext,
                               chunk_container: &mut ChunkContainer,
-                              transform: Transform,
+                              transform: Affine,
                               content_builder: &mut ContentBuilder| {
       if let Some((color, opacity)) = gradient_props.single_stop_color() {
         // Write gradients with one stop as a solid color fill.
@@ -1073,9 +1088,7 @@ impl ContentBuilder {
 
         let shading_pattern = ShadingPattern::new(
           gradient_props,
-          content_builder
-            .cur_transform_with_root_transform()
-            .pre_concat(transform),
+          content_builder.cur_transform_with_root_transform() * transform,
         );
         let color_space = content_builder
           .rd_builder
@@ -1157,7 +1170,7 @@ impl ContentBuilder {
 
   fn content_set_fill_properties(
     &mut self,
-    bounds: Rect,
+    bounds: Rect<f32>,
     fill: &Fill,
     serializer_context: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
@@ -1198,7 +1211,7 @@ impl ContentBuilder {
 
   fn content_set_stroke_properties(
     &mut self,
-    bounds: Rect,
+    bounds: Rect<f32>,
     stroke: &Stroke,
     serializer_context: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
@@ -1238,28 +1251,30 @@ impl ContentBuilder {
 
     // Only write if they don't correspond to the default values as defined in the
     // PDF specification.
-    if stroke.width != 1.0 {
-      self.content.set_line_width(stroke.width);
+    if stroke.outline.width != 1.0 {
+      self.content.set_line_width(stroke.outline.width);
     }
 
-    if stroke.miter_limit != 10.0 {
-      self.content.set_miter_limit(stroke.miter_limit);
+    if stroke.outline.miter_limit != 10.0 {
+      self.content.set_miter_limit(stroke.outline.miter_limit);
     }
 
-    if stroke.line_cap != LineCap::Butt {
-      self.content.set_line_cap(stroke.line_cap.to_pdf_line_cap());
-    }
-
-    if stroke.line_join != LineJoin::Miter {
+    if stroke.outline.line_cap != LineCap::Butt {
       self
         .content
-        .set_line_join(stroke.line_join.to_pdf_line_join());
+        .set_line_cap(line_cap_style(stroke.outline.line_cap));
     }
 
-    if let Some(stroke_dash) = &stroke.dash {
+    if stroke.outline.line_join != LineJoin::Miter {
       self
         .content
-        .set_dash_pattern(stroke_dash.array.iter().copied(), stroke_dash.offset);
+        .set_line_join(line_join_style(stroke.outline.line_join));
+    }
+
+    if let Some(dash) = &stroke.outline.dash {
+      self
+        .content
+        .set_dash_pattern(dash.intervals().iter().copied(), dash.phase());
     }
   }
 
@@ -1393,7 +1408,7 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
   out
 }
 
-fn end_point(segment: &PathSegment) -> Option<CorePoint> {
+fn end_point(segment: &PathSegment) -> Option<Point<f32>> {
   match *segment {
     PathSegment::MoveTo(p) | PathSegment::LineTo(p) => Some(p),
     PathSegment::QuadTo(_, p) | PathSegment::CubicTo(_, _, p) => Some(p),
@@ -1448,14 +1463,14 @@ fn closing_spacing(glyphs: &[impl Glyph], font: &Font, x: f32, size: f32) -> Opt
 
 // The font's bounding box at every glyph's origin: it can overestimate, but it covers every glyph
 // whatever the advances, which takumi's glyphs leave at zero and carry in their offsets instead.
-fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font) -> Rect {
+fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font) -> Rect<f32> {
   let (fl, ft, fr, fb) = font
     .bbox()
-    .transform(Transform::from_scale(
+    .transformed(Affine::scale(
       size / font.units_per_em(),
       -size / font.units_per_em(),
     ))
-    .map(|b| (b.left(), b.top(), b.right(), b.bottom()))
+    .map(|b| (b.left, b.top, b.right, b.bottom))
     .unwrap_or((0.0, 0.0, 1.0, 1.0));
   let (mut bl, mut bt, mut br, mut bb) = (x + fl, y + ft, x + fr, y + fb);
   let mut x = x;
@@ -1473,21 +1488,21 @@ fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font)
     y -= glyph.y_advance(size);
   }
 
-  Rect::from_ltrb(bl, bt, br, bb).unwrap_or_else(Rect::unit)
+  Rect::from_ltrb(bl, bt, br, bb).unwrap_or(UNIT_RECT)
 }
 
 #[cfg(test)]
 mod tests {
   use super::{PathOp, simplify_path};
 
-  use takumi_core::path::{PathSegment, Point};
+  use takumi_core::{geometry::Point, path::PathSegment};
 
   fn line(x: f32, y: f32) -> PathSegment {
-    PathSegment::LineTo(Point::from_xy(x, y))
+    PathSegment::LineTo(Point::new(x, y))
   }
 
   fn start(x: f32, y: f32) -> PathSegment {
-    PathSegment::MoveTo(Point::from_xy(x, y))
+    PathSegment::MoveTo(Point::new(x, y))
   }
 
   fn describe(segments: Vec<PathSegment>) -> Vec<String> {

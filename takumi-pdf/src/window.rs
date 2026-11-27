@@ -1,18 +1,14 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
+use takumi_core::style::FillRule;
 use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds, style::Affine};
+use takumi_core::{geometry::Rect, path::PathBuilder};
 
 use crate::{
   emitter::Emitter,
   options::PdfError,
-  paint::rect_path,
-  writer::{
-    geom::{Rect as PdfRect, Transform},
-    paint::FillRule,
-    surface::Surface,
-    tagging::ContentTag,
-  },
+  writer::{surface::Surface, tagging::ContentTag},
 };
 
 /// The content windows one emit walk filters by, in content coordinates.
@@ -139,7 +135,7 @@ impl ContentWindow {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     let (x, y, width, height) = self.clip;
-    let Some(path) = PdfRect::from_xywh(x, y, width, height).and_then(rect_path) else {
+    let Some(path) = Rect::from_xywh(x, y, width, height).map(PathBuilder::from_rect) else {
       return Ok(());
     };
 
@@ -147,10 +143,7 @@ impl ContentWindow {
       surface.start_tagged(ContentTag::Artifact);
     }
     surface.push_clip_path(&path, &FillRule::NonZero);
-    surface.push_transform(&Transform::from_translate(
-      self.translate.x,
-      self.translate.y,
-    ));
+    surface.push_transform(&Affine::translation(self.translate.x, self.translate.y));
     emitter.window = self.window;
     emitter.emit(surface)?;
     surface.pop();

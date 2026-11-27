@@ -2,12 +2,10 @@
 
 use takumi_core::{
   geometry::Point,
-  resources::image::{
-    SvgFill, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
-    SvgSpreadMethod, SvgStrokeStyle,
-  },
-  style::Color,
+  resources::image::{SvgFill, SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgStrokeStyle},
+  style::{Color, FillRule, MaskType},
 };
+use takumi_core::{geometry::Size, style::Affine};
 
 use crate::{
   filter::{ColorFilter, filtered},
@@ -15,13 +13,9 @@ use crate::{
   raster::embedded_image,
   writer::{
     color::rgb,
-    geom::{Size as PdfSize, Transform},
     image::Image as PdfImage,
-    mask::{Mask, MaskType},
-    paint::{
-      Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
-      SpreadMethod, Stop, Stroke, StrokeDash,
-    },
+    mask::Mask,
+    paint::{Fill, LinearGradient, Paint, Pattern, RadialGradient, Stop, Stroke},
     surface::Surface,
   },
 };
@@ -46,27 +40,27 @@ impl<'a> SvgPainter<'a> {
   fn draw_ops(&self, surface: &mut Surface, ops: &[SvgOp]) {
     for op in ops {
       match op {
-        SvgOp::PushTransform(transform) => surface.push_transform(&(*transform).into()),
+        SvgOp::PushTransform(transform) => surface.push_transform(transform),
         SvgOp::PushClip { path, evenodd, .. } => match pdf_path(path, Point::ZERO) {
           Some(path) => surface.push_clip_path(&path, &fill_rule(*evenodd)),
           // The matching `Pop` still comes; keep the layer stack balanced.
-          None => surface.push_transform(&Transform::identity()),
+          None => surface.push_transform(&Affine::IDENTITY),
         },
-        SvgOp::PushBlend { blend, .. } => surface.push_blend_mode((*blend).into()),
+        SvgOp::PushBlend { blend, .. } => surface.push_blend_mode(*blend),
         SvgOp::PushIsolation { .. } => surface.push_isolated(),
         SvgOp::PushOpacity { opacity, .. } => surface.push_opacity(normalized(*opacity)),
         SvgOp::PushMask { ops, luminance } => {
           // CSS filters the element after masking, so the mask's own colors stay as drawn.
           let stream = draw_stream(surface, |mask| SvgPainter::new(None).draw_ops(mask, ops));
           let kind = if *luminance {
-            MaskType::Luminosity
+            MaskType::Luminance
           } else {
             MaskType::Alpha
           };
 
           surface.push_mask(Mask::new(stream, kind));
         }
-        SvgOp::PushFilter(_) => surface.push_transform(&Transform::identity()),
+        SvgOp::PushFilter(_) => surface.push_transform(&Affine::IDENTITY),
         SvgOp::Pop => surface.pop(),
         SvgOp::Draw {
           path, fill, stroke, ..
@@ -87,7 +81,7 @@ impl<'a> SvgPainter<'a> {
           height,
           ..
         } => {
-          let Some(size) = PdfSize::from_wh(*width, *height) else {
+          let Some(size) = Size::positive(*width, *height) else {
             continue;
           };
           let Some(image) = self.image(data) else {
@@ -126,23 +120,8 @@ impl<'a> SvgPainter<'a> {
 
     Stroke {
       paint,
-      width: stroke.width,
-      miter_limit: stroke.miter_limit,
-      line_cap: match stroke.cap {
-        SvgLineCap::Butt => LineCap::Butt,
-        SvgLineCap::Round => LineCap::Round,
-        SvgLineCap::Square => LineCap::Square,
-      },
-      line_join: match stroke.join {
-        SvgLineJoin::Miter => LineJoin::Miter,
-        SvgLineJoin::Round => LineJoin::Round,
-        SvgLineJoin::Bevel => LineJoin::Bevel,
-      },
       opacity: normalized(opacity),
-      dash: stroke.dash.as_ref().map(|(array, offset)| StrokeDash {
-        array: array.clone(),
-        offset: *offset,
-      }),
+      outline: stroke.outline(),
     }
   }
 
@@ -174,8 +153,8 @@ impl<'a> SvgPainter<'a> {
           y1: start.y,
           x2: end.x,
           y2: end.y,
-          transform: gradient.transform.into(),
-          spread_method: gradient.spread.into(),
+          transform: gradient.transform,
+          spread_method: gradient.spread,
           stops: self.gradient_stops(gradient),
           anti_alias: false,
         }
@@ -196,8 +175,8 @@ impl<'a> SvgPainter<'a> {
           fx: focal.x,
           fy: focal.y,
           fr: *focal_radius,
-          transform: gradient.transform.into(),
-          spread_method: gradient.spread.into(),
+          transform: gradient.transform,
+          spread_method: gradient.spread,
           stops: self.gradient_stops(gradient),
           anti_alias: false,
         }
@@ -212,7 +191,7 @@ impl<'a> SvgPainter<'a> {
       } => (
         Pattern {
           stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
-          transform: (*transform).into(),
+          transform: (*transform),
           width: *width,
           height: *height,
         }
@@ -236,16 +215,6 @@ impl<'a> SvgPainter<'a> {
         }
       })
       .collect()
-  }
-}
-
-impl From<SvgSpreadMethod> for SpreadMethod {
-  fn from(spread: SvgSpreadMethod) -> Self {
-    match spread {
-      SvgSpreadMethod::Pad => Self::Pad,
-      SvgSpreadMethod::Reflect => Self::Reflect,
-      SvgSpreadMethod::Repeat => Self::Repeat,
-    }
   }
 }
 

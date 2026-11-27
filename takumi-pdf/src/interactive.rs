@@ -6,12 +6,13 @@ use std::{
   collections::{HashMap, hash_map::Entry},
   str::from_utf8,
 };
+use takumi_core::geometry::Rect;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use takumi_core::{
   context::BoxId,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
+  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   layout::{layout_view::LayoutView, node::Node, page_sizes::PageSizes, tree::RenderNode},
   painter::OwnContent,
   scene::{NodePaint, PageWindows, SceneRef, SceneView},
@@ -27,7 +28,6 @@ use crate::{
     action::LinkAction,
     annotation::{Annotation, LinkAnnotation, Target},
     destination::{Destination, XyzDestination},
-    geom::{Point, Rect as PdfRect},
     outline::{Outline, OutlineNode},
     page::Page,
   },
@@ -36,7 +36,7 @@ use crate::{
 /// A hyperlink box in content coordinates.
 pub(crate) struct LinkTarget {
   uri: String,
-  rect: PdfRect,
+  rect: Rect<f32>,
   /// The source node's box, so the annotation can join that node's `Link` element.
   node: BoxId,
   /// Whether a repeated fragment, such as a table header on a later page, paints this link.
@@ -102,7 +102,7 @@ pub(crate) struct HeadingTarget {
 /// also name the structure element built from `path`.
 pub(crate) fn xyz_destination(
   page: usize,
-  point: Point,
+  point: Point<f32>,
   path: &[usize],
   structural: bool,
 ) -> XyzDestination {
@@ -117,10 +117,10 @@ pub(crate) fn xyz_destination(
 
 /// The axis-aligned bounding box of a node-local rect under the node's
 /// absolute transform, in content coordinates.
-fn transformed_rect(transform: Affine, origin: CorePoint<f32>, size: Size<f32>) -> Option<PdfRect> {
+fn transformed_rect(transform: Affine, origin: Point<f32>, size: Size<f32>) -> Option<Rect<f32>> {
   let (left, top, right, bottom) = transformed_rect_extents(origin, size, transform)?;
 
-  PdfRect::from_ltrb(left, top, right, bottom)
+  Rect::from_ltrb(left, top, right, bottom)
 }
 
 fn heading_level(tag: &str) -> Option<u8> {
@@ -266,14 +266,14 @@ impl PageSummary {
             .invert()
         })
         .flatten()
-        .and_then(|undo| transformed_rect(paint.transform * undo, CorePoint::ZERO, layout.size))
-        .map(|flow| flow.bottom());
+        .and_then(|undo| transformed_rect(paint.transform * undo, Point::ZERO, layout.size))
+        .map(|flow| flow.bottom);
 
       extents
         .entry(index)
         .and_modify(|extent| extent.extend(flow_bottom))
         .or_insert(BoxExtent {
-          top: rect.top(),
+          top: rect.top,
           flow_bottom,
         });
     }
@@ -282,7 +282,7 @@ impl PageSummary {
       // The first box wins: a duplicated id is invalid HTML, and the earlier one
       // is what a browser would scroll to.
       self.anchors.entry(id.into()).or_insert(AnchorTarget {
-        top: rect.top(),
+        top: rect.top,
         path: paint.path.clone(),
       });
     }
@@ -302,7 +302,7 @@ impl PageSummary {
       self.headings.push(HeadingTarget {
         level,
         text,
-        top: rect.top(),
+        top: rect.top,
         path,
       });
     }
@@ -367,7 +367,7 @@ struct PaintedBox<'s> {
   node: &'s RenderNode,
   source: &'s Node,
   layout: Layout,
-  rect: PdfRect,
+  rect: Rect<f32>,
   /// Whether a repeated fragment, such as a table header on a later page, paints it.
   repeated: bool,
 }
@@ -377,7 +377,7 @@ impl<'s> PaintedBox<'s> {
     let node = scene.root.node_at_path(&paint.path)?;
     let layout = scene.enter(paint).ok()?;
     let source = node.node.as_ref()?;
-    let rect = transformed_rect(paint.transform, CorePoint::ZERO, layout.size)?;
+    let rect = transformed_rect(paint.transform, Point::ZERO, layout.size)?;
     let repeated = scene
       .results
       .is_repeated_fragment(paint.node_id, paint.fragment_index);
@@ -523,7 +523,7 @@ fn collect_inline_links(
     };
     let Some(rect) = transformed_rect(
       transform,
-      CorePoint { x: run.x, y: run.y },
+      Point { x: run.x, y: run.y },
       Size {
         width: run.width,
         height: run.height,
@@ -547,21 +547,21 @@ pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
   (y0, y1): (f32, f32),
-  offset: CorePoint<f32>,
+  offset: Point<f32>,
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
   for link in links {
-    let top = link.rect.top().max(y0);
-    let bottom = link.rect.bottom().min(y1);
+    let top = link.rect.top.max(y0);
+    let bottom = link.rect.bottom.min(y1);
 
     if bottom <= top {
       continue;
     }
-    let Some(rect) = PdfRect::from_ltrb(
-      (link.rect.left() + offset.x) * PT_PER_PX,
+    let Some(rect) = Rect::from_ltrb(
+      (link.rect.left + offset.x) * PT_PER_PX,
       (top - y0 + offset.y) * PT_PER_PX,
-      (link.rect.right() + offset.x) * PT_PER_PX,
+      (link.rect.right + offset.x) * PT_PER_PX,
       (bottom - y0 + offset.y) * PT_PER_PX,
     ) else {
       continue;

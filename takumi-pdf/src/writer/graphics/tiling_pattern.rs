@@ -2,12 +2,12 @@
 
 use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
+use takumi_core::style::Affine;
 
 use pdf_writer::types::{PaintType, TilingType};
 use pdf_writer::{Finish, Ref};
 
 use crate::writer::chunk_container::ChunkContainer;
-use crate::writer::geom::Transform;
 use crate::writer::num::NormalizedF32;
 use crate::writer::resource;
 use crate::writer::resource::Resourceable;
@@ -18,7 +18,7 @@ use crate::writer::stream::{FilterStreamBuilder, Stream};
 #[derive(Debug, PartialEq)]
 pub(crate) struct TilingPattern {
   stream: Stream,
-  transform: Transform,
+  transform: Affine,
   base_opacity: NormalizedF32,
   width: f32,
   height: f32,
@@ -39,7 +39,7 @@ impl Hash for TilingPattern {
 impl TilingPattern {
   pub(crate) fn new(
     stream: Stream,
-    transform: Transform,
+    transform: Affine,
     base_opacity: NormalizedF32,
     width: f32,
     height: f32,
@@ -103,7 +103,7 @@ impl Cacheable for TilingPattern {
       .tiling_type(TilingType::ConstantSpacing)
       .paint_type(PaintType::Colored)
       .bbox(final_bbox)
-      .matrix(self.transform.to_pdf_transform())
+      .matrix(self.transform.to_cols_array())
       .x_step(final_bbox.x2 - final_bbox.x1)
       .y_step(final_bbox.y2 - final_bbox.y1);
 

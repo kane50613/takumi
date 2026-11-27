@@ -7,13 +7,12 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use takumi_core::{geometry::Point, style::Affine};
 
-use crate::writer::geom::Transform;
 use pdf_writer::{Obj, Ref};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::error::WriterResult;
-use crate::writer::geom::Point;
 use crate::writer::interchange::tagging::TagId;
 use crate::writer::serialize::SerializeContext;
 
@@ -40,7 +39,7 @@ impl Destination {
 #[derive(Debug)]
 struct XyzDestRepr {
   page_index: usize,
-  point: Point,
+  point: Point<f32>,
   /// The structure element the destination targets, if the caller tagged one.
   /// PDF/UA-2 requires an in-document destination to name a structure element
   /// rather than a page position.
@@ -81,7 +80,7 @@ impl XyzDestination {
   /// Create a new XYZ destination. `page_index` should be the index (i.e. number) of the
   /// target page, and point indicates the specific location on that page that should be
   /// targeted. If the `page_index` is out of range, export will panic.
-  pub fn new(page_index: usize, point: Point) -> Self {
+  pub fn new(page_index: usize, point: Point<f32>) -> Self {
     Self(Arc::new(XyzDestRepr {
       page_index,
       point,
@@ -115,14 +114,19 @@ impl XyzDestination {
     };
 
     let page_ref = page_info.ref_();
-    let page_size = page_info.size().height();
+    let page_size = page_info.size().height;
 
     let point = self.0.point;
     // Convert to PDF coordinates
-    let invert_transform = Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, page_size);
-    let (x, y) = invert_transform
-      .to_affine()
-      .transform_point(point.x, point.y);
+    let invert_transform = Affine {
+      a: 1.0,
+      b: 0.0,
+      c: 0.0,
+      d: -1.0,
+      x: 0.0,
+      y: page_size,
+    };
+    let (x, y) = invert_transform.transform_point(point.x, point.y);
 
     let mut destination = chunk_container
       .non_stream

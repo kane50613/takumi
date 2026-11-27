@@ -2,7 +2,6 @@ use std::iter::successors;
 
 use crate::pixmap::{Pixmap, PixmapMut};
 use smallvec::SmallVec;
-use takumi_core::path::IntSize;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, style::FilterReference};
 use takumi_core::{
@@ -422,7 +421,7 @@ impl Backdrop {
       .max(0) as usize;
     let visible_width = x_end.saturating_sub(x_start);
 
-    let Some(size) = IntSize::from_wh(region.width, region.height) else {
+    let Some(size) = Size::checked_new(region.width, region.height) else {
       return Ok(None);
     };
     let Some(len) = checked_area(region.width, region.height, 4) else {

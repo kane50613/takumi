@@ -3,33 +3,32 @@
 
 use std::slice::Iter;
 
-use crate::path::Fill;
 use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
-use takumi_core::path::{
-  IntRect, IntSize, Path, PathBuilder, Rect, Stroke, StrokeDash, resolution_scale,
-};
+use crate::style::FillRule;
+use takumi_core::geometry::{Rect, Size};
+use takumi_core::path::{Path, PathBuilder, resolution_scale};
 
 use super::filter::apply as apply_filter;
 use crate::{
   blend::{blend_premultiplied_pixel, scale_premultiplied_pixel},
   coverage,
-  path::stroke_path,
-  shader::{Gradient, GradientShape, GradientStop, ImageFilter, ImageShader, Shader, Spread},
+  gradient::{Gradient, GradientShape, GradientStop},
+  shader::{ImageFilter, ImageShader, Shader},
 };
 use takumi_core::{
-  geometry::{PathCommand, Rect as ScopeRect},
+  geometry::PathCommand,
   resources::{
     image::within_raster_pixel_budget,
     image_buffer::{composite_premultiplied_over_row, premultiply_pixel},
   },
   resources::{
     image::{
-      SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
-      SvgRasterizer, SvgSpreadMethod, SvgStrokeStyle,
+      SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgRasterizer,
+      SvgSpreadMethod, SvgStrokeStyle,
     },
     image_buffer::ImageBuffer,
   },
-  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, LineCap, LineJoin, math::mul_div_255},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
 };
 
 /// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
@@ -38,13 +37,13 @@ struct Target<'a, 'b> {
   transform: Affine,
   clip: Option<Mask>,
   /// The root pixmap grown by twice its size on each side, in this pixmap's pixels, as resvg's `max_bbox`.
-  limit: IntRect,
+  limit: Rect<i32>,
 }
 
 impl<'a, 'b> Target<'a, 'b> {
   fn root(pixmap: &'a mut PixmapMut<'b>, transform: Affine) -> Option<Self> {
     let (width, height) = (pixmap.width(), pixmap.height());
-    let limit = IntRect::from_xywh(
+    let limit = Rect::checked_from_size(
       i32::try_from(width).ok()?.checked_mul(-2)?,
       i32::try_from(height).ok()?.checked_mul(-2)?,
       width.checked_mul(5)?,
@@ -62,9 +61,9 @@ impl<'a, 'b> Target<'a, 'b> {
   /// Where a layer sits, from its paint bounds or a filter region within `limit` and the raster budget.
   fn layer_bounds(
     &self,
-    scope: Option<ScopeRect<f32>>,
+    scope: Option<Rect<f32>>,
     filters: Option<&SvgFilters>,
-  ) -> Option<IntRect> {
+  ) -> Option<Rect<i32>> {
     if let Some(scope) = scope
       && let Some(bounds) = self.scope_bounds(scope)
     {
@@ -74,21 +73,21 @@ impl<'a, 'b> Target<'a, 'b> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
 
     let Some(filters) = filters else {
-      return IntRect::from_xywh(0, 0, width, height);
+      return Rect::checked_from_size(0, 0, width, height);
     };
-    let region = filters.region()?.transform(self.transform)?;
-    let region = IntRect::from_xywh(
+    let region = filters.region()?.transformed(self.transform)?;
+    let region = Rect::checked_from_size(
       region.x().floor() as i32,
       region.y().floor() as i32,
       region.width().ceil().max(1.0) as u32,
       region.height().ceil().max(1.0) as u32,
     )?
-    .intersect(&self.limit)?;
+    .intersection(&self.limit)?;
 
     if within_raster_pixel_budget(region.width(), region.height()) {
       Some(region)
     } else {
-      IntRect::from_xywh(0, 0, width, height)
+      Rect::checked_from_size(0, 0, width, height)
     }
   }
 
@@ -178,12 +177,7 @@ impl<'a, 'b> Target<'a, 'b> {
   }
 
   /// Draws the scope that follows into a fresh layer and composites it onto this target.
-  fn layer(
-    &mut self,
-    ops: &mut Iter<'_, SvgOp>,
-    composite: Composite,
-    scope: Option<ScopeRect<f32>>,
-  ) {
+  fn layer(&mut self, ops: &mut Iter<'_, SvgOp>, composite: Composite, scope: Option<Rect<f32>>) {
     let Some(bounds) = self.layer_bounds(scope, composite.filters) else {
       skip_scope(ops);
       return;
@@ -192,8 +186,8 @@ impl<'a, 'b> Target<'a, 'b> {
       skip_scope(ops);
       return;
     };
-    let transform = Affine::translation(-bounds.x() as f32, -bounds.y() as f32) * self.transform;
-    let Some(limit) = self.limit.translate(-bounds.x(), -bounds.y()) else {
+    let transform = Affine::translation(-bounds.left as f32, -bounds.top as f32) * self.transform;
+    let Some(limit) = self.limit.checked_translated(-bounds.left, -bounds.top) else {
       skip_scope(ops);
       return;
     };
@@ -227,14 +221,14 @@ impl<'a, 'b> Target<'a, 'b> {
       None | Some(BlendMode::Normal) => draw_over(
         self.pixmap,
         layer.as_ref(),
-        (bounds.x(), bounds.y()),
+        (bounds.left, bounds.top),
         opacity,
         self.clip.as_ref(),
       ),
       Some(mode) => draw_blended(
         self.pixmap,
         layer.as_ref(),
-        (bounds.x(), bounds.y()),
+        (bounds.left, bounds.top),
         opacity,
         self.clip.as_ref(),
         mode,
@@ -248,7 +242,7 @@ impl<'a, 'b> Target<'a, 'b> {
     ops: &mut Iter<'_, SvgOp>,
     path: &[PathCommand],
     evenodd: bool,
-    scope: Option<ScopeRect<f32>>,
+    scope: Option<Rect<f32>>,
   ) -> bool {
     let Some(scope) = scope.and_then(|scope| self.scope_bounds(scope)) else {
       return false;
@@ -261,8 +255,8 @@ impl<'a, 'b> Target<'a, 'b> {
     };
 
     copy_to_layer(self.pixmap.as_ref(), &mut layer, scope);
-    let transform = Affine::translation(-(scope.x() as f32), -(scope.y() as f32)) * self.transform;
-    let Some(limit) = self.limit.translate(-scope.x(), -scope.y()) else {
+    let transform = Affine::translation(-(scope.left as f32), -(scope.top as f32)) * self.transform;
+    let Some(limit) = self.limit.checked_translated(-scope.left, -scope.top) else {
       return false;
     };
     let mut view = layer.as_mut();
@@ -311,13 +305,13 @@ impl<'a, 'b> Target<'a, 'b> {
       })
       .collect();
 
-    Mask::from_vec(coverage, IntSize::from_wh(width, height)?)
+    Mask::from_vec(coverage, Size::checked_new(width, height)?)
   }
 
-  fn scope_bounds(&self, scope: ScopeRect<f32>) -> Option<IntRect> {
+  fn scope_bounds(&self, scope: Rect<f32>) -> Option<Rect<i32>> {
     let bounds = Rect::from_ltrb(scope.left, scope.top, scope.right, scope.bottom)?;
 
-    self.device_bounds(bounds.transform(self.transform)?.outset(2.0, 2.0)?)
+    self.device_bounds(bounds.transformed(self.transform)?.outset(2.0, 2.0)?)
   }
 
   fn draw_path(
@@ -336,9 +330,9 @@ impl<'a, 'b> Target<'a, 'b> {
       // Horizontal and vertical lines have no area to fill.
       if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
         let rule = if fill.evenodd {
-          Fill::EvenOdd
+          FillRule::EvenOdd
         } else {
-          Fill::NonZero
+          FillRule::NonZero
         };
         let mut tile = None;
 
@@ -356,29 +350,24 @@ impl<'a, 'b> Target<'a, 'b> {
       // as a hairline of reduced coverage.
       let mut tile = None;
 
-      let (outline, dash) = svg_stroke(stroke);
-
-      if let Some(outline) = stroke_path(
-        &path,
-        &outline,
-        dash.as_ref(),
-        resolution_scale(self.transform),
-      ) && let Some(shader) = shader_of(&stroke.paint, stroke.opacity, self.transform, &mut tile)
+      if let Some(outline) = path.stroke(&stroke.outline(), resolution_scale(self.transform))
+        && let Some(shader) = shader_of(&stroke.paint, stroke.opacity, self.transform, &mut tile)
       {
-        self.fill(&outline, Fill::NonZero, &shader, anti_alias);
+        self.fill(&outline, FillRule::NonZero, &shader, anti_alias);
       }
     }
   }
 
   /// Fills `path` under the target's transform with `shader`, through the target's clip.
-  fn fill(&mut self, path: &Path, rule: Fill, shader: &Shader, anti_alias: bool) {
+  fn fill(&mut self, path: &Path, rule: FillRule, shader: &Shader, anti_alias: bool) {
     let Some(device) = path.clone().transform(self.transform) else {
       return;
     };
     let Some(bounds) = self.device_bounds(device.bounds()) else {
       return;
     };
-    let Some(local) = device.transform(Affine::translation(-bounds.x() as f32, -bounds.y() as f32))
+    let Some(local) =
+      device.transform(Affine::translation(-bounds.left as f32, -bounds.top as f32))
     else {
       return;
     };
@@ -407,16 +396,13 @@ impl<'a, 'b> Target<'a, 'b> {
 
     // `SkMatrix::rectStaysRect`: axis aligned, or turned a quarter.
     if !(kx == 0.0 && ky == 0.0 || sx == 0.0 && sy == 0.0) {
-      self.fill(path, Fill::NonZero, shader, true);
+      self.fill(path, FillRule::NonZero, shader, true);
       return;
     }
 
     let map = |x: f32, y: f32| (x * sx + y * kx + tx, x * ky + y * sy + ty);
     let rect = path.bounds();
-    let ((x0, y0), (x1, y1)) = (
-      map(rect.left(), rect.top()),
-      map(rect.right(), rect.bottom()),
-    );
+    let ((x0, y0), (x1, y1)) = (map(rect.left, rect.top), map(rect.right, rect.bottom));
     let (left, right) = (x0.min(x1), x0.max(x1));
     let (top, bottom) = (y0.min(y1), y0.max(y1));
     let Some(bounds) =
@@ -424,7 +410,7 @@ impl<'a, 'b> Target<'a, 'b> {
     else {
       return;
     };
-    let (dx, dy) = (bounds.x() as f32, bounds.y() as f32);
+    let (dx, dy) = (bounds.left as f32, bounds.top as f32);
 
     if let Some(coverage) = coverage::fill_rect(
       [left - dx, top - dy, right - dx, bottom - dy],
@@ -435,34 +421,34 @@ impl<'a, 'b> Target<'a, 'b> {
   }
 
   /// The target's pixels `device` touches, none where it misses the target.
-  fn device_bounds(&self, device: Rect) -> Option<IntRect> {
+  fn device_bounds(&self, device: Rect<f32>) -> Option<Rect<i32>> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
     // An edge far past the target would saturate as it rounds to `i32`.
     let near_target = Rect::from_ltrb(
-      device.left().clamp(-1.0, width as f32 + 1.0),
-      device.top().clamp(-1.0, height as f32 + 1.0),
-      device.right().clamp(-1.0, width as f32 + 1.0),
-      device.bottom().clamp(-1.0, height as f32 + 1.0),
+      device.left.clamp(-1.0, width as f32 + 1.0),
+      device.top.clamp(-1.0, height as f32 + 1.0),
+      device.right.clamp(-1.0, width as f32 + 1.0),
+      device.bottom.clamp(-1.0, height as f32 + 1.0),
     )?;
 
     near_target
       .round_out()?
-      .intersect(&IntRect::from_xywh(0, 0, width, height)?)
+      .intersection(&Rect::checked_from_size(0, 0, width, height)?)
   }
 
   /// Composites `shader` over the target where `coverage`, a mask over `bounds`, covers it, through
   /// the target's clip.
-  fn blit(&mut self, coverage: &[u8], bounds: IntRect, shader: &Shader) {
+  fn blit(&mut self, coverage: &[u8], bounds: Rect<i32>, shader: &Shader) {
     let canvas_width = self.pixmap.width() as usize;
     let span = bounds.width() as usize;
     let clip = self.clip.as_ref().map(Mask::data);
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(self.pixmap.pixels_mut());
     let mut row = vec![[0; 4]; span];
 
-    for (index, y) in (bounds.top()..bounds.bottom()).enumerate() {
-      let start = y as usize * canvas_width + bounds.left() as usize;
+    for (index, y) in (bounds.top..bounds.bottom).enumerate() {
+      let start = y as usize * canvas_width + bounds.left as usize;
 
-      shader.shade_row(bounds.left(), y, &mut row);
+      shader.shade_row(bounds.left, y, &mut row);
 
       for (offset, pixel) in row.iter_mut().enumerate() {
         let mut alpha = coverage[index * span + offset];
@@ -500,7 +486,7 @@ impl<'a, 'b> Target<'a, 'b> {
       bytemuck::cast_slice(buffer.data()),
       (buffer.width(), buffer.height()),
       image_to_device,
-      Spread::Pad,
+      SvgSpreadMethod::Pad,
       if rendering == ImageScalingAlgorithm::Pixelated {
         ImageFilter::Nearest
       } else {
@@ -513,7 +499,7 @@ impl<'a, 'b> Target<'a, 'b> {
 
     self.fill(
       &PathBuilder::from_rect(rect),
-      Fill::NonZero,
+      FillRule::NonZero,
       &Shader::Image(image),
       true,
     );
@@ -531,7 +517,7 @@ fn shader_of<'t>(
   let gradient = |shape, gradient: &SvgGradient| match Gradient::new(
     shape,
     &gradient_stops(gradient, opacity),
-    spread_mode(gradient.spread),
+    gradient.spread,
     transform * gradient.transform,
   ) {
     Ok(gradient) => Some(Shader::Gradient(gradient)),
@@ -599,7 +585,7 @@ fn shader_of<'t>(
         bytemuck::cast_slice(tile.pixels()),
         (tile.width(), tile.height()),
         tile_to_device,
-        Spread::Repeat,
+        SvgSpreadMethod::Repeat,
         ImageFilter::Linear,
         opacity,
       )
@@ -735,11 +721,11 @@ fn draw_blended(
   }
 }
 
-fn copy_to_layer(source: PixmapRef, target: &mut Pixmap, bounds: IntRect) {
+fn copy_to_layer(source: PixmapRef, target: &mut Pixmap, bounds: Rect<i32>) {
   let width = bounds.width() as usize;
   let source_width = source.width() as usize;
-  let source_x = bounds.x() as usize;
-  let source_y = bounds.y() as usize;
+  let source_x = bounds.left as usize;
+  let source_y = bounds.top as usize;
 
   for row in 0..bounds.height() as usize {
     let source_start = ((source_y + row) * source_width + source_x) * 4;
@@ -750,11 +736,11 @@ fn copy_to_layer(source: PixmapRef, target: &mut Pixmap, bounds: IntRect) {
   }
 }
 
-fn copy_from_layer(source: &Pixmap, target: &mut PixmapMut, bounds: IntRect) {
+fn copy_from_layer(source: &Pixmap, target: &mut PixmapMut, bounds: Rect<i32>) {
   let width = bounds.width() as usize;
   let target_width = target.width() as usize;
-  let target_x = bounds.x() as usize;
-  let target_y = bounds.y() as usize;
+  let target_x = bounds.left as usize;
+  let target_y = bounds.top as usize;
 
   for row in 0..bounds.height() as usize {
     let source_start = row * width * 4;
@@ -813,14 +799,14 @@ fn clipped(
   target: &Target,
 ) -> Option<Mask> {
   let rule = if evenodd {
-    Fill::EvenOdd
+    FillRule::EvenOdd
   } else {
-    Fill::NonZero
+    FillRule::NonZero
   };
-  let size = IntSize::from_wh(target.pixmap.width(), target.pixmap.height())?;
+  let size = Size::checked_new(target.pixmap.width(), target.pixmap.height())?;
   let mut coverage = match tiny_path(commands).and_then(|path| path.transform(target.transform)) {
     Some(path) => coverage::fill_path(&path, rule, size)?,
-    None => vec![0; size.width() as usize * size.height() as usize],
+    None => vec![0; size.width as usize * size.height as usize],
   };
 
   if let Some(outer) = outer {
@@ -848,30 +834,6 @@ fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
   builder.finish()
 }
 
-/// The outline `stroke` draws and the dashes it cuts first.
-fn svg_stroke(stroke: &SvgStrokeStyle) -> (Stroke, Option<StrokeDash>) {
-  (
-    Stroke {
-      width: stroke.width,
-      miter_limit: stroke.miter_limit,
-      line_cap: match stroke.cap {
-        SvgLineCap::Butt => LineCap::Butt,
-        SvgLineCap::Round => LineCap::Round,
-        SvgLineCap::Square => LineCap::Square,
-      },
-      line_join: match stroke.join {
-        SvgLineJoin::Miter => LineJoin::Miter,
-        SvgLineJoin::Round => LineJoin::Round,
-        SvgLineJoin::Bevel => LineJoin::Bevel,
-      },
-    },
-    stroke
-      .dash
-      .as_ref()
-      .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
-  )
-}
-
 fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
   gradient
     .stops
@@ -888,15 +850,6 @@ fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
     .collect()
 }
 
-/// The spread of `spread`.
-fn spread_mode(spread: SvgSpreadMethod) -> Spread {
-  match spread {
-    SvgSpreadMethod::Pad => Spread::Pad,
-    SvgSpreadMethod::Reflect => Spread::Reflect,
-    SvgSpreadMethod::Repeat => Spread::Repeat,
-  }
-}
-
 fn to_u8(opacity: f32) -> u8 {
   (opacity.clamp(0.0, 1.0) * 255.0).round() as u8
 }
@@ -906,9 +859,9 @@ mod tests {
   use std::sync::Arc;
 
   use crate::pixmap::Pixmap;
-  use takumi_core::{path::IntRect, style::Affine};
+  use takumi_core::{geometry::Rect, style::Affine};
 
-  use super::{ScopeRect, SvgPixmapRasterizer, Target};
+  use super::{SvgPixmapRasterizer, Target};
   use takumi_core::{
     Fonts,
     context::RenderContext,
@@ -1132,7 +1085,7 @@ mod tests {
     let root_target = Target::root(&mut root_view, Affine::IDENTITY).unwrap();
     let bounds = root_target.layer_bounds(None, Some(filters)).unwrap();
 
-    assert_eq!(bounds, IntRect::from_xywh(-20, -20, 50, 50).unwrap());
+    assert_eq!(bounds, Rect::checked_from_size(-20, -20, 50, 50).unwrap());
 
     let mut layer = Pixmap::new(bounds.width(), bounds.height()).unwrap();
     let mut layer_view = layer.as_mut();
@@ -1140,12 +1093,12 @@ mod tests {
       pixmap: &mut layer_view,
       transform: Affine::translation(20.0, 20.0),
       clip: None,
-      limit: root_target.limit.translate(20, 20).unwrap(),
+      limit: root_target.limit.checked_translated(20, 20).unwrap(),
     };
 
     assert_eq!(
       nested.layer_bounds(None, Some(filters)),
-      IntRect::from_xywh(0, 0, 50, 50)
+      Rect::checked_from_size(0, 0, 50, 50)
     );
   }
 
@@ -1156,13 +1109,13 @@ mod tests {
     let target = Target::root(&mut view, Affine::IDENTITY).unwrap();
 
     assert_eq!(
-      target.scope_bounds(ScopeRect {
+      target.scope_bounds(Rect {
         left: 20.0,
         top: 30.0,
         right: 30.0,
         bottom: 50.0,
       }),
-      IntRect::from_xywh(18, 28, 14, 24)
+      Rect::checked_from_size(18, 28, 14, 24)
     );
   }
 
