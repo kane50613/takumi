@@ -14,7 +14,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BorderProperties, BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area,
-  create_mask, mul_div_255, placement_overlap, style::Affine,
+  coverage, create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -698,18 +698,13 @@ fn rasterize_mask(
     cull,
   )?;
   let size = IntSize::from_wh(width, height)?;
-  let buffer = vec![0; checked_area(width, height, 1)?];
-  let mut mask = TinyMask::from_vec(buffer, size)?;
+
+  checked_area(width, height, 1)?;
+
   let local_path = path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))?;
-  mask.fill_path(
-    &local_path,
-    style.fill_rule(),
-    true,
-    TinyTransform::identity(),
-  );
 
   Some((
-    mask.take(),
+    coverage::fill_path(&local_path, style.fill_rule(), size)?,
     Placement {
       left,
       top,

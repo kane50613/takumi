@@ -14,6 +14,7 @@ gif.workspace = true
 jpeg-encoder.workspace = true
 color.workspace = true
 tiny-skia.workspace = true
+tiny-skia-path.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
