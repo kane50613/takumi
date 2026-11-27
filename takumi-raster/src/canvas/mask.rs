@@ -794,65 +794,6 @@ impl<'a> MaskView<'a> {
       mask_width,
     }
   }
-
-  /// The combined constraint mask for the pixmap, cropped when the viewport differs.
-  pub(crate) fn resolve(self, size: Size<u32>) -> Option<Cow<'a, TinyMask>> {
-    if self.origin == self.canvas_origin
-      && self.mask.width() == size.width
-      && self.mask.height() == size.height
-    {
-      return Some(Cow::Borrowed(self.mask));
-    }
-
-    self.materialize(size).map(Cow::Owned)
-  }
-
-  fn materialize(self, size: Size<u32>) -> Option<TinyMask> {
-    let mut cropped = TinyMask::from_vec(
-      vec![0; (size.width as usize) * (size.height as usize)],
-      IntSize::from_wh(size.width, size.height)?,
-    )?;
-
-    let offset = Point {
-      x: self.canvas_origin.x - self.origin.x,
-      y: self.canvas_origin.y - self.origin.y,
-    };
-    let src_width = self.mask.width() as i32;
-    let src_height = self.mask.height() as i32;
-    let start_x = offset.x.max(0);
-    let start_y = offset.y.max(0);
-    let end_x = (offset.x + size.width as i32).min(src_width);
-    let end_y = (offset.y + size.height as i32).min(src_height);
-    if start_x >= end_x || start_y >= end_y {
-      return Some(cropped);
-    }
-
-    let src = self.mask.data();
-    let dst = cropped.data_mut();
-    if start_x == 0
-      && start_y == 0
-      && end_x == src_width
-      && end_y == src_height
-      && src_width as u32 == size.width
-      && src_height as u32 == size.height
-    {
-      dst.copy_from_slice(src);
-      return Some(cropped);
-    }
-
-    let dst_width = size.width as usize;
-    let src_width = src_width as usize;
-    let copy_width = (end_x - start_x) as usize;
-    let dst_x_start = (start_x - offset.x) as usize;
-    for src_y in start_y..end_y {
-      let dst_y = (src_y - offset.y) as usize;
-      let src_row = src_y as usize * src_width + start_x as usize;
-      let dst_row = dst_y * dst_width + dst_x_start;
-      dst[dst_row..dst_row + copy_width].copy_from_slice(&src[src_row..src_row + copy_width]);
-    }
-
-    Some(cropped)
-  }
 }
 
 #[derive(Clone, Copy)]

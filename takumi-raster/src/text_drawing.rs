@@ -2,17 +2,18 @@ use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, PixmapRef};
+use tiny_skia::{FillRule, IntSize, PathBuilder, PixmapRef, Rect};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
-  alpha_mask, checked_area, cull_bounds, render_mask,
+  checked_area, coverage, cull_bounds, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
     glyph_cache::GlyphCache,
   },
-  style::{Affine, BlendMode, Color, PaintPhase},
+  shader::{ImageFilter, ImageShader, Shader, Spread},
+  style::{Affine, BlendMode, Color, PaintPhase, math::mul_div_255},
 };
 
 /// A glyph transform split into the cached mask's transform and the whole pixels it is blitted at.
@@ -329,21 +330,34 @@ pub(crate) fn bitmap_coverage(
 
   checked_area(placement.width, placement.height, 4)?;
 
-  let mut pixmap = Pixmap::new(placement.width, placement.height)?;
+  // As tiny-skia's `draw_pixmap` draws: the source rect filled without antialiasing, sampled
+  // bilinearly.
+  let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
+  let size = IntSize::from_wh(placement.width, placement.height)?;
+  let outline =
+    PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local.into())?;
+  let coverage = coverage::fill_path_aliased(&outline, FillRule::Winding, size)?;
+  let shader = Shader::Image(ImageShader::new(
+    bytemuck::cast_slice(source.data()),
+    (source.width(), source.height()),
+    local,
+    Spread::Pad,
+    ImageFilter::Linear,
+    1.0,
+  )?);
+  let span = placement.width as usize;
+  let mut row = vec![[0; 4]; span];
+  let mut alpha = coverage;
 
-  pixmap.draw_pixmap(
-    0,
-    0,
-    source,
-    &PixmapPaint {
-      quality: FilterQuality::Bilinear,
-      ..PixmapPaint::default()
-    },
-    (Affine::translation(-placement.left as f32, -placement.top as f32) * transform).into(),
-    None,
-  );
+  for (y, alpha) in alpha.chunks_exact_mut(span).enumerate() {
+    shader.shade_row(0, y as i32, &mut row);
 
-  Some((alpha_mask(pixmap.data()), placement))
+    for (alpha, pixel) in alpha.iter_mut().zip(&row) {
+      *alpha = mul_div_255(*alpha, pixel[3]);
+    }
+  }
+
+  Some((alpha, placement))
 }
 
 #[cfg(test)]

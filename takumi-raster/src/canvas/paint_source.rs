@@ -5,7 +5,6 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
   blend::premultiplied_from_pixel,
-  canvas::checked_area,
   style::{Affine, ImageScalingAlgorithm},
 };
 
@@ -144,28 +143,6 @@ impl<'a> PaintSource<'a> {
       }
       _ => None,
     }
-  }
-
-  pub(crate) fn with_pixmap_ref<R>(self, f: impl FnOnce(PixmapRef<'_>) -> R) -> Option<R> {
-    if let Some(source) = self.as_pixmap_ref() {
-      return Some(f(source));
-    }
-
-    let width = self.width();
-    let height = self.height();
-    let source_len = checked_area(width, height, 4)?;
-    let mut premultiplied = vec![0; source_len];
-    let rows = self.rows(0, width);
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut premultiplied);
-    for (y, row) in pixels.chunks_exact_mut(width as usize).enumerate() {
-      rows.fill(y as u32, row);
-    }
-
-    PixmapRef::from_bytes(&premultiplied, width, height).map(f)
-  }
-
-  pub(crate) fn supports_rounded_fill_fast_path(self) -> bool {
-    matches!(self, Self::Pixmap(_))
   }
 }
 

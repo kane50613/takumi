@@ -11,7 +11,7 @@ use takumi_core::{
 };
 use tiny_skia::{
   FillRule as TinyFillRule, IntRect, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut,
-  PixmapRef, PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
+  PixmapRef, PremultipliedColorU8, Rect as TinyRect,
 };
 
 use crate::resources::image::RenderedImage;
@@ -21,7 +21,7 @@ use crate::resources::image::{ImageSource, SvgRaster};
 use crate::svg::SvgPixmapRasterizer;
 use crate::{
   BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
-  PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
+  PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area, coverage,
   interpolate_with_footprint, layout::node::resolve_image, overlay_image,
   resources::image_buffer::ImageBuffer, style::*, try_overlay_gradient_tile,
 };
@@ -101,21 +101,17 @@ impl TileLayer {
   /// A mask over a `size` pixmap, `offset` from the border box, keeping only `dest`.
   fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<TinyMask> {
     let dest = self.dest?;
-    let mut mask = TinyMask::new(size.width, size.height)?;
+    let size = IntSize::from_wh(size.width, size.height)?;
     let rect = TinyRect::from_ltrb(
       dest.left + offset.x,
       dest.top + offset.y,
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
+    let coverage =
+      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), TinyFillRule::Winding, size)?;
 
-    mask.fill_path(
-      &PathBuilder::from_rect(rect),
-      TinyFillRule::Winding,
-      false,
-      TinyTransform::identity(),
-    );
-    Some(mask)
+    TinyMask::from_vec(coverage, size)
   }
 }
 
@@ -252,7 +248,6 @@ pub(crate) fn rasterize_layers(
 }
 
 pub(crate) struct ColorTile {
-  color: Color,
   premultiplied: PremultipliedColorU8,
   width: u32,
   height: u32,
@@ -261,15 +256,10 @@ pub(crate) struct ColorTile {
 impl ColorTile {
   pub(crate) fn new(color: Color, width: u32, height: u32) -> Self {
     Self {
-      color,
       premultiplied: color.premultiplied(),
       width,
       height,
     }
-  }
-
-  pub(crate) fn color(&self) -> Color {
-    self.color
   }
 
   pub(crate) fn width(&self) -> u32 {
