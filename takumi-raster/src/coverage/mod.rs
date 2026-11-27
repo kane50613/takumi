@@ -1,7 +1,9 @@
 //! A8 coverage masks for filled paths, rasterized by a port of the analytic anti-aliasing scan
 //! converter Chromium's Skia uses for every anti-aliased path fill (`SkScan::AntiFillPath`, which
-//! always calls `SkScan::AAAFillPath`), and of rects by its `SkScan::AntiFillRect`.
+//! always calls `SkScan::AAAFillPath`), of rects by its `SkScan::AntiFillRect`, and of aliased
+//! paths by its `SkScan::FillPath`.
 
+mod aliased;
 mod blitter;
 mod edge;
 mod edge_builder;
@@ -9,7 +11,7 @@ mod edge_clipper;
 mod rect;
 mod scan;
 
-use tiny_skia::{FillRule, IntSize, Mask, Path, Transform};
+use tiny_skia::{FillRule, IntSize, Path};
 
 use blitter::{Coverage, IntBounds, round_out};
 
@@ -61,21 +63,28 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
   Some(coverage.data)
 }
 
-/// The coverage of `path` over a `size` mask at the origin without anti-aliasing.
-// TODO: port `SkScan::FillPath` in place of tiny-skia's aliased fill.
+/// The coverage of `path` over a `size` mask at the origin without anti-aliasing, as
+/// `SkScan::FillPath` fills it.
 pub(crate) fn fill_path_aliased(
   path: &Path,
   fill_rule: FillRule,
   size: IntSize,
 ) -> Option<Vec<u8>> {
-  let mut mask = Mask::from_vec(
-    vec![0; size.width() as usize * size.height() as usize],
-    size,
-  )?;
+  let mut mask = vec![0; size.width() as usize * size.height() as usize];
 
-  mask.fill_path(path, fill_rule, false, Transform::identity());
+  aliased::fill_path(
+    path,
+    fill_rule,
+    IntBounds {
+      left: 0,
+      top: 0,
+      right: size.width() as i32,
+      bottom: size.height() as i32,
+    },
+    &mut mask,
+  );
 
-  Some(mask.take())
+  Some(mask)
 }
 
 /// The coverage of the axis-aligned rect `[left, top, right, bottom]` over a `size` mask at the
