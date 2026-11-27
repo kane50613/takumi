@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
 
 use crate::style::{
-  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseMode, ParseResult, SizingContext, ToCss, lerp,
 };
 
 /// `tab-size` as a number of spaces. Naive: no `<length>`, and tabs expand to spaces.
@@ -49,7 +49,7 @@ impl Animatable for TabSize {
 }
 
 impl<'i> FromCss<'i> for TabSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let value = input.expect_number()?;
 
     if value < 0.0 {

@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, parse_important, serialize_identifier};
 
 use crate::{
-  style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token},
+  style::{Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, unexpected_token},
   viewport::ColorScheme,
 };
 
@@ -54,7 +54,7 @@ impl MakeComputed for ColorSchemes {}
 impl Animatable for ColorSchemes {}
 
 impl<'i> FromCss<'i> for ColorSchemes {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()

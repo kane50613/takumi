@@ -248,24 +248,23 @@ impl Emitter<'_> {
       }
     };
     let visible = chunks.visible(self.window);
-    let mut conversion = ConversionContext::new(
-      scene.properties,
-      ChunkWriter {
-        emitter: self,
-        surface,
-        owners: &chunks.owners,
-        current: Affine::IDENTITY,
-        entries: Vec::new(),
-        error: None,
-      },
-    );
+    let mut conversion = ConversionContext::new(scene.properties);
+    let mut writer = ChunkWriter {
+      emitter: self,
+      surface,
+      owners: &chunks.owners,
+      current: Affine::IDENTITY,
+      entries: Vec::new(),
+      error: None,
+    };
 
     for chunk in visible {
-      conversion.switch_to(chunk.chunk.state());
-      conversion.sink().emit(chunk);
+      conversion.switch_to(chunk.chunk.state(), &mut writer);
+      writer.emit(chunk);
     }
 
-    conversion.finish().error.map_or(Ok(()), Err)
+    conversion.finish(&mut writer);
+    writer.error.map_or(Ok(()), Err)
   }
 
   /// Pushes the box's mask, returning how many states went on.

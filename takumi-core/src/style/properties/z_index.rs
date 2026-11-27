@@ -2,7 +2,9 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss, parse_integer_value};
+use crate::style::{
+  Animatable, FromCss, MakeComputed, ParseMode, ParseResult, ToCss, parse_integer_value,
+};
 
 /// Represents the CSS `z-index` value for stacking order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -28,7 +30,7 @@ impl MakeComputed for ZIndex {}
 impl Animatable for ZIndex {}
 
 impl<'i> FromCss<'i> for ZIndex {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(value) = input.try_parse(parse_integer_value) {
       return Ok(Self::Integer(value));
     }

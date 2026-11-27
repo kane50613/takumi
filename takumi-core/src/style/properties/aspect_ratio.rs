@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, FromCssStr, MakeComputed, ParseResult, SizingContext, ToCss,
-  discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
+  Animatable, Color, FromCss, FromCssStr, MakeComputed, ParseMode, ParseResult, SizingContext,
+  ToCss, discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -75,7 +75,7 @@ impl From<AspectRatio> for Option<f32> {
 }
 
 impl<'i> FromCss<'i> for AspectRatio {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()

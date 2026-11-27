@@ -61,7 +61,7 @@ use crate::{
   style::{
     Affine, AnimationOrigin, BackgroundImage, BackgroundImages, CascadeOrigin, CascadeSource,
     Color, ColorInput, ComputedStyle, ContainerName, ContainerType, ContentItem, ContentValue,
-    Direction, Display, ElementAnimations, Float, FontUnits, Lang, LineHeight, LonghandId,
+    Direction, Display, ElementAnimations, Float, FontUnits, Lang, Length, LineHeight, LonghandId,
     MatchedStyleKey, Position, PropertyMask, Registrations, SizingContext, Style as NodeStyle,
     StyleDeclaration, StyleDeclarationBlock, StyleSheet, UnicodeBidi, WhiteSpaceCollapse,
     page_rule::PageContext,
@@ -3584,6 +3584,14 @@ impl RenderContext {
     };
     let sizing = self.child_sizing(&style, &self.sizing, is_document_root);
 
+    // `sizing` makes the element's own line height the `lh` basis, against which its specified
+    // line height would resolve again.
+    if let LineHeight::Length(length) = style.inherited_data.line_height
+      && !matches!(length, Length::Px(_))
+    {
+      style.inherited_data_mut().line_height =
+        LineHeight::Length(Length::Px(sizing.to_css(sizing.line_height)));
+    }
     style.make_computed(&sizing);
     if self.sizing.container_read.replace(parent_read) {
       sizing.container_read.set(true);
@@ -3768,27 +3776,28 @@ impl RenderContext {
       LineHeight::Normal => metrics.map_or(font_size, PrimaryFontMetrics::line_spacing),
       _ => 0.0,
     };
+    let mut sizing = self.sizing.with_font_metrics(
+      font_size,
+      self
+        .sizing
+        .root_font_size
+        .or_else(|| is_document_root.then_some(font_size)),
+      self.sizing.line_height,
+      self.sizing.root_line_height,
+      FontUnits { ch, ex },
+    );
+    // Blink's `CSSToLengthConversionData::LineHeightSize`: `lh` reads the element's own line
+    // height, which resolves against its own font size.
     let line_height = style
       .inherited_data
       .line_height
-      .to_px(&self.sizing, normal_basis);
+      .to_px(&sizing, normal_basis);
 
-    self
-      .sizing
-      .with_font_metrics(
-        font_size,
-        self
-          .sizing
-          .root_font_size
-          .or_else(|| is_document_root.then_some(font_size)),
-        line_height,
-        self
-          .sizing
-          .root_line_height
-          .or_else(|| is_document_root.then_some(line_height)),
-        FontUnits { ch, ex },
-      )
-      .with_color_scheme(self.used_color_scheme(style))
+    sizing.line_height = line_height;
+    sizing.root_line_height = sizing
+      .root_line_height
+      .or_else(|| is_document_root.then_some(line_height));
+    sizing.with_color_scheme(self.used_color_scheme(style))
   }
 }
 
@@ -3916,8 +3925,9 @@ mod tests {
     layout::node::Node,
     resources::font::Fonts,
     style::{
-      ComputedStyle, Direction, Display, Float, Length, PageName, PropertyRule, PropertySyntax,
-      SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TailwindValues,
+      ComputedStyle, Direction, Display, Float, Length, LineHeight, PageName, PropertyRule,
+      PropertySyntax, SizingContext, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
+      TailwindValues,
       page_rule::{PageContext, PageKind},
     },
     viewport::Viewport,
@@ -4297,6 +4307,78 @@ mod tests {
     assert_eq!(margin(child.context.style.box_data.margin_top), 10.0);
     assert_eq!(margin(child.context.style.box_data.margin_bottom), 3.0);
     assert_eq!(margin(child.context.style.box_data.margin_left), 20.0);
+  }
+
+  #[test]
+  fn lh_reads_the_elements_own_font_size_and_line_height() {
+    let stylesheet = parse_stylesheet(
+      ".p { font-size: 16px; line-height: 2 }
+       .c { font-size: 20px; margin-top: 1lh }
+       .u { line-height: 1.5 }
+       .e { line-height: 150% }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([
+        Node::container([]).with_class_name("c u"),
+        Node::container([]).with_class_name("c e"),
+        Node::container([]).with_class_name("c"),
+      ])
+      .with_class_name("p"),
+    );
+    let margins = tree
+      .children
+      .as_deref()
+      .expect("children")
+      .iter()
+      .map(|child| {
+        child
+          .context
+          .style
+          .box_data
+          .margin_top
+          .to_px(&child.context.sizing, 0.0)
+      })
+      .collect::<Vec<_>>();
+
+    assert_eq!(margins, [30.0, 30.0, 40.0]);
+  }
+
+  #[test]
+  fn a_line_height_reads_lh_from_its_parent_once() {
+    let stylesheet = parse_stylesheet(
+      ".p { font-size: 16px; line-height: 2 }
+       .c { font-size: 20px; line-height: calc(2lh - 2em) }",
+    );
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([Node::container([]).with_class_name("c")]).with_class_name("p"),
+    );
+    let child = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(
+      child.context.style.inherited_data.line_height,
+      LineHeight::Length(Length::Px(24.0))
+    );
+    assert_eq!(child.context.sizing.line_height, 24.0);
   }
 
   #[test]

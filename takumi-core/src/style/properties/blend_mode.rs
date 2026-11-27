@@ -2,15 +2,15 @@ use cssparser::Parser;
 use tiny_skia::BlendMode as TinyBlendMode;
 
 use crate::style::{
-  Animatable, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum, parse_comma_list,
-  tw::TailwindPropertyParser,
+  Animatable, FromCss, ListInterpolationStrategy, ParseMode, ParseResult, impl_css_enum,
+  parse_comma_list, tw::TailwindPropertyParser,
 };
 
 /// A list of blend modes.
 pub(crate) type BlendModes = Box<[BlendMode]>;
 
 impl<'i> FromCss<'i> for BlendModes {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     parse_comma_list(input, BlendMode::from_css)
   }
 

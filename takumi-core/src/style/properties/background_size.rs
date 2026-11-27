@@ -3,8 +3,9 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
+  ParseResult, SizingContext, ToCss, discrete, parse_comma_list, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Parsed `background-size` for one layer.
@@ -48,9 +49,11 @@ impl Default for BackgroundSize {
 }
 
 impl<'i> FromCss<'i> for BackgroundSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    if let Ok(width) = input.try_parse(Length::from_css) {
-      let height = input.try_parse(Length::from_css).unwrap_or(Length::Auto);
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    if let Ok(width) = input.try_parse(|input| Length::from_css_in(input, mode)) {
+      let height = input
+        .try_parse(|input| Length::from_css_in(input, mode))
+        .unwrap_or(Length::Auto);
 
       return Ok(BackgroundSize::Explicit { width, height });
     }
@@ -113,8 +116,8 @@ impl Animatable for BackgroundSize {
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    parse_comma_list(input, BackgroundSize::from_css)
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    parse_comma_list(input, |input| BackgroundSize::from_css_in(input, mode))
   }
 
   const VALID_TOKENS: &'static [&'static str] = BackgroundSize::VALID_TOKENS;

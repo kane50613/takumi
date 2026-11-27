@@ -1,6 +1,8 @@
 use cssparser::Parser;
 
-use crate::style::{ColorInput, FromCss, Length, MakeComputed, ParseResult, SizingContext};
+use crate::style::{
+  ColorInput, FromCss, Length, MakeComputed, ParseMode, ParseResult, SizingContext,
+};
 
 /// A `text-stroke` value, its `color` the element's when absent.
 #[derive(Debug, Clone, PartialEq)]
@@ -13,8 +15,8 @@ pub struct TextStroke {
 }
 
 impl<'i> FromCss<'i> for TextStroke {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let width = Length::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let width = Length::from_css_in(input, mode)?;
     let color = input.try_parse(ColorInput::from_css).ok();
 
     Ok(TextStroke { width, color })

@@ -11,9 +11,9 @@ use super::gradient_utils::{
 };
 use crate::geometry::Size;
 use crate::style::{
-  Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseResult,
-  PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss, impl_css_enum,
-  unexpected_token,
+  Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseMode,
+  ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss,
+  impl_css_enum, parse_nested_block, unexpected_token,
 };
 
 /// The radii of the ellipse through `corner`, as Blink's `EllipseRadius`.
@@ -96,7 +96,7 @@ pub enum RadialSize {
   },
 }
 impl<'i> FromCss<'i> for RadialSize {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(RadialSize::ClosestSide),
@@ -463,10 +463,10 @@ impl RadialGradient {
 }
 
 impl<'i> FromCss<'i> for RadialGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, RadialGradient> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, RadialGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
       let mut center = PositionValue::center();
@@ -483,14 +483,16 @@ impl<'i> FromCss<'i> for RadialGradient {
           continue;
         }
 
-        if let Ok(radius_x) = input.try_parse(Length::from_css) {
-          let radius_y = input.try_parse(Length::from_css).unwrap_or(radius_x);
+        if let Ok(radius_x) = input.try_parse(|input| Length::from_css_in(input, mode)) {
+          let radius_y = input
+            .try_parse(|input| Length::from_css_in(input, mode))
+            .unwrap_or(radius_x);
           size = RadialSize::Explicit { radius_x, radius_y };
           continue;
         }
 
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
-          center = PositionValue::from_css(input)?;
+          center = PositionValue::from_css_in(input, mode)?;
           continue;
         }
 
@@ -504,7 +506,8 @@ impl<'i> FromCss<'i> for RadialGradient {
         break;
       }
 
-      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
+      let (stops, modern) =
+        parse_gradient_stops(input, |input| StopPosition::from_css_in(input, mode))?;
 
       Ok(RadialGradient {
         repeating,

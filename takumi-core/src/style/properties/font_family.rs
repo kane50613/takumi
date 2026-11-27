@@ -9,8 +9,8 @@ use std::{
 use cssparser::{ParseError as CssParseError, Parser, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  FromCss, MakeComputed, ParseResult, ToCss, is_reserved_custom_ident, tw::Namespace,
-  tw::TailwindPropertyParser,
+  FromCss, MakeComputed, ParseMode, ParseResult, ToCss, is_reserved_custom_ident,
+  parse_comma_separated, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 /// Blink's `FontDescription::GenericFamilyType`: a CSS generic font family.
@@ -135,7 +135,7 @@ impl FontFamily {
 }
 
 impl<'i> FromCss<'i> for FontFamilyToken {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(name) = input.try_parse(|input| input.expect_string().map(ToString::to_string)) {
       return Ok(Self::Owned(name));
     }
@@ -166,8 +166,8 @@ impl<'i> FromCss<'i> for FontFamilyToken {
 }
 
 impl<'i> FromCss<'i> for FontFamily {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let list = input.parse_comma_separated(FontFamilyToken::from_css)?;
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
+    let list = parse_comma_separated(input, FontFamilyToken::from_css)?;
 
     Ok(Self::new(list))
   }

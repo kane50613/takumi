@@ -214,6 +214,52 @@ pub(crate) fn parse_comma_list<'i, T>(
   Ok(items.into_boxed_slice())
 }
 
+/// [`Parser::parse_nested_block`] through one shared instance, leaving each caller only `parse`.
+#[inline]
+pub(crate) fn parse_nested_block<'i, T>(
+  input: &mut Parser<'i>,
+  mut parse: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, T> {
+  let mut value = None;
+  parse_nested_block_erased(input, &mut |input| {
+    value = Some(parse(input)?);
+    Ok(())
+  })?;
+  // `value` is set whenever the block parsed.
+  value.ok_or_else(|| ValueError::invalid("nested block produced no value"))
+}
+
+#[inline(never)]
+fn parse_nested_block_erased<'i>(
+  input: &mut Parser<'i>,
+  parse: &mut dyn FnMut(&mut Parser<'i>) -> ParseResult<'i, ()>,
+) -> ParseResult<'i, ()> {
+  input.parse_nested_block(parse)
+}
+
+/// [`Parser::parse_comma_separated`] through one shared instance, leaving each caller only
+/// `parse_item`.
+#[inline]
+pub(crate) fn parse_comma_separated<'i, T>(
+  input: &mut Parser<'i>,
+  mut parse_item: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, Vec<T>> {
+  let mut items = Vec::with_capacity(1);
+  parse_comma_separated_erased(input, &mut |input| {
+    items.push(parse_item(input)?);
+    Ok(())
+  })?;
+  Ok(items)
+}
+
+#[inline(never)]
+fn parse_comma_separated_erased<'i>(
+  input: &mut Parser<'i>,
+  parse_item: &mut dyn FnMut(&mut Parser<'i>) -> ParseResult<'i, ()>,
+) -> ParseResult<'i, ()> {
+  input.parse_comma_separated(parse_item).map(drop)
+}
+
 // These parse Tailwind tokens straight through their `FromCss` value parser.
 impl TailwindPropertyParser for ObjectFit {}
 impl TailwindPropertyParser for ListStyleType {}
@@ -415,11 +461,11 @@ impl Animatable for BorderRadius {
 }
 
 impl<'i> FromCss<'i> for BorderRadius {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let widths: Sides<Length> = Sides::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let widths: Sides<Length> = Sides::from_css_in(input, mode)?;
 
     let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-      Sides::from_css(input)?
+      Sides::from_css_in(input, mode)?
     } else {
       widths
     };
@@ -634,8 +680,8 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [&'static str] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
-    let pair = SpacePair::<Length>::from_css(input)?;
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
+    let pair = SpacePair::<Length>::from_css_in(input, mode)?;
 
     if [pair.x, pair.y]
       .into_iter()
@@ -1344,7 +1390,7 @@ impl MakeComputed for TextTransform {}
 impl Animatable for TextTransform {}
 
 impl<'i> FromCss<'i> for TextTransform {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()

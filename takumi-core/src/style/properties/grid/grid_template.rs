@@ -3,7 +3,7 @@ use cssparser::{Parser, Token};
 use super::{NamedGridAreas, at_value_end, parse_line_names};
 use crate::style::{
   FromCss, GridLength, GridTemplateAreas, GridTemplateComponent, GridTemplateComponents,
-  GridTrackSize, Length, ParseResult, unexpected_token,
+  GridTrackSize, Length, ParseMode, ParseResult, unexpected_token,
 };
 
 /// Represents the `grid-template` shorthand.
@@ -20,7 +20,7 @@ pub struct GridTemplate {
 impl GridTemplate {
   /// Blink's `ConsumeGridTemplateRowsAndAreasAndColumns`:
   /// `[ <line-names>? <string> <track-size>? <line-names>? ]+ [ / <explicit-track-list> ]?`.
-  fn from_areas<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_areas<'i>(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     let mut areas = NamedGridAreas::default();
     let mut rows = Vec::new();
     let mut columns = None;
@@ -42,7 +42,7 @@ impl GridTemplate {
       }
       rows.push(GridTemplateComponent::Single(
         input
-          .try_parse(GridTrackSize::from_css)
+          .try_parse(|input| GridTrackSize::from_css_in(input, mode))
           .unwrap_or(GridTrackSize::Fixed(GridLength::Unit(Length::Auto))),
       ));
       if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
@@ -52,7 +52,7 @@ impl GridTemplate {
         break;
       }
       if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-        columns = Some(track_list(input, false)?);
+        columns = Some(track_list(input, false, mode)?);
         break;
       }
     }
@@ -67,20 +67,20 @@ impl GridTemplate {
 
 impl<'i> FromCss<'i> for GridTemplate {
   /// Blink's `ConsumeGridTemplateShorthand`.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(template) = input.try_parse(|input| -> ParseResult<'i, Self> {
-      let rows = track_listing(input)?;
+      let rows = track_listing(input, mode)?;
 
       input.expect_delim('/')?;
       Ok(Self {
         rows,
-        columns: track_listing(input)?,
+        columns: track_listing(input, mode)?,
         areas: None,
       })
     }) {
       return Ok(template);
     }
-    if let Ok(template) = input.try_parse(Self::from_areas) {
+    if let Ok(template) = input.try_parse(|input| Self::from_areas(input, mode)) {
       return Ok(template);
     }
 
@@ -94,6 +94,7 @@ impl<'i> FromCss<'i> for GridTemplate {
 /// Blink's `ConsumeGridTemplatesRowsOrColumns`: `none`, as `None`, or a track list.
 pub(super) fn track_listing<'i>(
   input: &mut Parser<'i>,
+  mode: ParseMode,
 ) -> ParseResult<'i, Option<GridTemplateComponents>> {
   if input
     .try_parse(|input| input.expect_ident_matching("none"))
@@ -102,7 +103,7 @@ pub(super) fn track_listing<'i>(
     return Ok(None);
   }
 
-  track_list(input, true).map(Some)
+  track_list(input, true, mode).map(Some)
 }
 
 /// A `grid-template-rows` or `grid-template-columns` track list holding at least one track, and
@@ -110,8 +111,9 @@ pub(super) fn track_listing<'i>(
 fn track_list<'i>(
   input: &mut Parser<'i>,
   allows_repeat: bool,
+  mode: ParseMode,
 ) -> ParseResult<'i, GridTemplateComponents> {
-  let components = GridTemplateComponents::from_css(input)?;
+  let components = GridTemplateComponents::from_css_in(input, mode)?;
 
   if components.first() == Some(&GridTemplateComponent::Subgrid) {
     if !allows_repeat {

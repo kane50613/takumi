@@ -15,8 +15,8 @@ use super::gradient_utils::{
 use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
-  tw::TailwindPropertyParser, unexpected_token,
+  ParseMode, ParseResult, SizingContext, ToCss, impl_css_enum, is_math_function, lerp, parse_angle,
+  parse_nested_block, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -476,18 +476,12 @@ pub struct ResolvedGradientStop {
 }
 
 impl<'i> FromCss<'i> for StopPosition {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
-    if let Ok(num) = input.try_parse(Parser::expect_number) {
-      return Ok(StopPosition(Length::Percentage(
-        num.clamp(0.0, 1.0) * 100.0,
-      )));
-    }
-
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, StopPosition> {
     if let Ok(unit_value) = input.try_parse(Parser::expect_percentage) {
       return Ok(StopPosition(Length::Percentage(unit_value * 100.0)));
     }
 
-    let Ok(length) = input.try_parse(Length::from_css) else {
+    let Ok(length) = input.try_parse(|input| Length::from_css_in(input, mode)) else {
       return Err(unexpected_token!(input.next()?,));
     };
 
@@ -499,7 +493,7 @@ impl<'i> FromCss<'i> for StopPosition {
 
 impl<'i> FromCss<'i> for GradientStop {
   /// Parses a gradient hint from the input.
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, GradientStop> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, GradientStop> {
     if let Ok(hint) = input.try_parse(StopPosition::from_css) {
       return Ok(GradientStop::Hint(hint));
     };
@@ -700,7 +694,7 @@ impl GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for GradientKeywordDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     input.expect_ident_matching("to")?;
 
     if let Ok(vertical) = input.try_parse(VerticalKeyword::from_css) {
@@ -731,7 +725,7 @@ impl<'i> FromCss<'i> for GradientKeywordDirection {
 }
 
 impl<'i> FromCss<'i> for LinearGradientDirection {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Self> {
     if let Ok(direction) = input.try_parse(GradientKeywordDirection::from_css) {
       return Ok(Self::Keyword(direction));
     }
@@ -747,10 +741,10 @@ impl LinearGradient {
 }
 
 impl<'i> FromCss<'i> for LinearGradient {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, LinearGradient> {
+  fn from_css_in(input: &mut Parser<'i>, mode: ParseMode) -> ParseResult<'i, LinearGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
-    input.parse_nested_block(|input| {
+    parse_nested_block(input, |input| {
       let mut direction = LinearGradientDirection::default();
       let mut interpolation = None;
       let mut saw_direction = false;
@@ -776,7 +770,8 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       input.try_parse(Parser::expect_comma).ok();
 
-      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
+      let (stops, modern) =
+        parse_gradient_stops(input, |input| StopPosition::from_css_in(input, mode))?;
 
       Ok(LinearGradient {
         repeating,
@@ -791,7 +786,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 }
 
 impl<'i> FromCss<'i> for Angle {
-  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Angle> {
+  fn from_css_in(input: &mut Parser<'i>, _mode: ParseMode) -> ParseResult<'i, Angle> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -1572,7 +1567,6 @@ mod tests {
   #[test]
   fn test_stop_position_parsing() {
     for (input, expected) in [
-      ("0.25", StopPosition(Length::Percentage(25.0))),
       ("75%", StopPosition(Length::Percentage(75.0))),
       ("50%", StopPosition(Length::Percentage(50.0))),
       ("12px", StopPosition(Length::Px(12.0))),
@@ -1584,6 +1578,8 @@ mod tests {
         "input: {input}"
       );
     }
+
+    assert!(StopPosition::from_css_str("0.25").is_err());
   }
 
   #[test]

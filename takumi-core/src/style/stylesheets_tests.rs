@@ -116,6 +116,96 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
   Ok(())
 }
 
+#[test]
+fn a_unitless_length_is_px_only_in_a_style_object_or_an_svg_property()
+-> Result<(), serde_json::Error> {
+  let text = style_with(
+    StyleDeclarationBlock::parse_loosy(
+      "font-size: 20px; font-size: 12; text-indent: 5; margin-top: 0; stroke-width: 3",
+    )
+    .declarations,
+  )
+  .inherit(&ComputedStyle::default());
+  let object = from_value::<Style>(json!({ "fontSize": 12, "lineHeight": 1.5, "textIndent": 5 }))?
+    .inherit(&ComputedStyle::default());
+
+  assert_eq!(
+    text.inherited_data.font_size,
+    FontSize::Length(Length::Px(20.0))
+  );
+  assert_eq!(text.misc_inherited1_data.text_indent.amount, Length::zero());
+  assert_eq!(text.box_data.margin_top, Length::Px(0.0));
+  assert_eq!(text.svg_stroke_data.stroke_width, Length::Px(3.0));
+  assert_eq!(
+    object.inherited_data.font_size,
+    FontSize::Length(Length::Px(12.0))
+  );
+  assert_eq!(object.inherited_data.line_height, LineHeight::Unitless(1.5));
+  assert_eq!(
+    object.misc_inherited1_data.text_indent.amount,
+    Length::Px(5.0)
+  );
+  Ok(())
+}
+
+fn computed_from_text(css: &str) -> ComputedStyle {
+  style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+    .inherit(&ComputedStyle::default())
+}
+
+#[test]
+fn an_invalid_unitless_length_drops_the_whole_declaration() {
+  let margins = computed_from_text("margin-inline: 1px 2px; margin-inline: 10px 20").box_data;
+
+  assert_eq!(
+    (margins.margin_left, margins.margin_right),
+    (Length::Px(1.0), Length::Px(2.0))
+  );
+}
+
+#[test]
+fn a_gradient_stop_takes_no_unitless_number() {
+  for css in [
+    "background-image: linear-gradient(red 0.25, blue 100%)",
+    "background-image: conic-gradient(red 0.25, blue)",
+  ] {
+    assert_eq!(
+      computed_from_text(css).background_data.background_image,
+      None,
+      "{css}"
+    );
+  }
+
+  for css in [
+    "background-image: linear-gradient(red 0, blue 100%)",
+    "background-image: linear-gradient(red 12px, blue 25%)",
+    "background-image: conic-gradient(red 0, blue 90deg)",
+  ] {
+    assert_ne!(
+      computed_from_text(css).background_data.background_image,
+      None,
+      "{css}"
+    );
+  }
+}
+
+#[test]
+fn a_polygon_vertex_takes_both_coordinates() {
+  for css in [
+    "clip-path: polygon(0 10, 100% 0, 0 100%)",
+    "clip-path: polygon(0, 100% 0, 0 100%)",
+  ] {
+    assert_eq!(computed_from_text(css).misc1_data.clip_path, None, "{css}");
+  }
+
+  assert_ne!(
+    computed_from_text("clip-path: polygon(0 10px, 100% 0, 0 100%)")
+      .misc1_data
+      .clip_path,
+    None
+  );
+}
+
 /// The JSX presets ship these as a camel-case style object.
 #[test]
 fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
@@ -1963,6 +2053,56 @@ fn font_size_rejects_a_negative_length_and_auto() {
 }
 
 #[test]
+fn line_height_rejects_a_negative_value() {
+  let line_height = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+      .inherited_data
+      .line_height
+  };
+
+  for css in [
+    "line-height: 2; line-height: -1",
+    "line-height: 2; line-height: -10px",
+    "line-height: 2; line-height: -50%",
+    "line-height: 2; font: 16px/-1 serif",
+  ] {
+    assert_eq!(line_height(css), LineHeight::Unitless(2.0), "{css}");
+  }
+}
+
+#[test]
+fn spacing_takes_normal_as_zero_and_rejects_auto() {
+  let style = |css: &str| {
+    style_with(StyleDeclarationBlock::parse_loosy(css).declarations)
+      .inherit(&ComputedStyle::default())
+  };
+
+  for (css, spacing) in [
+    (
+      "letter-spacing: 2px; letter-spacing: normal; word-spacing: 2px; word-spacing: normal",
+      Length::zero(),
+    ),
+    (
+      "letter-spacing: 2px; letter-spacing: auto; word-spacing: 2px; word-spacing: auto",
+      Length::Px(2.0),
+    ),
+  ] {
+    let style = style(css);
+
+    assert_eq!(style.inherited_data.letter_spacing, spacing, "{css}");
+    assert_eq!(style.inherited_data.word_spacing, spacing, "{css}");
+  }
+  assert_eq!(
+    style("text-indent: 2px; text-indent: auto")
+      .misc_inherited1_data
+      .text_indent
+      .amount,
+    Length::Px(2.0)
+  );
+}
+
+#[test]
 fn a_var_that_substitutes_to_an_invalid_value_unsets_the_property() {
   let style = inherited_style_from_pairs(
     [
@@ -2135,7 +2275,7 @@ fn stroke_dasharray_takes_commas_and_spaces_but_no_negatives() {
   assert!(parse_declarations_is_err("stroke-dasharray", "-1"));
   assert!(
     PropertyId::from_kebab_case("stroke-dasharray")
-      .parse_css_input_declarations(CssInput::Str("1,".into()))
+      .parse_css_input_declarations(CssInput::Str("1,".into()), ParseMode::Css)
       .is_err()
   );
   assert!(parse_declarations_is_err("stroke-width", "-1"));
