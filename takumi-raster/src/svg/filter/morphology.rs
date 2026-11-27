@@ -6,15 +6,19 @@ const MAX_RADIUS: f32 = 256.0;
 /// Pixels a column strip spans, which keeps each strip's running extrema in cache.
 const STRIP: usize = 64;
 
-impl MorphologyOperator {
-  /// Blink's `FEMorphology` as Skia's `SkMorphologyImageFilter` runs it.
-  pub(super) fn apply(self, rx: f32, ry: f32, pixels: &mut [[u8; 4]], width: usize) {
-    let radius = |radius: f32| radius.round().clamp(0.0, MAX_RADIUS) as usize;
+/// Blink's `FEMorphology` as Skia's `SkMorphologyImageFilter` runs it.
+pub(super) fn apply(
+  operator: MorphologyOperator,
+  rx: f32,
+  ry: f32,
+  pixels: &mut [[u8; 4]],
+  width: usize,
+) {
+  let radius = |radius: f32| radius.round().clamp(0.0, MAX_RADIUS) as usize;
 
-    match self {
-      MorphologyOperator::Erode => morph(u8::min, radius(rx), radius(ry), pixels, width),
-      MorphologyOperator::Dilate => morph(u8::max, radius(rx), radius(ry), pixels, width),
-    }
+  match operator {
+    MorphologyOperator::Erode => morph(u8::min, radius(rx), radius(ry), pixels, width),
+    MorphologyOperator::Dilate => morph(u8::max, radius(rx), radius(ry), pixels, width),
   }
 }
 
@@ -200,7 +204,7 @@ mod tests {
           &data,
         );
 
-        operator.apply(rx, ry, &mut data, width);
+        apply(operator, rx, ry, &mut data, width);
 
         assert_eq!(data, expected, "{operator:?} {rx} {ry}");
       }

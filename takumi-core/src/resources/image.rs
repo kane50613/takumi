@@ -13,9 +13,6 @@ use std::{str::from_utf8, sync::Arc};
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
-#[cfg(feature = "svg-raster")]
-use tiny_skia::Pixmap;
-#[cfg(feature = "svg")]
 use xxhash_rust::xxh3::Xxh3;
 use xxhash_rust::xxh3::xxh3_64;
 
@@ -29,16 +26,16 @@ use crate::layout::node::Node;
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(all(feature = "svg-sizing", any(test, not(feature = "svg"))))]
 use crate::resources::svg_size::SvgSize;
+#[cfg(feature = "svg-raster")]
+use crate::style::Affine;
 #[cfg(feature = "svg")]
 use crate::style::Color;
 #[cfg(feature = "svg")]
 use crate::svg::{HostReads, SvgDocument, SvgHost};
-#[cfg(feature = "svg-raster")]
-use crate::svg_drawing;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
   SvgFill, SvgFilters, SvgGradient, SvgGradientStop, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp,
-  SvgOpPaint, SvgSpreadMethod, SvgStrokeStyle,
+  SvgOpPaint, SvgRasterizer, SvgSpreadMethod, SvgStrokeStyle,
 };
 use crate::{
   context::RenderContext,
@@ -49,14 +46,14 @@ use crate::{
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
-#[cfg(feature = "svg-raster")]
-use tiny_skia::Transform;
 
+/// The most pixels an SVG raster or one of its filter buffers may hold.
 #[cfg(feature = "svg-raster")]
-pub(crate) const MAX_RASTER_PIXELS: u64 = 64 << 20;
+pub const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
+/// Whether a `width` by `height` SVG raster fits [`MAX_RASTER_PIXELS`].
 #[cfg(feature = "svg-raster")]
-pub(crate) fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
+pub fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
 
@@ -124,9 +121,13 @@ impl SvgPicture {
     self.key
   }
 
-  /// The pixels of `raster`.
+  /// The pixels of `raster`, drawn by `rasterizer`.
   #[cfg(feature = "svg-raster")]
-  fn rasterize(&self, raster: SvgRaster) -> Result<Arc<ImageBuffer>, ImageError> {
+  fn rasterize(
+    &self,
+    raster: SvgRaster,
+    rasterizer: &dyn SvgRasterizer,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
     let SvgRaster {
       origin,
       size,
@@ -139,17 +140,19 @@ impl SvgPicture {
       return Err(ImageError::InvalidPixmapSize);
     }
 
-    let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
     let sx = width as f32 / size.width;
     let sy = height as f32 / size.height;
+    let transform = Affine {
+      a: sx,
+      b: 0.0,
+      c: 0.0,
+      d: sy,
+      x: -origin.x * sx,
+      y: -origin.y * sy,
+    };
 
-    svg_drawing::draw(
-      &self.ops,
-      Transform::from_row(sx, 0.0, 0.0, sy, -origin.x * sx, -origin.y * sy),
-      &mut pixmap.as_mut(),
-    );
-
-    ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
+    rasterizer
+      .rasterize(&self.ops, transform, width, height)
       .map(Arc::new)
       .ok_or(ImageError::InvalidPixmapSize)
   }
@@ -395,13 +398,15 @@ impl SvgSource {
     }
   }
 
-  /// The pixels of `raster`, from the cache when an image drew them before.
+  /// The pixels of `raster`, from the cache when an image drew them before, `rasterizer` drawing
+  /// them otherwise.
   #[cfg(feature = "svg-raster")]
   pub fn rasterize_cached(
     &self,
     raster: SvgRaster,
     image_rendering: ImageScalingAlgorithm,
     host: &RenderContext,
+    rasterizer: &dyn SvgRasterizer,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
     let sized = SizedKey::new(raster.hash(), raster.width, raster.height, image_rendering);
     let known = self.known(host, raster.viewport);
@@ -411,14 +416,14 @@ impl SvgSource {
     if let Some((_, key)) = known {
       return host
         .cache()
-        .sized(Some(key), sized, || picture().rasterize(raster));
+        .sized(Some(key), sized, || picture().rasterize(raster, rasterizer));
     }
 
     let picture = picture();
 
-    host
-      .cache()
-      .sized(picture.key(), sized, || picture.rasterize(raster))
+    host.cache().sized(picture.key(), sized, || {
+      picture.rasterize(raster, rasterizer)
+    })
   }
 }
 
@@ -671,7 +676,8 @@ impl ImageSource {
     }
   }
 
-  /// The image as a bitmap, an SVG rasterized first.
+  /// The image as a bitmap, or [`ImageError::SvgParseNotSupported`] for an SVG, which
+  /// [`SvgSource::rasterize_cached`] draws.
   pub fn render_for_layout(
     &self,
     width: u32,
@@ -718,20 +724,8 @@ impl ImageSource {
           source_scale,
         })
       }
-      #[cfg(feature = "svg-raster")]
-      ImageSource::Svg(svg) => Ok(RenderedImage::Rasterized(svg.rasterize_cached(
-        SvgRaster::whole(
-          Size {
-            width: width as f32,
-            height: height as f32,
-          },
-          width,
-          height,
-        ),
-        image_rendering,
-        host,
-      )?)),
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg-raster")))]
+      // A raster backend draws an SVG through its own rasterizer, before it gets here.
+      #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
@@ -824,29 +818,21 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   Ok(DecodedDataUri { mime, bytes })
 }
 
-/// Applies the SVG `<filter>` with `id="{filter_id}"` to a premultiplied-RGBA layer in place.
+/// The SVG `<filter>` with `id="{filter_id}"` in `markup`, resolved for a `width` by `height`
+/// layer, or `None` when no such filter exists.
 #[cfg(feature = "svg-raster")]
-pub fn apply_svg_filter(
-  layer: &mut [u8],
-  width: u32,
-  height: u32,
+pub fn parse_svg_filter(
   markup: &str,
   filter_id: &str,
-) -> Result<(), ImageError> {
+  width: u32,
+  height: u32,
+) -> Result<Option<Arc<crate::svg::filter::SvgFilter>>, ImageError> {
   // The markup may come out of a document that declared `xlink` on an outer element.
   let document = SvgDocument::parse(&format!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">{markup}</svg>"#
   ))?;
 
-  let Some(filter) = document.filter(filter_id, width as f32, height as f32) else {
-    // An invalid filter reference hides the element.
-    layer.fill(0);
-    return Ok(());
-  };
-
-  filter
-    .apply_to_layer(layer, width, height)
-    .ok_or(ImageError::InvalidPixmapSize)
+  Ok(document.filter(filter_id, width as f32, height as f32))
 }
 
 /// The MIME type encoded image `bytes` announce, `application/octet-stream` when none matches.
@@ -932,7 +918,6 @@ pub enum ImageError {
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// SVG rendering is not supported in this build
-  #[cfg(not(feature = "svg-raster"))]
   #[error("SVG rendering is not supported in this build")]
   SvgParseNotSupported,
   /// The image source is unknown
@@ -1093,187 +1078,6 @@ mod tests {
 
   use super::*;
 
-  #[cfg(feature = "svg-raster")]
-  fn filtered_layer(filter: &str, size: u32) -> Vec<u8> {
-    let mut layer = vec![255u8; (size * size * 4) as usize];
-
-    apply_svg_filter(&mut layer, size, size, filter, "f").expect("the filter runs");
-    layer
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn lighting_a_layer_larger_than_the_filter_region_stays_in_bounds() {
-    for light in [
-      r#"<feDiffuseLighting in="SourceGraphic"><feDistantLight azimuth="45" elevation="45"/></feDiffuseLighting>"#,
-      r#"<feSpecularLighting in="SourceAlpha" specularExponent="2"><fePointLight x="3" y="3" z="4"/></feSpecularLighting>"#,
-    ] {
-      let document = SvgDocument::parse(&format!(
-        r#"<svg><filter id="f" filterUnits="userSpaceOnUse" x="2" y="2" width="5" height="5">{light}</filter></svg>"#
-      ))
-      .expect("a document");
-      let filter = document.filter("f", 12.0, 12.0).expect("a filter");
-      let mut layer = tiny_skia::Pixmap::new(12, 12).expect("a pixmap");
-
-      layer.fill(tiny_skia::Color::BLACK);
-      filter.apply(tiny_skia::Transform::identity(), &mut layer);
-    }
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_filter_region_of_a_million_units_allocates_only_the_layer() {
-    filtered_layer(
-      r#"<filter id="f" filterUnits="userSpaceOnUse" x="-1000000" y="-1000000" width="2000000" height="2000000"><feGaussianBlur stdDeviation="2"/></filter>"#,
-      8,
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_filter_keeping_thousands_of_results_alive_ends() {
-    let flood = (0..2000).fold(String::new(), |mut markup, index| {
-      markup.push_str(&format!(r#"<feFlood result="r{index}"/>"#));
-      markup
-    });
-    let nodes = (0..2000).fold(String::new(), |mut markup, index| {
-      markup.push_str(&format!(r#"<feMergeNode in="r{index}"/>"#));
-      markup
-    });
-
-    filtered_layer(
-      &format!(r#"<filter id="f">{flood}<feMerge>{nodes}</feMerge></filter>"#),
-      1024,
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_convolution_of_a_million_cells_is_invalid() {
-    let kernel = "0 ".repeat(1_000_000);
-
-    filtered_layer(
-      &format!(
-        r#"<filter id="f"><feConvolveMatrix order="1000" kernelMatrix="{kernel}"/></filter>"#
-      ),
-      64,
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_morphology_radius_past_the_layer_costs_the_layer_once() {
-    filtered_layer(
-      r#"<filter id="f"><feMorphology radius="100000" operator="dilate"/></filter>"#,
-      2000,
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_billion_octaves_of_noise_end() {
-    filtered_layer(
-      r#"<filter id="f"><feTurbulence baseFrequency="0.05" numOctaves="1000000000"/></filter>"#,
-      16,
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  fn pixel(layer: &[u8], size: u32, x: u32, y: u32) -> [u8; 4] {
-    let start = ((y * size + x) * 4) as usize;
-
-    [
-      layer[start],
-      layer[start + 1],
-      layer[start + 2],
-      layer[start + 3],
-    ]
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn filter_markup_may_use_xlink_without_declaring_it() {
-    let mut layer = vec![255u8; 16 * 16 * 4];
-
-    assert!(
-      apply_svg_filter(
-        &mut layer,
-        16,
-        16,
-        r##"<filter id="f"><feImage xlink:href="#missing"/></filter>"##,
-        "f"
-      )
-      .is_ok()
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_tiled_linear_rgb_result_converts_back_to_srgb() {
-    let layer = filtered_layer(
-      r#"<filter id="f"><feFlood flood-color="rgb(200, 100, 50)"/><feGaussianBlur stdDeviation="1" result="a"/><feTile in="a"/></filter>"#,
-      20,
-    );
-    let [red, green, blue, alpha] = pixel(&layer, 20, 10, 10);
-
-    assert!(
-      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2 && alpha == 255,
-      "{:?}",
-      [red, green, blue, alpha]
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_lighting_color_lights_in_its_own_color() {
-    let layer = filtered_layer(
-      r#"<filter id="f"><feDiffuseLighting lighting-color="rgb(200, 100, 50)"><feDistantLight elevation="90"/></feDiffuseLighting></filter>"#,
-      16,
-    );
-    let [red, green, blue, _] = pixel(&layer, 16, 8, 8);
-
-    assert!(
-      red.abs_diff(200) <= 2 && green.abs_diff(100) <= 2 && blue.abs_diff(50) <= 2,
-      "{:?}",
-      [red, green, blue]
-    );
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_specular_exponent_past_128_clamps_instead_of_clearing() {
-    let layer = filtered_layer(
-      r#"<filter id="f"><feSpecularLighting specularExponent="200"><feDistantLight elevation="90"/></feSpecularLighting></filter>"#,
-      16,
-    );
-
-    assert_ne!(pixel(&layer, 16, 8, 8), [0, 0, 0, 0]);
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_background_image_input_reads_the_result_before() {
-    let layer = filtered_layer(
-      r#"<filter id="f"><feFlood flood-color="rgb(0, 0, 255)"/><feComposite in="BackgroundImage" in2="BackgroundImage"/></filter>"#,
-      16,
-    );
-    let [red, _, blue, _] = pixel(&layer, 16, 8, 8);
-
-    assert!(blue > 200 && red < 50, "{:?}", pixel(&layer, 16, 8, 8));
-  }
-
-  #[cfg(feature = "svg-raster")]
-  #[test]
-  fn a_bounding_box_subregion_is_a_fraction_of_the_box() {
-    let layer = filtered_layer(
-      r#"<filter id="f" primitiveUnits="objectBoundingBox"><feColorMatrix type="saturate" values="1" x="0.25" width="0.5"/></filter>"#,
-      40,
-    );
-
-    assert_eq!(pixel(&layer, 40, 20, 20), [255, 255, 255, 255]);
-    assert_eq!(pixel(&layer, 40, 4, 20), [0, 0, 0, 0]);
-  }
-
   /// `SvgSize` reads the root element only; the canvas of the laid out document and the intrinsic
   /// rules the backends used before must agree with it on every SVG in the repo.
   #[cfg(feature = "svg")]
@@ -1415,14 +1219,6 @@ mod tests {
       (percentage.width, percentage.height, percentage.ratio()),
       (None, None, Some(2.0))
     );
-  }
-
-  #[cfg(feature = "svg")]
-  fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
-    match image {
-      RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
-      RenderedImage::Sampled { source, .. } => source.pixel(x, y),
-    }
   }
 
   #[cfg(feature = "png")]
@@ -1890,65 +1686,6 @@ mod tests {
     assert_eq!(to_data_url("x", b"foobar"), "data:x;base64,Zm9vYmFy");
   }
 
-  // A namespace-less root is accepted, so markup without `xmlns` is still
-  // detected and rendered as SVG.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_without_xmlns_renders() -> Result<(), ImageError> {
-    let svg = r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
-    let image = ImageSource::from_bytes(svg.as_bytes())?;
-
-    assert!(matches!(image, ImageSource::Svg(_)));
-    let rendered = image.render_for_layout(
-      4,
-      4,
-      ImageScalingAlgorithm::Auto,
-      0,
-      &RenderContext::with_current_color(Color::black()),
-    )?;
-    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
-    Ok(())
-  }
-
-  // `currentColor` resolves against the host color in an `svg` element, as an inline `svg`
-  // inherits `color`, and to black in an image, a document isolated from its host.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_current_color_resolves_to_host_color_only_in_an_svg_element() -> Result<(), ImageError> {
-    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
-    let image = ImageSource::from_bytes(svg.as_bytes())?;
-    let host = RenderContext::with_current_color(Color([255, 0, 0, 255]));
-    let render =
-      |host: &RenderContext| image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, host);
-
-    assert_eq!(
-      premul_at(&render(&host.for_svg_element())?, 2, 2),
-      [255, 0, 0, 255]
-    );
-    assert_eq!(premul_at(&render(&host)?, 2, 2), [0, 0, 0, 255]);
-    Ok(())
-  }
-
-  // The dependency on the host color is detected on decoded attribute values,
-  // so an entity-encoded `currentColor` inherits too.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_entity_encoded_current_color_resolves_to_host_color() -> Result<(), ImageError> {
-    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="current&#67;olor"/></svg>"#;
-    let image = ImageSource::from_bytes(svg.as_bytes())?;
-
-    let rendered = image.render_for_layout(
-      4,
-      4,
-      ImageScalingAlgorithm::Auto,
-      0,
-      &RenderContext::with_current_color(Color([255, 0, 0, 255])).for_svg_element(),
-    )?;
-
-    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
-    Ok(())
-  }
-
   /// The key of `svg`'s picture at 4 by 4 as the content of an `svg` element of `color`.
   #[cfg(feature = "svg")]
   fn picture_key(svg: &str, color: Color) -> Option<u64> {
@@ -2127,58 +1864,6 @@ mod tests {
     Ok(())
   }
 
-  // Two hosts of different colors drawing one source through one cache each get their own color.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn a_cached_raster_keeps_each_host_color() -> Result<(), ImageError> {
-    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#;
-    let cache = Cache::default();
-    let image = cache.decode_image(svg, ImageCacheMode::Auto)?;
-    let draw = |color| {
-      let host = RenderContext::builder()
-        .fonts(Fonts::default().snapshot())
-        .sizing(
-          SizingContext::builder()
-            .viewport(Viewport::new((4, 4)))
-            .build(),
-        )
-        .current_color(color)
-        .cache(cache.clone())
-        .build()
-        .for_svg_element();
-
-      image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, &host)
-    };
-
-    draw(Color([255, 0, 0, 255]))?;
-
-    assert_eq!(
-      premul_at(&draw(Color([0, 0, 255, 255]))?, 2, 2),
-      [0, 0, 255, 255]
-    );
-    Ok(())
-  }
-
-  // A `color` attribute on the root wins over the host color, so the host
-  // never overrides what the SVG defines itself.
-  #[cfg(feature = "svg")]
-  #[test]
-  fn svg_own_color_attribute_beats_host_color() -> Result<(), ImageError> {
-    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"##;
-    let image = ImageSource::from_bytes(svg.as_bytes())?;
-
-    let rendered = image.render_for_layout(
-      4,
-      4,
-      ImageScalingAlgorithm::Auto,
-      0,
-      &RenderContext::with_current_color(Color([255, 0, 0, 255])),
-    )?;
-
-    assert_eq!(premul_at(&rendered, 2, 2), [0, 255, 0, 255]);
-    Ok(())
-  }
-
   // The markup a vector backend embeds for an `svg` element carries the host color as a root
   // presentation attribute, so a standalone viewer resolves it identically.
   #[cfg(feature = "svg")]
@@ -2308,25 +1993,6 @@ mod tests {
 
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_rasterization_rejects_oversized_target() {
-    let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
-      .parse::<SvgSource>()
-      .unwrap()
-      .into();
-
-    let result = source.render_for_layout(
-      8193,
-      8192,
-      ImageScalingAlgorithm::Auto,
-      0,
-      &RenderContext::with_current_color(Color::black()),
-    );
-
-    assert_matches!(result, Err(ImageError::InvalidPixmapSize));
-  }
-
-  #[cfg(feature = "svg")]
-  #[test]
   fn svg_is_drawable_only_at_a_nonzero_size_within_budget() {
     let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
       .parse::<SvgSource>()
@@ -2426,41 +2092,5 @@ mod tests {
   fn gif_dimensions_come_from_header() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
     assert_eq!(gif.dimensions(), (4, 4));
-  }
-
-  /// An `<image>` whose href is a local file path must not be read from disk;
-  /// the referenced file's pixels must never appear in the rasterized output.
-  #[cfg(all(feature = "svg", feature = "png"))]
-  #[test]
-  fn svg_image_href_local_path_is_not_read() {
-    let opaque_red = ImageBuffer::from_rgba_bytes([255, 0, 0, 255].repeat(4 * 4), 4, 4)
-      .unwrap()
-      .encode_png()
-      .unwrap();
-    let path = std::env::temp_dir().join(format!("takumi_lfi_image_{}.png", std::process::id()));
-    std::fs::write(&path, &opaque_red).unwrap();
-
-    let ns = r#"xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink""#;
-    let svg = format!(
-      r#"<svg {ns} width="8" height="8"><image xlink:href="{}" x="0" y="0" width="8" height="8"/></svg>"#,
-      path.display()
-    );
-    let source = svg.parse::<SvgSource>().unwrap();
-    let host = RenderContext::with_current_color(Color::black());
-    let viewport = Size {
-      width: 8.0,
-      height: 8.0,
-    };
-    let rasterized = source
-      .picture(&host, viewport)
-      .rasterize(SvgRaster::whole(viewport, 8, 8))
-      .unwrap();
-
-    std::fs::remove_file(&path).ok();
-
-    assert!(
-      rasterized.data().iter().all(|&byte| byte == 0),
-      "local file was read and composited into the SVG output"
-    );
   }
 }

@@ -4,7 +4,7 @@
 use std::sync::OnceLock;
 
 use super::{BYTE_TO_FLOAT, ColorSpace};
-use crate::{
+use takumi_core::{
   filter::ColorMatrixChain,
   style::{Color, TransferTable},
 };
@@ -239,18 +239,16 @@ impl ColorFilter {
   }
 }
 
-impl ColorSpace {
-  /// The sRGB `color` converted into this space, as Blink's `AdaptColorToOperatingInterpolationSpace`
-  /// runs the conversion filter on it.
-  pub(super) fn convert_color(self, Color([red, green, blue, alpha]): Color) -> Color {
-    match self {
-      Self::Srgb => Color([red, green, blue, alpha]),
-      Self::LinearRgb => {
-        let [red, green, blue, _] = SRGB_TO_LINEAR
-          .on_colors([red, green, blue, alpha].map(|channel| f32::from(channel) * BYTE_TO_FLOAT));
+/// The sRGB `color` converted into this space, as Blink's `AdaptColorToOperatingInterpolationSpace`
+/// runs the conversion filter on it.
+pub(super) fn convert_color(space: ColorSpace, Color([red, green, blue, alpha]): Color) -> Color {
+  match space {
+    ColorSpace::Srgb => Color([red, green, blue, alpha]),
+    ColorSpace::LinearRgb => {
+      let [red, green, blue, _] = SRGB_TO_LINEAR
+        .on_colors([red, green, blue, alpha].map(|channel| f32::from(channel) * BYTE_TO_FLOAT));
 
-        Color([to_byte(red), to_byte(green), to_byte(blue), alpha])
-      }
+      Color([to_byte(red), to_byte(green), to_byte(blue), alpha])
     }
   }
 }

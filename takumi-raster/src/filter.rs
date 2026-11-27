@@ -2,7 +2,7 @@ use std::iter::successors;
 
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
-use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
+use takumi_core::{Error, style::FilterReference};
 use takumi_core::{
   filter::{ColorMatrix, ColorMatrixChain},
   geometry::{Point, Size},
@@ -10,6 +10,8 @@ use takumi_core::{
 };
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapPaint, Transform as TinyTransform};
 
+#[cfg(feature = "svg")]
+use crate::svg::apply_svg_filter;
 use crate::{
   BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
@@ -314,8 +316,6 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
             let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow)?;
           }
-          // Runs the SVG filter pipeline; `apply_svg_filter` hands the
-          // layer over without a base64 / data-URI roundtrip.
           #[cfg(feature = "svg")]
           Filter::Reference(reference) => {
             let (width, height) = (pixmap.width(), pixmap.height());

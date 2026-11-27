@@ -15,7 +15,7 @@ use rayon::prelude::*;
 use crate::geometry::{Placement, Point, Size};
 
 /// Smallest sigma that blurs, Skia's `SkBlurEngine::IsEffectivelyIdentity`.
-pub(crate) const MIN_SIGMA: f32 = 0.03;
+pub const MIN_SIGMA: f32 = 0.03;
 
 /// How many pixels away a blur of `sigma` can carry a pixel's ink: an upper bound, linear so a
 /// transform's scale carries it, past the three deviations Chrome's blur reaches.
@@ -40,12 +40,7 @@ pub fn blur_rgba(pixels: &mut [[u8; 4]], width: usize, height: usize, sigma: f32
 /// Blurs premultiplied RGBA pixels in place with a sigma for each axis, as `feGaussianBlur` has,
 /// capped as Skia's `SkBlurImageFilter` caps every image filter's blur.
 #[inline]
-pub(crate) fn blur_rgba_axes(
-  pixels: &mut [[u8; 4]],
-  width: usize,
-  height: usize,
-  sigma: Point<f32>,
-) {
+pub fn blur_rgba_axes(pixels: &mut [[u8; 4]], width: usize, height: usize, sigma: Point<f32>) {
   let cap = |sigma: f32| {
     if sigma > MAX_IMAGE_FILTER_SIGMA {
       MAX_IMAGE_FILTER_SIGMA

@@ -6,8 +6,13 @@ use std::fs;
 use takumi::prelude::*;
 use takumi_core::{
   context::RenderContext,
-  resources::{cache::Cache, image::RenderedImage},
+  geometry::Size,
+  resources::{
+    cache::Cache,
+    image::{ImageSource, SvgRaster},
+  },
 };
+use takumi_raster::SvgPixmapRasterizer;
 
 use crate::test_utils::{repo_base_path, write_goldens};
 
@@ -43,12 +48,21 @@ fn raster(source: &ImageSource, fonts: &Fonts) -> Vec<u8> {
         .build(),
     )
     .build();
-  let RenderedImage::Rasterized(buffer) = source
-    .render_for_layout(200, 80, ImageScalingAlgorithm::Auto, 0, &host)
-    .unwrap()
-  else {
-    panic!("expected rasterized svg");
+  let ImageSource::Svg(svg) = source else {
+    panic!("expected an svg");
   };
+  let viewport = Size {
+    width: 200.0,
+    height: 80.0,
+  };
+  let buffer = svg
+    .rasterize_cached(
+      SvgRaster::whole(viewport, 200, 80),
+      ImageScalingAlgorithm::Auto,
+      &host,
+      &SvgPixmapRasterizer,
+    )
+    .unwrap();
 
   buffer.data().to_vec()
 }

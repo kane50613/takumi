@@ -11,22 +11,23 @@ use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, Pixmap
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
   LightSource, MorphologyOperator, Primitive, SpotLight, SvgFilter, Turbulence,
-  color_filter::{ColorFilter, ColorFilters},
-  composite,
-  lighting::Lighting,
-  turbulence,
+  color_filter::{ColorFilter, ColorFilters, convert_color},
+  composite, convolve_matrix, displacement_map,
+  lighting::{self, Lighting},
+  morphology, turbulence,
 };
-use crate::{
+use takumi_core::{
   blur::{MIN_SIGMA, blur_rgba_axes},
   geometry::{Point, Rect},
+  math::ApproxEq,
   resources::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
     image_buffer::premultiply_pixel,
   },
   style::{Affine, Color, math::mul_div_255},
-  svg::approx_eq::ApproxEq,
-  svg_drawing::{draw as draw_svg, draw_over, tiny_blend_mode},
 };
+
+use crate::svg::drawing::{draw as draw_svg, draw_over, tiny_blend_mode};
 
 /// A primitive's pixels over the filter region, with `filters` deferred as Skia's `FilterResult`
 /// defers them.
@@ -157,130 +158,138 @@ struct Run<'a> {
   later: &'a [Primitive],
 }
 
-impl SvgFilter {
-  /// Applies the filter to a layer, which `transform` maps the user space of the filter onto. A
-  /// filter that cannot run clears the layer.
-  pub(crate) fn apply(&self, transform: Transform, layer: &mut Pixmap) {
-    let (width, height) = (layer.width(), layer.height());
-    let Some(blank) = Pixmap::new(width, height) else {
-      return;
-    };
-    let source = std::mem::replace(layer, blank);
+/// Applies the filter to a layer, which `transform` maps the user space of the filter onto. A
+/// filter that cannot run clears the layer.
+pub(crate) fn apply(filter: &SvgFilter, transform: Transform, layer: &mut Pixmap) {
+  let (width, height) = (layer.width(), layer.height());
+  let Some(blank) = Pixmap::new(width, height) else {
+    return;
+  };
+  let source = std::mem::replace(layer, blank);
 
-    if let Some((image, region)) = self.run(transform.into(), source) {
-      if region == Rect::from_size(0, 0, width, height) {
-        *layer = image.take();
-      } else {
-        draw(
-          layer,
-          image.view(),
-          region.left,
-          region.top,
-          TinyBlendMode::SourceOver,
-        );
-      }
-    }
-  }
-
-  /// The output of the primitives on the layer, in sRGB, and the part of the layer it covers.
-  fn run(&self, transform: Affine, source: Pixmap) -> Option<(Image, Rect<i32>)> {
-    // The filter region comes straight from the filter, so it can be larger than the layer.
-    let layer = Rect::from_size(0, 0, source.width(), source.height());
-    let region = self.region.pixel_bounds(transform)?.intersection(&layer)?;
-    // Every input of a primitive is as large as the region.
-    let source = if region == layer {
-      source
+  if let Some((image, region)) = run(filter, transform.into(), source) {
+    if region == Rect::from_size(0, 0, width, height) {
+      *layer = image.take();
     } else {
-      source.clone_rect(IntRect::from_xywh(
+      draw(
+        layer,
+        image.view(),
         region.left,
         region.top,
-        region.width(),
-        region.height(),
-      )?)?
-    };
-    let mut graphic = Image::new(source, ColorSpace::Srgb);
-
-    graphic.region = region;
-
-    let alpha = self
-      .primitives
-      .iter()
-      .any(|primitive| primitive.kind.inputs().contains(&&Input::SourceAlpha))
-      .then(|| graphic.alpha());
-    let mut run = Run {
-      transform,
-      region,
-      source_graphic: Some(graphic),
-      source_alpha: alpha,
-      results: Vec::new(),
-      later: &self.primitives,
-    };
-
-    for (index, primitive) in self.primitives.iter().enumerate() {
-      run.later = &self.primitives[index + 1..];
-
-      let image = run.primitive(primitive)?;
-
-      run.results.push(FilterResult {
-        name: primitive.result.clone(),
-        image,
-      });
-
-      run.release(true);
-
-      if run.live_bytes() > MAX_LIVE_BYTES {
-        return None;
-      }
+        TinyBlendMode::SourceOver,
+      );
     }
-
-    let image = run.results.pop()?.image;
-
-    Some((image.into_color_space(ColorSpace::Srgb), region))
   }
+}
 
-  /// Applies the filter to a premultiplied RGBA layer in place, `None` past the raster budget.
-  pub(crate) fn apply_to_layer(&self, layer: &mut [u8], width: u32, height: u32) -> Option<()> {
-    // The pixels of the region with its top-left corner at the origin, which the layer sits within
-    // at `dx`, `dy`.
-    let dx = (-self.region.left).round() as i32;
-    let dy = (-self.region.top).round() as i32;
-    let window = self
-      .region
-      .pixel_bounds(Transform::from_translate(-self.region.left, -self.region.top).into())?
-      .intersection(&Rect::from_size(dx, dy, width, height))?;
+/// The output of the primitives on the layer, in sRGB, and the part of the layer it covers.
+fn run(filter: &SvgFilter, transform: Affine, source: Pixmap) -> Option<(Image, Rect<i32>)> {
+  // The filter region comes straight from the filter, so it can be larger than the layer.
+  let layer = Rect::from_size(0, 0, source.width(), source.height());
+  let region = filter
+    .region
+    .transformed(transform)
+    .and_then(pixel_bounds)?
+    .intersection(&layer)?;
+  // Every input of a primitive is as large as the region.
+  let source = if region == layer {
+    source
+  } else {
+    source.clone_rect(IntRect::from_xywh(
+      region.left,
+      region.top,
+      region.width(),
+      region.height(),
+    )?)?
+  };
+  let mut graphic = Image::new(source, ColorSpace::Srgb);
 
-    if !within_raster_pixel_budget(window.width(), window.height()) {
+  graphic.region = region;
+
+  let alpha = filter
+    .primitives
+    .iter()
+    .any(|primitive| inputs(&primitive.kind).contains(&&Input::SourceAlpha))
+    .then(|| graphic.alpha());
+  let mut run = Run {
+    transform,
+    region,
+    source_graphic: Some(graphic),
+    source_alpha: alpha,
+    results: Vec::new(),
+    later: &filter.primitives,
+  };
+
+  for (index, primitive) in filter.primitives.iter().enumerate() {
+    run.later = &filter.primitives[index + 1..];
+
+    let image = run.primitive(primitive)?;
+
+    run.results.push(FilterResult {
+      name: primitive.result.clone(),
+      image,
+    });
+
+    run.release(true);
+
+    if run.live_bytes() > MAX_LIVE_BYTES {
       return None;
     }
-
-    let mut sub = Pixmap::new(window.width(), window.height())?;
-    let transform = Transform::from_translate(
-      -self.region.left - window.left as f32,
-      -self.region.top - window.top as f32,
-    );
-
-    draw(
-      &mut sub,
-      PixmapRef::from_bytes(layer, width, height)?,
-      dx - window.left,
-      dy - window.top,
-      TinyBlendMode::SourceOver,
-    );
-    self.apply(transform, &mut sub);
-
-    let mut out = Pixmap::new(width, height)?;
-
-    draw(
-      &mut out,
-      sub.as_ref(),
-      window.left - dx,
-      window.top - dy,
-      TinyBlendMode::SourceOver,
-    );
-    layer.copy_from_slice(out.data());
-
-    Some(())
   }
+
+  let image = run.results.pop()?.image;
+
+  Some((image.into_color_space(ColorSpace::Srgb), region))
+}
+
+/// Applies the filter to a premultiplied RGBA layer in place, `None` past the raster budget.
+pub(crate) fn apply_to_layer(
+  filter: &SvgFilter,
+  layer: &mut [u8],
+  width: u32,
+  height: u32,
+) -> Option<()> {
+  // The pixels of the region with its top-left corner at the origin, which the layer sits within
+  // at `dx`, `dy`.
+  let dx = (-filter.region.left).round() as i32;
+  let dy = (-filter.region.top).round() as i32;
+  let window = filter
+    .region
+    .transformed(Transform::from_translate(-filter.region.left, -filter.region.top).into())
+    .and_then(pixel_bounds)?
+    .intersection(&Rect::from_size(dx, dy, width, height))?;
+
+  if !within_raster_pixel_budget(window.width(), window.height()) {
+    return None;
+  }
+
+  let mut sub = Pixmap::new(window.width(), window.height())?;
+  let transform = Transform::from_translate(
+    -filter.region.left - window.left as f32,
+    -filter.region.top - window.top as f32,
+  );
+
+  draw(
+    &mut sub,
+    PixmapRef::from_bytes(layer, width, height)?,
+    dx - window.left,
+    dy - window.top,
+    TinyBlendMode::SourceOver,
+  );
+  apply(filter, transform, &mut sub);
+
+  let mut out = Pixmap::new(width, height)?;
+
+  draw(
+    &mut out,
+    sub.as_ref(),
+    window.left - dx,
+    window.top - dy,
+    TinyBlendMode::SourceOver,
+  );
+  layer.copy_from_slice(out.data());
+
+  Some(())
 }
 
 /// Most bytes a filter's live results and sources hold at once, takumi's own limit.
@@ -301,7 +310,10 @@ impl Run<'_> {
 
   /// Runs one primitive, cutting its result to its subregion.
   fn primitive(&mut self, primitive: &Primitive) -> Option<Image> {
-    let mut subregion = primitive.subregion.pixel_bounds(self.transform)?;
+    let mut subregion = primitive
+      .subregion
+      .transformed(self.transform)
+      .and_then(pixel_bounds)?;
 
     // `feOffset` inherits its region from the input.
     if let Kind::Offset {
@@ -347,7 +359,7 @@ impl Run<'_> {
     let read_later = |input: &Input| {
       later
         .iter()
-        .any(|primitive| primitive.kind.inputs().contains(&input))
+        .any(|primitive| inputs(&primitive.kind).contains(&input))
     };
 
     if !read_later(&Input::SourceGraphic) {
@@ -362,9 +374,7 @@ impl Run<'_> {
 
       (keep_last && index - 1 == last)
         || later.iter().any(|primitive| {
-          primitive
-            .kind
-            .inputs()
+          inputs(&primitive.kind)
             .iter()
             .any(|input| input.names(&result.name))
         })
@@ -379,9 +389,7 @@ impl Run<'_> {
       primitive.kind,
       Kind::ColorMatrix { .. } | Kind::ComponentTransfer { .. }
     );
-    let mut inputs = primitive
-      .kind
-      .inputs()
+    let mut inputs = inputs(&primitive.kind)
       .into_iter()
       .map(|input| {
         let image = self.input(input)?;
@@ -542,7 +550,7 @@ impl Run<'_> {
       Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space, window),
       Kind::Turbulence(fe) => self.turbulence(fe, primitive.subregion, window, space),
       Kind::DiffuseLighting(fe) => self.lighting(
-        |light, color, depth| fe.lighting(light, color, depth),
+        |light, color, depth| lighting::diffuse_lighting(fe, light, color, depth),
         fe.light_source,
         fe.lighting_color,
         next()?,
@@ -550,7 +558,7 @@ impl Run<'_> {
         subregion,
       ),
       Kind::SpecularLighting(fe) => self.lighting(
-        |light, color, depth| fe.lighting(light, color, depth),
+        |light, color, depth| lighting::specular_lighting(fe, light, color, depth),
         fe.light_source,
         fe.lighting_color,
         next()?,
@@ -712,7 +720,7 @@ impl Run<'_> {
     let mut pixmap = input.blank_like()?;
     let width = pixmap.width() as usize;
 
-    fe.apply(input.pixmap.rgba(), width, window, pixmap.rgba_mut());
+    convolve_matrix::apply(fe, input.pixmap.rgba(), width, window, pixmap.rgba_mut());
     Some(Image::new(pixmap, space))
   }
 
@@ -727,7 +735,7 @@ impl Run<'_> {
     let radius = self.scaled(radius.0, radius.1);
     let width = pixmap.width() as usize;
 
-    operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
+    morphology::apply(operator, radius.x, radius.y, pixmap.rgba_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
@@ -744,7 +752,8 @@ impl Run<'_> {
     let mut pixmap = source.blank_like()?;
     let (sx, sy) = self.transform.row_scales();
 
-    fe.apply(
+    displacement_map::apply(
+      fe,
       [sx, sy],
       pixmap.width() as usize,
       window,
@@ -778,7 +787,8 @@ impl Run<'_> {
     };
     let width = pixmap.width() as usize;
 
-    fe.apply(
+    turbulence::apply(
+      fe,
       &canvas,
       (tile.width(), tile.height()),
       pixmap.rgba_mut(),
@@ -820,7 +830,7 @@ impl Run<'_> {
     };
     let (light, depth) = self.light_source(light);
 
-    lighting(light, space.convert_color(lighting_color), depth).apply(
+    lighting(light, convert_color(space, lighting_color), depth).apply(
       input.pixmap.rgba(),
       width,
       window,
@@ -868,27 +878,25 @@ impl Run<'_> {
   }
 }
 
-impl Kind {
-  /// The inputs the primitive reads, in the order it takes them.
-  fn inputs(&self) -> Vec<&Input> {
-    match self {
-      Kind::Blend { input1, input2, .. } | Kind::Composite { input1, input2, .. } => {
-        vec![input1, input2]
-      }
-      Kind::DisplacementMap(fe) => vec![&fe.input1, &fe.input2],
-      Kind::Merge { inputs } => inputs.iter().collect(),
-      Kind::ColorMatrix { input, .. }
-      | Kind::ComponentTransfer { input, .. }
-      | Kind::GaussianBlur { input, .. }
-      | Kind::Morphology { input, .. }
-      | Kind::Offset { input, .. }
-      | Kind::Tile { input } => vec![input],
-      Kind::ConvolveMatrix(fe) => vec![&fe.input],
-      Kind::DiffuseLighting(fe) => vec![&fe.input],
-      Kind::SpecularLighting(fe) => vec![&fe.input],
-      Kind::DropShadow(fe) => vec![&fe.input],
-      Kind::Flood { .. } | Kind::Image(_) | Kind::Turbulence(_) => Vec::new(),
+/// The inputs the primitive reads, in the order it takes them.
+fn inputs(kind: &Kind) -> Vec<&Input> {
+  match kind {
+    Kind::Blend { input1, input2, .. } | Kind::Composite { input1, input2, .. } => {
+      vec![input1, input2]
     }
+    Kind::DisplacementMap(fe) => vec![&fe.input1, &fe.input2],
+    Kind::Merge { inputs } => inputs.iter().collect(),
+    Kind::ColorMatrix { input, .. }
+    | Kind::ComponentTransfer { input, .. }
+    | Kind::GaussianBlur { input, .. }
+    | Kind::Morphology { input, .. }
+    | Kind::Offset { input, .. }
+    | Kind::Tile { input } => vec![input],
+    Kind::ConvolveMatrix(fe) => vec![&fe.input],
+    Kind::DiffuseLighting(fe) => vec![&fe.input],
+    Kind::SpecularLighting(fe) => vec![&fe.input],
+    Kind::DropShadow(fe) => vec![&fe.input],
+    Kind::Flood { .. } | Kind::Image(_) | Kind::Turbulence(_) => Vec::new(),
   }
 }
 
@@ -950,4 +958,21 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
     line[..left].fill([0; 4]);
     line[right..].fill([0; 4]);
   }
+}
+
+/// The pixels `bounds` covers, none unless it has area: the floor of the origin and the ceiling of
+/// the size.
+fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
+  if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
+    return None;
+  }
+
+  let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
+
+  Some(Rect {
+    left,
+    top,
+    right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
+    bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
+  })
 }

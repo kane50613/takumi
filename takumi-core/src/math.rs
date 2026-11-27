@@ -27,6 +27,28 @@ pub(crate) fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
   if phi >= 1.0 { 0.0 } else { phi }
 }
 
+/// Float comparison within four ulps, as strict-num's `approx_eq_ulps` and usvg compare floats.
+pub trait ApproxEq {
+  /// Whether `self` and `other` are equal or within four ulps of each other with the same sign.
+  fn approx_eq(self, other: Self) -> bool;
+}
+
+impl ApproxEq for f32 {
+  fn approx_eq(self, other: Self) -> bool {
+    self == other
+      || (self.is_sign_negative() == other.is_sign_negative()
+        && self.to_bits().abs_diff(other.to_bits()) <= 4)
+  }
+}
+
+impl ApproxEq for f64 {
+  fn approx_eq(self, other: Self) -> bool {
+    self == other
+      || (self.is_sign_negative() == other.is_sign_negative()
+        && self.to_bits().abs_diff(other.to_bits()) <= 4)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use std::f32::consts::TAU;

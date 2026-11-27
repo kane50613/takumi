@@ -8,9 +8,9 @@ use super::{
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Rect},
+  math::ApproxEq,
   path_data::PathData,
   style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, VectorEffect, Visibility},
-  svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 

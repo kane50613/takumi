@@ -83,10 +83,13 @@ pub mod viewport;
 /// SVG documents laid out through the CSS cascade.
 #[cfg(feature = "svg")]
 pub(crate) mod svg;
-#[cfg(feature = "svg-raster")]
-mod svg_drawing;
 #[cfg(feature = "svg")]
 mod svg_vector;
+/// The SVG filter primitives a raster backend runs.
+#[cfg(feature = "svg")]
+pub mod svg_filter {
+  pub use crate::svg::filter::*;
+}
 
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables) shared with the
 /// raster and SVG renderers.

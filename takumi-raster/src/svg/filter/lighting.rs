@@ -1,5 +1,5 @@
 use super::{BYTE_TO_FLOAT, DiffuseLighting, LightSource, SpecularLighting};
-use crate::{geometry::Rect, style::Color};
+use takumi_core::{geometry::Rect, style::Color};
 
 /// How far past its cutoff a spotlight fades in, Skia's `kConeAAThreshold`.
 const CONE_FADE: f32 = 0.016;
@@ -32,32 +32,38 @@ enum Light {
   },
 }
 
-impl DiffuseLighting {
-  /// The lighting of this primitive, with its light already in the layer's pixels.
-  pub(super) fn lighting(&self, light: LightSource, color: Color, depth: f32) -> Lighting {
-    Lighting::new(
-      Material::Diffuse,
-      light,
-      color,
-      self.diffuse_constant,
-      self.surface_scale * depth,
-    )
-  }
+/// The lighting of this primitive, with its light already in the layer's pixels.
+pub(super) fn diffuse_lighting(
+  diffuse: &DiffuseLighting,
+  light: LightSource,
+  color: Color,
+  depth: f32,
+) -> Lighting {
+  Lighting::new(
+    Material::Diffuse,
+    light,
+    color,
+    diffuse.diffuse_constant,
+    diffuse.surface_scale * depth,
+  )
 }
 
-impl SpecularLighting {
-  /// The lighting of this primitive, with its light already in the layer's pixels.
-  pub(super) fn lighting(&self, light: LightSource, color: Color, depth: f32) -> Lighting {
-    Lighting::new(
-      Material::Specular {
-        shininess: self.specular_exponent,
-      },
-      light,
-      color,
-      self.specular_constant,
-      self.surface_scale * depth,
-    )
-  }
+/// The lighting of this primitive, with its light already in the layer's pixels.
+pub(super) fn specular_lighting(
+  specular: &SpecularLighting,
+  light: LightSource,
+  color: Color,
+  depth: f32,
+) -> Lighting {
+  Lighting::new(
+    Material::Specular {
+      shininess: specular.specular_exponent,
+    },
+    light,
+    color,
+    specular.specular_constant,
+    specular.surface_scale * depth,
+  )
 }
 
 impl Lighting {

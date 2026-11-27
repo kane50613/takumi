@@ -185,7 +185,7 @@ impl Affine {
 
   /// The length of each row of the linear part, as tiny-skia's `Transform::get_scale` has them.
   #[cfg(feature = "svg")]
-  pub(crate) fn row_scales(self) -> (f32, f32) {
+  pub fn row_scales(self) -> (f32, f32) {
     (self.a.hypot(self.c), self.b.hypot(self.d))
   }
 

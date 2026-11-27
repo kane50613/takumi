@@ -10,14 +10,18 @@ use tiny_skia::{
   Transform,
 };
 
-use crate::{
+use super::filter::apply as apply_filter;
+use takumi_core::{
   geometry::{PathCommand, Rect as ScopeRect},
   resources::{image::within_raster_pixel_budget, image_buffer::composite_premultiplied_over_row},
-  style::{BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
-  svg_vector::{
-    SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
-    SvgSpreadMethod, SvgStrokeStyle,
+  resources::{
+    image::{
+      SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint,
+      SvgRasterizer, SvgSpreadMethod, SvgStrokeStyle,
+    },
+    image_buffer::ImageBuffer,
   },
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
 };
 
 /// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
@@ -196,7 +200,9 @@ impl<'a, 'b> Target<'a, 'b> {
     .run(ops);
 
     if let Some(filters) = composite.filters {
-      filters.apply(transform, &mut layer);
+      for filter in filters.filters() {
+        apply_filter(filter, transform, &mut layer);
+      }
     }
     if let Some(mask) = &composite.mask {
       layer.apply_mask(mask);
@@ -312,9 +318,12 @@ impl<'a, 'b> Target<'a, 'b> {
     if let Some(fill) = fill {
       // Horizontal and vertical lines have no area to fill.
       if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
-        fill
-          .paint
-          .with_tiny(fill.opacity, self.transform, anti_alias, |paint| {
+        with_tiny(
+          &fill.paint,
+          fill.opacity,
+          self.transform,
+          anti_alias,
+          |paint| {
             self.pixmap.fill_path(
               &path,
               paint,
@@ -326,21 +335,26 @@ impl<'a, 'b> Target<'a, 'b> {
               self.transform,
               self.clip.as_ref(),
             );
-          });
+          },
+        );
       }
     }
     if let Some(stroke) = stroke {
-      stroke
-        .paint
-        .with_tiny(stroke.opacity, self.transform, anti_alias, |paint| {
+      with_tiny(
+        &stroke.paint,
+        stroke.opacity,
+        self.transform,
+        anti_alias,
+        |paint| {
           self.pixmap.stroke_path(
             &path,
             paint,
-            &Stroke::from(stroke),
+            &tiny_stroke(stroke),
             self.transform,
             self.clip.as_ref(),
           );
-        });
+        },
+      );
     }
   }
 
@@ -385,100 +399,98 @@ impl<'a, 'b> Target<'a, 'b> {
   }
 }
 
-impl SvgOpPaint {
-  /// Hands `paint_with` a tiny-skia paint, rasterizing a pattern tile at `transform`'s scale.
-  fn with_tiny(
-    &self,
-    opacity: f32,
-    transform: Transform,
-    anti_alias: bool,
-    paint_with: impl FnOnce(&Paint),
-  ) {
-    let tile;
-    let mut tiny = Paint {
-      anti_alias,
-      ..Paint::default()
-    };
+/// Hands `paint_with` a tiny-skia paint, rasterizing a pattern tile at `transform`'s scale.
+fn with_tiny(
+  paint: &SvgOpPaint,
+  opacity: f32,
+  transform: Transform,
+  anti_alias: bool,
+  paint_with: impl FnOnce(&Paint),
+) {
+  let tile;
+  let mut tiny = Paint {
+    anti_alias,
+    ..Paint::default()
+  };
 
-    match self {
-      SvgOpPaint::Color(Color([red, green, blue, _])) => {
-        tiny.set_color_rgba8(*red, *green, *blue, to_u8(opacity));
-      }
-      SvgOpPaint::Linear {
-        start,
-        end,
-        gradient,
-      } => {
-        let Some(shader) = LinearGradient::new(
-          (start.x, start.y).into(),
-          (end.x, end.y).into(),
-          gradient_stops(gradient, opacity),
-          gradient.spread.into(),
-          Transform::from(gradient.transform),
-        ) else {
-          return;
-        };
-
-        tiny.shader = shader;
-      }
-      SvgOpPaint::Radial {
-        center,
-        radius,
-        focal,
-        focal_radius,
-        gradient,
-      } => {
-        let Some(shader) = RadialGradient::new(
-          (focal.x, focal.y).into(),
-          *focal_radius,
-          (center.x, center.y).into(),
-          *radius,
-          gradient_stops(gradient, opacity),
-          gradient.spread.into(),
-          Transform::from(gradient.transform),
-        ) else {
-          return;
-        };
-
-        tiny.shader = shader;
-      }
-      SvgOpPaint::Pattern {
-        ops,
-        transform: pattern_transform,
-        width,
-        height,
-      } => {
-        let pattern_transform = Transform::from(*pattern_transform);
-        let (scale_x, scale_y) = transform.pre_concat(pattern_transform).get_scale();
-        let tile_width = (width * scale_x).round() as u32;
-        let tile_height = (height * scale_y).round() as u32;
-
-        if !within_raster_pixel_budget(tile_width, tile_height) {
-          return;
-        }
-
-        let Some(mut pixmap) = Pixmap::new(tile_width, tile_height) else {
-          return;
-        };
-
-        draw(
-          ops,
-          Transform::from_scale(scale_x, scale_y),
-          &mut pixmap.as_mut(),
-        );
-        tile = pixmap;
-        tiny.shader = Pattern::new(
-          tile.as_ref(),
-          SpreadMode::Repeat,
-          FilterQuality::Bicubic,
-          opacity,
-          pattern_transform.pre_scale(1.0 / scale_x, 1.0 / scale_y),
-        );
-      }
+  match paint {
+    SvgOpPaint::Color(Color([red, green, blue, _])) => {
+      tiny.set_color_rgba8(*red, *green, *blue, to_u8(opacity));
     }
-    tiny.blend_mode = TinyBlendMode::SourceOver;
-    paint_with(&tiny);
+    SvgOpPaint::Linear {
+      start,
+      end,
+      gradient,
+    } => {
+      let Some(shader) = LinearGradient::new(
+        (start.x, start.y).into(),
+        (end.x, end.y).into(),
+        gradient_stops(gradient, opacity),
+        spread_mode(gradient.spread),
+        Transform::from(gradient.transform),
+      ) else {
+        return;
+      };
+
+      tiny.shader = shader;
+    }
+    SvgOpPaint::Radial {
+      center,
+      radius,
+      focal,
+      focal_radius,
+      gradient,
+    } => {
+      let Some(shader) = RadialGradient::new(
+        (focal.x, focal.y).into(),
+        *focal_radius,
+        (center.x, center.y).into(),
+        *radius,
+        gradient_stops(gradient, opacity),
+        spread_mode(gradient.spread),
+        Transform::from(gradient.transform),
+      ) else {
+        return;
+      };
+
+      tiny.shader = shader;
+    }
+    SvgOpPaint::Pattern {
+      ops,
+      transform: pattern_transform,
+      width,
+      height,
+    } => {
+      let pattern_transform = Transform::from(*pattern_transform);
+      let (scale_x, scale_y) = transform.pre_concat(pattern_transform).get_scale();
+      let tile_width = (width * scale_x).round() as u32;
+      let tile_height = (height * scale_y).round() as u32;
+
+      if !within_raster_pixel_budget(tile_width, tile_height) {
+        return;
+      }
+
+      let Some(mut pixmap) = Pixmap::new(tile_width, tile_height) else {
+        return;
+      };
+
+      draw(
+        ops,
+        Transform::from_scale(scale_x, scale_y),
+        &mut pixmap.as_mut(),
+      );
+      tile = pixmap;
+      tiny.shader = Pattern::new(
+        tile.as_ref(),
+        SpreadMode::Repeat,
+        FilterQuality::Bicubic,
+        opacity,
+        pattern_transform.pre_scale(1.0 / scale_x, 1.0 / scale_y),
+      );
+    }
   }
+  tiny.blend_mode = TinyBlendMode::SourceOver;
+  paint_with(&tiny);
 }
 
 /// How a layer joins the target below it.
@@ -488,6 +500,24 @@ struct Composite<'a> {
   blend: Option<TinyBlendMode>,
   mask: Option<Mask>,
   filters: Option<&'a SvgFilters>,
+}
+
+/// Draws an SVG image's ops onto pixels, for [`SvgSource::rasterize_cached`](takumi_core::resources::image::SvgSource::rasterize_cached).
+pub struct SvgPixmapRasterizer;
+
+impl SvgRasterizer for SvgPixmapRasterizer {
+  fn rasterize(
+    &self,
+    ops: &[SvgOp],
+    transform: Affine,
+    width: u32,
+    height: u32,
+  ) -> Option<ImageBuffer> {
+    let mut pixmap = Pixmap::new(width, height)?;
+
+    draw(ops, transform.into(), &mut pixmap.as_mut());
+    ImageBuffer::from_premultiplied_rgba(pixmap.take(), width, height)
+  }
 }
 
 /// Draws `ops` onto `pixmap` with `transform` as the canvas transform.
@@ -671,26 +701,25 @@ fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
   builder.finish()
 }
 
-impl From<&SvgStrokeStyle> for Stroke {
-  fn from(stroke: &SvgStrokeStyle) -> Self {
-    Self {
-      width: stroke.width,
-      miter_limit: stroke.miter_limit,
-      line_cap: match stroke.cap {
-        SvgLineCap::Butt => LineCap::Butt,
-        SvgLineCap::Round => LineCap::Round,
-        SvgLineCap::Square => LineCap::Square,
-      },
-      line_join: match stroke.join {
-        SvgLineJoin::Miter => LineJoin::Miter,
-        SvgLineJoin::Round => LineJoin::Round,
-        SvgLineJoin::Bevel => LineJoin::Bevel,
-      },
-      dash: stroke
-        .dash
-        .as_ref()
-        .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
-    }
+/// The tiny-skia stroke of `stroke`.
+fn tiny_stroke(stroke: &SvgStrokeStyle) -> Stroke {
+  Stroke {
+    width: stroke.width,
+    miter_limit: stroke.miter_limit,
+    line_cap: match stroke.cap {
+      SvgLineCap::Butt => LineCap::Butt,
+      SvgLineCap::Round => LineCap::Round,
+      SvgLineCap::Square => LineCap::Square,
+    },
+    line_join: match stroke.join {
+      SvgLineJoin::Miter => LineJoin::Miter,
+      SvgLineJoin::Round => LineJoin::Round,
+      SvgLineJoin::Bevel => LineJoin::Bevel,
+    },
+    dash: stroke
+      .dash
+      .as_ref()
+      .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
   }
 }
 
@@ -712,13 +741,12 @@ fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
     .collect()
 }
 
-impl From<SvgSpreadMethod> for SpreadMode {
-  fn from(spread: SvgSpreadMethod) -> Self {
-    match spread {
-      SvgSpreadMethod::Pad => Self::Pad,
-      SvgSpreadMethod::Reflect => Self::Reflect,
-      SvgSpreadMethod::Repeat => Self::Repeat,
-    }
+/// The tiny-skia spread mode of `spread`.
+fn spread_mode(spread: SvgSpreadMethod) -> SpreadMode {
+  match spread {
+    SvgSpreadMethod::Pad => SpreadMode::Pad,
+    SvgSpreadMethod::Reflect => SpreadMode::Reflect,
+    SvgSpreadMethod::Repeat => SpreadMode::Repeat,
   }
 }
 
@@ -741,37 +769,51 @@ mod tests {
 
   use tiny_skia::{IntRect, Pixmap, Transform};
 
-  use super::{ScopeRect, Target};
-  use crate::{
+  use super::{ScopeRect, SvgPixmapRasterizer, Target};
+  use takumi_core::{
+    Fonts,
     context::RenderContext,
     geometry::Size,
     resources::{
-      image::{ImageSource, RenderedImage, SvgSource, to_data_url},
+      cache::Cache,
+      image::{ImageCacheMode, ImageError, ImageSource, SvgOp, SvgRaster, SvgSource, to_data_url},
       image_buffer::ImageBuffer,
     },
-    style::{Color, ImageScalingAlgorithm},
-    svg_vector::SvgOp,
+    style::{Color, ImageScalingAlgorithm, SizingContext},
+    viewport::Viewport,
   };
 
   const NS: &str = r#"xmlns="http://www.w3.org/2000/svg""#;
   const XLINK: &str = r#"xmlns:xlink="http://www.w3.org/1999/xlink""#;
 
-  fn rasterize(svg: &str, size: u32, current_color: Color) -> Arc<ImageBuffer> {
-    let source: ImageSource = svg.parse::<SvgSource>().unwrap().into();
-    let rendered = source
-      .render_for_layout(
-        size,
-        size,
-        ImageScalingAlgorithm::Auto,
-        0,
-        &RenderContext::with_current_color(current_color),
+  fn context(current_color: Color) -> RenderContext {
+    RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((800, 600)))
+          .build(),
       )
-      .unwrap();
-    let RenderedImage::Rasterized(buffer) = rendered else {
-      panic!("expected a rasterized svg");
+      .current_color(current_color)
+      .build()
+  }
+
+  fn rasterize(svg: &str, size: u32, current_color: Color) -> Arc<ImageBuffer> {
+    let viewport = Size {
+      width: size as f32,
+      height: size as f32,
     };
 
-    buffer
+    svg
+      .parse::<SvgSource>()
+      .unwrap()
+      .rasterize_cached(
+        SvgRaster::whole(viewport, size, size),
+        ImageScalingAlgorithm::Auto,
+        &context(current_color),
+        &SvgPixmapRasterizer,
+      )
+      .unwrap()
   }
 
   fn draw(body: &str, size: u32) -> Arc<ImageBuffer> {
@@ -923,7 +965,7 @@ mod tests {
     .parse()
     .unwrap();
     let picture = source.picture(
-      &RenderContext::with_current_color(Color::black()),
+      &context(Color::black()),
       Size {
         width: 10.0,
         height: 10.0,
@@ -1051,7 +1093,6 @@ mod tests {
   }
 
   // An `<image>` whose href is a local file path must not be read from disk.
-  #[cfg(feature = "png")]
   #[test]
   fn image_href_local_path_is_not_read() {
     let opaque_red = ImageBuffer::from_rgba_bytes([255, 0, 0, 255].repeat(4 * 4), 4, 4)
@@ -1093,5 +1134,137 @@ mod tests {
     assert_eq!(spot("0.5").data(), spot("1").data());
     assert_eq!(spot("500").data(), spot("128").data());
     assert_ne!(spot("2").data(), spot("1").data());
+  }
+
+  /// `image`, an SVG, rasterized at `width` by `height` for `host`.
+  fn rasterized_at(
+    image: &ImageSource,
+    width: u32,
+    height: u32,
+    host: &RenderContext,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
+    let ImageSource::Svg(svg) = image else {
+      panic!("expected an svg");
+    };
+    let viewport = Size {
+      width: width as f32,
+      height: height as f32,
+    };
+
+    svg.rasterize_cached(
+      SvgRaster::whole(viewport, width, height),
+      ImageScalingAlgorithm::Auto,
+      host,
+      &SvgPixmapRasterizer,
+    )
+  }
+
+  /// `image`, an SVG, rasterized at `size` by `size` for `host`.
+  fn rasterized(
+    image: &ImageSource,
+    size: u32,
+    host: &RenderContext,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
+    rasterized_at(image, size, size, host)
+  }
+
+  // A namespace-less root is accepted, so markup without `xmlns` is still
+  // detected and rendered as SVG.
+  #[test]
+  fn svg_without_xmlns_renders() -> Result<(), ImageError> {
+    let svg = r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    assert!(matches!(image, ImageSource::Svg(_)));
+    let rendered = rasterized(&image, 4, &context(Color::black()))?;
+    assert_eq!(rendered.pixel(2, 2), [255, 0, 0, 255]);
+    Ok(())
+  }
+
+  // `currentColor` resolves against the host color in an `svg` element, as an inline `svg`
+  // inherits `color`, and to black in an image, a document isolated from its host.
+  #[test]
+  fn svg_current_color_resolves_to_host_color_only_in_an_svg_element() -> Result<(), ImageError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+    let host = context(Color([255, 0, 0, 255]));
+    let render = |host: &RenderContext| rasterized(&image, 4, host);
+
+    assert_eq!(
+      render(&host.for_svg_element())?.pixel(2, 2),
+      [255, 0, 0, 255]
+    );
+    assert_eq!(render(&host)?.pixel(2, 2), [0, 0, 0, 255]);
+    Ok(())
+  }
+
+  // The dependency on the host color is detected on decoded attribute values,
+  // so an entity-encoded `currentColor` inherits too.
+  #[test]
+  fn svg_entity_encoded_current_color_resolves_to_host_color() -> Result<(), ImageError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="current&#67;olor"/></svg>"#;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    let rendered = rasterized(
+      &image,
+      4,
+      &context(Color([255, 0, 0, 255])).for_svg_element(),
+    )?;
+
+    assert_eq!(rendered.pixel(2, 2), [255, 0, 0, 255]);
+    Ok(())
+  }
+
+  // Two hosts of different colors drawing one source through one cache each get their own color.
+  #[test]
+  fn a_cached_raster_keeps_each_host_color() -> Result<(), ImageError> {
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="currentColor"><rect width="4" height="4" fill="currentColor"/></svg>"#;
+    let cache = Cache::default();
+    let image = cache.decode_image(svg, ImageCacheMode::Auto)?;
+    let draw = |color| {
+      let host = RenderContext::builder()
+        .fonts(Fonts::default().snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((4, 4)))
+            .build(),
+        )
+        .current_color(color)
+        .cache(cache.clone())
+        .build()
+        .for_svg_element();
+
+      rasterized(&image, 4, &host)
+    };
+
+    draw(Color([255, 0, 0, 255]))?;
+
+    assert_eq!(draw(Color([0, 0, 255, 255]))?.pixel(2, 2), [0, 0, 255, 255]);
+    Ok(())
+  }
+
+  // A `color` attribute on the root wins over the host color, so the host
+  // never overrides what the SVG defines itself.
+  #[test]
+  fn svg_own_color_attribute_beats_host_color() -> Result<(), ImageError> {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"##;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    let rendered = rasterized(&image, 4, &context(Color([255, 0, 0, 255])))?;
+
+    assert_eq!(rendered.pixel(2, 2), [0, 255, 0, 255]);
+    Ok(())
+  }
+
+  #[test]
+  fn svg_rasterization_rejects_oversized_target() {
+    let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
+      .parse::<SvgSource>()
+      .unwrap()
+      .into();
+
+    let result = rasterized_at(&source, 8193, 8192, &context(Color::black()));
+
+    assert!(matches!(result, Err(ImageError::InvalidPixmapSize)));
   }
 }

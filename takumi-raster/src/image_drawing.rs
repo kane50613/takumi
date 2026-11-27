@@ -7,6 +7,8 @@ use tiny_skia::PixmapRef;
 
 #[cfg(feature = "svg")]
 use crate::resources::image::SvgRaster;
+#[cfg(feature = "svg")]
+use crate::svg::SvgPixmapRasterizer;
 use crate::{
   BorderProperties, Canvas, CanvasDevice, PaintSource, RenderContext, Result, SamplingOptions,
   painter::BoxPainter,
@@ -69,6 +71,7 @@ fn process_image_for_object_fit(
         raster,
         context.style.misc_inherited_data.image_rendering,
         context,
+        &SvgPixmapRasterizer,
       )?),
       logical_to_source: Affine::IDENTITY,
       offset: crop_origin + clipped.origin,

@@ -10,6 +10,19 @@ use crate::{
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
+/// Draws an SVG's ops into pixels, which only a raster backend can.
+pub trait SvgRasterizer {
+  /// `ops` drawn under `transform` onto a transparent `width` by `height` premultiplied RGBA bitmap,
+  /// or `None` when that bitmap cannot be allocated.
+  fn rasterize(
+    &self,
+    ops: &[SvgOp],
+    transform: Affine,
+    width: u32,
+    height: u32,
+  ) -> Option<ImageBuffer>;
+}
+
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
 #[derive(Debug, Clone)]
 pub enum SvgOp {
@@ -181,11 +194,9 @@ impl SvgFilters {
       })
   }
 
-  /// Applies each filter in order to `layer`, drawn under `transform`.
-  pub fn apply(&self, transform: tiny_skia::Transform, layer: &mut tiny_skia::Pixmap) {
-    for filter in &self.0 {
-      filter.apply(transform, layer);
-    }
+  /// The filters, in the order they apply.
+  pub fn filters(&self) -> &[Arc<SvgFilter>] {
+    &self.0
   }
 }
 

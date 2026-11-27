@@ -2,7 +2,7 @@
 use rayon::prelude::*;
 
 use super::Turbulence;
-use crate::geometry::Rect;
+use takumi_core::geometry::Rect;
 
 /// Skia's `SkPerlinNoiseShader::kBlockSize`, the lattice points per axis before it repeats.
 const BLOCK: usize = 256;
@@ -29,42 +29,40 @@ struct Noise {
   stitch: Option<(f32, f32)>,
 }
 
-impl Turbulence {
-  /// Blink's `FETurbulence` as Skia's `perlin_noise` runs it, stitching at `tile`.
-  pub(super) fn apply(
-    &self,
-    canvas: &Canvas,
-    tile: (f32, f32),
-    dest: &mut [[u8; 4]],
-    width: usize,
-    window: Rect<usize>,
-  ) {
-    let noise = Noise::new(self, tile);
-    let rows = &mut dest[window.top * width..window.bottom * width];
-    let fill_row = |(row, line): (usize, &mut [[u8; 4]])| {
-      // The shader reads each pixel at its center, in user space.
-      let y = ((window.top + row) as f32 + 0.5 - canvas.offset.1) / canvas.scale.1;
+/// Blink's `FETurbulence` as Skia's `perlin_noise` runs it, stitching at `tile`.
+pub(super) fn apply(
+  turbulence: &Turbulence,
+  canvas: &Canvas,
+  tile: (f32, f32),
+  dest: &mut [[u8; 4]],
+  width: usize,
+  window: Rect<usize>,
+) {
+  let noise = Noise::new(turbulence, tile);
+  let rows = &mut dest[window.top * width..window.bottom * width];
+  let fill_row = |(row, line): (usize, &mut [[u8; 4]])| {
+    // The shader reads each pixel at its center, in user space.
+    let y = ((window.top + row) as f32 + 0.5 - canvas.offset.1) / canvas.scale.1;
 
-      for (x, pixel) in line[window.left..window.right]
-        .iter_mut()
-        .enumerate()
-        .map(|(column, pixel)| (window.left + column, pixel))
-      {
-        let x = (x as f32 + 0.5 - canvas.offset.0) / canvas.scale.0;
-
-        *pixel = noise.sample(self, x, y);
-      }
-    };
-
-    #[cfg(feature = "rayon")]
-    rows
-      .par_chunks_mut(width)
-      .with_min_len(16)
+    for (x, pixel) in line[window.left..window.right]
+      .iter_mut()
       .enumerate()
-      .for_each(fill_row);
-    #[cfg(not(feature = "rayon"))]
-    rows.chunks_mut(width).enumerate().for_each(fill_row);
-  }
+      .map(|(column, pixel)| (window.left + column, pixel))
+    {
+      let x = (x as f32 + 0.5 - canvas.offset.0) / canvas.scale.0;
+
+      *pixel = noise.sample(turbulence, x, y);
+    }
+  };
+
+  #[cfg(feature = "rayon")]
+  rows
+    .par_chunks_mut(width)
+    .with_min_len(16)
+    .enumerate()
+    .for_each(fill_row);
+  #[cfg(not(feature = "rayon"))]
+  rows.chunks_mut(width).enumerate().for_each(fill_row);
 }
 
 impl Noise {

@@ -10,12 +10,12 @@ use super::{
 };
 use crate::{
   geometry::{Point, Rect, Size},
+  math::ApproxEq,
   resources::{
     image::{SvgGradientStop, SvgSpreadMethod},
     svg_size::ViewBox,
   },
   style::{Affine, Color, FromCssStr, Length, PercentageNumber},
-  svg::approx_eq::ApproxEq,
   svg::{
     element::SvgElementKind,
     length::{LengthAxis, SvgLengthContext},
