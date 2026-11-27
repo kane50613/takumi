@@ -301,7 +301,7 @@ struct Expectations {
 }
 
 impl Expectations {
-  const HEADER: &str = "# The WPT reftests expected to pass: `path` is one test and `dir/` every test under it, and\n# a leading `!` expects a failure. The most specific rule decides. `WPT_UPDATE=1 cargo test --test\n# wpt_reftests` rewrites it.\n";
+  const HEADER: &str = "# The WPT reftests expected to pass: `path` is one test and `dir/` every test under it, and\n# a leading `!` expects a failure. The most specific rule decides. `WPT_UPDATE=1 cargo test\n# --profile wpt --test wpt_reftests` rewrites it.\n";
 
   fn read(path: &Path) -> Self {
     let rules = fs::read_to_string(path)

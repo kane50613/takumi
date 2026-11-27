@@ -214,6 +214,14 @@ opt-level = "z"
 debug = true
 strip = "debuginfo"
 
+# The WPT reftests render every test at full optimization, but link without the shipped binary's
+# fat LTO and single codegen unit, which would take most of a run.
+[profile.wpt]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3, as do
