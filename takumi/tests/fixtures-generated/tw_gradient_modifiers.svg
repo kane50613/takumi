@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#f1f5f9"/>
+  <clipPath id="cp0">
+    <path d="M184 131h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="312.828" y1="348.931" x2="423.172" y2="73.069">
+      <stop offset="0" stop-color="#4f39f6"/>
+      <stop offset=".016" stop-color="#5239f6"/>
+      <stop offset=".032" stop-color="#543af6"/>
+      <stop offset=".048" stop-color="#573af6"/>
+      <stop offset=".063" stop-color="#593bf6"/>
+      <stop offset=".079" stop-color="#5c3bf7"/>
+      <stop offset=".095" stop-color="#5e3cf7"/>
+      <stop offset=".111" stop-color="#613cf7"/>
+      <stop offset=".127" stop-color="#633cf7"/>
+      <stop offset=".143" stop-color="#663df7"/>
+      <stop offset=".159" stop-color="#683df7"/>
+      <stop offset=".175" stop-color="#6b3df7"/>
+      <stop offset=".19" stop-color="#6d3df7"/>
+      <stop offset=".206" stop-color="#6f3ef7"/>
+      <stop offset=".222" stop-color="#723ef7"/>
+      <stop offset=".238" stop-color="#743ef8"/>
+      <stop offset=".254" stop-color="#773ef8"/>
+      <stop offset=".27" stop-color="#793ef8"/>
+      <stop offset=".286" stop-color="#7b3ff8"/>
+      <stop offset=".302" stop-color="#7e3ff8"/>
+      <stop offset=".317" stop-color="#803ff8"/>
+      <stop offset=".333" stop-color="#823ff8"/>
+      <stop offset=".349" stop-color="#853ff8"/>
+      <stop offset=".365" stop-color="#873ff8"/>
+      <stop offset=".381" stop-color="#893ff8"/>
+      <stop offset=".397" stop-color="#8b3ff8"/>
+      <stop offset=".413" stop-color="#8e3ff9"/>
+      <stop offset=".429" stop-color="#903ff9"/>
+      <stop offset=".444" stop-color="#923ff9"/>
+      <stop offset=".46" stop-color="#953ff9"/>
+      <stop offset=".476" stop-color="#973ff9"/>
+      <stop offset=".492" stop-color="#993ff9"/>
+      <stop offset=".508" stop-color="#9b3ef9"/>
+      <stop offset=".524" stop-color="#9e3ef9"/>
+      <stop offset=".54" stop-color="#a03ef9"/>
+      <stop offset=".556" stop-color="#a23ef9"/>
+      <stop offset=".571" stop-color="#a43ef9"/>
+      <stop offset=".587" stop-color="#a73df9"/>
+      <stop offset=".603" stop-color="#a93df9"/>
+      <stop offset=".619" stop-color="#ab3dfa"/>
+      <stop offset=".635" stop-color="#ad3cfa"/>
+      <stop offset=".651" stop-color="#b03cfa"/>
+      <stop offset=".667" stop-color="#b23cfa"/>
+      <stop offset=".683" stop-color="#b43bfa"/>
+      <stop offset=".698" stop-color="#b63bfa"/>
+      <stop offset=".714" stop-color="#b93afa"/>
+      <stop offset=".73" stop-color="#bb3afa"/>
+      <stop offset=".746" stop-color="#bd39fa"/>
+      <stop offset=".762" stop-color="#bf39fa"/>
+      <stop offset=".778" stop-color="#c238fa"/>
+      <stop offset=".794" stop-color="#c437fa"/>
+      <stop offset=".81" stop-color="#c637fa"/>
+      <stop offset=".825" stop-color="#c836fa"/>
+      <stop offset=".841" stop-color="#cb35fa"/>
+      <stop offset=".857" stop-color="#cd34fb"/>
+      <stop offset=".873" stop-color="#cf33fb"/>
+      <stop offset=".889" stop-color="#d132fb"/>
+      <stop offset=".905" stop-color="#d431fb"/>
+      <stop offset=".921" stop-color="#d630fb"/>
+      <stop offset=".937" stop-color="#d82ffb"/>
+      <stop offset=".952" stop-color="#da2efb"/>
+      <stop offset=".968" stop-color="#dd2dfb"/>
+      <stop offset=".984" stop-color="#df2bfb"/>
+      <stop offset="1" stop-color="#e12afb"/>
+    </linearGradient>
+    <rect x="168" y="131" width="400" height="160" fill="url(#lg1)"/>
+  </g>
+  <clipPath id="cp2">
+    <path d="M648 131h368c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-368c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="887.172" y1="73.069" x2="776.828" y2="348.931">
+      <stop offset="0" stop-color="#fb2c36"/>
+      <stop offset=".016" stop-color="#fb333c"/>
+      <stop offset=".032" stop-color="#fb3943"/>
+      <stop offset=".048" stop-color="#fb4049"/>
+      <stop offset=".063" stop-color="#fc4750"/>
+      <stop offset=".079" stop-color="#fc4d56"/>
+      <stop offset=".095" stop-color="#fc545c"/>
+      <stop offset=".111" stop-color="#fc5b63"/>
+      <stop offset=".127" stop-color="#fc6269"/>
+      <stop offset=".143" stop-color="#fc686f"/>
+      <stop offset=".159" stop-color="#fc6f76"/>
+      <stop offset=".175" stop-color="#fc767c"/>
+      <stop offset=".19" stop-color="#fd7c83"/>
+      <stop offset=".206" stop-color="#fd8389"/>
+      <stop offset=".222" stop-color="#fd8a8f"/>
+      <stop offset=".238" stop-color="#fd9096"/>
+      <stop offset=".254" stop-color="#fd979c"/>
+      <stop offset=".27" stop-color="#fd9ea2"/>
+      <stop offset=".286" stop-color="#fda5a9"/>
+      <stop offset=".302" stop-color="#fdabaf"/>
+      <stop offset=".317" stop-color="#feb2b6"/>
+      <stop offset=".333" stop-color="#feb9bc"/>
+      <stop offset=".349" stop-color="#febfc2"/>
+      <stop offset=".365" stop-color="#fec6c9"/>
+      <stop offset=".381" stop-color="#fecdcf"/>
+      <stop offset=".397" stop-color="#fed3d6"/>
+      <stop offset=".413" stop-color="#fedadc"/>
+      <stop offset=".429" stop-color="#fee1e2"/>
+      <stop offset=".444" stop-color="#ffe8e9"/>
+      <stop offset=".46" stop-color="#ffeeef"/>
+      <stop offset=".476" stop-color="#fff5f5"/>
+      <stop offset=".492" stop-color="#fff"/>
+      <stop offset=".508" stop-color="#fcfdff"/>
+      <stop offset=".524" stop-color="#f5f9ff"/>
+      <stop offset=".54" stop-color="#eef5ff"/>
+      <stop offset=".556" stop-color="#e7f1ff"/>
+      <stop offset=".571" stop-color="#e1edff"/>
+      <stop offset=".587" stop-color="#dae9ff"/>
+      <stop offset=".603" stop-color="#d3e5ff"/>
+      <stop offset=".619" stop-color="#cde1ff"/>
+      <stop offset=".635" stop-color="#c6dcff"/>
+      <stop offset=".651" stop-color="#bfd8ff"/>
+      <stop offset=".667" stop-color="#b8d4ff"/>
+      <stop offset=".683" stop-color="#b2d0ff"/>
+      <stop offset=".698" stop-color="#abccff"/>
+      <stop offset=".714" stop-color="#a4c8ff"/>
+      <stop offset=".73" stop-color="#9dc4ff"/>
+      <stop offset=".746" stop-color="#97c0ff"/>
+      <stop offset=".762" stop-color="#90bcff"/>
+      <stop offset=".778" stop-color="#89b8ff"/>
+      <stop offset=".794" stop-color="#82b4ff"/>
+      <stop offset=".81" stop-color="#7cb0ff"/>
+      <stop offset=".825" stop-color="#75acff"/>
+      <stop offset=".841" stop-color="#6ea8ff"/>
+      <stop offset=".857" stop-color="#68a4ff"/>
+      <stop offset=".873" stop-color="#61a0ff"/>
+      <stop offset=".889" stop-color="#5a9bff"/>
+      <stop offset=".905" stop-color="#5397ff"/>
+      <stop offset=".921" stop-color="#4d93ff"/>
+      <stop offset=".937" stop-color="#468fff"/>
+      <stop offset=".952" stop-color="#3f8bff"/>
+      <stop offset=".968" stop-color="#3887ff"/>
+      <stop offset=".984" stop-color="#3283ff"/>
+      <stop offset="1" stop-color="#2b7fff"/>
+    </linearGradient>
+    <rect x="632" y="131" width="400" height="160" fill="url(#lg3)"/>
+  </g>
+  <clipPath id="cp4">
+    <path d="M472 339h256c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-256c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <radialGradient id="rg5" gradientUnits="userSpaceOnUse" cx="528" cy="379" r="305.47" gradientTransform="matrix(1 0 0 .556 0 168.444)">
+      <stop offset="0" stop-color="#ffdf20"/>
+      <stop offset=".016" stop-color="#ffdd1f"/>
+      <stop offset=".032" stop-color="#ffda1f"/>
+      <stop offset=".048" stop-color="#ffd81e"/>
+      <stop offset=".063" stop-color="#fed51e"/>
+      <stop offset=".079" stop-color="#fed31d"/>
+      <stop offset=".095" stop-color="#fed11d"/>
+      <stop offset=".111" stop-color="#fece1c"/>
+      <stop offset=".127" stop-color="#fecc1c"/>
+      <stop offset=".143" stop-color="#feca1b"/>
+      <stop offset=".159" stop-color="#fdc71b"/>
+      <stop offset=".175" stop-color="#fdc51a"/>
+      <stop offset=".19" stop-color="#fdc21a"/>
+      <stop offset=".206" stop-color="#fdc019"/>
+      <stop offset=".222" stop-color="#fdbe19"/>
+      <stop offset=".238" stop-color="#fdbb18"/>
+      <stop offset=".254" stop-color="#fcb918"/>
+      <stop offset=".27" stop-color="#fcb717"/>
+      <stop offset=".286" stop-color="#fcb417"/>
+      <stop offset=".302" stop-color="#fcb216"/>
+      <stop offset=".317" stop-color="#fcaf16"/>
+      <stop offset=".333" stop-color="#fcad15"/>
+      <stop offset=".349" stop-color="#fcab15"/>
+      <stop offset=".365" stop-color="#fba814"/>
+      <stop offset=".381" stop-color="#fba614"/>
+      <stop offset=".397" stop-color="#fba313"/>
+      <stop offset=".413" stop-color="#fba113"/>
+      <stop offset=".429" stop-color="#fb9f12"/>
+      <stop offset=".444" stop-color="#fb9c12"/>
+      <stop offset=".46" stop-color="#fa9a11"/>
+      <stop offset=".476" stop-color="#fa9811"/>
+      <stop offset=".492" stop-color="#fa9510"/>
+      <stop offset=".508" stop-color="#fa9310"/>
+      <stop offset=".524" stop-color="#fa900f"/>
+      <stop offset=".54" stop-color="#fa8e0f"/>
+      <stop offset=".556" stop-color="#f98c0e"/>
+      <stop offset=".571" stop-color="#f9890e"/>
+      <stop offset=".587" stop-color="#f9870d"/>
+      <stop offset=".603" stop-color="#f9850d"/>
+      <stop offset=".619" stop-color="#f9820c"/>
+      <stop offset=".635" stop-color="#f9800c"/>
+      <stop offset=".651" stop-color="#f87d0b"/>
+      <stop offset=".667" stop-color="#f87b0b"/>
+      <stop offset=".683" stop-color="#f8790a"/>
+      <stop offset=".698" stop-color="#f8760a"/>
+      <stop offset=".714" stop-color="#f87409"/>
+      <stop offset=".73" stop-color="#f87109"/>
+      <stop offset=".746" stop-color="#f86f08"/>
+      <stop offset=".762" stop-color="#f76d08"/>
+      <stop offset=".778" stop-color="#f76a07"/>
+      <stop offset=".794" stop-color="#f76807"/>
+      <stop offset=".81" stop-color="#f76606"/>
+      <stop offset=".825" stop-color="#f76306"/>
+      <stop offset=".841" stop-color="#f76105"/>
+      <stop offset=".857" stop-color="#f65e05"/>
+      <stop offset=".873" stop-color="#f65c04"/>
+      <stop offset=".889" stop-color="#f65a04"/>
+      <stop offset=".905" stop-color="#f65703"/>
+      <stop offset=".921" stop-color="#f65503"/>
+      <stop offset=".937" stop-color="#f65302"/>
+      <stop offset=".952" stop-color="#f55002"/>
+      <stop offset=".968" stop-color="#f54e01"/>
+      <stop offset=".984" stop-color="#f54b01"/>
+      <stop offset="1" stop-color="#f54900"/>
+    </radialGradient>
+    <rect x="456" y="339" width="288" height="160" fill="url(#rg5)"/>
+  </g>
+</svg>

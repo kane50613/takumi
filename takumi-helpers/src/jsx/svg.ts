@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactElement } from "react";
+import { attributeNames } from "./metadata";
 import {
   camelToKebab,
   componentRenderer,
@@ -29,120 +30,62 @@ const unitlessNumbers = new Set(
   ),
 );
 
-const propertiesToKebabCase = new Set([
-  "stopColor",
-  "stopOpacity",
-  "strokeWidth",
-  "strokeDasharray",
-  "strokeDashoffset",
-  "strokeLinecap",
-  "strokeLinejoin",
-  "fillRule",
-  "clipRule",
-  "colorInterpolationFilters",
-  "floodColor",
-  "floodOpacity",
-  "accentHeight",
-  "alignmentBaseline",
-  "arabicForm",
-  "baselineShift",
-  "capHeight",
-  "clipPath",
-  "colorInterpolation",
-  "colorProfile",
-  "colorRendering",
-  "dominantBaseline",
-  "enableBackground",
-  "fillOpacity",
-  "fontFamily",
-  "fontSize",
-  "fontSizeAdjust",
-  "fontStretch",
-  "fontStyle",
-  "fontVariant",
-  "fontWeight",
-  "glyphName",
-  "glyphOrientationHorizontal",
-  "glyphOrientationVertical",
-  "horizAdvX",
-  "horizOriginX",
-  "imageRendering",
-  "letterSpacing",
-  "lightingColor",
-  "markerEnd",
-  "markerMid",
-  "markerStart",
-  "overlinePosition",
-  "overlineThickness",
-  "paintOrder",
-  "pointerEvents",
-  "renderingIntent",
-  "shapeRendering",
-  "strikethroughPosition",
-  "strikethroughThickness",
-  "strokeMiterlimit",
-  "strokeOpacity",
-  "textAnchor",
-  "textDecoration",
-  "textRendering",
-  "transformOrigin",
-  "underlinePosition",
-  "underlineThickness",
-  "unicodeBidi",
-  "unicodeRange",
-  "unitsPerEm",
-  "vectorEffect",
-  "vertAdvY",
-  "vertOriginX",
-  "vertOriginY",
-  "vAlphabetic",
-  "vHanging",
-  "vIdeographic",
-  "vMathematical",
-  "wordSpacing",
-  "writingMode",
-  "xHeight",
-]);
+/** The prefixes of the attribute names a serialized subtree writes. */
+type Prefixes = Set<string>;
 
 export function serializeSvg(element: ReactElement<ComponentProps<"svg">, "svg">): string {
   const { xmlns, ...props } = element.props;
+  const prefixes: Prefixes = new Set();
+  const markup = serializeNode(
+    xmlns != null
+      ? element
+      : { ...element, props: { ...props, xmlns: "http://www.w3.org/2000/svg" } },
+    prefixes,
+  );
 
-  if (xmlns != null) return serializeNode(element);
+  if (
+    !prefixes.has("xlink") ||
+    Object.entries(props).some(
+      ([key, value]) => value != null && attributeName(key) === "xmlns:xlink",
+    )
+  ) {
+    return markup;
+  }
 
-  return serializeNode({ ...element, props: { ...props, xmlns: "http://www.w3.org/2000/svg" } });
+  return `<svg xmlns:xlink="http://www.w3.org/1999/xlink"${markup.slice("<svg".length)}`;
 }
 
-function serializeNode(node: unknown): string {
+function serializeNode(node: unknown, prefixes: Prefixes): string {
   if (typeof node === "string" || typeof node === "number") return escapeXml(String(node));
 
-  if (Array.isArray(node)) return node.map((child) => serializeNode(child)).join("");
+  if (Array.isArray(node)) return node.map((child) => serializeNode(child, prefixes)).join("");
 
-  return isValidElement(node) ? serializeElement(node) : "";
+  return isValidElement(node) ? serializeElement(node, prefixes) : "";
 }
 
-function serializeElement(element: ReactElementLike): string {
+function serializeElement(element: ReactElementLike, prefixes: Prefixes): string {
   const { type } = element;
   const props = (element.props as Record<string, unknown>) || {};
 
   const render = componentRenderer(type);
 
-  if (render) return serializeNode(render(element.props));
+  if (render) return serializeNode(render(element.props), prefixes);
 
   // Fragments and other symbol types have no tag of their own; emit their children in place.
-  if (typeof type === "symbol") return serializeNode(props.children);
+  if (typeof type === "symbol") return serializeNode(props.children, prefixes);
 
-  if (isReactForwardRef(type)) return serializeNode(type.render(element.props, null));
+  if (isReactForwardRef(type)) return serializeNode(type.render(element.props, null), prefixes);
 
-  if (isReactMemo(type)) return serializeElement({ ...element, type: type.type });
+  if (isReactMemo(type)) return serializeElement({ ...element, type: type.type }, prefixes);
 
   if (typeof type !== "string") return "";
 
   assertXmlName(type, "element");
 
-  return `<${type}${serializeAttributes(props)}>${serializeNode(props.children)}</${type}>`;
+  return `<${type}${serializeAttributes(props, prefixes)}>${serializeNode(props.children, prefixes)}</${type}>`;
 }
 
-function serializeAttributes(props: Record<string, unknown>): string {
+function serializeAttributes(props: Record<string, unknown>, prefixes: Prefixes): string {
   let attributes = "";
 
   for (const [key, value] of Object.entries(props)) {
@@ -151,6 +94,12 @@ function serializeAttributes(props: Record<string, unknown>): string {
     const name = attributeName(key);
 
     assertXmlName(name, "attribute");
+
+    const separator = name.indexOf(":");
+
+    if (separator !== -1) {
+      prefixes.add(name.slice(0, separator));
+    }
 
     const text =
       key === "style" && typeof value === "object" ? serializeStyle(value) : String(value);
@@ -164,7 +113,7 @@ function serializeAttributes(props: Record<string, unknown>): string {
 function attributeName(prop: string): string {
   if (prop === "className") return "class";
 
-  return propertiesToKebabCase.has(prop) ? camelToKebab(prop) : prop;
+  return attributeNames[prop] ?? prop;
 }
 
 function serializeStyle(style: object): string {
@@ -195,55 +144,82 @@ function serializeStyle(style: object): string {
 /** Whether `value` stays inside one CSS declaration; trailing semicolons are allowed. */
 function isCssDeclarationValue(value: string): boolean {
   const expectedClosers: string[] = [];
-  let quote: string | undefined;
+  let index = 0;
 
-  for (let index = 0; index < value.length; index++) {
+  while (index < value.length) {
+    const skipped = skipCssLiteral(value, index);
+
+    if (skipped === -1) {
+      return false;
+    }
+
+    if (skipped !== undefined) {
+      index = skipped;
+      continue;
+    }
+
     const char = value.charAt(index);
-
-    if (char === "\\") {
-      if (index === value.length - 1) return false;
-
-      index++;
-      continue;
-    }
-
-    if (quote) {
-      if (char === quote) quote = undefined;
-      continue;
-    }
-
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-
-    if (char === "/" && value.charAt(index + 1) === "*") {
-      const commentEnd = value.indexOf("*/", index + 2);
-
-      if (commentEnd === -1) return false;
-
-      index = commentEnd + 1;
-      continue;
-    }
-
     const closer = cssClosingBrackets.get(char);
 
     if (closer) {
       expectedClosers.push(closer);
-      continue;
-    }
-
-    if (char === ")" || char === "]" || char === "}") {
-      if (expectedClosers.pop() !== char) return false;
-      continue;
-    }
-
-    if (char === ";" && expectedClosers.length === 0) {
+    } else if (char === ")" || char === "]" || char === "}") {
+      if (expectedClosers.pop() !== char) {
+        return false;
+      }
+    } else if (char === ";" && expectedClosers.length === 0) {
       return /^[;\s]*$/.test(value.slice(index));
     }
+
+    index++;
   }
 
-  return quote === undefined && expectedClosers.length === 0;
+  return expectedClosers.length === 0;
+}
+
+/**
+ * The index past the escape, string, or comment starting at `index`, `-1` when it never ends, or
+ * `undefined` when none starts there.
+ */
+function skipCssLiteral(value: string, index: number): number | undefined {
+  const char = value.charAt(index);
+
+  if (char === "\\") {
+    return index + 1 < value.length ? index + 2 : -1;
+  }
+
+  if (char === '"' || char === "'") {
+    return skipCssString(value, index + 1, char);
+  }
+
+  if (char === "/" && value.charAt(index + 1) === "*") {
+    const commentEnd = value.indexOf("*/", index + 2);
+
+    return commentEnd === -1 ? -1 : commentEnd + 2;
+  }
+}
+
+/** The index past the `quote` that closes a string whose content starts at `index`, or `-1`. */
+function skipCssString(value: string, index: number, quote: string): number {
+  while (index < value.length) {
+    const char = value.charAt(index);
+
+    if (char === quote) {
+      return index + 1;
+    }
+
+    if (char === "\\") {
+      if (index + 1 >= value.length) {
+        return -1;
+      }
+
+      index++;
+    }
+
+    index++;
+  }
+
+  return -1;
 }
 
 function assertXmlName(name: string, kind: "element" | "attribute"): void {

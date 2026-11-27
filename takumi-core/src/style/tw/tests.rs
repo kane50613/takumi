@@ -831,7 +831,10 @@ fn test_linear_gradient_apply() {
     Some(
       [BackgroundImage::Linear(LinearGradient {
         repeating: false,
-        direction: crate::style::LinearGradientDirection::Angle(Angle::new(90.0)),
+        direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
+          horizontal: Some(HorizontalKeyword::Right),
+          vertical: None,
+        }),
         interpolation: ColorInterpolationMethod::default(),
         stops: [
           GradientStop::ColorHint {
@@ -865,9 +868,13 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.misc1_data.box_shadow,
+      style
+        .misc1_data
+        .box_shadow
+        .as_deref()
+        .map(|shadows| &shadows[4..]),
       Some(
-        [
+        &[
           BoxShadow {
             inset: false,
             offset_x: Length::Px(0.0),
@@ -884,8 +891,7 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
             spread_radius: Length::Px(-2.0),
             color: ColorInput::Value(Color([251, 44, 54, 255])),
           },
-        ]
-        .into()
+        ][..]
       )
     );
   }
@@ -1117,7 +1123,14 @@ fn test_shadow_none_overrides_color_in_either_order() {
     let values = TailwindValues::from_str(classes).unwrap();
     let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
       .inherit(&ComputedStyle::default());
-    assert_eq!(style.misc1_data.box_shadow, None, "case: {classes}");
+    let shadows = style.misc1_data.box_shadow.as_deref().unwrap_or_default();
+
+    assert!(
+      shadows
+        .iter()
+        .all(|shadow| shadow.color == ColorInput::Value(Color::transparent())),
+      "case: {classes}"
+    );
   }
 }
 
@@ -1377,7 +1390,11 @@ fn test_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.misc1_data.box_shadow.as_deref(),
+    computed
+      .misc1_data
+      .box_shadow
+      .as_deref()
+      .map(|shadows| &shadows[4..]),
     Some(
       &[BoxShadow {
         inset: false,
@@ -1863,9 +1880,9 @@ fn test_shadow_color_reads_css_variables() {
 
   let shadows = computed.misc1_data.box_shadow.as_deref().expect("shadows");
 
-  assert_eq!(shadows.len(), 2);
+  assert_eq!(shadows.len(), 6);
 
-  for shadow in shadows {
+  for shadow in &shadows[4..] {
     assert_eq!(shadow.color, ColorInput::Value(Color::from_rgb(0x5b21b6)));
   }
 }
@@ -2139,4 +2156,300 @@ fn test_min_and_max_breakpoints_stack() {
   assert!(at(700, "sm:max-md:flex"));
   assert!(!at(500, "sm:max-md:flex"));
   assert!(!at(800, "sm:max-md:flex"));
+}
+
+/// The box shadows `classes` compute to on an element with no variable defined.
+fn computed_box_shadows(classes: &str) -> Vec<BoxShadow> {
+  let values = TailwindValues::from_str(classes).unwrap();
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+
+  style
+    .misc1_data
+    .box_shadow
+    .as_deref()
+    .unwrap_or_default()
+    .to_vec()
+}
+
+fn shadow(inset: bool, offset_y: f32, blur: f32, spread: Length, color: ColorInput) -> BoxShadow {
+  BoxShadow {
+    inset,
+    offset_x: Length::Px(0.0),
+    offset_y: Length::Px(offset_y),
+    blur_radius: Length::Px(blur),
+    spread_radius: spread,
+    color,
+  }
+}
+
+#[test]
+fn test_shadow_ring_and_inset_layers_stack_as_tailwind_orders_them() {
+  let transparent = || {
+    shadow(
+      false,
+      0.0,
+      0.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color::transparent()),
+    )
+  };
+  let red = ColorInput::Value(Color([251, 44, 54, 255]));
+  let blue = ColorInput::Value(Color([43, 127, 255, 255]));
+
+  let stacked = computed_box_shadows(
+    "shadow-md ring-2 ring-red-500 ring-offset-4 ring-offset-blue-500 inset-ring-3 inset-shadow-sm",
+  );
+
+  assert_eq!(stacked.len(), 6);
+  assert_eq!(
+    stacked[0],
+    shadow(
+      true,
+      2.0,
+      4.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color([0, 0, 0, 13]))
+    )
+  );
+  assert_eq!(
+    stacked[1],
+    shadow(true, 0.0, 0.0, Length::Px(3.0), ColorInput::CurrentColor)
+  );
+  assert_eq!(stacked[2], shadow(false, 0.0, 0.0, Length::Px(4.0), blue));
+  assert_eq!(stacked[3].color, red);
+  assert_eq!(stacked[3].spread_radius.to_css_string(), "calc(6px)");
+  assert_eq!(
+    stacked[4],
+    shadow(
+      false,
+      4.0,
+      6.0,
+      Length::Px(-1.0),
+      ColorInput::Value(Color([0, 0, 0, 26]))
+    )
+  );
+
+  let ring = computed_box_shadows("ring inset-shadow-[0_1px_2px_red] ring-inset");
+
+  assert_eq!(ring.len(), 5);
+  assert_eq!(
+    ring[0],
+    shadow(
+      true,
+      1.0,
+      2.0,
+      Length::Px(0.0),
+      ColorInput::Value(Color([255, 0, 0, 255]))
+    )
+  );
+  assert_eq!(ring[1..3], [transparent(), transparent()]);
+  assert!(ring[3].inset);
+  assert_eq!(ring[3].color, ColorInput::CurrentColor);
+  assert_eq!(ring[3].spread_radius.to_css_string(), "calc(1px)");
+  assert_eq!(ring[4], transparent());
+}
+
+#[test]
+fn test_gradient_directions_and_interpolation_modifiers_as_tailwind_writes_them() {
+  let image = |token: &str| match parse_property(token).as_deref() {
+    Some([StyleDeclaration::Deferred(deferred)]) => Some(deferred.specified_value.clone()),
+    _ => None,
+  };
+  let stops = |position: &str| format!("({position}, var(--tw-gradient-stops))");
+
+  for (token, expected) in [
+    (
+      "bg-linear-to-tr",
+      "linear-gradient".to_owned() + &stops("to top right in oklab"),
+    ),
+    (
+      "bg-linear-to-bl/srgb",
+      "linear-gradient".to_owned() + &stops("to bottom left in srgb"),
+    ),
+    (
+      "bg-linear-45/longer",
+      "linear-gradient".to_owned() + &stops("45deg in oklch longer hue"),
+    ),
+    (
+      "-bg-linear-45",
+      "linear-gradient".to_owned() + &stops("-45deg in oklab"),
+    ),
+    (
+      "bg-linear-[to_right]",
+      "linear-gradient".to_owned() + &stops("to right"),
+    ),
+    (
+      "bg-linear-to-r/[in_hsl_longer_hue]",
+      "linear-gradient".to_owned() + &stops("to right in hsl longer hue"),
+    ),
+    (
+      "bg-radial/oklch",
+      "radial-gradient".to_owned() + &stops("in oklch"),
+    ),
+    (
+      "bg-radial-[at_25%_25%]",
+      "radial-gradient".to_owned() + &stops("at 25% 25%"),
+    ),
+    (
+      "bg-conic-90/decreasing",
+      "conic-gradient".to_owned() + &stops("from 90deg in oklch decreasing hue"),
+    ),
+    (
+      "bg-conic/srgb",
+      "conic-gradient".to_owned() + &stops("in srgb"),
+    ),
+  ] {
+    assert_eq!(image(token), Some(expected), "{token}");
+  }
+
+  for token in [
+    "-bg-linear-to-r",
+    "bg-linear-[to_right]/srgb",
+    "bg-radial-[circle]/srgb",
+    "rotate-to-r",
+  ] {
+    assert_eq!(parse_property(token), None, "{token}");
+  }
+}
+
+#[test]
+fn test_corner_gradient_keeps_its_keyword_for_the_box() {
+  let values = TailwindValues::from_str("bg-linear-to-br from-red-500 to-blue-500").unwrap();
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+  let images = style.background_data.background_image.as_deref().unwrap();
+  let [BackgroundImage::Linear(gradient)] = images else {
+    panic!("expected a single linear gradient");
+  };
+
+  assert_eq!(
+    gradient.direction,
+    LinearGradientDirection::Keyword(GradientKeywordDirection {
+      horizontal: Some(HorizontalKeyword::Right),
+      vertical: Some(VerticalKeyword::Bottom),
+    })
+  );
+}
+
+#[test]
+fn test_bare_drop_shadow_draws_both_theme_layers() {
+  use crate::style::properties::{Filter, TextShadow};
+
+  let values = TailwindValues::from_str("drop-shadow").unwrap();
+  let computed =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+  let layer = |blur: f32, alpha: u8| {
+    Filter::DropShadow(TextShadow {
+      offset_x: Length::Px(0.0),
+      offset_y: Length::Px(1.0),
+      blur_radius: Length::Px(blur),
+      color: ColorInput::Value(Color([0, 0, 0, alpha])),
+    })
+  };
+
+  assert_eq!(
+    computed.misc1_data.filter,
+    vec![layer(2.0, 26), layer(1.0, 15)]
+  );
+}
+
+#[test]
+fn test_not_negates_at_rule_variants() {
+  let active = |token: &str, viewport: Viewport| {
+    TwRule::parse(token)
+      .unwrap_or_else(|| panic!("{token} compiles"))
+      .is_active(viewport, &Default::default())
+  };
+  let dark = Viewport {
+    color_scheme: ColorScheme::Dark,
+    ..Viewport::new((100, 200))
+  };
+  let print = Viewport {
+    media_target: MediaTarget::Print,
+    ..Viewport::new((1000, 100))
+  };
+
+  assert!(!active("not-dark:w-4", dark));
+  assert!(active("not-dark:w-4", print));
+  assert!(!active("not-print:w-4", print));
+  assert!(active("not-print:w-4", dark));
+  assert!(!active("not-motion-safe:w-4", dark));
+  assert!(active("not-contrast-more:w-4", dark));
+  assert!(active("not-md:w-4", dark));
+  assert!(!active("not-md:w-4", print));
+  assert!(active("not-max-md:w-4", print));
+  assert!(!active("not-max-md:w-4", dark));
+  assert!(TwRule::parse("not-before:w-4").is_none());
+
+  let order = |token: &str| TwRule::parse(token).unwrap().order;
+
+  assert!(order("not-md:w-4") < order("first:w-4"));
+  assert!(order("not-dark:w-4") < order("md:w-4"));
+}
+
+#[test]
+fn test_not_breakpoints_match_an_unknown_viewport_width() {
+  let active = |token: &str| {
+    TwRule::parse(token)
+      .unwrap_or_else(|| panic!("{token} compiles"))
+      .is_active(Viewport::new((None, 100)), &Default::default())
+  };
+
+  assert!(!active("sm:w-4"));
+  assert!(!active("max-sm:w-4"));
+  assert!(active("not-sm:w-4"));
+  assert!(active("not-max-sm:w-4"));
+  assert!(!active("not-not-sm:w-4"));
+  assert!(!active("not-missing:w-4"));
+}
+
+#[test]
+fn test_not_variants_sort_in_the_not_group() {
+  let order = |token: &str| TwRule::parse(token).unwrap().order;
+
+  assert!(order("not-md:w-4") < order("not-lg:w-4"));
+  assert!(order("not-max-lg:w-4") < order("not-max-md:w-4"));
+  assert!(order("not-not-dark:w-4") < order("md:w-4"));
+  assert!(order("not-not-md:w-4") < order("sm:w-4"));
+  assert!(order("not-sm:w-4") < order("not-dark:w-4"));
+  assert!(order("not-motion-safe:w-4") < order("not-sm:w-4"));
+  assert!(order("not-not-dark:w-4") < order("not-sm:w-4"));
+  assert!(order("not-not-sm:w-4") < order("not-motion-safe:w-4"));
+  assert!(order("not-enabled:w-4") < order("not-disabled:w-4"));
+  assert!(order("not-first:w-4") < order("not-motion-safe:w-4"));
+  assert!(order("not-autofill:w-4") < order("not-optional:w-4"));
+  assert!(order("not-placeholder-shown:w-4") < order("not-autofill:w-4"));
+  assert!(order("not-hover:w-4") < order("not-focus:w-4"));
+  assert!(order("not-active:w-4") < order("not-enabled:w-4"));
+  assert!(order("not-visited:w-4") < order("not-checked:w-4"));
+  assert!(order("not-sm:w-4") < order("not-[&:first-child]:w-4"));
+}
+
+#[test]
+fn test_a_long_not_chain_parses_by_parity() {
+  let chain = |count: usize, variant: &str| format!("{}{variant}:w-4", "not-".repeat(count));
+
+  for variant in ["first", "hover", "md", "dark"] {
+    assert!(
+      TwRule::parse(&chain(100_001, variant)).is_some(),
+      "{variant}"
+    );
+  }
+
+  let dark = Viewport {
+    color_scheme: ColorScheme::Dark,
+    ..Viewport::new((100, 200))
+  };
+  let active = |token: &str| {
+    TwRule::parse(token)
+      .unwrap()
+      .is_active(dark, &Default::default())
+  };
+
+  assert!(!active(&chain(100_001, "dark")));
+  assert!(active(&chain(100_000, "dark")));
 }

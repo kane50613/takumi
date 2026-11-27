@@ -1,7 +1,11 @@
 //! Tailwind's variants, such as `md:`, `first:`, and `before:`: the conditions a utility applies
 //! under, and where they sort it.
 
-use std::{cmp::Ordering, collections::HashMap, sync::Arc};
+use std::{
+  cmp::{Ordering, Reverse},
+  collections::HashMap,
+  sync::Arc,
+};
 
 use cssparser::Parser;
 use selectors::parser::{ParseRelative, Selector, SelectorList};
@@ -29,6 +33,10 @@ pub(crate) struct Breakpoint {
   pub token: Arc<str>,
   /// Whether the variant applies below its width, as `max-*` does.
   below: bool,
+  /// Whether a `not-` run flipped `below`.
+  negated: bool,
+  /// How many `not-` prefixes wrap it, which sort it in Tailwind's `not` group when any.
+  nots: usize,
 }
 
 impl Breakpoint {
@@ -53,6 +61,8 @@ impl Breakpoint {
         width: Some(width),
         token: value.into(),
         below,
+        negated: false,
+        nots: 0,
       });
     }
 
@@ -73,16 +83,31 @@ impl Breakpoint {
       width,
       token: value.into(),
       below,
+      negated: false,
+      nots: 0,
     })
+  }
+
+  /// The breakpoint a `not-` run makes of this one: Tailwind's `@media not (width >= …)` holds
+  /// exactly where the opposite `max-*` or `min-*` breakpoint does.
+  fn under_not(self, nots: usize) -> Self {
+    let negated = nots % 2 == 1;
+
+    Self {
+      below: self.below != negated,
+      negated,
+      nots,
+      ..self
+    }
   }
 
   /// Check if the breakpoint matches the viewport width.
   pub fn matches(&self, viewport: Viewport, overrides: &BreakpointOverrides) -> bool {
-    let Some(viewport_width) = viewport.size.width else {
-      return false;
-    };
     let Some(width) = overrides.get(&*self.token).copied().or(self.width) else {
       return false;
+    };
+    let Some(viewport_width) = viewport.size.width else {
+      return self.negated;
     };
 
     let breakpoint_width = match width {
@@ -100,10 +125,10 @@ impl Breakpoint {
   }
 
   /// Where the breakpoint sorts among others: `max-*` first, then the rest, each by its built-in
-  /// width as Tailwind's `compareBreakpoints` compares it, then its token. Approximate: Tailwind
-  /// compares the widths a theme gives.
+  /// width as Tailwind's `compareBreakpoints` compares it, then its token, all as written under
+  /// any `not-`. Approximate: Tailwind compares the widths a theme gives.
   fn order(&self) -> BreakpointOrder {
-    let at_least = !self.below;
+    let at_least = self.below == self.negated;
     let width = self
       .width
       .map(|width| width.to_css_string().into())
@@ -128,7 +153,7 @@ pub(crate) struct ContainerVariant {
 /// Where a breakpoint or container variant sorts: `max-*` first, then the rest, each by its width
 /// as Tailwind's `compareBreakpoints` compares them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct WidthOrder {
+pub(crate) struct WidthOrder {
   at_least: bool,
   width: Box<str>,
 }
@@ -265,15 +290,17 @@ const PREFERENCES: [(&str, &str); 4] = [
   ("contrast-less", "(prefers-contrast: less)"),
 ];
 
-/// The states of an element no static render is in, whose `not-` variants always apply.
-const UNREACHED_STATES: [&str; 7] = [
-  "focus-within",
-  "hover",
-  "focus",
-  "focus-visible",
-  "active",
-  "visited",
-  "target",
+/// The states of an element no static render is in, whose `not-` variants always apply, each with
+/// the registered variant Tailwind registers next, which places it in the `not` group.
+const UNREACHED_STATES: [(&str, &str); 8] = [
+  ("autofill", "optional"),
+  ("focus-within", "enabled"),
+  ("hover", "enabled"),
+  ("focus", "enabled"),
+  ("focus-visible", "enabled"),
+  ("active", "enabled"),
+  ("visited", "checked"),
+  ("target", "checked"),
 ];
 
 /// One variant of a utility, as Tailwind's `parseVariant` reads it.
@@ -290,35 +317,62 @@ pub(crate) enum Variant {
     query: &'static str,
     rank: u8,
   },
+  /// A media query variant under `not-`, `not-dark:` or `not-print:`, which Tailwind's `not`
+  /// compiles to `@media not …`, or to the query itself when a run of `not-` cancels out.
+  NotMedia {
+    query: String,
+    order: NotOrder,
+  },
   /// A pseudo-class on the element itself, such as `:first-child` for `first:`.
   Structural {
     pseudo_class: String,
     rank: u8,
+    /// Its sort key in Tailwind's `not` group, under `not-`.
+    not_order: Option<NotOrder>,
   },
   /// An arbitrary variant, `[&:nth-child(4)]`, which sorts after every registered one.
   Arbitrary(String),
   PseudoElement(PseudoElement),
 }
 
+/// Where Tailwind registers `not-*`, ahead of every other variant this rank orders.
+const NOT_RANK: u8 = 0;
 /// Where Tailwind registers `before:` and `after:`, after `not-*` and ahead of every structural
 /// variant.
 const BEFORE_RANK: u8 = 1;
 const AFTER_RANK: u8 = 2;
 
-/// The structural variants in the order Tailwind registers them, from `STRUCTURAL_RANK` on.
-const REGISTERED: [&str; 9] = [
-  "first",
-  "last",
-  "only",
-  "odd",
-  "even",
-  "first-of-type",
-  "last-of-type",
-  "only-of-type",
-  "empty",
+/// The structural and form state variants in the order Tailwind registers them, from
+/// `STRUCTURAL_RANK` on, each with the pseudo-class it compiles to. Approximate: `default`,
+/// `valid`, `invalid`, and the other states takumi's selectors never match are left out.
+const REGISTERED: [(&str, &str); 17] = [
+  ("first", ":first-child"),
+  ("last", ":last-child"),
+  ("only", ":only-child"),
+  ("odd", ":nth-child(odd)"),
+  ("even", ":nth-child(even)"),
+  ("first-of-type", ":first-of-type"),
+  ("last-of-type", ":last-of-type"),
+  ("only-of-type", ":only-of-type"),
+  ("checked", ":checked"),
+  ("indeterminate", ":indeterminate"),
+  ("placeholder-shown", ":placeholder-shown"),
+  ("optional", ":optional"),
+  ("required", ":required"),
+  ("read-only", ":read-only"),
+  ("empty", ":empty"),
+  ("enabled", ":enabled"),
+  ("disabled", ":disabled"),
 ];
 const STRUCTURAL_RANK: u8 = 3;
-const FUNCTIONAL: [&str; 4] = ["nth-", "nth-last-", "nth-of-type-", "nth-last-of-type-"];
+const FUNCTIONAL: [&str; 6] = [
+  "aria-",
+  "data-",
+  "nth-",
+  "nth-last-",
+  "nth-of-type-",
+  "nth-last-of-type-",
+];
 
 impl Variant {
   /// The variant `token` names, or `None` for one takumi does not support.
@@ -352,23 +406,111 @@ impl Variant {
     }
 
     if let Some(pseudo_class) = pseudo_class(token) {
+      let (base, nots) = strip_negations(token);
+
       return Some(Self::Structural {
         rank: structural_rank(token),
         pseudo_class,
+        not_order: (nots > 0).then(|| NotInner::structural(base).under_nots(nots)),
       });
     }
 
+    let (base, nots) = strip_negations(token);
+
+    if nots > 0 {
+      return Self::parse(base)?.under_not(nots);
+    }
+
     Breakpoint::parse(token).map(Self::Breakpoint)
+  }
+
+  /// The variant a `not-` run makes of this at-rule variant, negating it when `negated`, or
+  /// `None` for one Tailwind's `not` does not negate here. Approximate: Tailwind also negates a
+  /// container query and `ltr:` and `rtl:`, and sorts every variant under `not-` in its group.
+  fn under_not(self, nots: usize) -> Option<Self> {
+    let negated = nots % 2 == 1;
+
+    match self {
+      Self::Breakpoint(breakpoint) => Some(Self::Breakpoint(breakpoint.under_not(nots))),
+      Self::Late {
+        condition: LateCondition::Media(query),
+        rank,
+      } => Some(Self::NotMedia {
+        query: negate_query(query, negated),
+        order: NotInner::Late(rank).under_nots(nots),
+      }),
+      Self::Preference { query, rank } => Some(Self::NotMedia {
+        query: negate_query(query, negated),
+        order: NotInner::Preference(rank).under_nots(nots),
+      }),
+      _ if negated => None,
+      variant => Some(variant),
+    }
+  }
+}
+
+/// `query`, under `not` when `negated`.
+fn negate_query(query: &str, negated: bool) -> String {
+  if negated {
+    return format!("not {query}");
+  }
+
+  query.to_owned()
+}
+
+/// Where a variant under `not-` sorts in Tailwind's `not` group, which compares the compounds
+/// nested in it: one under more `not-` prefixes first, then by the inner variant.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct NotOrder {
+  nesting: Reverse<usize>,
+  inner: NotInner,
+}
+
+/// The variant a `not-` run wraps: a structural variant first, then a preference, a breakpoint,
+/// a late variant, and an arbitrary variant by its compound's text.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum NotInner {
+  /// The rank of the structural variant, then the place of an unreached state registered ahead
+  /// of it.
+  Structural(u8, u8),
+  Preference(u8),
+  Breakpoint(BreakpointOrder),
+  Late(u8),
+  Arbitrary(String),
+}
+
+impl NotInner {
+  /// The key of the structural, form state, attribute, or arbitrary variant `base`.
+  fn structural(base: &str) -> Self {
+    if let Some(compound) = arbitrary_compound(base) {
+      return Self::Arbitrary(compound);
+    }
+
+    if let Some(index) = UNREACHED_STATES
+      .iter()
+      .position(|(state, _)| *state == base)
+    {
+      return Self::Structural(structural_rank(UNREACHED_STATES[index].1), index as u8);
+    }
+
+    Self::Structural(structural_rank(base), u8::MAX)
+  }
+
+  fn under_nots(self, nots: usize) -> NotOrder {
+    NotOrder {
+      nesting: Reverse(nots),
+      inner: self,
+    }
   }
 }
 
 /// Where a structural variant sorts. Approximate: values of one variant keep their order.
 fn structural_rank(token: &str) -> u8 {
   if token.starts_with("not-") {
-    return 0;
+    return NOT_RANK;
   }
 
-  if let Some(index) = REGISTERED.iter().position(|name| *name == token) {
+  if let Some(index) = REGISTERED.iter().position(|(name, _)| *name == token) {
     return STRUCTURAL_RANK + index as u8;
   }
 
@@ -390,6 +532,8 @@ pub(super) struct Variants {
   pub(super) container: Vec<ContainerVariant>,
   /// The media queries the late and preference variants require of the viewport.
   pub(super) media: Vec<MediaQueryList>,
+  /// The sort keys of the media query and structural variants under `not-`.
+  not_orders: Vec<NotOrder>,
   pub(super) pseudo_element: Option<PseudoElement>,
   pseudo_classes: String,
   /// The compounds of the arbitrary variants.
@@ -419,7 +563,12 @@ impl Variants {
   /// Adds `variant`, or `None` for a second pseudo-element.
   pub(super) fn push(&mut self, variant: Variant) -> Option<()> {
     match variant {
-      Variant::Breakpoint(breakpoint) => self.breakpoint.push(breakpoint),
+      Variant::Breakpoint(breakpoint) => {
+        if breakpoint.nots > 0 {
+          self.ranks |= 1 << NOT_RANK;
+        }
+        self.breakpoint.push(breakpoint);
+      }
       Variant::Container(container) => self.container.push(container),
       Variant::Late { condition, rank } => {
         match condition {
@@ -436,8 +585,20 @@ impl Variants {
           .push(MediaQueryList::parse(&mut Parser::new(query)).ok()?);
         self.preference |= 1 << rank;
       }
-      Variant::Structural { pseudo_class, rank } => {
+      Variant::NotMedia { query, order } => {
+        self
+          .media
+          .push(MediaQueryList::parse(&mut Parser::new(&query)).ok()?);
+        self.not_orders.push(order);
+        self.ranks |= 1 << NOT_RANK;
+      }
+      Variant::Structural {
+        pseudo_class,
+        rank,
+        not_order,
+      } => {
         self.pseudo_classes.push_str(&pseudo_class);
+        self.not_orders.extend(not_order);
         self.ranks |= 1 << rank;
       }
       Variant::Arbitrary(compound) => {
@@ -471,7 +632,8 @@ impl Variants {
   }
 
   /// The variants' sort key, the latest Tailwind registers first: the arbitrary variants, the late variants, a container
-  /// query, a breakpoint, the preference variants, then the structural variant bits.
+  /// query, a breakpoint, the preference variants, the structural variant bits, then the
+  /// media query and breakpoint variants under `not-`.
   pub(super) fn order(&self) -> VariantOrder {
     VariantOrder {
       arbitrary: descending(self.arbitrary.iter().cloned()),
@@ -482,9 +644,23 @@ impl Variants {
           .iter()
           .map(|container| container.order.clone()),
       ),
-      breakpoint: descending(self.breakpoint.iter().map(Breakpoint::order)),
+      breakpoint: descending(
+        self
+          .breakpoint
+          .iter()
+          .filter(|breakpoint| breakpoint.nots == 0)
+          .map(Breakpoint::order),
+      ),
       preference: self.preference,
       ranks: self.ranks,
+      not: descending(
+        self
+          .breakpoint
+          .iter()
+          .filter(|breakpoint| breakpoint.nots > 0)
+          .map(|breakpoint| NotInner::Breakpoint(breakpoint.order()).under_nots(breakpoint.nots))
+          .chain(self.not_orders.iter().cloned()),
+      ),
     }
   }
 }
@@ -510,37 +686,51 @@ pub(crate) struct VariantOrder {
   breakpoint: Vec<BreakpointOrder>,
   preference: u8,
   ranks: u32,
+  /// The media query and breakpoint variants under `not-`, which Tailwind orders within its
+  /// `not` group, the lowest bits.
+  not: Vec<NotOrder>,
 }
 
-/// The pseudo-class a structural variant compiles to, or `None` for any other variant.
-fn pseudo_class(variant: &str) -> Option<String> {
-  let fixed = match variant {
-    "first" => ":first-child",
-    "last" => ":last-child",
-    "only" => ":only-child",
-    "odd" => ":nth-child(odd)",
-    "even" => ":nth-child(even)",
-    "first-of-type" => ":first-of-type",
-    "last-of-type" => ":last-of-type",
-    "only-of-type" => ":only-of-type",
-    "empty" => ":empty",
-    _ => "",
-  };
+/// The variant under a run of `not-` prefixes, and how many: Tailwind's `not` compounds with
+/// itself, and each pair cancels out.
+fn strip_negations(token: &str) -> (&str, usize) {
+  let base = token.trim_start_matches("not-");
 
-  if !fixed.is_empty() {
-    return Some(fixed.to_owned());
+  (base, (token.len() - base.len()) / "not-".len())
+}
+
+/// The selector a structural, form state, or attribute variant compiles to, under any `not-`
+/// prefixes, or `None` for any other variant.
+fn pseudo_class(variant: &str) -> Option<String> {
+  let (base, nots) = strip_negations(variant);
+
+  if nots % 2 == 0 {
+    return element_pseudo_class(base);
   }
 
-  if let Some(negated) = variant.strip_prefix("not-") {
-    if UNREACHED_STATES.contains(&negated) {
-      return Some(format!(":not(:{negated})"));
-    }
+  if UNREACHED_STATES.iter().any(|(state, _)| *state == base) {
+    return Some(format!(":not(:{base})"));
+  }
 
-    return Some(format!(":not({})", pseudo_class(negated)?));
+  Some(format!(":not({})", element_pseudo_class(base)?))
+}
+
+/// The selector a structural, form state, or attribute variant without `not-` compiles to.
+fn element_pseudo_class(variant: &str) -> Option<String> {
+  if let Some((_, pseudo_class)) = REGISTERED.iter().find(|(name, _)| *name == variant) {
+    return Some((*pseudo_class).to_owned());
   }
 
   if let Some(compound) = arbitrary_compound(variant) {
     return Some(compound);
+  }
+
+  if let Some(value) = variant.strip_prefix("aria-") {
+    return attribute_selector("aria", value, "=\"true\"");
+  }
+
+  if let Some(value) = variant.strip_prefix("data-") {
+    return attribute_selector("data", value, "");
   }
 
   for (prefix, function) in [
@@ -568,6 +758,42 @@ fn pseudo_class(variant: &str) -> Option<String> {
   }
 
   None
+}
+
+/// The attribute selector Tailwind's `aria-*` and `data-*` variants write: `[aria-checked="true"]`
+/// for a name, which `named_value` follows, and `[data-state="open"]` for `data-[state=open]`.
+fn attribute_selector(prefix: &str, value: &str, named_value: &str) -> Option<String> {
+  match value
+    .strip_prefix('[')
+    .and_then(|rest| rest.strip_suffix(']'))
+  {
+    Some(bracketed) => Some(format!(
+      "[{prefix}-{}]",
+      quote_attribute_value(&arbitrary(bracketed))
+    )),
+    None => is_ident(value).then(|| format!("[{prefix}-{value}{named_value}]")),
+  }
+}
+
+/// Tailwind's `quoteAttributeValue`: an attribute's unquoted value quoted, keeping a trailing `i`
+/// or `s` flag outside the quotes.
+fn quote_attribute_value(input: &str) -> String {
+  let Some((attribute, value)) = input.split_once('=') else {
+    return input.to_owned();
+  };
+  let value = value.trim();
+
+  if value.starts_with(['\'', '"']) {
+    return input.to_owned();
+  }
+
+  if let [.., b' ', flag @ (b'i' | b'I' | b's' | b'S')] = value.as_bytes() {
+    let unflagged = &value[..value.len() - 2];
+
+    return format!("{attribute}=\"{unflagged}\" {}", *flag as char);
+  }
+
+  format!("{attribute}=\"{value}\"")
 }
 
 /// The compound an arbitrary variant such as `[&:nth-child(3)]` or `[&.active]` adds to the
@@ -678,8 +904,31 @@ mod tests {
       ("nth-[2n_+_1]", Some(":nth-child(2n + 1)")),
       ("not-first", Some(":not(:first-child)")),
       ("not-hover", Some(":not(:hover)")),
+      ("not-not-first", Some(":first-child")),
+      ("not-not-not-first", Some(":not(:first-child)")),
       ("not-focus-within", Some(":not(:focus-within)")),
-      ("not-enabled", None),
+      ("not-enabled", Some(":not(:enabled)")),
+      ("disabled", Some(":disabled")),
+      ("checked", Some(":checked")),
+      ("indeterminate", Some(":indeterminate")),
+      ("placeholder-shown", Some(":placeholder-shown")),
+      ("read-only", Some(":read-only")),
+      ("required", Some(":required")),
+      ("not-optional", Some(":not(:optional)")),
+      ("not-autofill", Some(":not(:autofill)")),
+      ("autofill", None),
+      ("valid", None),
+      ("default", None),
+      ("read-write", None),
+      ("aria-checked", Some("[aria-checked=\"true\"]")),
+      ("aria-[sort=ascending]", Some("[aria-sort=\"ascending\"]")),
+      ("not-aria-busy", Some(":not([aria-busy=\"true\"])")),
+      ("data-active", Some("[data-active]")),
+      ("data-[state=open]", Some("[data-state=\"open\"]")),
+      ("data-[state='open']", Some("[data-state='open']")),
+      ("data-[lang=EN_i]", Some("[data-lang=\"EN\" i]")),
+      ("data-[size]", Some("[data-size]")),
+      ("data-a.b", None),
       ("[&:nth-child(4)]", Some(":nth-child(4)")),
       ("[&.active]", Some(".active")),
       ("[&[data-x]]", Some("[data-x]")),
@@ -749,7 +998,14 @@ mod tests {
       "after",
       "first",
       "odd",
+      "only-of-type",
+      "checked",
+      "read-only",
       "empty",
+      "enabled",
+      "disabled",
+      "aria-checked",
+      "data-active",
       "nth-3",
       "nth-last-of-type-2",
       "motion-safe",

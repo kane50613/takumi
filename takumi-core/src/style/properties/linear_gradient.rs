@@ -538,17 +538,8 @@ impl Animatable for Angle {
 
 impl TailwindPropertyParser for Angle {
   fn parse_tw(token: &str) -> Option<Self> {
-    match token.to_ascii_lowercase().as_str() {
-      "none" => return Some(Angle::zero()),
-      "to-t" => return Some(Angle::new(0.0)),
-      "to-tr" => return Some(Angle::new(45.0)),
-      "to-r" => return Some(Angle::new(90.0)),
-      "to-br" => return Some(Angle::new(135.0)),
-      "to-b" => return Some(Angle::new(180.0)),
-      "to-bl" => return Some(Angle::new(225.0)),
-      "to-l" => return Some(Angle::new(270.0)),
-      "to-tl" => return Some(Angle::new(315.0)),
-      _ => {}
+    if token.eq_ignore_ascii_case("none") {
+      return Some(Angle::zero());
     }
 
     let angle = token.parse::<f32>().ok()?;
@@ -734,6 +725,32 @@ impl<'i> FromCss<'i> for LinearGradientDirection {
   }
 
   const VALID_TOKENS: &'static [&'static str] = Angle::VALID_TOKENS;
+}
+
+/// `bg-linear-to-tr` names a corner, `bg-linear-45` an angle, as Tailwind's
+/// `linearGradientDirections` reads them.
+impl TailwindPropertyParser for LinearGradientDirection {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let (vertical, horizontal) = match token {
+      "to-t" => (Some(VerticalKeyword::Top), None),
+      "to-tr" => (Some(VerticalKeyword::Top), Some(HorizontalKeyword::Right)),
+      "to-r" => (None, Some(HorizontalKeyword::Right)),
+      "to-br" => (
+        Some(VerticalKeyword::Bottom),
+        Some(HorizontalKeyword::Right),
+      ),
+      "to-b" => (Some(VerticalKeyword::Bottom), None),
+      "to-bl" => (Some(VerticalKeyword::Bottom), Some(HorizontalKeyword::Left)),
+      "to-l" => (None, Some(HorizontalKeyword::Left)),
+      "to-tl" => (Some(VerticalKeyword::Top), Some(HorizontalKeyword::Left)),
+      _ => return Angle::parse_tw(token).map(Self::Angle),
+    };
+
+    Some(Self::Keyword(GradientKeywordDirection {
+      horizontal,
+      vertical,
+    }))
+  }
 }
 
 impl LinearGradient {

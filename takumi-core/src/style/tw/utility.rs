@@ -7,7 +7,7 @@ use phf::phf_map;
 
 use super::{
   Namespace, TW_VAR_SPACING, TailwindPropertyParser, builder::TailwindDeclarationBuilder,
-  parse_opacity_modifier, parser::*, with_opacity,
+  extract_arbitrary_value, is_ident, parse_opacity_modifier, parser::*, with_opacity,
 };
 use crate::style::*;
 
@@ -21,10 +21,35 @@ const SCALE_PAIR: &str = "var(--tw-scale-x, 100%) var(--tw-scale-y, 100%)";
 
 const HAIRLINE: LineWidth = LineWidth::Length(Length::Px(1.0));
 
+/// The `@property` initial value of each `--tw-*` shadow layer.
+const NULL_SHADOW: &str = "0 0 #0000";
+/// Tailwind's `ringOffsetShadowValue`, each variable's `@property` initial value inlined as its
+/// fallback.
+const RING_OFFSET_SHADOW: &str =
+  "var(--tw-ring-inset,) 0 0 0 var(--tw-ring-offset-width, 0px) var(--tw-ring-offset-color, #fff)";
+
+/// A layer of Tailwind's box-shadow stack a shadow utility sets: its variable and the one its
+/// colour reads.
+struct ShadowLayer {
+  variable: &'static str,
+  color: &'static str,
+}
+
+const SHADOW: ShadowLayer = ShadowLayer {
+  variable: "--tw-shadow",
+  color: "--tw-shadow-color",
+};
+const INSET_SHADOW: ShadowLayer = ShadowLayer {
+  variable: "--tw-inset-shadow",
+  color: "--tw-inset-shadow-color",
+};
+
 /// A root's utilities.
 pub(super) struct Utility {
   /// What the root alone writes, as `border` does.
   bare: Option<fn(&mut TailwindDeclarationBuilder)>,
+  /// What the root alone writes with a `/modifier`, as `bg-radial/srgb` does.
+  modified: Option<fn(&str, &mut TailwindDeclarationBuilder) -> Option<()>>,
   /// The value forms the root reads, tried in order.
   values: &'static [Value],
   /// The theme namespaces an unknown token reads, each with the longhands it fills.
@@ -89,6 +114,7 @@ impl Utility {
   const fn fixed(emit: fn(&mut TailwindDeclarationBuilder)) -> Self {
     Self {
       bare: Some(emit),
+      modified: None,
       values: &[],
       theme: &[],
     }
@@ -97,6 +123,7 @@ impl Utility {
   const fn functional(values: &'static [Value]) -> Self {
     Self {
       bare: None,
+      modified: None,
       values,
       theme: &[],
     }
@@ -104,6 +131,14 @@ impl Utility {
 
   const fn bare(mut self, emit: fn(&mut TailwindDeclarationBuilder)) -> Self {
     self.bare = Some(emit);
+    self
+  }
+
+  const fn modified(
+    mut self,
+    emit: fn(&str, &mut TailwindDeclarationBuilder) -> Option<()>,
+  ) -> Self {
+    self.modified = Some(emit);
     self
   }
 
@@ -185,6 +220,12 @@ pub(super) fn emit(token: &str, builder: &mut TailwindDeclarationBuilder) -> Opt
   if let Some(emit) = UTILITIES.get(token).and_then(|utility| utility.bare) {
     emit(builder);
     return Some(());
+  }
+
+  if let Some((root, modifier)) = token.split_once('/')
+    && let Some(emit) = UTILITIES.get(root).and_then(|utility| utility.modified)
+  {
+    return emit(modifier, builder);
   }
 
   let (token, negative) = match token.strip_prefix('-') {
@@ -407,16 +448,19 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
   "bg-clip" => Utility::functional(&[value!(BackgroundClip: background_clip)]),
   "mask" => Utility::functional(&[value!(BackgroundImage, |image, builder| builder
     .push(StyleDeclaration::mask_image(Some([image].into()))))]),
-  "bg-linear" => Utility::functional(&[value!(Angle, |angle, builder| builder.push_deferred(
-    LonghandId::BackgroundImage,
-    format!("linear-gradient({}deg in oklab, var(--tw-gradient-stops))", *angle),
-  ))]),
-  "bg-radial" => Utility::fixed(|builder| builder.push_deferred(
-    LonghandId::BackgroundImage,
-    "radial-gradient(in oklab, var(--tw-gradient-stops))".to_owned(),
-  )),
-  "bg-conic" => Utility::functional(&[value!(Angle, conic_gradient)])
-    .bare(|builder| conic_gradient(Angle::zero(), builder)),
+  "bg-linear" => Utility::functional(&[Value { namespaces: &[], emit: linear_gradient }]),
+  "bg-radial" => Utility::functional(&[Value { namespaces: &[], emit: radial_gradient }])
+    .bare(|builder| push_gradient(builder, "radial-gradient", DEFAULT_INTERPOLATION))
+    .modified(|modifier, builder| {
+      push_gradient(builder, "radial-gradient", &gradient_interpolation(Some(modifier))?);
+      Some(())
+    }),
+  "bg-conic" => Utility::functional(&[Value { namespaces: &[], emit: conic_gradient }])
+    .bare(|builder| push_gradient(builder, "conic-gradient", DEFAULT_INTERPOLATION))
+    .modified(|modifier, builder| {
+      push_gradient(builder, "conic-gradient", &gradient_interpolation(Some(modifier))?);
+      Some(())
+    }),
   "from" => Utility::functional(&[
     value!(TwGradientPosition, |position, builder| builder
       .push_custom("--tw-gradient-from-position", &position.0.to_css_string())),
@@ -590,23 +634,53 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
   "outline-offset" => Utility::functional(&[value!(LineWidth, |offset, builder| builder
     .push(StyleDeclaration::outline_offset(Length::from(offset))))]),
   "shadow" => Utility::functional(&[
-    value!(TwVarColor, |color, builder| builder.push_custom("--tw-shadow-color", &color.0)),
+    value!(TwVarColor, |color, builder| builder.push_custom(SHADOW.color, &color.0)),
     value!(BoxShadow, |shadow, builder| builder
-      .push_deferred(LonghandId::BoxShadow, box_shadow_css(&shadow))),
+      .push_box_shadow(SHADOW.variable, &box_shadow_css(&shadow, SHADOW.color))),
   ])
-  .bare(|builder| box_shadow_preset(builder, "--shadow", &SHADOW_SM)),
-  "shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-2xs", &SHADOW_2XS)),
-  "shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-xs", &SHADOW_XS)),
-  "shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-sm", &SHADOW_SM)),
-  "shadow-md" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-md", &SHADOW_MD)),
-  "shadow-lg" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-lg", &SHADOW_LG)),
-  "shadow-xl" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-xl", &SHADOW_XL)),
-  "shadow-2xl" => Utility::fixed(|builder| box_shadow_preset(builder, "--shadow-2xl", &SHADOW_2XL)),
-  "shadow-none" | "inset-shadow-none" => Utility::fixed(|builder| builder
-    .push_deferred(LonghandId::BoxShadow, "none".to_owned())),
-  "inset-shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-2xs", &INSET_SHADOW_2XS)),
-  "inset-shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-xs", &INSET_SHADOW_XS)),
-  "inset-shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, "--inset-shadow-sm", &INSET_SHADOW_SM)),
+  .bare(|builder| box_shadow_preset(builder, &SHADOW, "--shadow", &SHADOW_SM)),
+  "shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-2xs", &SHADOW_2XS)),
+  "shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-xs", &SHADOW_XS)),
+  "shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-sm", &SHADOW_SM)),
+  "shadow-md" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-md", &SHADOW_MD)),
+  "shadow-lg" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-lg", &SHADOW_LG)),
+  "shadow-xl" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-xl", &SHADOW_XL)),
+  "shadow-2xl" => Utility::fixed(|builder| box_shadow_preset(builder, &SHADOW, "--shadow-2xl", &SHADOW_2XL)),
+  "shadow-none" => Utility::fixed(|builder| builder.push_box_shadow(SHADOW.variable, NULL_SHADOW)),
+  "inset-shadow" => Utility::functional(&[
+    value!(TwVarColor, |color, builder| builder.push_custom(INSET_SHADOW.color, &color.0)),
+    value!(BoxShadow, |shadow, builder| {
+      let shadow = BoxShadow { inset: true, ..shadow };
+
+      builder.push_box_shadow(INSET_SHADOW.variable, &box_shadow_css(&shadow, INSET_SHADOW.color));
+    }),
+  ]),
+  "inset-shadow-2xs" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-2xs", &INSET_SHADOW_2XS)),
+  "inset-shadow-xs" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-xs", &INSET_SHADOW_XS)),
+  "inset-shadow-sm" => Utility::fixed(|builder| box_shadow_preset(builder, &INSET_SHADOW, "--inset-shadow-sm", &INSET_SHADOW_SM)),
+  "inset-shadow-none" => Utility::fixed(|builder| builder
+    .push_box_shadow(INSET_SHADOW.variable, &format!("inset {NULL_SHADOW}"))),
+  "ring" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| builder
+      .push_box_shadow("--tw-ring-shadow", &ring_shadow_css(width.0))),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-ring-color", &color.0)),
+  ])
+  .bare(|builder| builder.push_box_shadow("--tw-ring-shadow", &ring_shadow_css(Length::Px(1.0)))),
+  "ring-inset" => Utility::fixed(|builder| builder.push_custom("--tw-ring-inset", "inset")),
+  "ring-offset" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| {
+      builder.push_custom("--tw-ring-offset-width", &width.0.to_css_string());
+      builder.push_custom("--tw-ring-offset-shadow", RING_OFFSET_SHADOW);
+    }),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-ring-offset-color", &color.0)),
+  ]),
+  "inset-ring" => Utility::functional(&[
+    value!(TwRingWidth, |width, builder| builder
+      .push_box_shadow("--tw-inset-ring-shadow", &inset_ring_shadow_css(width.0))),
+    value!(TwVarColor, |color, builder| builder.push_custom("--tw-inset-ring-color", &color.0)),
+  ])
+  .bare(|builder| builder
+    .push_box_shadow("--tw-inset-ring-shadow", &inset_ring_shadow_css(Length::Px(1.0)))),
   "grow" | "flex-grow" => Utility::functional(&[value!(FlexGrow, |grow, builder| builder.push(StyleDeclaration::flex_grow(Some(grow))))])
     .bare(|builder| builder.push(StyleDeclaration::flex_grow(Some(FlexGrow(1.0))))),
   "shrink" | "flex-shrink" => Utility::functional(&[value!(FlexGrow, |shrink, builder| builder.push(StyleDeclaration::flex_shrink(Some(shrink))))])
@@ -910,7 +984,14 @@ pub(super) static UTILITIES: phf::Map<&str, Utility> = phf_map! {
     }
   })]),
   "drop-shadow" => Utility::functional(&[value!(TwDropShadow, drop_shadow)])
-    .bare(|builder| drop_shadow(dsp("", ts(1.0, 2.0, 26)), builder)),
+    .bare(|builder| {
+      let layers = DROP_SHADOW
+        .iter()
+        .map(|layer| Filter::DropShadow(layer.clone()).to_css_string())
+        .collect::<Vec<_>>();
+
+      builder.push_filter(false, "drop-shadow", &layers.join(" "));
+    }),
   "drop-shadow-xs" => Utility::fixed(|builder| drop_shadow(dsp("xs", ts(1.0, 1.0, 13)), builder)),
   "drop-shadow-sm" => Utility::fixed(|builder| drop_shadow(dsp("sm", ts(1.0, 2.0, 38)), builder)),
   "drop-shadow-md" => Utility::fixed(|builder| drop_shadow(dsp("md", ts(3.0, 3.0, 31)), builder)),
@@ -977,17 +1058,124 @@ fn background_size(size: BackgroundSize, builder: &mut TailwindDeclarationBuilde
   builder.push(StyleDeclaration::background_size([size].into()));
 }
 
-fn conic_gradient(angle: Angle, builder: &mut TailwindDeclarationBuilder) {
-  let image = if *angle == 0.0 {
-    "conic-gradient(in oklab, var(--tw-gradient-stops))".to_owned()
-  } else {
-    format!(
-      "conic-gradient(from {}deg in oklab, var(--tw-gradient-stops))",
-      *angle
-    )
+/// The interpolation a gradient utility writes without a `/modifier`.
+const DEFAULT_INTERPOLATION: &str = "in oklab";
+
+/// `function(<position>, var(--tw-gradient-stops))`, the position Tailwind's
+/// `--tw-gradient-position` puts ahead of the stops.
+fn push_gradient(builder: &mut TailwindDeclarationBuilder, function: &str, position: &str) {
+  builder.push_deferred(
+    LonghandId::BackgroundImage,
+    format!("{function}({position}, var(--tw-gradient-stops))"),
+  );
+}
+
+/// The interpolation a gradient's `/modifier` names, as Tailwind's `resolveInterpolationModifier`
+/// reads it.
+fn gradient_interpolation(modifier: Option<&str>) -> Option<String> {
+  let Some(modifier) = modifier else {
+    return Some(DEFAULT_INTERPOLATION.to_owned());
   };
 
-  builder.push_deferred(LonghandId::BackgroundImage, image);
+  if let Some(arbitrary) = extract_arbitrary_value(modifier) {
+    return Some(arbitrary.into_owned());
+  }
+
+  if !is_ident(modifier) {
+    return None;
+  }
+
+  Some(match modifier {
+    "longer" | "shorter" | "increasing" | "decreasing" => format!("in oklch {modifier} hue"),
+    _ => format!("in {modifier}"),
+  })
+}
+
+/// A gradient utility's value: an arbitrary one as its position, which takes no modifier, or the
+/// position `named` reads from the value, or the miss it reports, followed by the interpolation
+/// of its `/modifier`.
+fn emit_gradient(
+  function: &str,
+  suffix: &str,
+  builder: &mut TailwindDeclarationBuilder,
+  named: impl FnOnce(&str) -> Result<String, ValueMatch>,
+) -> ValueMatch {
+  if let Some(arbitrary) = extract_arbitrary_value(suffix) {
+    push_gradient(builder, function, &arbitrary);
+    return ValueMatch::Emitted;
+  }
+
+  let (value, modifier) = match suffix.split_once('/') {
+    Some((value, modifier)) => (value, Some(modifier)),
+    None => (suffix, None),
+  };
+  let position = match named(value) {
+    Ok(position) => position,
+    Err(miss) => return miss,
+  };
+  let Some(interpolation) = gradient_interpolation(modifier) else {
+    return ValueMatch::Miss;
+  };
+
+  push_gradient(builder, function, &format!("{position} {interpolation}"));
+  ValueMatch::Emitted
+}
+
+/// Tailwind's `handleBgLinear`: a side or corner, or an angle a `-` negates.
+fn linear_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  if let Some(arbitrary) = negative.then(|| extract_arbitrary_value(suffix)).flatten() {
+    let Ok(angle) = Angle::from_css_str(&arbitrary) else {
+      return ValueMatch::NoNegative;
+    };
+
+    push_gradient(builder, "linear-gradient", &(-angle).to_css_string());
+    return ValueMatch::Emitted;
+  }
+
+  emit_gradient("linear-gradient", suffix, builder, |value| {
+    let direction = LinearGradientDirection::parse_tw(value).ok_or(ValueMatch::Miss)?;
+    let direction = match (direction, negative) {
+      (LinearGradientDirection::Angle(angle), true) => LinearGradientDirection::Angle(-angle),
+      (LinearGradientDirection::Keyword(_), true) => return Err(ValueMatch::NoNegative),
+      (direction, false) => direction,
+    };
+
+    Ok(direction.to_css_string())
+  })
+}
+
+/// Tailwind's `handleBgConic`: the angle it starts from, which a `-` negates, or an arbitrary
+/// position, which it does not.
+fn conic_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  emit_gradient("conic-gradient", suffix, builder, |value| {
+    let angle = Angle::parse_tw(value).ok_or(ValueMatch::Miss)?;
+    let angle = if negative { -angle } else { angle };
+
+    Ok(format!("from {}", angle.to_css_string()))
+  })
+}
+
+/// Tailwind's `bg-radial-[…]`, whose value is the gradient's shape and position.
+fn radial_gradient(
+  suffix: &str,
+  negative: bool,
+  builder: &mut TailwindDeclarationBuilder,
+) -> ValueMatch {
+  if negative || !suffix.starts_with('[') {
+    return ValueMatch::Miss;
+  }
+
+  emit_gradient("radial-gradient", suffix, builder, |_| {
+    Err(ValueMatch::Miss)
+  })
 }
 
 /// Sets `--tw-border-style` with the sides, so a later width utility draws in this style.
@@ -1026,13 +1214,35 @@ fn drop_shadow(drop_shadow: TwDropShadow, builder: &mut TailwindDeclarationBuild
 
 fn box_shadow_preset(
   builder: &mut TailwindDeclarationBuilder,
+  layer: &ShadowLayer,
   variable: &str,
   layers: &[BoxShadow],
 ) {
-  builder.push_deferred(
-    LonghandId::BoxShadow,
-    preset_shadow_css(variable, layers.iter().map(box_shadow_css)),
+  builder.push_box_shadow(
+    layer.variable,
+    &preset_shadow_css(
+      variable,
+      layers
+        .iter()
+        .map(|shadow| box_shadow_css(shadow, layer.color)),
+    ),
   );
+}
+
+/// Tailwind's `ringShadowValue`, which an offset widens.
+fn ring_shadow_css(width: Length) -> String {
+  format!(
+    "var(--tw-ring-inset,) 0 0 0 calc({} + var(--tw-ring-offset-width, 0px)) var(--tw-ring-color, currentcolor)",
+    width.to_css_string()
+  )
+}
+
+/// Tailwind's `insetRingShadowValue`.
+fn inset_ring_shadow_css(width: Length) -> String {
+  format!(
+    "inset 0 0 0 {} var(--tw-inset-ring-color, currentcolor)",
+    width.to_css_string()
+  )
 }
 
 fn text_shadow_preset(
@@ -1080,14 +1290,9 @@ fn animation_shorthand_css(animations: &Animations) -> String {
     .join(", ")
 }
 
-/// `drop-shadow(var(--drop-shadow-md, …))` for a preset; the bare `drop-shadow`
-/// utility reads `--drop-shadow` itself.
+/// `drop-shadow(var(--drop-shadow-md, …))` for a preset.
 fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
   match drop_shadow.token {
-    Some("") => format!(
-      "drop-shadow(var(--drop-shadow, {}))",
-      drop_shadow.shadow.to_css_string()
-    ),
     Some(token) => format!(
       "drop-shadow(var(--drop-shadow-{token}, {}))",
       drop_shadow.shadow.to_css_string()
@@ -1114,7 +1319,7 @@ fn shadow_layer_css(
   out
 }
 
-fn box_shadow_css(shadow: &BoxShadow) -> String {
+fn box_shadow_css(shadow: &BoxShadow, color_variable: &str) -> String {
   shadow_layer_css(
     if shadow.inset { "inset " } else { "" },
     &[
@@ -1124,7 +1329,7 @@ fn box_shadow_css(shadow: &BoxShadow) -> String {
       &shadow.spread_radius,
     ],
     &shadow.color,
-    "--tw-shadow-color",
+    color_variable,
   )
 }
 
@@ -1181,6 +1386,9 @@ const SHADOW_XL: [BoxShadow; 2] = [
   bs(false, 20.0, 25.0, -5.0, 26),
   bs(false, 8.0, 10.0, -6.0, 26),
 ];
+
+/// `theme.css`'s deprecated `--drop-shadow`, which Tailwind inlines into the bare utility.
+const DROP_SHADOW: [TextShadow; 2] = [ts(1.0, 2.0, 26), ts(1.0, 1.0, 15)];
 
 const TEXT_SHADOW_SM: [TextShadow; 3] = [ts(1.0, 0.0, 19), ts(1.0, 1.0, 19), ts(2.0, 2.0, 19)];
 const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(2.0, 4.0, 26)];

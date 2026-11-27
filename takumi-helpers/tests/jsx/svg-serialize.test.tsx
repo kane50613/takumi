@@ -141,6 +141,10 @@ test("serializeSvg keeps valid style values that contain semicolons", () => {
   };
   expectReactDomMarkup(<svg xmlns="http://www.w3.org/2000/svg" style={style} />);
   expect(serializeSvg(<svg style={{ stroke: "blue;" }} />)).toContain('style="stroke:blue;"');
+
+  for (const fontFamily of ['"a\\"b; c"', "'a)b'", "/* ; */ serif", '"a\\\\"']) {
+    expect(serializeSvg(<svg style={{ fontFamily }} />)).toContain("font-family:");
+  }
 });
 
 test("serializeSvg keeps an empty style object empty", () => {
@@ -156,7 +160,7 @@ test("serializeSvg rejects style entries that leave their declaration", () => {
     "Invalid SVG style property",
   );
 
-  for (const fill of ["red;filter:url(#x)", '"red', "url(#x", "red)", "red/*", "red\\"]) {
+  for (const fill of ["red;filter:url(#x)", '"red', "url(#x", "red)", "red/*", "red\\", '"red\\']) {
     expect(() => serializeSvg(<svg style={{ fill }} />)).toThrow("Invalid SVG style value");
   }
 });
@@ -180,4 +184,20 @@ test("serializeSvg keeps camelCase attributes SVG itself spells in camelCase", (
   );
 
   expectReactDomMarkup(component);
+});
+
+test("serializeSvg declares the XLink namespace its attributes use", () => {
+  const image = <image xlinkHref="a.png" />;
+
+  expect(serializeSvg(<svg xmlns="http://www.w3.org/2000/svg">{image}</svg>)).toBe(
+    '<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg"><image xlink:href="a.png"></image></svg>',
+  );
+  expectReactDomMarkup(
+    <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink">
+      {image}
+    </svg>,
+  );
+  expect(serializeSvg(<svg xmlnsXlink={undefined}>{image}</svg>)).toBe(
+    '<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg"><image xlink:href="a.png"></image></svg>',
+  );
 });

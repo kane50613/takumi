@@ -2111,7 +2111,12 @@ fn tailwind_direction_variants_read_dir() {
   let width = |html: &str| {
     let node = Node::from_html(html, FromHtmlOptions::default()).expect("parses");
 
-    measure_with_css(Node::container([node]), "").children[0].children[0].width
+    measure_with_css(
+      node,
+      "input { appearance: none; display: block; height: 4px }",
+    )
+    .children[0]
+      .width
   };
 
   assert_eq!(
@@ -2394,6 +2399,75 @@ fn a_linked_scope_without_a_start_roots_at_its_link_parent() {
 
   assert_eq!(measured.children[0].children[0].width, 30.0);
   assert_ne!(measured.children[1].width, 30.0);
+}
+
+/// Tailwind's form state, `aria-*`, and `data-*` variants, and their `not-` forms, match the
+/// element as the selectors Tailwind compiles them to do.
+#[test]
+fn tailwind_form_state_and_attribute_variants_match_the_element() {
+  let width = |html: &str| {
+    let node =
+      Node::from_html(&format!("<div>{html}</div>"), FromHtmlOptions::default()).expect("parses");
+
+    measure_with_css(
+      node,
+      "input { appearance: none; display: block; height: 4px }",
+    )
+    .children[0]
+      .width
+  };
+
+  for (html, expected) in [
+    (
+      r#"<input type="checkbox" checked tw="w-10 checked:w-20">"#,
+      80.0,
+    ),
+    (r#"<input type="checkbox" tw="w-10 checked:w-20">"#, 40.0),
+    (
+      r#"<input type="checkbox" tw="w-10 not-checked:w-20">"#,
+      80.0,
+    ),
+    (
+      r#"<input type="checkbox" disabled tw="w-10 disabled:w-20">"#,
+      80.0,
+    ),
+    (r#"<input type="checkbox" tw="w-10 enabled:w-20">"#, 80.0),
+    (
+      r#"<input type="checkbox" required tw="w-10 required:w-20">"#,
+      80.0,
+    ),
+    (r#"<input type="checkbox" tw="w-10 optional:w-20">"#, 80.0),
+    (
+      r#"<input type="checkbox" tw="w-10 not-autofill:w-20">"#,
+      80.0,
+    ),
+    (
+      r#"<div aria-checked="true" tw="w-10 aria-checked:w-20">x</div>"#,
+      80.0,
+    ),
+    (
+      r#"<div aria-checked="false" tw="w-10 aria-checked:w-20">x</div>"#,
+      40.0,
+    ),
+    (
+      r#"<div aria-sort="ascending" tw="w-10 aria-[sort=ascending]:w-20">x</div>"#,
+      80.0,
+    ),
+    (
+      r#"<div data-active tw="w-10 data-active:w-20">x</div>"#,
+      80.0,
+    ),
+    (
+      r#"<div data-state="open" tw="w-10 data-[state=open]:w-20">x</div>"#,
+      80.0,
+    ),
+    (
+      r#"<div data-state="closed" tw="w-10 data-[state=open]:w-20 not-data-[state=open]:w-30">x</div>"#,
+      120.0,
+    ),
+  ] {
+    assert_eq!(width(html), expected, "{html}");
+  }
 }
 
 /// Every `ComputedStyle` field is public, so code outside takumi can build one by struct update.
