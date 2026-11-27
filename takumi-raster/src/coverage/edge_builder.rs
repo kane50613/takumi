@@ -3,8 +3,8 @@
 //! y-extrema chopping of `src/core/SkGeometry.cpp` and the convexity and rect tests of
 //! `src/core/SkPathPriv.cpp` that pick the scan converter's fast paths.
 
-use tiny_skia_path::PathVerb;
-use tiny_skia_path::{Path, Point, Rect};
+use takumi_core::path::PathVerb;
+use takumi_core::path::{Path, Point, Rect};
 
 use super::{
   edge::Edge,

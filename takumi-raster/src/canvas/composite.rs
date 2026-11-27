@@ -634,7 +634,7 @@ mod scaled_rows_tests {
 mod tests {
   use crate::pixmap::Mask;
   use takumi_core::geometry::{Point, Size};
-  use tiny_skia_path::IntSize;
+  use takumi_core::path::IntSize;
 
   use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
   use crate::{Placement, style::BlendMode};

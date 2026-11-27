@@ -2,6 +2,7 @@ use std::iter::successors;
 
 use crate::pixmap::{Pixmap, PixmapMut};
 use smallvec::SmallVec;
+use takumi_core::path::IntSize;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, style::FilterReference};
 use takumi_core::{
@@ -9,7 +10,6 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
-use tiny_skia_path::IntSize;
 
 #[cfg(feature = "svg")]
 use crate::svg::apply_svg_filter;

@@ -1910,7 +1910,6 @@ dependencies = [
  "smallvec",
  "thin-vec",
  "thiserror",
- "tiny-skia-path",
  "typed-builder",
  "unicode-bidi",
  "wuff",

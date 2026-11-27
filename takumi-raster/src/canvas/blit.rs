@@ -687,7 +687,7 @@ mod tests {
           _ => noise(index, 2),
         })
         .collect(),
-      tiny_skia_path::IntSize::from_wh(24, 11).unwrap(),
+      takumi_core::path::IntSize::from_wh(24, 11).unwrap(),
     )
     .unwrap();
     let view = MaskView {
