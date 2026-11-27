@@ -28,7 +28,6 @@ siphasher.workspace = true
 skrifa.workspace = true
 kurbo.workspace = true
 write-fonts.workspace = true
-tiny-skia-path.workspace = true
 xmp-writer.workspace = true
 yoke.workspace = true
 

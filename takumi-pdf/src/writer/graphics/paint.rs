@@ -4,8 +4,10 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
-use takumi_core::path::Stroke as CoreStroke;
-use takumi_core::style::{LineCap as CoreLineCap, LineJoin as CoreLineJoin};
+use takumi_core::{
+  path::{Stroke as PathStroke, StrokeDash as PathDash},
+  style::{LineCap as CoreLineCap, LineJoin as CoreLineJoin},
+};
 
 use crate::writer::geom::Transform;
 use crate::writer::graphics::color::{Color, luma, rgb};
@@ -371,22 +373,27 @@ impl Default for Stroke {
 }
 
 impl Stroke {
-  /// The outline core's stroker draws for this stroke, without its dash.
-  pub(crate) fn core_outline(&self) -> CoreStroke {
-    CoreStroke {
-      width: self.width,
-      miter_limit: self.miter_limit,
-      line_cap: match self.line_cap {
-        LineCap::Butt => CoreLineCap::Butt,
-        LineCap::Round => CoreLineCap::Round,
-        LineCap::Square => CoreLineCap::Square,
+  /// The outline this stroke draws and the dashes it cuts first, for its bounds.
+  pub(crate) fn outline(self) -> (PathStroke, Option<PathDash>) {
+    (
+      PathStroke {
+        width: self.width,
+        miter_limit: self.miter_limit,
+        line_cap: match self.line_cap {
+          LineCap::Butt => CoreLineCap::Butt,
+          LineCap::Round => CoreLineCap::Round,
+          LineCap::Square => CoreLineCap::Square,
+        },
+        line_join: match self.line_join {
+          LineJoin::Miter => CoreLineJoin::Miter,
+          LineJoin::Round => CoreLineJoin::Round,
+          LineJoin::Bevel => CoreLineJoin::Bevel,
+        },
       },
-      line_join: match self.line_join {
-        LineJoin::Miter => CoreLineJoin::Miter,
-        LineJoin::Round => CoreLineJoin::Round,
-        LineJoin::Bevel => CoreLineJoin::Bevel,
-      },
-    }
+      self
+        .dash
+        .and_then(|dash| PathDash::new(dash.array, dash.offset)),
+    )
   }
 }
 

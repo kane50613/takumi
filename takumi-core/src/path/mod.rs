@@ -39,6 +39,18 @@ impl Point {
     Self { x: 0.0, y: 0.0 }
   }
 
+  /// `SkPoint::Distance`: how far `other` is, through doubles only where the floats overflow.
+  pub fn distance(self, other: Self) -> f32 {
+    let (dx, dy) = (self.x - other.x, self.y - other.y);
+    let squared = dx * dx + dy * dy;
+
+    if squared.is_finite() {
+      squared.sqrt()
+    } else {
+      (f64::from(dx) * f64::from(dx) + f64::from(dy) * f64::from(dy)).sqrt() as f32
+    }
+  }
+
   /// Whether both coordinates are finite.
   pub fn is_finite(self) -> bool {
     self.x.is_finite() && self.y.is_finite()

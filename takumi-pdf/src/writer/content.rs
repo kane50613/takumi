@@ -9,7 +9,7 @@ use std::sync::Arc;
 use float_cmp::approx_eq;
 use pdf_writer::types::TextRenderingMode;
 use pdf_writer::{Content, Finish, Name, Str, TextStr};
-use tiny_skia_path::{Path, PathSegment, PathVerb};
+use takumi_core::path::{Path, PathSegment, PathVerb, Point as CorePoint};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
@@ -231,16 +231,16 @@ impl ContentBuilder {
 
     let stroke_bbox = |stroke: &Stroke| {
       if calculate_bbox(matches!(&stroke.paint.0, InnerPaint::Color(_))) {
-        calculate_stroke_bbox(stroke, path).unwrap_or(Rect::from_tsp(bounds))
+        calculate_stroke_bbox(stroke, path).unwrap_or(Rect::from_core(bounds))
       } else {
-        Rect::from_tsp(bounds)
+        Rect::from_core(bounds)
       }
     };
 
     let fill_prep = |sb: &mut ContentBuilder, fill: &Fill| {
       let has_pattern = matches!(fill.paint.0, InnerPaint::Pattern(_));
       let fill_opacity = fill.opacity;
-      sb.expand_bbox(Rect::from_tsp(bounds));
+      sb.expand_bbox(Rect::from_core(bounds));
 
       // PDF viewers don't show patterns with fill/stroke opacities consistently.
       // Because of this, the opacity is accounted for in the pattern itself.
@@ -265,7 +265,7 @@ impl ContentBuilder {
                    chunk_container: &mut ChunkContainer,
                    fill: &Fill| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_tsp(bounds), fill, sc, chunk_container);
+      sb.content_set_fill_properties(Rect::from_core(bounds), fill, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
       match fill_rule {
@@ -291,7 +291,7 @@ impl ContentBuilder {
                           stroke: &Stroke,
                           stroke_bbox: Rect| {
       let fill_rule = fill.rule;
-      sb.content_set_fill_properties(Rect::from_tsp(bounds), fill, sc, chunk_container);
+      sb.content_set_fill_properties(Rect::from_core(bounds), fill, sc, chunk_container);
       sb.content_set_stroke_properties(stroke_bbox, stroke, sc, chunk_container);
       sb.content_draw_path(path.segments());
 
@@ -351,7 +351,7 @@ impl ContentBuilder {
     self.content_save_state();
     match path
       .clone()
-      .transform(self.cur_transform_with_root_transform().to_tsp())
+      .transform(self.cur_transform_with_root_transform().to_affine())
     {
       Some(path) => self.content_draw_path(path.segments()),
       // A transform that overflows the path leaves nothing inside the clip.
@@ -1393,7 +1393,7 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
   out
 }
 
-fn end_point(segment: &PathSegment) -> Option<tiny_skia_path::Point> {
+fn end_point(segment: &PathSegment) -> Option<CorePoint> {
   match *segment {
     PathSegment::MoveTo(p) | PathSegment::LineTo(p) => Some(p),
     PathSegment::QuadTo(_, p) | PathSegment::CubicTo(_, _, p) => Some(p),
@@ -1480,7 +1480,7 @@ fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font)
 mod tests {
   use super::{PathOp, simplify_path};
 
-  use tiny_skia_path::{PathSegment, Point};
+  use takumi_core::path::{PathSegment, Point};
 
   fn line(x: f32, y: f32) -> PathSegment {
     PathSegment::LineTo(Point::from_xy(x, y))
