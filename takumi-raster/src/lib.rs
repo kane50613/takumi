@@ -34,6 +34,7 @@ mod background_drawing;
 mod blend;
 mod canvas;
 mod components;
+mod coverage;
 /// Debug drawing utilities
 mod debug_drawing;
 mod dithering;

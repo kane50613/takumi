@@ -32,7 +32,7 @@ use crate::{
   Stroke, Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
   cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
-  placement_overlap, render_mask,
+  placement_overlap, render_mask, render_rect_mask,
   style::{Affine, BlendMode},
   union_alpha_masks,
 };
@@ -274,9 +274,16 @@ impl<'c> CanvasDevice<'c> {
       );
     }
 
+    if let FillShape::Rect(size) = shape
+      && style.stroke().is_none()
+      && let Some(coverage) = render_rect_mask(*size, device, Some(self.canvas.viewport()))
+    {
+      return coverage;
+    }
+
     render_mask(
       &shape.to_commands(),
-      Some(self.transform * transform),
+      Some(device),
       Some(style),
       Some(self.canvas.viewport()),
     )
@@ -341,28 +348,22 @@ impl<'c> CanvasDevice<'c> {
     }
   }
 
-  /// Paints `commands`, filled or stroked as `style` under `transform`, in `color` blurred as a CSS
-  /// shadow of `blur_radius` blurs.
+  /// Paints the shadow `shadow` casts from what `cover` rasterizes under a device transform within
+  /// a cull viewport.
   fn draw_blurred(
     &mut self,
-    commands: &[Command],
-    style: Style,
+    shadow: SizedShadow,
     transform: Affine,
-    blur_radius: f32,
-    color: Color,
+    cover: impl FnOnce(Affine, CanvasViewport) -> (Vec<u8>, Placement),
   ) {
     // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`). A `text-fit`
     // scale on the run comes from the painter, which scales the shadow it passes.
-    let blur_radius = blur_radius * self.transform.uniform_scale();
-    let transform = self.transform * transform;
-    let coverage = render_mask(
-      commands,
-      Some(transform),
-      Some(style),
-      Some(self.shadow_viewport(blur_radius)),
-    );
+    let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+    let device =
+      self.transform * (Affine::translation(shadow.offset_x, shadow.offset_y) * transform);
+    let coverage = cover(device, self.shadow_viewport(blur_radius));
 
-    self.draw_blurred_coverage(coverage, blur_radius, color);
+    self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
   }
 
   /// The canvas viewport grown by how far a shadow of `blur_radius` blurs.
@@ -437,13 +438,9 @@ impl<'c> CanvasDevice<'c> {
     style: Style,
     transform: Affine,
   ) {
-    self.draw_blurred(
-      commands,
-      style,
-      Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
-      shadow.blur_radius,
-      shadow.color,
-    );
+    self.draw_blurred(shadow, transform, |device, cull| {
+      render_mask(commands, Some(device), Some(style), Some(cull))
+    });
   }
 
   /// The part of the viewport a layer within `bounds` covers, all of it when `bounds` is unknown.
@@ -654,12 +651,20 @@ impl PaintDevice for CanvasDevice<'_> {
 
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     if let Some(shadow) = self.shadow {
-      return self.draw_shadow_of(
-        shadow,
-        &shape.to_commands(),
-        Fill::from(shape.rule()).into(),
-        transform,
-      );
+      return self.draw_blurred(shadow, transform, |device, cull| {
+        if let FillShape::Rect(size) = shape
+          && let Some(coverage) = render_rect_mask(*size, device, Some(cull))
+        {
+          return coverage;
+        }
+
+        render_mask(
+          &shape.to_commands(),
+          Some(device),
+          Some(Fill::from(shape.rule()).into()),
+          Some(cull),
+        )
+      });
     }
 
     let unclipped = self.clips.is_empty();
