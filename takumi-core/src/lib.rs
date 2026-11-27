@@ -86,7 +86,7 @@ pub(crate) mod svg;
 #[cfg(feature = "svg")]
 mod svg_vector;
 /// The SVG filter primitives a raster backend runs.
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-raster")]
 pub mod svg_filter {
   pub use crate::svg::filter::*;
 }
