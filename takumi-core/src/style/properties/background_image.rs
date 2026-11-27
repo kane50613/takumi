@@ -198,12 +198,12 @@ mod tests {
           BackgroundImage::Radial(
             RadialGradient::builder()
               .size(RadialSize::Explicit {
-                radius_x: Length::Percentage(0.6 * 100.0),
-                radius_y: Length::Percentage(0.6 * 100.0),
+                radius_x: Length::Percentage(60.0),
+                radius_y: Length::Percentage(60.0),
               })
               .center(PositionValue(SpacePair::from_pair(
-                Length::Percentage(0.5 * 100.0).into(),
-                Length::Percentage(0.5 * 100.0).into(),
+                Length::Percentage(50.0).into(),
+                Length::Percentage(50.0).into(),
               )))
               .stops([
                 GradientStop::ColorHint {
@@ -220,12 +220,12 @@ mod tests {
           BackgroundImage::Radial(
             RadialGradient::builder()
               .size(RadialSize::Explicit {
-                radius_x: Length::Percentage(0.3 * 100.0),
-                radius_y: Length::Percentage(0.3 * 100.0),
+                radius_x: Length::Percentage(30.0),
+                radius_y: Length::Percentage(30.0),
               })
               .center(PositionValue(SpacePair::from_pair(
-                Length::Percentage(0.5 * 100.0).into(),
-                Length::Percentage(0.5 * 100.0).into(),
+                Length::Percentage(50.0).into(),
+                Length::Percentage(50.0).into(),
               )))
               .stops([
                 GradientStop::ColorHint {

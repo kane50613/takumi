@@ -3154,8 +3154,6 @@ svg/extensibility/foreignObject/compositing-backface-visibility.html
 svg/extensibility/foreignObject/foreign-object-scale-scroll.html
 svg/extensibility/foreignObject/will-change-in-foreign-object-paint-order.html
 svg/geometry/reftests/
-!svg/geometry/reftests/percentage-attribute.svg
-!svg/geometry/reftests/percentage.svg
 svg/layout/svg-intrinsic-size-min-size.html
 svg/layout/svg-use-symbol-width-2-print.html
 svg/layout/svg-use-symbol-width-print.html
