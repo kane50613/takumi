@@ -216,16 +216,18 @@ strip = "debuginfo"
 
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
-# raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
-[profile.release.package.zune-jpeg]
-opt-level = "z"
+# raster/shaping and image-webp (wasm webp encode) stay at opt-level 3, as do
+# the exceptions below.
 [profile.release.package.imagesize]
 opt-level = "z"
 [profile.release.package.cssparser]
 opt-level = "z"
 [profile.release.package.selectors]
 opt-level = "z"
-# PNG is the exception: an animated source decodes a frame per draw, so these
+# zune-jpeg is an exception and has no entry, so it inherits opt-level 3. A
+# 2400x1601 progressive cover decodes in 129ms on wasm and 45ms on napi, 3-7%
+# faster than "z", for 0.5KB brotli.
+# PNG is the other: an animated source decodes a frame per draw, so these
 # three sit on the per-image path many times over. Size-optimizing them costs
 # 24-33% on APNG frame decoding and saves 1.1KB brotli in the wasm bundle.
 [profile.release.package.png]
