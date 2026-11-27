@@ -77,6 +77,9 @@ pub enum SvgOp {
     stroke: Option<SvgStrokeStyle>,
     /// `false` for `shape-rendering: crispEdges` and `optimizeSpeed`.
     anti_alias: bool,
+    /// Whether `path` outlines a `rect` without radii, which a backend fills as a rect, as Blink's
+    /// `SVGShapePainter` does.
+    rect: bool,
   },
   /// Draws a bitmap over `(0, 0, width, height)` in the current coordinate space.
   Image {

@@ -38,6 +38,7 @@ impl LayoutObject {
       stroke_first: false,
       anti_alias: true,
       abs_transform: Affine::IDENTITY,
+      rectangle: true,
     })))
   }
 }
@@ -295,6 +296,7 @@ impl SvgLayout<'_> {
         ShapeRendering::CrispEdges | ShapeRendering::OptimizeSpeed
       ),
       abs_transform: path_transform,
+      rectangle: styled.kind == SvgElementKind::Rect && self.radii(styled, scope) == (0.0, 0.0),
     };
 
     shape.settle_paints(None);

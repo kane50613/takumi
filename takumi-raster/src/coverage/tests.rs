@@ -123,3 +123,30 @@ fn non_finite_points_make_no_path() {
 
   assert!(builder.finish().is_none());
 }
+
+#[test]
+fn whole_pixel_square_covers_its_edges_fully() {
+  for size in [8.0, 50.0, 200.0] {
+    let path = polygon(&[
+      (2.0, 2.0),
+      (2.0 + size, 2.0),
+      (2.0 + size, 2.0 + size),
+      (2.0, 2.0 + size),
+    ]);
+    let width = size as u32 + 4;
+    let mask = fill(&path, FillRule::Winding, width, width);
+    let at = |x: u32, y: u32| mask[(y * width + x) as usize];
+
+    assert_eq!(
+      [
+        at(2, 2),
+        at(2, 5),
+        at(1 + size as u32, 5),
+        at(5, 1 + size as u32)
+      ],
+      [255; 4],
+      "{size}"
+    );
+    assert_eq!([at(1, 5), at(5, 1)], [0; 2], "{size}");
+  }
+}

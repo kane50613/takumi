@@ -184,6 +184,7 @@ impl<'b> SvgPainter<'b> {
           fill: None,
           stroke: Some(stroke),
           anti_alias,
+          rect: shape.rectangle,
         });
       }
 
@@ -193,6 +194,7 @@ impl<'b> SvgPainter<'b> {
           fill: Some(fill),
           stroke: None,
           anti_alias,
+          rect: shape.rectangle,
         });
       }
     } else {
@@ -201,6 +203,7 @@ impl<'b> SvgPainter<'b> {
         fill,
         stroke,
         anti_alias,
+        rect: shape.rectangle,
       });
     }
   }

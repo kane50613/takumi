@@ -51,6 +51,7 @@ mod render;
 #[cfg(all(test, feature = "pages"))]
 mod render_pages_tests;
 mod scanline;
+mod shader;
 mod simd;
 mod stacking_context;
 #[cfg(feature = "svg")]

@@ -159,6 +159,7 @@ impl TextPainter<'_> {
       stroke_first,
       anti_alias: true,
       abs_transform: self.abs_transform,
+      rectangle: false,
     };
 
     shape.settle_paints(None);

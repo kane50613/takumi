@@ -51,6 +51,18 @@ impl<T> Point<T> {
 impl Point<f32> {
   /// The origin.
   pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
+
+  /// `SkPoint::Length`: the distance from the origin, through doubles only where the floats
+  /// overflow.
+  pub fn length(self) -> f32 {
+    let squared = self.x * self.x + self.y * self.y;
+
+    if squared.is_finite() {
+      squared.sqrt()
+    } else {
+      (f64::from(self.x) * f64::from(self.x) + f64::from(self.y) * f64::from(self.y)).sqrt() as f32
+    }
+  }
 }
 
 impl<U, T: Add<U>> Add<Point<U>> for Point<T> {

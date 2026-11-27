@@ -49,14 +49,7 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
   .any(|value| ((value << 18) >> 18) != value);
 
   if overflows {
-    let mut mask = Mask::from_vec(
-      vec![0; size.width() as usize * size.height() as usize],
-      size,
-    )?;
-
-    mask.fill_path(path, fill_rule, false, Transform::identity());
-
-    return Some(mask.take());
+    return fill_path_aliased(path, fill_rule, size);
   }
 
   let mut coverage = Coverage::new(size.width(), size.height());
@@ -66,6 +59,23 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
   }
 
   Some(coverage.data)
+}
+
+/// The coverage of `path` over a `size` mask at the origin without anti-aliasing.
+// TODO: port `SkScan::FillPath` in place of tiny-skia's aliased fill.
+pub(crate) fn fill_path_aliased(
+  path: &Path,
+  fill_rule: FillRule,
+  size: IntSize,
+) -> Option<Vec<u8>> {
+  let mut mask = Mask::from_vec(
+    vec![0; size.width() as usize * size.height() as usize],
+    size,
+  )?;
+
+  mask.fill_path(path, fill_rule, false, Transform::identity());
+
+  Some(mask.take())
 }
 
 /// The coverage of the axis-aligned rect `[left, top, right, bottom]` over a `size` mask at the

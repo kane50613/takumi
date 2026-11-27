@@ -6,7 +6,7 @@
 
 use std::{f32::consts::SQRT_2, rc::Rc};
 
-use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, PixmapRef, Transform};
+use tiny_skia::{IntRect, Pixmap, PixmapRef, Transform};
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
@@ -24,10 +24,16 @@ use takumi_core::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
     image_buffer::premultiply_pixel,
   },
-  style::{Affine, Color, math::mul_div_255},
+  style::{
+    Affine, BlendMode, Color,
+    math::{div_255, mul_div_255},
+  },
 };
 
-use crate::svg::drawing::{draw as draw_svg, draw_over, tiny_blend_mode};
+use crate::{
+  blend::{blend_premultiplied_pixel, composite_premultiplied_over},
+  svg::drawing::{draw as draw_svg, draw_over},
+};
 
 /// A primitive's pixels over the filter region, with `filters` deferred as Skia's `FilterResult`
 /// defers them.
@@ -171,13 +177,7 @@ pub(crate) fn apply(filter: &SvgFilter, transform: Transform, layer: &mut Pixmap
     if region == Rect::from_size(0, 0, width, height) {
       *layer = image.take();
     } else {
-      draw(
-        layer,
-        image.view(),
-        region.left,
-        region.top,
-        TinyBlendMode::SourceOver,
-      );
+      draw(layer, image.view(), region.left, region.top, Layer::Over);
     }
   }
 }
@@ -274,7 +274,7 @@ pub(crate) fn apply_to_layer(
     PixmapRef::from_bytes(layer, width, height)?,
     dx - window.left,
     dy - window.top,
-    TinyBlendMode::SourceOver,
+    Layer::Over,
   );
   apply(filter, transform, &mut sub);
 
@@ -285,7 +285,7 @@ pub(crate) fn apply_to_layer(
     sub.as_ref(),
     window.left - dx,
     window.top - dy,
-    TinyBlendMode::SourceOver,
+    Layer::Over,
   );
   layer.copy_from_slice(out.data());
 
@@ -413,7 +413,7 @@ impl Run<'_> {
         let top = next()?.into_color_space(space);
         let mut pixmap = next()?.into_color_space(space).take();
 
-        draw(&mut pixmap, top.view(), 0, 0, tiny_blend_mode(*mode));
+        draw(&mut pixmap, top.view(), 0, 0, Layer::Blend(*mode));
         Some(Image::new(pixmap, space))
       }
       // `FEDropShadow` in `fe_drop_shadow.cc`.
@@ -466,7 +466,7 @@ impl Run<'_> {
           input.view(),
           offset.x as i32,
           offset.y as i32,
-          TinyBlendMode::SourceOver,
+          Layer::Over,
         );
         Some(Image::new(pixmap, input.color_space))
       }
@@ -489,13 +489,11 @@ impl Run<'_> {
 
         let mut pixmap = bottom.take();
         let blend = match operator {
-          CompositeOperator::In => TinyBlendMode::SourceIn,
-          CompositeOperator::Out => TinyBlendMode::SourceOut,
-          CompositeOperator::Atop => TinyBlendMode::SourceAtop,
-          CompositeOperator::Xor => TinyBlendMode::Xor,
-          CompositeOperator::Over | CompositeOperator::Arithmetic { .. } => {
-            TinyBlendMode::SourceOver
-          }
+          CompositeOperator::In => Layer::In,
+          CompositeOperator::Out => Layer::Out,
+          CompositeOperator::Atop => Layer::Atop,
+          CompositeOperator::Xor => Layer::Xor,
+          CompositeOperator::Over | CompositeOperator::Arithmetic { .. } => Layer::Over,
         };
 
         draw(&mut pixmap, top.view(), 0, 0, blend);
@@ -511,7 +509,7 @@ impl Run<'_> {
             input.into_color_space(space).view(),
             0,
             0,
-            TinyBlendMode::SourceOver,
+            Layer::Over,
           );
         }
         Some(Image::new(pixmap, space))
@@ -672,44 +670,36 @@ impl Run<'_> {
       shadow_pixmap.as_ref(),
       offset.x as i32,
       offset.y as i32,
-      TinyBlendMode::SourceOver,
+      Layer::Over,
     );
-    draw(&mut pixmap, input.as_ref(), 0, 0, TinyBlendMode::SourceOver);
+    draw(&mut pixmap, input.as_ref(), 0, 0, Layer::Over);
     Some(Image::new(pixmap, space))
   }
 
-  /// Blink's `FETile` in `fe_tile.cc`: the data of the input repeated across the region.
+  /// Blink's `FETile` in `fe_tile.cc`: the data of the input repeated across the region, copied as
+  /// Skia's `SkTileImageFilter` copies it.
   fn tile(&self, input: Image) -> Option<Image> {
     let tile = input.region.translated(-self.region.left, -self.region.top);
-    let tile_pixmap = input.pixmap.clone_rect(tiny_skia::IntRect::from_xywh(
-      tile.left,
-      tile.top,
-      tile.width(),
-      tile.height(),
-    )?)?;
-    let mut pixmap = self.blank()?;
-    let rect = tiny_skia::Rect::from_xywh(
-      0.0,
-      0.0,
-      self.region.width() as f32,
-      self.region.height() as f32,
-    )?;
+    let (tile_width, tile_height) = (tile.width() as i32, tile.height() as i32);
 
-    pixmap.fill_rect(
-      rect,
-      &tiny_skia::Paint {
-        shader: tiny_skia::Pattern::new(
-          tile_pixmap.as_ref(),
-          tiny_skia::SpreadMode::Repeat,
-          tiny_skia::FilterQuality::Bicubic,
-          1.0,
-          Transform::from_translate(tile.left as f32, tile.top as f32),
-        ),
-        ..tiny_skia::Paint::default()
-      },
-      Transform::identity(),
-      None,
-    );
+    if tile_width <= 0 || tile_height <= 0 {
+      return None;
+    }
+
+    let mut pixmap = self.blank()?;
+    let width = pixmap.width() as i32;
+    let source_width = input.pixmap.width() as i32;
+    let source = input.pixmap.rgba();
+    let target = pixmap.rgba_mut();
+
+    for (index, pixel) in target.iter_mut().enumerate() {
+      let (x, y) = (index as i32 % width, index as i32 / width);
+      let column = tile.left + (x - tile.left).rem_euclid(tile_width);
+      let row = tile.top + (y - tile.top).rem_euclid(tile_height);
+
+      *pixel = source[(row * source_width + column) as usize];
+    }
+
     Some(Image::new(pixmap, input.color_space))
   }
 
@@ -898,24 +888,71 @@ impl PixmapPixels for Pixmap {
   }
 }
 
-/// Draws `source` over `target` with its top-left corner at `x`, `y`.
-fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, blend_mode: TinyBlendMode) {
-  if blend_mode == TinyBlendMode::SourceOver {
+/// How [`draw`] joins a source to the target below it: source-over, the Porter-Duff operators of
+/// `feComposite`, or a blend mode.
+#[derive(Clone, Copy)]
+enum Layer {
+  Over,
+  In,
+  Out,
+  Atop,
+  Xor,
+  Blend(BlendMode),
+}
+
+/// Draws `source` onto `target` with its top-left corner at `x`, `y`, joined as `layer` has it.
+/// The Porter-Duff operators follow Skia's 8-bit `srcin`, `srcout`, `srcatop`, and `xor` stages.
+fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, layer: Layer) {
+  if let Layer::Over = layer {
     draw_over(&mut target.as_mut(), source, (x, y), 1.0, None);
     return;
   }
 
-  target.draw_pixmap(
-    x,
-    y,
-    source,
-    &PixmapPaint {
-      blend_mode,
-      ..PixmapPaint::default()
-    },
-    Transform::identity(),
-    None,
-  );
+  let target_width = target.width() as i32;
+  let (source_width, source_height) = (source.width() as i32, source.height() as i32);
+  let left = x.max(0);
+  let right = (x + source_width).min(target_width);
+  let top = y.max(0);
+  let bottom = (y + source_height).min(target.height() as i32);
+  let target_pixels: &mut [[u8; 4]] = target.data_mut().as_chunks_mut().0;
+  let source_pixels: &[[u8; 4]] = source.data().as_chunks().0;
+
+  for row in top..bottom {
+    for column in left..right {
+      let destination = &mut target_pixels[(row * target_width + column) as usize];
+      let source = source_pixels[((row - y) * source_width + column - x) as usize];
+      let (source_alpha, destination_alpha) = (source[3], destination[3]);
+
+      *destination = match layer {
+        Layer::Over => {
+          let mut over = *destination;
+
+          composite_premultiplied_over(&mut over, source);
+          over
+        }
+        Layer::In => source.map(|channel| mul_div_255(channel, destination_alpha)),
+        Layer::Out => source.map(|channel| mul_div_255(channel, 255 - destination_alpha)),
+        Layer::Atop => std::array::from_fn(|lane| {
+          div_255(
+            u16::from(source[lane]) * u16::from(destination_alpha)
+              + u16::from(destination[lane]) * u16::from(255 - source_alpha),
+          )
+        }),
+        Layer::Xor => std::array::from_fn(|lane| {
+          div_255(
+            u16::from(source[lane]) * u16::from(255 - destination_alpha)
+              + u16::from(destination[lane]) * u16::from(255 - source_alpha),
+          )
+        }),
+        Layer::Blend(mode) => {
+          let mut blended = *destination;
+
+          blend_premultiplied_pixel(&mut blended, source, mode);
+          blended
+        }
+      };
+    }
+  }
 }
 
 /// Blurs premultiplied pixels by a sigma for each axis.
