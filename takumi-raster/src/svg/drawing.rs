@@ -1,4 +1,4 @@
-//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers its supplied paint bounds, or a
+//! Draws flattened SVG ops onto a pixmap. A layer covers its supplied paint bounds, or a
 //! filter layer's region when it has none.
 
 use std::slice::Iter;
@@ -282,8 +282,8 @@ impl<'a, 'b> Target<'a, 'b> {
     true
   }
 
-  /// The mask `ops` draw, which cuts the layer it is pushed with: their alpha, or their luminance as
-  /// tiny-skia's `Mask::from_pixmap` reads it.
+  /// The mask `ops` draw, which cuts the layer it is pushed with: their alpha, or the luminance of
+  /// their unpremultiplied color times their alpha, rounded up.
   fn mask(&self, ops: &[SvgOp], luminance: bool) -> Option<Mask> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
     let mut drawn = Pixmap::new(width, height)?;
@@ -643,7 +643,7 @@ pub(crate) fn draw(ops: &[SvgOp], transform: Affine, pixmap: &mut PixmapMut) {
 }
 
 /// Draws `source` over `target` with its top left at `origin`, at `opacity` and inside `clip` when
-/// there is one, as tiny-skia's source-over `draw_pixmap` does, in integers.
+/// there is one, in integers.
 pub(crate) fn draw_over(
   target: &mut PixmapMut,
   source: PixmapRef,

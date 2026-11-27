@@ -332,8 +332,7 @@ pub(crate) fn bitmap_coverage(
 
   checked_area(placement.width, placement.height, 4)?;
 
-  // As tiny-skia's `draw_pixmap` draws: the source rect filled without antialiasing, sampled
-  // bilinearly.
+  // The source rect filled without antialiasing and sampled bilinearly.
   let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
   let size = IntSize::from_wh(placement.width, placement.height)?;
   let outline =

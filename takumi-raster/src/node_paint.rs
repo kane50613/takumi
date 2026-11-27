@@ -1,4 +1,4 @@
-//! Raster box decorations, compositing [`takumi_core::layout::decoration`] with tiny-skia.
+//! Raster box decorations, compositing [`takumi_core::layout::decoration`].
 
 use std::sync::Arc;
 

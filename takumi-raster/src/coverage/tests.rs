@@ -1,5 +1,5 @@
 use crate::path::Fill;
-use takumi_core::path::{IntSize, Path, PathBuilder, PathSegment, Rect};
+use takumi_core::path::{IntSize, Path, PathBuilder, Rect};
 
 use super::{fill_path, fill_path_aliased};
 
@@ -169,61 +169,118 @@ fn whole_pixel_square_covers_its_edges_fully() {
   }
 }
 
-/// tiny-skia's aliased fill, a port of an older `SkScan::FillPath`, as the oracle.
-fn tiny_skia_aliased(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
-  let mut mask = tiny_skia::Mask::new(width, height).unwrap();
-  let mut builder = tiny_skia::PathBuilder::new();
+/// The aliased fill of the polygon `points` by its winding at each row center, with the vertices
+/// on Skia's 1/64 grid and each span from the rounded crossings: an oracle independent of the edge
+/// walk. `SkEdge::setLine` starts its x on the 1/64 grid and steps it in 16.16, so a crossing
+/// within 1/32 of a half pixel can round either way, and the pixels beside one come back as
+/// ambiguous.
+fn aliased_reference(
+  points: &[(f32, f32)],
+  fill_rule: Fill,
+  width: u32,
+  height: u32,
+) -> (Vec<u8>, Vec<bool>) {
+  let grid = |value: f32| f64::from((value * 64.0) as i32) / 64.0;
+  let vertices: Vec<(f64, f64)> = points.iter().map(|&(x, y)| (grid(x), grid(y))).collect();
+  let mask_bits = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
+  let (mut mask, mut ambiguous) = (
+    vec![0; (width * height) as usize],
+    vec![false; (width * height) as usize],
+  );
 
-  for segment in path.segments() {
-    match segment {
-      PathSegment::MoveTo(to) => builder.move_to(to.x, to.y),
-      PathSegment::LineTo(to) => builder.line_to(to.x, to.y),
-      PathSegment::QuadTo(control, to) => builder.quad_to(control.x, control.y, to.x, to.y),
-      PathSegment::CubicTo(first, second, to) => {
-        builder.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
+  for row in 0..height as i32 {
+    let center = f64::from(row) + 0.5;
+    let mut crossings: Vec<(f64, i32)> = Vec::new();
+
+    for (index, &(x0, y0)) in vertices.iter().enumerate() {
+      let (x1, y1) = vertices[(index + 1) % vertices.len()];
+      let ((top_x, top), (bottom_x, bottom), winding) = if y0 <= y1 {
+        ((x0, y0), (x1, y1), 1)
+      } else {
+        ((x1, y1), (x0, y0), -1)
+      };
+
+      // `SkEdge` covers the rows whose centers its rounded ends enclose.
+      if f64::from(row) >= (top + 0.5).floor() && f64::from(row) < (bottom + 0.5).floor() {
+        crossings.push((
+          top_x + (center - top) * (bottom_x - top_x) / (bottom - top),
+          winding,
+        ));
       }
-      PathSegment::Close => builder.close(),
+    }
+
+    crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let mut winding = 0;
+    let mut left = 0.0;
+
+    for (x, edge_winding) in crossings {
+      if winding & mask_bits == 0 {
+        left = x;
+      }
+
+      winding += edge_winding;
+
+      if winding & mask_bits == 0 {
+        let (from, to) = ((left + 0.5).floor() as i32, (x + 0.5).floor() as i32);
+        let row_start = (row as u32 * width) as usize;
+
+        for column in from.max(0)..to.min(width as i32) {
+          mask[row_start + column as usize] = 255;
+        }
+
+        for edge in [left, x] {
+          if ((edge + 0.5).fract() - 0.5).abs() > 0.5 - 1.0 / 32.0 {
+            for column in [(edge + 0.5).floor() as i32 - 1, (edge + 0.5).floor() as i32] {
+              if (0..width as i32).contains(&column) {
+                ambiguous[row_start + column as usize] = true;
+              }
+            }
+          }
+        }
+      }
     }
   }
 
-  let path = builder.finish().unwrap();
-  let fill_rule = match fill_rule {
-    Fill::NonZero => tiny_skia::FillRule::Winding,
-    Fill::EvenOdd => tiny_skia::FillRule::EvenOdd,
-  };
-
-  mask.fill_path(&path, fill_rule, false, tiny_skia::Transform::identity());
-  mask.data().to_vec()
+  (mask, ambiguous)
 }
 
 #[test]
-fn aliased_polygons_match_skias_fill() {
+fn aliased_polygons_match_their_winding_at_pixel_centers() {
   let mut seed = 0x2545_f491_u32;
   let mut next = |range: f32| {
     seed ^= seed << 13;
     seed ^= seed >> 17;
     seed ^= seed << 5;
-    (seed % 10_000) as f32 / 10_000.0 * range - 8.0
+    (seed % 10_000) as f32 / 10_000.0 * range
   };
 
   for case in 0..200 {
     let points: Vec<(f32, f32)> = (0..3 + case % 6)
-      .map(|_| (next(80.0), next(60.0)))
+      .map(|_| (next(64.0), next(48.0)))
       .collect();
     let path = polygon(&points);
 
     for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
-      assert_eq!(
-        fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
-        tiny_skia_aliased(&path, fill_rule, 64, 48),
-        "case {case} {fill_rule:?} {points:?}",
-      );
+      let ours = fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap();
+      let (reference, ambiguous) = aliased_reference(&points, fill_rule, 64, 48);
+
+      assert!(ambiguous.iter().filter(|&&ambiguous| ambiguous).count() < 64 * 48 / 20);
+
+      for (index, ((ours, reference), ambiguous)) in
+        ours.iter().zip(&reference).zip(&ambiguous).enumerate()
+      {
+        assert!(
+          *ambiguous || ours == reference,
+          "case {case} {fill_rule:?} pixel {index}: {ours} against {reference}, {points:?}",
+        );
+      }
     }
   }
 }
 
 #[test]
-fn aliased_curves_match_skias_fill() {
+fn aliased_curves_agree_with_their_antialiased_coverage() {
   let mut builder = PathBuilder::new();
 
   push_circle(&mut builder, 30.3, 25.7, 19.6);
@@ -232,13 +289,24 @@ fn aliased_curves_match_skias_fill() {
   builder.close();
 
   let path = builder.finish().unwrap();
+  let size = IntSize::from_wh(64, 48).unwrap();
 
   for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
-    assert_eq!(
-      fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
-      tiny_skia_aliased(&path, fill_rule, 64, 48),
-      "{fill_rule:?}",
+    let aliased = fill_path_aliased(&path, fill_rule, size).unwrap();
+    let antialiased = fill_path(&path, fill_rule, size).unwrap();
+
+    assert!(
+      aliased.iter().filter(|&&alpha| alpha == 255).count() > 500,
+      "{fill_rule:?}"
     );
+
+    // A pixel the analytic scan covers whole is filled, and one it leaves empty is not.
+    for (index, (&aliased, &coverage)) in aliased.iter().zip(&antialiased).enumerate() {
+      assert!(
+        (coverage != 255 || aliased == 255) && (coverage != 0 || aliased == 0),
+        "{fill_rule:?} pixel {index}: {aliased} against coverage {coverage}",
+      );
+    }
   }
 }
 

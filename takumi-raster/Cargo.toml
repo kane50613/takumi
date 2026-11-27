@@ -61,7 +61,6 @@ pages = ["takumi-core/fragmentation"]
 
 [dev-dependencies]
 serde_json.workspace = true
-tiny-skia.workspace = true
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"

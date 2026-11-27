@@ -73,7 +73,7 @@ pub(crate) struct Rgba(pub [u8; 4]);
 impl Rgba {
   pub(crate) const TRANSPARENT: Self = Self([0, 0, 0, 0]);
 
-  /// Unpremultiplies a tiny-skia pixel.
+  /// Unpremultiplies a premultiplied pixel.
   pub(crate) fn demultiplied(color: [u8; 4]) -> Self {
     let mut pixel = color;
 
