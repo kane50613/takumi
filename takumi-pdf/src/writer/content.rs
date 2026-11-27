@@ -211,9 +211,7 @@ impl ContentBuilder {
     }
 
     // See issue 199.
-    let is_line = path.verbs().len() == 2
-      && path.verbs()[0] == PathVerb::Move
-      && path.verbs()[1] == PathVerb::Line;
+    let is_line = matches!(path.verbs(), [PathVerb::Move, PathVerb::Line]);
     let dont_fill = bounds.width() == 0.0 || bounds.height() == 0.0 || is_line;
 
     if dont_fill {
