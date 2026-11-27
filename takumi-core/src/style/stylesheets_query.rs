@@ -352,7 +352,7 @@ impl ComputedStyle {
       )
     {
       local *= Affine::translation(point.x - origin_x, point.y - origin_y);
-      local *= Affine::rotation_radians(self.misc3_data.offset_rotate.resolve(tangent));
+      local *= Affine::rotation(self.misc3_data.offset_rotate.resolve(tangent));
       if let Some((anchor_x, anchor_y)) =
         self.misc3_data.offset_anchor.resolve(sizing, width, height)
       {

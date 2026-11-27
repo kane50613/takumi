@@ -16,7 +16,7 @@ use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_c
 use crate::{
   layout::layout_style::LayoutLength,
   style::{
-    Length, ParseMode, ParseResult, SizingContext, ToCss,
+    Angle, Length, ParseMode, ParseResult, SizingContext, ToCss,
     calc::{CalcFormula, CalcUnit, CalcValue},
     interner::{self, Interner},
     length_from_dimension_unit, parse_comma_separated, parse_nested_block,
@@ -405,8 +405,8 @@ fn fold_unary(name: &str, argument: Node) -> Option<Node> {
   };
 
   Some(match_ignore_ascii_case! { name,
-    "sin" => Node::Number(sin_cos_degrees(degrees).0),
-    "cos" => Node::Number(sin_cos_degrees(degrees).1),
+    "sin" => Node::Number(Angle::new(degrees).sin_cos_degrees().0),
+    "cos" => Node::Number(Angle::new(degrees).sin_cos_degrees().1),
     "tan" => Node::Number(tan_degrees(degrees)),
     "asin" if number => Node::Angle(value.raw.asin().to_degrees()),
     "acos" if number => Node::Angle(value.raw.acos().to_degrees()),
@@ -415,17 +415,6 @@ fn fold_unary(name: &str, argument: Node) -> Option<Node> {
     "exp" if number => Node::Number(value.raw.exp()),
     _ => return None,
   })
-}
-
-/// The sine and cosine of `degrees`, exact at multiples of 90deg, as gfx's `SinCosDegrees`.
-fn sin_cos_degrees(degrees: f32) -> (f32, f32) {
-  let quadrants = degrees / 90.0;
-
-  if degrees.abs() < 90_000_000.0 && quadrants.fract() == 0.0 {
-    return [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)][(quadrants as i32 & 3) as usize];
-  }
-
-  degrees.to_radians().sin_cos()
 }
 
 /// The tangent of `degrees`, exact at multiples of 45deg, as Blink's `TanDegrees`.

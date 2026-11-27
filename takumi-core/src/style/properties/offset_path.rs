@@ -1,7 +1,4 @@
-use std::{
-  f32::consts::{FRAC_PI_2, PI},
-  fmt,
-};
+use std::fmt;
 
 use cssparser::Parser;
 use kurbo::{
@@ -337,12 +334,13 @@ impl Default for OffsetRotate {
 }
 
 impl OffsetRotate {
-  /// Resolves the final rotation, in radians, given the path tangent direction.
-  pub fn resolve(self, tangent_radians: f32) -> f32 {
+  /// The rotation along a path whose tangent points `tangent_degrees`, summed in degrees as
+  /// Blink's `ApplyMotionPathTransform` rotates by it, with `reverse` a further half turn.
+  pub fn resolve(self, tangent_degrees: f32) -> Angle {
     match self {
-      Self::Auto(angle) => tangent_radians + angle.normalized().to_radians(),
-      Self::Reverse(angle) => tangent_radians + PI + angle.normalized().to_radians(),
-      Self::Fixed(angle) => angle.normalized().to_radians(),
+      Self::Auto(angle) => Angle::new(tangent_degrees + *angle),
+      Self::Reverse(angle) => Angle::new(tangent_degrees + (*angle + 180.0)),
+      Self::Fixed(angle) => angle,
     }
   }
 }
@@ -581,7 +579,7 @@ fn point_and_tangent(segment: PathSeg, t: f64) -> (Point<f32>, f32) {
   let point = segment.eval(t);
   let before = segment.eval((t - 1e-3).max(0.0));
   let after = segment.eval((t + 1e-3).min(1.0));
-  let tangent = (after.y - before.y).atan2(after.x - before.x) as f32;
+  let tangent = (after.y - before.y).atan2(after.x - before.x).to_degrees() as f32;
 
   (
     Point {
@@ -666,7 +664,7 @@ fn ray_length(start: Point<f32>, ray: &RayShape, size: Size<f32>) -> f32 {
       if start.x < 0.0 || start.x > size.width || start.y < 0.0 || start.y > size.height {
         return 0.0;
       }
-      let theta = ray.angle.normalized().to_radians();
+      let theta = ray.angle.to_radians();
       let (mut sin_t, mut cos_t) = (theta.sin(), theta.cos());
       let vertical = if cos_t >= 0.0 {
         start.y
@@ -706,20 +704,21 @@ fn sample_ray(
   let length = ray_length(start, ray, border_box);
   let traveled = distance.to_px(sizing, length);
   // 0deg points up; the direction (and tangent) is the angle minus a quarter turn.
-  let direction = ray.angle.normalized().to_radians() - FRAC_PI_2;
+  let tangent = *ray.angle - 90.0;
+  let direction = tangent.to_radians();
 
   (
     Point {
       x: start.x + traveled * direction.cos(),
       y: start.y + traveled * direction.sin(),
     },
-    direction,
+    tangent,
   )
 }
 
 impl OffsetPath {
   /// Samples the path at `distance`, returning the point (box-local px) and
-  /// tangent direction (radians).
+  /// tangent direction (degrees).
   pub(crate) fn sample(
     &self,
     distance: Length,
@@ -791,8 +790,18 @@ mod tests {
 
   #[test]
   fn resolve_uses_tangent() {
-    assert_eq!(OffsetRotate::Auto(Angle::zero()).resolve(1.0), 1.0);
-    assert_eq!(OffsetRotate::Fixed(Angle::zero()).resolve(1.0), 0.0);
+    assert_eq!(
+      OffsetRotate::Auto(Angle::new(400.0)).resolve(30.0),
+      Angle::new(430.0)
+    );
+    assert_eq!(
+      OffsetRotate::Reverse(Angle::new(10.0)).resolve(30.0),
+      Angle::new(220.0)
+    );
+    assert_eq!(
+      OffsetRotate::Fixed(Angle::new(400.0)).resolve(30.0),
+      Angle::new(400.0)
+    );
   }
 
   /// The point `distance` along `path` within a 200 px box.

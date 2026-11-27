@@ -238,7 +238,8 @@ impl ColorMatrix {
     filter
   }
 
-  /// `feColorMatrix type="hueRotate"`, with the spec's own coefficients.
+  /// `feColorMatrix type="hueRotate"`, with the spec's own coefficients, from the single-precision
+  /// sine and cosine of the specified degrees as Blink's `HueRotateMatrix` takes them.
   pub(crate) fn hue_rotate(angle: Angle) -> Self {
     const BASE: [[f32; 3]; 3] = [
       [0.213, 0.715, 0.072],
@@ -255,7 +256,7 @@ impl ColorMatrix {
       [0.143, 0.140, -0.283],
       [-0.787, 0.715, 0.072],
     ];
-    let (sin, cos) = angle.normalized().to_radians().sin_cos();
+    let (sin, cos) = angle.to_radians().sin_cos();
     let mut matrix = IDENTITY;
 
     for (index, row) in matrix.rows.iter_mut().take(3).enumerate() {
@@ -356,12 +357,20 @@ mod tests {
   use super::{ColorMatrix, ColorMatrixChain, TransferFunction};
   use crate::style::{Angle, Filter, PercentageNumber};
 
+  /// cc's `GetHueRotateMatrix` takes `cosf` and `sinf` of the specified degrees.
   #[test]
-  fn a_hue_rotation_past_a_turn_matches_its_normalized_angle() {
-    for (degrees, normalized) in [(400.0, 40.0), (-90.0, 270.0), (720.0, 0.0)] {
+  fn a_hue_rotation_reads_the_specified_degrees() {
+    for degrees in [400.0_f32, -90.0, 720.0, 1234.5] {
+      let (sin, cos) = degrees.to_radians().sin_cos();
+      let rows = ColorMatrix::hue_rotate(Angle::new(degrees)).rows;
+
       assert_eq!(
-        ColorMatrix::hue_rotate(Angle::new(degrees)),
-        ColorMatrix::hue_rotate(Angle::new(normalized)),
+        [rows[0][0], rows[1][1], rows[2][2]],
+        [
+          0.213 + cos * 0.787 - sin * 0.213,
+          0.715 + cos * 0.285 + sin * 0.140,
+          0.072 + cos * 0.928 + sin * 0.072,
+        ],
         "{degrees}deg"
       );
     }
