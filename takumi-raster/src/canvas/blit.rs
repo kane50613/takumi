@@ -1,9 +1,9 @@
 //! Free blitters and the image/mask overlay dispatchers that paint onto a
 //! [`DrawTarget`].
 
+use crate::pixmap::{PixmapMut, PixmapRef};
 use std::ops::Range;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{PixmapMut, PixmapRef};
 
 use super::{
   DrawTarget, MASK_RUN, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
@@ -614,8 +614,8 @@ pub(crate) fn overlay_sampled_paint_source(
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
+  use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapRef};
   use takumi_core::geometry::Size;
-  use tiny_skia::{Mask as TinyMask, Pixmap, PixmapRef};
 
   use super::*;
   use crate::{
@@ -687,7 +687,7 @@ mod tests {
           _ => noise(index, 2),
         })
         .collect(),
-      tiny_skia::IntSize::from_wh(24, 11).unwrap(),
+      tiny_skia_path::IntSize::from_wh(24, 11).unwrap(),
     )
     .unwrap();
     let view = MaskView {
@@ -759,13 +759,12 @@ mod tests {
       };
       let alpha = next();
 
-      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
+      *pixel = [
         next() % (alpha.saturating_add(1)),
         next() % (alpha.saturating_add(1)),
         next() % (alpha.saturating_add(1)),
         alpha,
-      )
-      .unwrap();
+      ];
     }
     pixmap
   }

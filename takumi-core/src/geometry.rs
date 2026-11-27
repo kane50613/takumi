@@ -4,8 +4,8 @@ use std::ops::{Add, Sub};
 
 use kurbo::PathSeg;
 #[cfg(feature = "svg")]
-use tiny_skia::PathSegment;
-use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
+use tiny_skia_path::PathSegment;
+use tiny_skia_path::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{layout_unit::LayoutUnit, style::Affine};
@@ -582,7 +582,7 @@ impl PathCommand {
   /// The commands of a tiny-skia path.
   #[cfg(feature = "svg")]
   pub(crate) fn from_path(path: &Path) -> Vec<Self> {
-    let point = |point: tiny_skia::Point| Point::new(point.x, point.y);
+    let point = |point: tiny_skia_path::Point| Point::new(point.x, point.y);
 
     path
       .segments()
@@ -602,7 +602,7 @@ impl PathCommand {
   #[cfg(feature = "svg")]
   pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
     let path = Self::build_path(paths)?;
-    let edges = |bounds: tiny_skia::Rect| Rect {
+    let edges = |bounds: tiny_skia_path::Rect| Rect {
       left: bounds.left(),
       right: bounds.right(),
       top: bounds.top(),

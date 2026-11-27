@@ -3,9 +3,11 @@
 
 use std::slice::Iter;
 
-use tiny_skia::{
-  FillRule, IntRect, IntSize, LineCap, LineJoin, Mask, Path, PathBuilder, PathStroker, Pixmap,
-  PixmapMut, PixmapRef, Rect, Stroke, StrokeDash, Transform,
+use crate::path::Fill;
+use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
+use tiny_skia_path::{
+  IntRect, IntSize, LineCap, LineJoin, Path, PathBuilder, PathStroker, Rect, Stroke, StrokeDash,
+  Transform,
 };
 
 use super::filter::apply as apply_filter;
@@ -295,22 +297,17 @@ impl<'a, 'b> Target<'a, 'b> {
       .iter()
       .map(|pixel| {
         if !luminance {
-          return pixel.alpha();
+          return pixel[3];
         }
 
-        let alpha = f32::from(pixel.alpha()) / 255.0;
+        let alpha = f32::from(pixel[3]) / 255.0;
         let channel = |value: u8| {
           let value = f32::from(value) / 255.0;
 
-          if pixel.alpha() == 0 {
-            value
-          } else {
-            value / alpha
-          }
+          if pixel[3] == 0 { value } else { value / alpha }
         };
-        let luma = channel(pixel.red()) * 0.2126
-          + channel(pixel.green()) * 0.7152
-          + channel(pixel.blue()) * 0.0722;
+        let luma =
+          channel(pixel[0]) * 0.2126 + channel(pixel[1]) * 0.7152 + channel(pixel[2]) * 0.0722;
 
         ((luma * alpha) * 255.0).clamp(0.0, 255.0).ceil() as u8
       })
@@ -341,9 +338,9 @@ impl<'a, 'b> Target<'a, 'b> {
       // Horizontal and vertical lines have no area to fill.
       if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
         let rule = if fill.evenodd {
-          FillRule::EvenOdd
+          Fill::EvenOdd
         } else {
-          FillRule::Winding
+          Fill::NonZero
         };
         let mut tile = None;
 
@@ -370,13 +367,13 @@ impl<'a, 'b> Target<'a, 'b> {
       if let Some(outline) = dashed.and_then(|path| path.stroke(&style, resolution))
         && let Some(shader) = shader_of(&stroke.paint, stroke.opacity, self.transform, &mut tile)
       {
-        self.fill(&outline, FillRule::Winding, &shader, anti_alias);
+        self.fill(&outline, Fill::NonZero, &shader, anti_alias);
       }
     }
   }
 
   /// Fills `path` under the target's transform with `shader`, through the target's clip.
-  fn fill(&mut self, path: &Path, rule: FillRule, shader: &Shader, anti_alias: bool) {
+  fn fill(&mut self, path: &Path, rule: Fill, shader: &Shader, anti_alias: bool) {
     let Some(device) = path.clone().transform(self.transform) else {
       return;
     };
@@ -414,7 +411,7 @@ impl<'a, 'b> Target<'a, 'b> {
 
     // `SkMatrix::rectStaysRect`: axis aligned, or turned a quarter.
     if !(kx == 0.0 && ky == 0.0 || sx == 0.0 && sy == 0.0) {
-      self.fill(path, FillRule::Winding, shader, true);
+      self.fill(path, Fill::NonZero, shader, true);
       return;
     }
 
@@ -520,7 +517,7 @@ impl<'a, 'b> Target<'a, 'b> {
 
     self.fill(
       &PathBuilder::from_rect(rect),
-      FillRule::Winding,
+      Fill::NonZero,
       &Shader::Image(image),
       true,
     );
@@ -824,9 +821,9 @@ fn clipped(
   target: &Target,
 ) -> Option<Mask> {
   let rule = if evenodd {
-    FillRule::EvenOdd
+    Fill::EvenOdd
   } else {
-    FillRule::Winding
+    Fill::NonZero
   };
   let size = IntSize::from_wh(target.pixmap.width(), target.pixmap.height())?;
   let mut coverage = match tiny_path(commands).and_then(|path| path.transform(target.transform)) {
@@ -914,7 +911,8 @@ fn to_u8(opacity: f32) -> u8 {
 mod tests {
   use std::sync::Arc;
 
-  use tiny_skia::{IntRect, Pixmap, Transform};
+  use crate::pixmap::Pixmap;
+  use tiny_skia_path::{IntRect, Transform};
 
   use super::{ScopeRect, SvgPixmapRasterizer, Target};
   use takumi_core::{

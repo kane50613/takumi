@@ -1,6 +1,6 @@
 use takumi_core::{geometry::PathCommand, painter::StrokeStyle};
-use tiny_skia::{
-  FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Stroke as TinyStroke,
+use tiny_skia_path::{
+  LineCap as TinyLineCap, LineJoin as TinyLineJoin, Stroke as TinyStroke,
   StrokeDash as TinyStrokeDash,
 };
 
@@ -112,15 +112,6 @@ impl From<Stroke> for Style {
   }
 }
 
-impl From<Fill> for TinyFillRule {
-  fn from(fill: Fill) -> Self {
-    match fill {
-      Fill::NonZero => TinyFillRule::Winding,
-      Fill::EvenOdd => TinyFillRule::EvenOdd,
-    }
-  }
-}
-
 impl From<Join> for TinyLineJoin {
   fn from(join: Join) -> Self {
     match join {
@@ -155,10 +146,10 @@ impl From<Stroke> for TinyStroke {
 }
 
 impl Style {
-  pub(crate) fn fill_rule(self) -> TinyFillRule {
+  pub(crate) fn fill_rule(self) -> Fill {
     match self {
-      Style::FillEvenOdd => Fill::EvenOdd.into(),
-      Style::FillNonZero | Style::Stroke(_) => Fill::NonZero.into(),
+      Style::FillEvenOdd => Fill::EvenOdd,
+      Style::FillNonZero | Style::Stroke(_) => Fill::NonZero,
     }
   }
 

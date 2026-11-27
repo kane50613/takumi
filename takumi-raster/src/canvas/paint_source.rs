@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell};
 
-use tiny_skia::PixmapRef;
+use crate::pixmap::PixmapRef;
 
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
@@ -225,8 +225,8 @@ impl<'a> From<PixmapRef<'a>> for PaintSource<'a> {
   }
 }
 
-impl<'a> From<&'a tiny_skia::Pixmap> for PaintSource<'a> {
-  fn from(value: &'a tiny_skia::Pixmap) -> Self {
+impl<'a> From<&'a crate::pixmap::Pixmap> for PaintSource<'a> {
+  fn from(value: &'a crate::pixmap::Pixmap) -> Self {
     Self::Pixmap(value.as_ref())
   }
 }
@@ -712,7 +712,7 @@ fn box_average(
 
 #[cfg(test)]
 mod tests {
-  use tiny_skia::Pixmap;
+  use crate::pixmap::Pixmap;
 
   use super::{
     BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
@@ -760,13 +760,12 @@ mod tests {
       let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
       let alpha = byte(24);
 
-      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(
+      *pixel = [
         byte(3) % (alpha.saturating_add(1)),
         byte(9) % (alpha.saturating_add(1)),
         byte(15) % (alpha.saturating_add(1)),
         alpha,
-      )
-      .unwrap();
+      ];
     }
     pixmap
   }
@@ -852,8 +851,8 @@ mod tests {
   fn sampling_a_pixel_centre_reads_that_pixel() -> Result<(), &'static str> {
     let mut pixmap = Pixmap::new(2, 1).ok_or("failed to create pixmap")?;
     let pixels = pixmap.pixels_mut();
-    pixels[0] = tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).ok_or("black")?;
-    pixels[1] = tiny_skia::PremultipliedColorU8::from_rgba(255, 255, 255, 255).ok_or("white")?;
+    pixels[0] = [0, 0, 0, 255];
+    pixels[1] = [255, 255, 255, 255];
 
     let centre = interpolate_bilinear(pixmap.as_ref().into(), 0.5, 0.5).ok_or("sampled")?;
     assert_eq!(centre[0], 0, "a pixel centre reads the pixel itself");
@@ -875,8 +874,7 @@ mod tests {
     let mut pixmap = Pixmap::new(8, 1).ok_or("failed to create pixmap")?;
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let value = if index % 2 == 0 { 0 } else { 255 };
-      *pixel = tiny_skia::PremultipliedColorU8::from_rgba(value, value, value, 255)
-        .ok_or("failed to create opaque grayscale pixel")?;
+      *pixel = [value, value, value, 255];
     }
 
     let sample = interpolate_with_footprint(

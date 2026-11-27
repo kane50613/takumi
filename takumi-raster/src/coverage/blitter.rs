@@ -150,7 +150,7 @@ impl Coverage {
   }
 
   /// `SkBlitter::blitFatAntiRect` for a rect at least three pixels wide.
-  pub(super) fn blit_fat_anti_rect(&mut self, rect: tiny_skia::Rect) {
+  pub(super) fn blit_fat_anti_rect(&mut self, rect: tiny_skia_path::Rect) {
     let bounds = round_out(rect);
 
     if bounds.height() == 0 {
@@ -206,7 +206,7 @@ const fn saturating_span(start: i32, end: i32) -> i32 {
 
 /// `safeRoundOut` in `SkScan_AntiPath.cpp`: `SkRect::roundOut`, pinned to the range a
 /// supersampled coordinate can hold.
-pub(super) fn round_out(rect: tiny_skia::Rect) -> IntBounds {
+pub(super) fn round_out(rect: tiny_skia_path::Rect) -> IntBounds {
   const LIMIT: i32 = i32::MAX >> 2;
 
   let pin = |value: f32| (value as i32).clamp(-LIMIT, LIMIT);

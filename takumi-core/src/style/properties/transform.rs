@@ -4,7 +4,7 @@ use std::{
 };
 
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
-use tiny_skia::Transform as TinyTransform;
+use tiny_skia_path::Transform as TinyTransform;
 
 use crate::style::{
   Angle, Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseMode,
