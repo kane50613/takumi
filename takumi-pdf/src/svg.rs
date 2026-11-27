@@ -191,7 +191,7 @@ impl<'a> SvgPainter<'a> {
       } => (
         Pattern {
           stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
-          transform: (*transform),
+          transform: *transform,
           width: *width,
           height: *height,
         }

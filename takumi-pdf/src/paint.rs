@@ -42,7 +42,7 @@ pub(crate) fn empty_path(origin: Point<f32>) -> Option<Path> {
   builder.finish()
 }
 
-/// Converts takumi-core path commands to a writer path translated by `origin`.
+/// `commands` as a path translated by `origin`.
 pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<Path> {
   let Point { x, y } = origin;
   let mut builder = PathBuilder::new();
@@ -61,7 +61,7 @@ pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<P
   builder.finish()
 }
 
-/// A fill shape as a writer path translated by `origin`.
+/// `shape` as a path translated by `origin`.
 pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<Path> {
   match shape {
     FillShape::Rect(size) => {

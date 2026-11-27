@@ -191,7 +191,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: (transform * Affine::scale(1.0, -1.0)),
+          transform: transform * Affine::scale(1.0, -1.0),
           anti_alias: false,
         }
         .into(),
@@ -257,7 +257,6 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         // clipped area whole leaves artifacts in Chrome's PDF viewer when zooming.
         let filled = clips.pop().unwrap_or_else(|| bounds.clone());
 
-        let clips: Vec<Path> = clips.into_iter().collect();
         let clip_count = clips.len();
 
         for path in &clips {

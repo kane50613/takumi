@@ -265,6 +265,9 @@ pub(crate) fn line_join_style(join: LineJoin) -> LineJoinStyle {
   }
 }
 
+/// The miter limit PDF assumes when a content stream sets none.
+pub(crate) const PDF_MITER_LIMIT: f32 = 10.0;
+
 /// A stroke: its paint and opacity, and the outline it draws.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Stroke {
@@ -277,14 +280,15 @@ pub struct Stroke {
 }
 
 impl Stroke {
-  /// A solid stroke of `width` with PDF's default miter limit of 10.
+  /// A solid stroke of `width` with PDF's default miter limit.
   pub(crate) fn solid(paint: Paint, opacity: NormalizedF32, width: f32) -> Self {
     Self {
       paint,
       opacity,
       outline: PathStroke {
         width,
-        ..Self::default().outline
+        miter_limit: PDF_MITER_LIMIT,
+        ..PathStroke::default()
       },
     }
   }
@@ -296,7 +300,7 @@ impl Default for Stroke {
       paint: luma::Color::black().into(),
       opacity: NormalizedF32::ONE,
       outline: PathStroke {
-        miter_limit: 10.0,
+        miter_limit: PDF_MITER_LIMIT,
         ..PathStroke::default()
       },
     }

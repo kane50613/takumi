@@ -158,6 +158,8 @@ impl GradientPropertiesExt for LinearGradient {
       let p2 = Point::new(self.x2, self.y2);
 
       let (ts, min, max) = get_point_ts(p1, p2);
+      let transform = self.transform * ts;
+
       (
         GradientProperties::PostScriptGradient(PostScriptGradient {
           min,
@@ -165,12 +167,12 @@ impl GradientPropertiesExt for LinearGradient {
           cx: 0.0,
           cy: 0.0,
           stops: self.stops,
-          domain: get_expanded_bbox(bbox, self.transform * ts),
+          domain: get_expanded_bbox(bbox, transform),
           spread_method: self.spread_method,
           gradient_type: GradientType::Linear,
           anti_alias: self.anti_alias,
         }),
-        (self.transform * ts),
+        transform,
       )
     }
   }

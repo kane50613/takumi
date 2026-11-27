@@ -28,7 +28,7 @@ use crate::writer::graphics::graphics_state::{ExtGState, GraphicsStates};
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
-use crate::writer::graphics::paint::{Fill, InnerPaint, Paint, Stroke};
+use crate::writer::graphics::paint::{Fill, InnerPaint, PDF_MITER_LIMIT, Paint, Stroke};
 use crate::writer::graphics::shading_function::{
   GradientProperties, GradientPropertiesExt, ShadingFunction,
 };
@@ -538,17 +538,9 @@ impl ContentBuilder {
       .rd_builder
       .register_resource(sc.register_font_identifier(font_identifier));
     self.content.set_font(font_name.to_pdf_name(), size);
-    self.content.set_text_matrix(
-      Affine {
-        a: 1.0,
-        b: 0.0,
-        c: 0.0,
-        d: -1.0,
-        x: *cur_x,
-        y: cur_y,
-      }
-      .to_cols_array(),
-    );
+    self
+      .content
+      .set_text_matrix([1.0, 0.0, 0.0, -1.0, *cur_x, cur_y]);
 
     for glyph in glyphs {
       if glyph.glyph_id() == GlyphId::new(0)
@@ -1255,7 +1247,7 @@ impl ContentBuilder {
       self.content.set_line_width(stroke.outline.width);
     }
 
-    if stroke.outline.miter_limit != 10.0 {
+    if stroke.outline.miter_limit != PDF_MITER_LIMIT {
       self.content.set_miter_limit(stroke.outline.miter_limit);
     }
 

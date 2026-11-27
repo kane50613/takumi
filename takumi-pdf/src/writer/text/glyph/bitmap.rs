@@ -36,8 +36,8 @@ pub(crate) fn draw_glyph(font: Font, glyph: GlyphId, surface: &mut Surface) -> O
 
       // Adapted from vello.
       let scale_factor = upem / (bitmap_glyph.ppem_y);
-      let mut transform = (Affine::translation(-bitmap_glyph.bearing_x, bitmap_glyph.bearing_y)
-        * Affine::scale(scale_factor, scale_factor))
+      let mut transform = Affine::translation(-bitmap_glyph.bearing_x, bitmap_glyph.bearing_y)
+        * Affine::scale(scale_factor, scale_factor)
         * Affine::translation(-bitmap_glyph.inner_bearing_x, -bitmap_glyph.inner_bearing_y);
 
       transform = match bitmap_glyph.placement_origin {

@@ -71,7 +71,7 @@ use crate::{
     mask::Mask,
     num::NormalizedF32,
     paint::{
-      Fill, LinearGradient as PdfLinearGradient, Paint, Pattern,
+      Fill, LinearGradient as PdfLinearGradient, PDF_MITER_LIMIT, Paint, Pattern,
       RadialGradient as PdfRadialGradient, Stroke, SweepGradient,
     },
     stream::Stream,
@@ -746,7 +746,7 @@ impl Emitter<'_> {
           cx: 0.0,
           cy: 0.0,
           cr: extent,
-          transform: (pattern_space
+          transform: pattern_space
             * Affine {
               a: scale_x,
               b: 0.0,
@@ -754,7 +754,7 @@ impl Emitter<'_> {
               d: scale_y,
               x: x + cx,
               y: y + cy,
-            }),
+            },
           spread_method: SvgSpreadMethod::Pad,
           stops,
           anti_alias: false,
@@ -787,7 +787,7 @@ impl Emitter<'_> {
           cy: ccy,
           start_angle: 0.0,
           end_angle: 360.0,
-          transform: (pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy)),
+          transform: pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
           spread_method: SvgSpreadMethod::Pad,
           stops,
           anti_alias: false,
@@ -1941,7 +1941,7 @@ impl SurfaceDevice<'_, '_> {
       paint,
       opacity,
       outline: PathStroke {
-        miter_limit: Stroke::default().outline.miter_limit,
+        miter_limit: PDF_MITER_LIMIT,
         ..stroke.outline()
       },
     };

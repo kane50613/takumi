@@ -218,12 +218,10 @@ impl<'a> Surface<'a> {
       let base_transform = Affine::translation(
         cur_x + glyph.x_offset(font_size),
         cur_y - glyph.y_offset(font_size),
+      ) * Affine::scale(
+        font_size / font.units_per_em(),
+        -font_size / font.units_per_em(),
       );
-      let base_transform = base_transform
-        * Affine::scale(
-          font_size / font.units_per_em(),
-          -font_size / font.units_per_em(),
-        );
       draw_glyph(
         font.clone(),
         context_color,

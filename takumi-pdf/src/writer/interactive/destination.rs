@@ -7,13 +7,14 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use takumi_core::{geometry::Point, style::Affine};
+use takumi_core::geometry::Point;
 
 use pdf_writer::{Obj, Ref};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::error::WriterResult;
 use crate::writer::interchange::tagging::TagId;
+use crate::writer::page::page_root_transform;
 use crate::writer::serialize::SerializeContext;
 
 /// The type of destination.
@@ -114,19 +115,8 @@ impl XyzDestination {
     };
 
     let page_ref = page_info.ref_();
-    let page_size = page_info.size().height;
-
-    let point = self.0.point;
-    // Convert to PDF coordinates
-    let invert_transform = Affine {
-      a: 1.0,
-      b: 0.0,
-      c: 0.0,
-      d: -1.0,
-      x: 0.0,
-      y: page_size,
-    };
-    let (x, y) = invert_transform.transform_point(point.x, point.y);
+    let (x, y) =
+      page_root_transform(page_info.size().height).transform_point(self.0.point.x, self.0.point.y);
 
     let mut destination = chunk_container
       .non_stream

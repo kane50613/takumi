@@ -931,12 +931,11 @@ impl ToCss for LinearGradient {
 
 #[cfg(test)]
 mod tests {
-  use crate::resources::image_buffer::demultiplied;
-
   use color::{ColorSpaceTag, HueDirection};
 
   use super::*;
   use crate::{
+    resources::image_buffer::demultiplied,
     style::{FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };

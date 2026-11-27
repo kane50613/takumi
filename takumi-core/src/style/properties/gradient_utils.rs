@@ -255,11 +255,9 @@ pub(crate) fn interpolate_rgba_premultiplied(c1: [u8; 4], c2: [u8; 4], t: f32) -
   }
 
   let mut result = [0u8; 4];
-  let c1_rgba = c1;
-  let c2_rgba = c2;
 
   for i in 0..4 {
-    result[i] = (c1_rgba[i] as f32 * (1.0 - t) + c2_rgba[i] as f32 * t)
+    result[i] = (c1[i] as f32 * (1.0 - t) + c2[i] as f32 * t)
       .round()
       .clamp(0.0, 255.0) as u8;
   }
@@ -330,15 +328,14 @@ pub trait GradientOverlayTile {
     }
 
     let mut row_state = self.begin_row(x_start, y, lut_len);
-    let bytes = |color: [u8; 4]| color;
 
     if self.dither_active() {
       for (x, pixel) in (x_start..).zip(out) {
-        *pixel = bytes(self.sample_dithered_at(self.next_lut_index(&mut row_state), x, y));
+        *pixel = self.sample_dithered_at(self.next_lut_index(&mut row_state), x, y);
       }
     } else {
       for pixel in out {
-        *pixel = bytes(self.sample_at(self.next_lut_index(&mut row_state)));
+        *pixel = self.sample_at(self.next_lut_index(&mut row_state));
       }
     }
   }
@@ -397,8 +394,7 @@ pub trait GradientOverlayTile {
         for (i, dst) in row.iter_mut().enumerate() {
           let lut_idx = self.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
-          let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
-          *dst = pixel;
+          *dst = sample(lut_idx, src_x_start + i as u32, src_y);
         }
       } else {
         const CHUNK: usize = 256;
@@ -412,9 +408,8 @@ pub trait GradientOverlayTile {
           for slot in buf.iter_mut().take(n) {
             let lut_idx = self.next_lut_index(&mut row_state);
             debug_assert!(lut_idx < lut_len);
-            let pixel = sample(lut_idx, src_x, src_y);
+            *slot = sample(lut_idx, src_x, src_y);
             src_x += 1;
-            *slot = pixel;
           }
           for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
             let src_a = src[3];
