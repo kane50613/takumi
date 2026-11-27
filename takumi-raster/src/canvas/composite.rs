@@ -15,7 +15,7 @@ use crate::{
   blend::{blend_premultiplied_pixel, scale_premultiplied_pixel},
   mul_div_255,
   resources::image_buffer::composite_premultiplied_over_row,
-  style::{Affine, BlendMode, ImageScalingAlgorithm},
+  style::{Affine, BlendMode, ImageScalingAlgorithm, math::div_255},
 };
 
 #[derive(Clone, Copy)]
@@ -165,12 +165,48 @@ fn constant_full_over(dst: &mut [[u8; 4]; MASK_RUN], color: [u8; 4]) {
 /// `color` scaled by `mask` over `dst`, both at most a [`MASK_RUN`] long.
 #[inline(always)]
 fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
+  if let (Ok(run), Ok(alphas)) = (
+    <&mut [[u8; 4]; MASK_RUN]>::try_from(&mut *dst),
+    <&[u8; MASK_RUN]>::try_from(mask),
+  ) {
+    return constant_run_over(run, alphas, color);
+  }
+
   composite_run_over(
     dst,
     mask
       .iter()
       .map(|&alpha| scale_premultiplied_pixel(color, alpha)),
   );
+}
+
+/// [`constant_over`] on a whole run, [`scale_premultiplied_pixel`] then
+/// [`composite_premultiplied_over_row`] one channel plane at a time in 16-bit lanes, which
+/// vectorizes.
+#[inline(always)]
+fn constant_run_over(dst: &mut [[u8; 4]; MASK_RUN], mask: &[u8; MASK_RUN], color: [u8; 4]) {
+  let div = |v: u16| u16::from(div_255(v));
+  let below: [[u16; MASK_RUN]; 4] =
+    std::array::from_fn(|channel| std::array::from_fn(|pixel| u16::from(dst[pixel][channel])));
+  let source: [[u16; MASK_RUN]; 4] = std::array::from_fn(|channel| {
+    std::array::from_fn(|pixel| div(u16::from(color[channel]) * u16::from(mask[pixel])))
+  });
+  let out: [[u16; MASK_RUN]; 4] = std::array::from_fn(|channel| {
+    std::array::from_fn(|pixel| {
+      let (alpha, below_alpha) = (source[3][pixel], below[3][pixel]);
+      let over = (source[channel][pixel] + div(below[channel][pixel] * (255 - alpha))).min(255);
+      let keep = u16::from(alpha == 0).wrapping_neg();
+      let replace = u16::from(alpha != 0 && below_alpha == 0).wrapping_neg();
+
+      (below[channel][pixel] & keep)
+        | (source[channel][pixel] & replace)
+        | (over & !(keep | replace))
+    })
+  });
+
+  for (pixel, slot) in dst.iter_mut().enumerate() {
+    *slot = std::array::from_fn(|channel| out[channel][pixel] as u8);
+  }
 }
 
 /// [`constant_general`]'s normal-mode source-over under `clip`, a run of pixels at a time.
