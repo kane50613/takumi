@@ -1,4 +1,4 @@
-//! Path to edge-list conversion for the analytic scan converter: Skia's unclipped
+//! Path to edge-list conversion for the analytic scan converter: Skia's
 //! `SkEdgeBuilder::build` for `SkAnalyticEdgeBuilder` (`src/core/SkEdgeBuilder.cpp`), with the
 //! y-extrema chopping of `src/core/SkGeometry.cpp` and the convexity and rect tests of
 //! `src/core/SkPathPriv.cpp` that pick the scan converter's fast paths.
@@ -6,11 +6,20 @@
 use tiny_skia::{Path, Point, Rect};
 use tiny_skia_path::PathVerb;
 
-use super::edge::Edge;
+use super::{
+  edge::Edge,
+  edge_clipper::{EdgeClipper, Segment},
+};
 
-/// `SkAnalyticEdgeBuilder::buildEdges` without a clip, walking contours as `SkPathEdgeIter` does.
-pub(super) fn build_edges(path: &Path) -> Vec<Edge> {
+/// `SkAnalyticEdgeBuilder::buildEdges`, walking contours as `SkPathEdgeIter` does and clipping
+/// each segment when `clipper` is given.
+pub(super) fn build_edges(path: &Path, clipper: Option<&EdgeClipper>) -> Vec<Edge> {
   let mut edges = Vec::with_capacity(path.points().len());
+  let mut builder = Builder {
+    edges: &mut edges,
+    clipper,
+    segments: Vec::new(),
+  };
   let points = path.points();
   let mut index = 0;
   let mut move_to = None;
@@ -19,52 +28,102 @@ pub(super) fn build_edges(path: &Path) -> Vec<Edge> {
   for verb in path.verbs() {
     match verb {
       PathVerb::Move => {
-        close_contour(&mut edges, &mut move_to, last);
+        builder.close_contour(&mut move_to, last);
         last = points[index];
         move_to = Some(last);
         index += 1;
       }
       PathVerb::Line => {
-        add_line(&mut edges, last, points[index]);
+        builder.line(last, points[index]);
         last = points[index];
         index += 1;
       }
       PathVerb::Quad => {
-        let quad = [last, points[index], points[index + 1]];
-
-        for mono in chop_quad_at_y_extrema(quad) {
-          edges.extend(Edge::quadratic(&mono));
-        }
+        builder.quad([last, points[index], points[index + 1]]);
         last = points[index + 1];
         index += 2;
       }
       PathVerb::Cubic => {
-        let cubic = [last, points[index], points[index + 1], points[index + 2]];
-
-        for mono in chop_cubic_at_y_extrema(cubic) {
-          edges.extend(Edge::cubic(&mono));
-        }
+        builder.cubic([last, points[index], points[index + 1], points[index + 2]]);
         last = points[index + 2];
         index += 3;
       }
       PathVerb::Close => {
         let start = move_to.unwrap_or(last);
 
-        close_contour(&mut edges, &mut move_to, last);
+        builder.close_contour(&mut move_to, last);
         move_to = Some(start);
         last = start;
       }
     }
   }
-  close_contour(&mut edges, &mut move_to, last);
+  builder.close_contour(&mut move_to, last);
 
   edges
 }
 
-/// The line `SkPathEdgeIter` closes every contour with, back to its start.
-fn close_contour(edges: &mut Vec<Edge>, move_to: &mut Option<Point>, last: Point) {
-  if let Some(start) = move_to.take() {
-    add_line(edges, last, start);
+/// The edge list being built and the clipper its segments pass through, `SkEdgeBuilder::build`.
+struct Builder<'a> {
+  edges: &'a mut Vec<Edge>,
+  clipper: Option<&'a EdgeClipper>,
+  segments: Vec<Segment>,
+}
+
+impl Builder<'_> {
+  /// The line `SkPathEdgeIter` closes every contour with, back to its start.
+  fn close_contour(&mut self, move_to: &mut Option<Point>, last: Point) {
+    if let Some(start) = move_to.take() {
+      self.line(last, start);
+    }
+  }
+
+  fn line(&mut self, p0: Point, p1: Point) {
+    match self.clipper {
+      Some(clipper) => {
+        clipper.clip_line(p0, p1, &mut self.segments);
+        self.add_segments();
+      }
+      None => add_line(self.edges, p0, p1),
+    }
+  }
+
+  fn quad(&mut self, quad: [Point; 3]) {
+    match self.clipper {
+      Some(clipper) => {
+        clipper.clip_quad(quad, &mut self.segments);
+        self.add_segments();
+      }
+      None => {
+        for mono in chop_quad_at_y_extrema(quad) {
+          self.edges.extend(Edge::quadratic(&mono));
+        }
+      }
+    }
+  }
+
+  fn cubic(&mut self, cubic: [Point; 4]) {
+    match self.clipper {
+      Some(clipper) => {
+        clipper.clip_cubic(cubic, &mut self.segments);
+        self.add_segments();
+      }
+      None => {
+        for mono in chop_cubic_at_y_extrema(cubic) {
+          self.edges.extend(Edge::cubic(&mono));
+        }
+      }
+    }
+  }
+
+  /// Adds what the clipper produced, already monotonic in y.
+  fn add_segments(&mut self) {
+    for segment in self.segments.drain(..) {
+      match segment {
+        Segment::Line(p0, p1) => add_line(self.edges, p0, p1),
+        Segment::Quad(quad) => self.edges.extend(Edge::quadratic(&quad)),
+        Segment::Cubic(cubic) => self.edges.extend(Edge::cubic(&cubic)),
+      }
+    }
   }
 }
 
@@ -175,16 +234,22 @@ fn lerp(a: Point, b: Point, t: f32) -> Point {
   Point::from_xy(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
 }
 
+/// `SkChopQuadAt`: the two halves of `src` split at `t`, sharing their middle point.
+pub(super) fn chop_quad_at(src: [Point; 3], t: f32) -> [Point; 5] {
+  let p01 = lerp(src[0], src[1], t);
+  let p12 = lerp(src[1], src[2], t);
+
+  [src[0], p01, lerp(p01, p12, t), p12, src[2]]
+}
+
 /// `SkChopQuadAtYExtrema`: one or two y-monotonic quads.
-fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
+pub(super) fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
   let [p0, p1, p2] = src;
   let (a, mut b, c) = (p0.y, p1.y, p2.y);
 
   if is_not_monotonic(a, b, c) {
     if let Some(t) = valid_unit_divide(a - b, a - b - b + c) {
-      let p01 = lerp(p0, p1, t);
-      let p12 = lerp(p1, p2, t);
-      let mid = lerp(p01, p12, t);
+      let [_, p01, mid, p12, _] = chop_quad_at(src, t);
 
       // `flatten_double_quad_extrema`.
       return [
@@ -204,8 +269,22 @@ fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
     .flatten()
 }
 
+pub(super) fn transpose(point: Point) -> Point {
+  Point::from_xy(point.y, point.x)
+}
+
+/// `SkChopQuadAtXExtrema`, through [`chop_quad_at_y_extrema`] on the transposed quad.
+pub(super) fn chop_quad_at_x_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
+  chop_quad_at_y_extrema(src.map(transpose)).map(|quad| quad.map(transpose))
+}
+
+/// `SkChopCubicAtXExtrema`, through [`chop_cubic_at_y_extrema`] on the transposed cubic.
+pub(super) fn chop_cubic_at_x_extrema(src: [Point; 4]) -> impl Iterator<Item = [Point; 4]> {
+  chop_cubic_at_y_extrema(src.map(transpose)).map(|cubic| cubic.map(transpose))
+}
+
 /// `SkFindUnitQuadRoots`.
-fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) {
+pub(super) fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) {
   let mut roots = [0.0; 2];
   let mut count = 0;
   let mut push = |root: Option<f32>| {
@@ -253,7 +332,7 @@ fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) {
 }
 
 /// The control points `SkChopCubicAt` interpolates at `t`: `ab`, `bc`, `cd`, `abc`, `bcd`, `abcd`.
-fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
+pub(super) fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
   let ab = lerp(src[0], src[1], t);
   let bc = lerp(src[1], src[2], t);
   let cd = lerp(src[2], src[3], t);
@@ -264,7 +343,7 @@ fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
 }
 
 /// `SkChopCubicAtYExtrema`: one to three y-monotonic cubics, sharing end points in `dst`.
-fn chop_cubic_at_y_extrema(src: [Point; 4]) -> impl Iterator<Item = [Point; 4]> {
+pub(super) fn chop_cubic_at_y_extrema(src: [Point; 4]) -> impl Iterator<Item = [Point; 4]> {
   // `SkFindCubicExtrema`.
   let [a, b, c, d] = src.map(|point| point.y);
   let (roots, count) = find_unit_quad_roots(d - a + 3.0 * (b - c), 2.0 * (a - b - b + c), b - a);

@@ -4,7 +4,7 @@
 //! slopes, so no supersampling is involved.
 
 use smallvec::SmallVec;
-use tiny_skia::{FillRule, Path};
+use tiny_skia::{FillRule, Path, Rect};
 
 use super::{
   blitter::{
@@ -15,6 +15,7 @@ use super::{
     fixed_mul, floor_to_fixed, floor_to_int, int_to_fixed, left_shift, round_to_int,
   },
   edge_builder::{build_edges, is_convex, trivial_rect},
+  edge_clipper::EdgeClipper,
 };
 
 /// The `nullptr` of the index-linked edge list.
@@ -1069,7 +1070,7 @@ fn walk_edges(
   }
 }
 
-/// `SkScan::AAAFillPath` for a non-inverse `path` whose rounded-out bounds `ir` lie in `clip`.
+/// `SkScan::AAAFillPath` for a non-inverse `path` with rounded-out bounds `ir`, clipped to `clip`.
 pub(super) fn fill_path(
   path: &Path,
   fill_rule: FillRule,
@@ -1081,11 +1082,20 @@ pub(super) fn fill_path(
 
   let additive = if MaskBlitter::can_handle(ir) {
     // `try_blit_fat_anti_rect`.
-    if let Some(rect) = trivial_rect(path)
-      && round_out(rect).width() >= 3
-    {
-      coverage.blit_fat_anti_rect(rect);
-      return;
+    if let Some(rect) = trivial_rect(path) {
+      let Some(rect) = Rect::from_ltrb(
+        rect.left().max(clip.left as f32),
+        rect.top().max(clip.top as f32),
+        rect.right().min(clip.right as f32),
+        rect.bottom().min(clip.bottom as f32),
+      ) else {
+        return;
+      };
+
+      if round_out(rect).width() >= 3 {
+        coverage.blit_fat_anti_rect(rect);
+        return;
+      }
     }
 
     Additive::Mask(MaskBlitter::new(ir))
@@ -1097,7 +1107,7 @@ pub(super) fn fill_path(
       AlphaSum::Saturate
     };
 
-    Additive::Runs(RunBlitter::new(ir, sum))
+    Additive::Runs(RunBlitter::new(ir.intersect(clip), sum))
   };
 
   let is_using_mask = matches!(additive, Additive::Mask(_));
@@ -1115,7 +1125,7 @@ pub(super) fn fill_path(
   target.additive.finish(target.coverage);
 }
 
-/// `aaa_fill_path` for a path contained in `clip`.
+/// `aaa_fill_path`, clipping the edges to `clip` when the path bounds `ir` leave it.
 fn fill_edges(
   path: &Path,
   fill_rule: FillRule,
@@ -1125,8 +1135,23 @@ fn fill_edges(
   is_using_mask: bool,
   target: &mut Target,
 ) {
-  let mut edges = build_edges(path);
+  let contained = clip.contains(ir);
+  let clipper = if contained {
+    None
+  } else {
+    // A convex path needs both edges even past the clip's right side.
+    Rect::from_ltrb(
+      clip.left as f32,
+      clip.top as f32,
+      clip.right as f32,
+      clip.bottom as f32,
+    )
+    .map(|rect| EdgeClipper::new(rect, !convex))
+  };
+  let mut edges = build_edges(path, clipper.as_ref());
   let count = edges.len();
+  let start_y = ir.top.max(clip.top);
+  let stop_y = ir.bottom.min(clip.bottom);
 
   if count == 0 {
     return;
@@ -1169,14 +1194,14 @@ fn fill_edges(
       &mut edges,
       head,
       target,
-      ir.bottom,
+      stop_y,
       left_bound,
       right_bound,
       is_using_mask,
     );
   } else {
     // Many points already give enough fractional scan lines, so intersections are skipped.
-    let skip_intersect = path.points().len() > ((ir.bottom - ir.top) * 2) as usize;
+    let skip_intersect = path.points().len() > ((stop_y - start_y) * 2) as usize;
 
     walk_edges(
       &mut edges,
@@ -1184,8 +1209,8 @@ fn fill_edges(
       tail,
       fill_rule,
       target,
-      ir.top,
-      ir.bottom,
+      start_y,
+      stop_y,
       left_bound,
       right_bound,
       is_using_mask,

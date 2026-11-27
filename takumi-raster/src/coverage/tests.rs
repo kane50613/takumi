@@ -69,3 +69,23 @@ fn rect_fill_rounds_edges_to_256ths() {
   // `antifilldot8` with T = 64, B = 256: a single scanline of alpha `B - T - 1`.
   assert_eq!(mask, [95, 191, 191, 143]);
 }
+
+/// Clipping chops curves at the clip, which changes how `SkAnalyticEdge` subdivides them, so only
+/// edge pixels may move, by under a quarter.
+#[test]
+fn clipped_path_matches_its_unclipped_crop() {
+  let circle = |cx: f32| PathBuilder::from_circle(cx, 40.0, 37.3).unwrap();
+  let clipped = fill(&circle(10.5), FillRule::Winding, 40, 80);
+  let whole = fill(&circle(50.5), FillRule::Winding, 90, 80);
+  let mut total = 0u32;
+
+  for y in 0..80 {
+    for x in 0..40 {
+      let (a, b) = (clipped[y * 40 + x], whole[y * 90 + x + 40]);
+
+      assert!(a.abs_diff(b) < 64, "({x}, {y}): {a} vs {b}");
+      total += u32::from(a.abs_diff(b));
+    }
+  }
+  assert!(total < 40 * 80, "mean difference {}", total as f32 / 3200.0);
+}

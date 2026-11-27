@@ -1,11 +1,11 @@
 //! A8 coverage masks for filled paths, rasterized by a port of the analytic anti-aliasing scan
 //! converter Chromium's Skia uses for every anti-aliased path fill (`SkScan::AntiFillPath`, which
-//! always calls `SkScan::AAAFillPath`). Paths larger than their mask, which Skia would cut with
-//! `SkEdgeClipper`, still go through tiny-skia's supersampler.
+//! always calls `SkScan::AAAFillPath`), and of rects by its `SkScan::AntiFillRect`.
 
 mod blitter;
 mod edge;
 mod edge_builder;
+mod edge_clipper;
 mod rect;
 mod scan;
 
@@ -45,17 +45,30 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
   let ir = round_out(path.bounds());
   let fits = |bounds: IntBounds| mask_bounds.contains(bounds);
   let analytic = MASK_RASTERIZER.load(Ordering::Relaxed) == MaskRasterizer::Analytic as u8;
-
-  // `rect_overflows_short_shift` with `SK_SUPERSAMPLE_SHIFT` 2, past which Skia fills aliased.
-  let overflows = [ir.left, ir.top, ir.right, ir.bottom]
-    .into_iter()
-    .any(|value| ((value << 18) >> 18) != value);
-  let contained = fits(ir)
+  // A path inside the mask would lie inside a device-sized clip even where its control points
+  // leave the mask, so only a path the mask cuts is clipped.
+  let clip = if fits(ir)
     || path
       .compute_tight_bounds()
-      .is_some_and(|tight| fits(round_out(tight)));
+      .is_some_and(|tight| fits(round_out(tight)))
+  {
+    mask_bounds.union(ir)
+  } else {
+    mask_bounds
+  };
+  let clipped_ir = ir.intersect(clip);
 
-  if !analytic || !contained || overflows {
+  // `rect_overflows_short_shift` with `SK_SUPERSAMPLE_SHIFT` 2, past which Skia fills aliased.
+  let overflows = [
+    clipped_ir.left,
+    clipped_ir.top,
+    clipped_ir.right,
+    clipped_ir.bottom,
+  ]
+  .into_iter()
+  .any(|value| ((value << 18) >> 18) != value);
+
+  if !analytic || overflows {
     let mut mask = Mask::from_vec(
       vec![0; size.width() as usize * size.height() as usize],
       size,
@@ -68,9 +81,8 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
 
   let mut coverage = Coverage::new(size.width(), size.height());
 
-  if ir.width() > 0 && ir.height() > 0 {
-    // Control points past the mask would lie inside a device-sized clip, so the clip covers them.
-    scan::fill_path(path, fill_rule, ir, mask_bounds.union(ir), &mut coverage);
+  if clipped_ir.width() > 0 && clipped_ir.height() > 0 {
+    scan::fill_path(path, fill_rule, ir, clip, &mut coverage);
   }
 
   Some(coverage.data)

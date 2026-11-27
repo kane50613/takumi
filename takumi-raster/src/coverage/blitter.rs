@@ -28,6 +28,15 @@ impl IntBounds {
       && self.bottom >= other.bottom
   }
 
+  pub(super) fn intersect(self, other: Self) -> Self {
+    Self {
+      left: self.left.max(other.left),
+      top: self.top.max(other.top),
+      right: self.right.min(other.right),
+      bottom: self.bottom.min(other.bottom),
+    }
+  }
+
   pub(super) fn union(self, other: Self) -> Self {
     Self {
       left: self.left.min(other.left),
