@@ -6,11 +6,12 @@
 mod blitter;
 mod edge;
 mod edge_builder;
+mod rect;
 mod scan;
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use tiny_skia::{FillRule, IntSize, Mask, Path, Transform};
+use tiny_skia::{FillRule, IntSize, Mask, Path, PathBuilder, Rect, Transform};
 
 use blitter::{Coverage, IntBounds, round_out};
 
@@ -71,6 +72,28 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: IntSize) -> Opti
     // Control points past the mask would lie inside a device-sized clip, so the clip covers them.
     scan::fill_path(path, fill_rule, ir, mask_bounds.union(ir), &mut coverage);
   }
+
+  Some(coverage.data)
+}
+
+/// The coverage of the axis-aligned rect `[left, top, right, bottom]` over a `size` mask at the
+/// origin, as `SkDraw::drawRect` fills a rect the matrix keeps a rect.
+pub(crate) fn fill_rect(rect: [f32; 4], size: IntSize) -> Option<Vec<u8>> {
+  // The scan takes the mask's edges to 16.16 fixed point, which holds 32767.
+  if size.width() > 32767 || size.height() > 32767 {
+    return None;
+  }
+
+  if MASK_RASTERIZER.load(Ordering::Relaxed) != MaskRasterizer::Analytic as u8 {
+    let [left, top, right, bottom] = rect;
+    let path = PathBuilder::from_rect(Rect::from_ltrb(left, top, right, bottom)?);
+
+    return fill_path(&path, FillRule::Winding, size);
+  }
+
+  let mut coverage = Coverage::new(size.width(), size.height());
+
+  rect::fill_rect(rect, &mut coverage);
 
   Some(coverage.data)
 }

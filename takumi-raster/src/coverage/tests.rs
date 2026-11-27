@@ -61,3 +61,11 @@ fn even_odd_leaves_the_star_center_empty() {
   assert_eq!(fill(&star, FillRule::Winding, 80, 80)[center], 255);
   assert_eq!(fill(&star, FillRule::EvenOdd, 80, 80)[center], 0);
 }
+
+#[test]
+fn rect_fill_rounds_edges_to_256ths() {
+  let mask = super::fill_rect([0.5, 0.25, 3.75, 1.0], IntSize::from_wh(4, 1).unwrap()).unwrap();
+
+  // `antifilldot8` with T = 64, B = 256: a single scanline of alpha `B - T - 1`.
+  assert_eq!(mask, [95, 191, 191, 143]);
+}

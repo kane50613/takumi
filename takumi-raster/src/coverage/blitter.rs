@@ -57,6 +57,10 @@ impl Coverage {
     }
   }
 
+  pub(super) const fn size(&self) -> (i32, i32) {
+    (self.width, self.height)
+  }
+
   /// The mask row `y` from `x` up to `len` pixels, cut to the mask.
   fn span(&mut self, x: i32, y: i32, len: i32) -> (&mut [u8], usize) {
     if y < 0 || y >= self.height || len <= 0 {

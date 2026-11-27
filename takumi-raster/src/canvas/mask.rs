@@ -584,6 +584,55 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
+/// The coverage of a `size` rect at `transform`, or `None` for the caller to fill as a path when
+/// `transform` does not keep it a rect or its edges leave Skia's fixed-point range. Blink paints
+/// such rects through `SkCanvas::drawRect`, which fills them with `SkScan::AntiFillRect`.
+pub(crate) fn render_rect_mask(
+  size: Size<f32>,
+  transform: Affine,
+  cull: Option<CanvasViewport>,
+) -> Option<(Vec<u8>, Placement)> {
+  let Affine { a, b, c, d, .. } = transform;
+
+  if !(b == 0.0 && c == 0.0 || a == 0.0 && d == 0.0) {
+    return None;
+  }
+
+  let (x0, y0) = transform.transform_point(0.0, 0.0);
+  let (x1, y1) = transform.transform_point(size.width, size.height);
+  let (left, right) = (x0.min(x1), x0.max(x1));
+  let (top, bottom) = (y0.min(y1), y0.max(y1));
+
+  // `SkDraw::drawRect` fills a rect past `SkRectPriv::FitsInFixed` as a path.
+  if [left, top, right, bottom]
+    .iter()
+    .any(|value| value.abs() > 32767.0)
+  {
+    return None;
+  }
+
+  let placement = cull_bounds(
+    [
+      left.floor() as i32,
+      top.floor() as i32,
+      right.ceil() as i32,
+      bottom.ceil() as i32,
+    ],
+    cull,
+  )
+  .unwrap_or_default();
+  let Some(mask_size) = IntSize::from_wh(placement.width, placement.height) else {
+    return Some((Vec::new(), placement));
+  };
+
+  checked_area(placement.width, placement.height, 1)?;
+
+  let (dx, dy) = (placement.left as f32, placement.top as f32);
+  let mask = coverage::fill_rect([left - dx, top - dy, right - dx, bottom - dy], mask_size)?;
+
+  Some((mask, placement))
+}
+
 /// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
 /// pixel, within [`GlyphCache::max_entry_bytes`].
 fn fits_glyph_cache(glyphs: &GlyphCache, size: Size<f32>, transform: Affine) -> bool {
@@ -874,6 +923,14 @@ mod tests {
   };
 
   use super::*;
+
+  #[test]
+  fn a_rect_past_the_fixed_point_range_fills_as_a_path() {
+    let cull = CanvasViewport::local(Size::new(100, 10));
+
+    assert!(render_rect_mask(Size::new(40000.0, 10.0), Affine::IDENTITY, Some(cull)).is_none());
+    assert!(render_rect_mask(Size::new(400.0, 10.0), Affine::IDENTITY, Some(cull)).is_some());
+  }
 
   #[test]
   fn a_cached_mask_matches_a_fresh_one_and_is_reused() {
