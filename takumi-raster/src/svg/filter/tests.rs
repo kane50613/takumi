@@ -173,3 +173,17 @@ fn a_bounding_box_subregion_is_a_fraction_of_the_box() {
   assert_eq!(pixel(&layer, 40, 20, 20), [255, 255, 255, 255]);
   assert_eq!(pixel(&layer, 40, 4, 20), [0, 0, 0, 0]);
 }
+
+#[test]
+fn tiling_repeats_the_input_across_the_region() {
+  let layer = filtered_layer(
+    r#"<filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="8" height="8"><feFlood x="2" y="2" width="2" height="2" flood-color="green" result="a"/><feTile in="a"/></filter>"#,
+    8,
+  );
+
+  for (x, y) in [(0, 0), (3, 3), (7, 7)] {
+    let index = (y * 8 + x) * 4;
+
+    assert_eq!(layer[index..index + 4], [0, 128, 0, 255], "({x}, {y})");
+  }
+}

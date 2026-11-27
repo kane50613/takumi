@@ -679,13 +679,16 @@ impl Run<'_> {
   /// Blink's `FETile` in `fe_tile.cc`: the data of the input repeated across the region, copied as
   /// Skia's `SkTileImageFilter` copies it.
   fn tile(&self, input: Image) -> Option<Image> {
-    let tile = input.region.translated(-self.region.left, -self.region.top);
+    let tile = input
+      .region
+      .translated(-self.region.left, -self.region.top)
+      .intersection(&Rect::from_size(
+        0,
+        0,
+        input.pixmap.width(),
+        input.pixmap.height(),
+      ))?;
     let (tile_width, tile_height) = (tile.width() as i32, tile.height() as i32);
-
-    if tile_width <= 0 || tile_height <= 0 {
-      return None;
-    }
-
     let mut pixmap = self.blank()?;
     let width = pixmap.width() as i32;
     let source_width = input.pixmap.width() as i32;
