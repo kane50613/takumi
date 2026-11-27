@@ -1,3 +1,131 @@
+## @takumi-rs/helpers@2.23.0
+
+### `[dir]` and `img[src]` match elements parsed from HTML
+
+Attribute selectors on `dir` and on an `<img>`'s `src` used to match only nodes built with JSX. `dir="auto"` in JSX also no longer fails the render.
+
+```tsx
+<div dir="auto">{name}</div>
+// Before: the render fails with `unknown variant auto`
+// After: it renders, with its direction taken from its text
+```
+
+### `lang` keeps the text it is written with
+
+An element keeps its `lang` attribute as written, so `[lang]` selectors and `attr(lang)` read the same text as in a browser. A `lang` that is not a language tag takumi reads, such as `lang=""`, stays an attribute instead of being dropped or failing the render. A number `id` or `lang` in JSX is written as text, as React DOM writes it.
+
+An empty or invalid `lang` also stops the language inherited from the parent, as in Chrome. `:lang()` takes one identifier, so `:lang(en, fr)` and `:lang("en")` drop their rule, and it never matches a malformed `lang` such as `en-`.
+
+```html
+<p lang="EN_us">Hello</p>
+<!-- Before: `[lang="EN_us"]` misses it, and `attr(lang)` reads `en-US` -->
+<!-- After: both read `EN_us` -->
+```
+
+### JSX writes boolean attributes as React DOM does
+
+`aria-*` and `data-*` props, `draggable`, `contentEditable`, and `spellCheck` keep `false` as the text `"false"` and write `true` as `"true"`, so attribute selectors match them as in the browser. `htmlFor`, `acceptCharset`, and `httpEquiv` are written as `for`, `accept-charset`, and `http-equiv`.
+
+```tsx
+<div aria-hidden={false} draggable />
+// Before: `[aria-hidden]` misses it, and `[draggable="true"]` misses it
+// After: both match
+```
+
+### `dir="auto"` takes one direction from its text, as in Chrome
+
+An element with `dir="auto"`, and a `<bdi>`, now takes its `direction` and `:dir()` from the first strong character of its text. It skips `<bdi>`, `<script>`, `<style>`, `<textarea>`, and descendants with a `dir` of `ltr`, `rtl`, or `auto`. Before, each paragraph inside it took its own direction, and `:dir()` read its parent's. A tel input keeps `ltr` under an `rtl` parent.
+
+### Node trees carrying large images use about the memory of HTML
+
+Rendering a node tree that carries large `data:` URIs, such as one from `fromHtml` or JSX, no longer peaks several times above rendering the same HTML string.
+
+### Validate and compute lengths as Chrome does
+
+CSS text now reads lengths the way Chrome does.
+
+- `letter-spacing: normal` and `word-spacing: normal` set no extra spacing. `auto` is invalid for them and for `text-indent`, so the declaration is dropped.
+- A negative `line-height` is invalid, also inside the `font` shorthand.
+- A `font-size` calculation that comes out negative is `0px`.
+- A unitless number other than `0` is no longer a length in px. `font-size: 12` and `text-indent: 5` are dropped. SVG attributes and the properties Chrome parses like them, such as `stroke-width`, `r`, and `stroke-dasharray`, still take one.
+- A gradient stop takes no unitless number other than `0`. Nor does a `blur()` radius, even in an SVG `filter` attribute. A `polygon()` vertex needs both coordinates.
+- `calc(10% + 2em)` computes its `em` part to px on the element that declares it, so children inherit `calc(10% + 32px)`. A percentage or calculated `line-height` computes to px against the element's own font size.
+- `lh` resolves against the element's own font size and line height, not its parent's.
+
+Numbers in a JSX style object still work. A number becomes px unless the property takes a bare number, as React writes it. The SVG serializer in `@takumi-rs/helpers` now writes `px` after a number in a `style` object, as React DOM does.
+
+```css
+.card {
+  font-size: 20px;
+  line-height: 1.5;
+  /* Before: 24px, from the parent's 16px font */
+  /* After: 30px */
+  height: 1lh;
+}
+```
+
+### Migration
+
+Write a unit after a length in CSS text, such as in `font-size` or `text-indent`, since a unitless length other than `0` now drops the declaration. SVG attributes and the SVG properties listed above still take a bare number.
+
+```diff
+- font-size: 12;
++ font-size: 12px;
+```
+
+### Block elements isolate their bidi text
+
+`div`, `p`, headings, lists, table parts, `bdi`, `output`, and the other elements HTML's rendering rules list now isolate their bidi text, as they do in Chrome. A `<bdo>` from JSX now overrides the bidi of its text as one parsed from HTML does. An element made inline by CSS keeps its text apart from the bidi ordering of the text around it.
+
+```html
+<div>
+  שלום
+  <section style="display: inline">abc 123</section>
+  עולם
+</div>
+<!-- Before: the inline section's text is reordered with the Hebrew around it -->
+<!-- After: it stays one isolated run -->
+```
+
+### Element language and JSX `<select>` follow Chrome and React DOM
+
+- An SVG element with both `xml:lang` and `lang` takes its language from `xml:lang`, in either order, as Chrome does.
+- `:lang()` matches the render's `lang` option when no ancestor sets `lang`, as Chrome matches the document's language.
+- `:lang()` in an inline `<svg>` reads its HTML ancestors' `lang` as written, so a malformed `lang="en_US"` matches nothing, as in Chrome.
+- A JSX `<select>` with `value` or `defaultValue` marks the options it names as `selected`, as React DOM's server renderer does.
+
+```tsx
+<select defaultValue="b">
+  <option value="a">A</option>
+  <option value="b">B</option>
+</select>
+// Before: neither option has `selected`, so `option:checked` matches A
+// After: B has `selected`, so `option:checked` matches B
+```
+
+### Render Hono JSX and `html` templates
+
+`render`, `ImageResponse`, and takumi-pdf's `render` draw Hono JSX and Hono's `html` template as Hono's `c.html()` would send them.
+
+- Context reaches its consumers, and `Suspense` and `ErrorBoundary` behave as they do in Hono.
+- A JSX element whose tag is `image`, `text`, or `container`, such as an SVG `<image>`, is no longer taken for a node tree.
+
+```tsx
+/** @jsxImportSource hono/jsx */
+import { Suspense } from "hono/jsx/streaming";
+import { ImageResponse } from "takumi-js/response";
+
+const Title = async () => <h1>{await getTitle()}</h1>;
+
+new ImageResponse(
+  <Suspense fallback={<h1>Loading</h1>}>
+    <Title />
+  </Suspense>,
+);
+// Before: draws the markup as text, one character per node
+// After: draws the title
+```
+
 ## @takumi-rs/helpers@2.21.0
 
 ### Reuse downloaded bytes across renders, and load Google Fonts for known text

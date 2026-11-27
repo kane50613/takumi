@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/cli-linux-arm64",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "The takumi command-line binary for Linux on arm64.",
   "homepage": "https://takumi.kane.tw/docs/cli",
   "bugs": {
