@@ -141,26 +141,39 @@ impl From<TinyTransform> for Affine {
 impl Mul<Affine> for Affine {
   type Output = Affine;
 
+  /// `SkMatrix::setConcat`: `self` after `rhs`, the scale-and-translate case in floats and the
+  /// rest through `muladdmul`'s doubles.
   fn mul(self, rhs: Affine) -> Self::Output {
-    // A factor that only rounds the linear part is skipped, but never a translation, which a
-    // large scale on the other factor could make visible.
-    let is_noop = |factor: Self| factor.x == 0.0 && factor.y == 0.0 && factor.is_identity();
-
-    if is_noop(self) {
+    if self == Affine::IDENTITY {
       return rhs;
     }
 
-    if is_noop(rhs) {
+    if rhs == Affine::IDENTITY {
       return self;
     }
 
+    if self.b == 0.0 && self.c == 0.0 && rhs.b == 0.0 && rhs.c == 0.0 {
+      return Affine {
+        a: self.a * rhs.a,
+        b: 0.0,
+        c: 0.0,
+        d: self.d * rhs.d,
+        x: self.a * rhs.x + self.x,
+        y: self.d * rhs.y + self.y,
+      };
+    }
+
+    let mul_add_mul = |a: f32, b: f32, c: f32, d: f32| {
+      (f64::from(a) * f64::from(b) + f64::from(c) * f64::from(d)) as f32
+    };
+
     Affine {
-      a: self.a * rhs.a + self.c * rhs.b,
-      b: self.b * rhs.a + self.d * rhs.b,
-      c: self.a * rhs.c + self.c * rhs.d,
-      d: self.b * rhs.c + self.d * rhs.d,
-      x: self.a * rhs.x + self.c * rhs.y + self.x,
-      y: self.b * rhs.x + self.d * rhs.y + self.y,
+      a: mul_add_mul(self.a, rhs.a, self.c, rhs.b),
+      b: mul_add_mul(self.b, rhs.a, self.d, rhs.b),
+      c: mul_add_mul(self.a, rhs.c, self.c, rhs.d),
+      d: mul_add_mul(self.b, rhs.c, self.d, rhs.d),
+      x: mul_add_mul(self.a, rhs.x, self.c, rhs.y) + self.x,
+      y: mul_add_mul(self.b, rhs.x, self.d, rhs.y) + self.y,
     }
   }
 }
@@ -775,6 +788,27 @@ mod tests {
       .skia_invert(),
       None
     );
+  }
+
+  #[test]
+  fn concatenating_sums_the_products_in_doubles_as_skia_does() {
+    let (first, second) = (-1.048_f32, -0.52_f32);
+    let (first_rhs, second_rhs) = (0.177_f32, 0.416_f32);
+    let left = Affine {
+      a: first,
+      c: second,
+      ..Affine::IDENTITY
+    };
+    let right = Affine {
+      a: first_rhs,
+      b: second_rhs,
+      ..Affine::IDENTITY
+    };
+    let doubles =
+      (f64::from(first) * f64::from(first_rhs) + f64::from(second) * f64::from(second_rhs)) as f32;
+
+    assert_ne!(doubles, first * first_rhs + second * second_rhs);
+    assert_eq!((left * right).a, doubles);
   }
 
   #[cfg(feature = "svg")]
