@@ -6,7 +6,6 @@ use kurbo::PathSeg;
 use xxhash_rust::xxh3::Xxh3;
 
 #[cfg(feature = "svg")]
-use crate::path::PathSegment;
 use crate::{
   layout_unit::LayoutUnit,
   path::{Path, PathBuilder as SkPathBuilder},
@@ -597,16 +596,7 @@ impl PathCommand {
   /// The commands of a [`Path`].
   #[cfg(feature = "svg")]
   pub(crate) fn from_path(path: &Path) -> Vec<Self> {
-    path
-      .segments()
-      .map(|segment| match segment {
-        PathSegment::MoveTo(to) => Self::MoveTo(to),
-        PathSegment::LineTo(to) => Self::LineTo(to),
-        PathSegment::QuadTo(control, to) => Self::QuadTo(control, to),
-        PathSegment::CubicTo(first, second, to) => Self::CubicTo(first, second, to),
-        PathSegment::Close => Self::Close,
-      })
-      .collect()
+    path.segments().collect()
   }
 
   /// `paths` as Skia's path builder normalizes them. None for commands that draw nothing.

@@ -4,7 +4,7 @@ use std::{
   ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
-use crate::math::hash_f32;
+use crate::math::{NEARLY_ZERO, hash_f32};
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
@@ -389,9 +389,8 @@ impl Affine {
       }
     } else {
       let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
-      let nearly_zero = 1.0 / 4096.0_f32;
 
-      if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
+      if (det as f32).abs() <= NEARLY_ZERO * NEARLY_ZERO * NEARLY_ZERO {
         return None;
       }
 

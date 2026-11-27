@@ -65,7 +65,7 @@ pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<P
 pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<Path> {
   match shape {
     FillShape::Rect(size) => {
-      Rect::from_xywh(origin.x, origin.y, size.width, size.height).map(PathBuilder::from_rect)
+      Rect::from_xywh(origin.x, origin.y, size.width, size.height).map(Path::from_rect)
     }
     _ => pdf_path(&shape.to_commands(), origin),
   }
@@ -440,8 +440,7 @@ pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surfa
   let Some(color) = color else {
     return;
   };
-  let Some(path) = Rect::from_xywh(0.0, 0.0, size.width, size.height).map(PathBuilder::from_rect)
-  else {
+  let Some(path) = Rect::from_xywh(0.0, 0.0, size.width, size.height).map(Path::from_rect) else {
     return;
   };
 

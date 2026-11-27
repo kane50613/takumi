@@ -17,11 +17,6 @@ pub struct SvgFilter {
 }
 
 impl SvgFilter {
-  /// The region the filter paints within, in the user space of the element it filters.
-  pub fn region(&self) -> Rect<f32> {
-    self.region
-  }
-
   /// The bytes the filter retains, for cache budgeting. Approximate: counts its primitives, their
   /// names and kernels, transfer tables, and image ops, not allocator slack.
   pub fn estimated_bytes(&self) -> usize {

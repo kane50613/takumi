@@ -3,7 +3,7 @@
 
 use takumi_core::style::FillRule;
 use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds, style::Affine};
-use takumi_core::{geometry::Rect, path::PathBuilder};
+use takumi_core::{geometry::Rect, path::Path};
 
 use crate::{
   emitter::Emitter,
@@ -135,7 +135,7 @@ impl ContentWindow {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     let (x, y, width, height) = self.clip;
-    let Some(path) = Rect::from_xywh(x, y, width, height).map(PathBuilder::from_rect) else {
+    let Some(path) = Rect::from_xywh(x, y, width, height).map(Path::from_rect) else {
       return Ok(());
     };
 

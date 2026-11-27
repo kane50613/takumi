@@ -4,7 +4,7 @@ use crate::pixmap::PixmapRef;
 use crate::style::FillRule;
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Rect, Size};
-use takumi_core::path::PathBuilder;
+use takumi_core::path::Path;
 use xxhash_rust::xxh3::Xxh3;
 
 use takumi_core::{path::Stroke, resources::image::SvgSpreadMethod};
@@ -339,8 +339,7 @@ pub(crate) fn bitmap_coverage(
   // The source rect filled without antialiasing and sampled bilinearly.
   let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
   let size = Size::checked_new(placement.width, placement.height)?;
-  let outline =
-    PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local)?;
+  let outline = Path::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local)?;
   let coverage = coverage::fill_path_aliased(&outline, FillRule::NonZero, size)?;
   let shader = Shader::Image(ImageShader::new(
     bytemuck::cast_slice(source.data()),

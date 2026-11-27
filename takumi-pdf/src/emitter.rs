@@ -529,7 +529,7 @@ impl Emitter<'_> {
       origin.x + dest.right,
       origin.y + dest.bottom,
     )
-    .map(PathBuilder::from_rect) else {
+    .map(Path::from_rect) else {
       return;
     };
     let (xs, ys) = tiling.origins();
@@ -621,7 +621,7 @@ impl Emitter<'_> {
     let Some((paint, clip)) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
-    let Some(path) = Rect::from_xywh(at.x, at.y, w, h).map(PathBuilder::from_rect) else {
+    let Some(path) = Rect::from_xywh(at.x, at.y, w, h).map(Path::from_rect) else {
       return;
     };
 
@@ -993,7 +993,7 @@ impl Emitter<'_> {
     };
     let clip_path = replaced.clip.and_then(|clip| {
       if clip.border.is_zero() {
-        Rect::from_xywh(bx, by, w, h).map(PathBuilder::from_rect)
+        Rect::from_xywh(bx, by, w, h).map(Path::from_rect)
       } else {
         shape_path(&clip.into(), frame.origin)
       }
@@ -1088,8 +1088,7 @@ impl Emitter<'_> {
   #[cfg(all(feature = "svg", feature = "images"))]
   /// Paints `picture`, laid out at `viewport`, clipped to its canvas.
   fn paint_picture(&self, picture: &SvgPicture, viewport: Size<f32>, surface: &mut Surface) {
-    let canvas =
-      Rect::from_xywh(0.0, 0.0, viewport.width, viewport.height).map(PathBuilder::from_rect);
+    let canvas = Rect::from_xywh(0.0, 0.0, viewport.width, viewport.height).map(Path::from_rect);
 
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
@@ -1398,7 +1397,7 @@ impl Emitter<'_> {
         frame.origin.x + right,
         frame.origin.y + bottom,
       )
-      .map(PathBuilder::from_rect)
+      .map(Path::from_rect)
     };
 
     if let Some(color) = background.color {

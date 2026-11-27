@@ -2,6 +2,9 @@
 
 use std::hash::{Hash, Hasher};
 
+/// `SK_ScalarNearlyZero`: the tolerance Skia treats a float as zero within.
+pub(crate) const NEARLY_ZERO: f32 = 1.0 / 4096.0;
+
 /// Hashes `value` so that floats `==` holds equal hash equally, `-0.0` as `0.0`.
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
   (value + 0.0).to_bits().hash(state);
@@ -48,13 +51,6 @@ impl ApproxEq for f32 {
   }
 }
 
-impl ApproxEq for f64 {
-  fn approx_eq(self, other: Self) -> bool {
-    self == other
-      || (self.is_sign_negative() == other.is_sign_negative()
-        && self.to_bits().abs_diff(other.to_bits()) <= 4)
-  }
-}
 
 #[cfg(test)]
 mod tests {

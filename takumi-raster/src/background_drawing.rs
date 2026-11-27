@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
 use crate::style::FillRule;
 use smallvec::SmallVec;
-use takumi_core::path::PathBuilder;
+use takumi_core::path::Path;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
@@ -107,8 +107,7 @@ impl TileLayer {
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage =
-      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), FillRule::NonZero, size)?;
+    let coverage = coverage::fill_path_aliased(&Path::from_rect(rect), FillRule::NonZero, size)?;
 
     TinyMask::from_vec(coverage, size)
   }

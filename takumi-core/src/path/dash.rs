@@ -85,6 +85,16 @@ impl StrokeDash {
       interval_length: length,
     })
   }
+
+  /// The on and off lengths.
+  pub fn intervals(&self) -> &[f32] {
+    &self.intervals
+  }
+
+  /// How far into the intervals the path starts.
+  pub fn phase(&self) -> f32 {
+    self.phase
+  }
 }
 
 impl Eq for StrokeDash {}
@@ -96,18 +106,6 @@ impl Hash for StrokeDash {
     }
 
     hash_f32(self.phase, state);
-  }
-}
-
-impl StrokeDash {
-  /// The on and off lengths.
-  pub fn intervals(&self) -> &[f32] {
-    &self.intervals
-  }
-
-  /// How far into the intervals the path starts.
-  pub fn phase(&self) -> f32 {
-    self.phase
   }
 }
 
@@ -239,18 +237,6 @@ struct ContourMeasures<'a> {
   verb: usize,
   point: usize,
   tolerance: f32,
-}
-
-/// `SkPoint::Distance`.
-fn point_distance(a: Point<f32>, b: Point<f32>) -> f32 {
-  let (dx, dy) = (a.x - b.x, a.y - b.y);
-  let squared = dx * dx + dy * dy;
-
-  if squared.is_finite() {
-    squared.sqrt()
-  } else {
-    (f64::from(dx) * f64::from(dx) + f64::from(dy) * f64::from(dy)).sqrt() as f32
-  }
 }
 
 /// `SkScalarInterp`.
@@ -434,7 +420,7 @@ impl ContourMeasure {
     distance: f32,
     point_index: usize,
   ) -> f32 {
-    let next = distance + point_distance(from, to);
+    let next = distance + from.distance(to);
 
     if next > distance {
       self.push(next, point_index, SegmentType::Line, MAX_T_VALUE);
@@ -484,7 +470,7 @@ impl ContourMeasure {
       );
     }
 
-    let next = distance + point_distance(quad[0], quad[2]);
+    let next = distance + quad[0].distance(quad[2]);
 
     if next > distance {
       self.push(next, point_index, SegmentType::Quad, max_t);
@@ -534,7 +520,7 @@ impl ContourMeasure {
       );
     }
 
-    let next = distance + point_distance(cubic[0], cubic[3]);
+    let next = distance + cubic[0].distance(cubic[3]);
 
     if next > distance {
       self.push(next, point_index, SegmentType::Cubic, max_t);

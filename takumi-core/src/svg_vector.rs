@@ -192,7 +192,7 @@ impl SvgFilters {
     self
       .0
       .iter()
-      .map(|filter| filter.region())
+      .map(|filter| filter.region)
       .reduce(|union, region| union.union(&region))
       .and_then(|region| Rect::from_ltrb(region.left, region.top, region.right, region.bottom))
   }

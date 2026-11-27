@@ -44,7 +44,7 @@ fn fractional_rect_edges_cover_their_area() {
 
 #[test]
 fn small_rect_takes_the_fat_rect_blit() {
-  let path = PathBuilder::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
+  let path = Path::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
   let mask = fill(&path, FillRule::NonZero, 5, 2);
 
   assert_eq!(mask, [95, 191, 191, 191, 95, 127, 255, 255, 255, 127]);

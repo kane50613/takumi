@@ -511,7 +511,7 @@ impl<'a, 'b> Target<'a, 'b> {
     };
 
     self.fill(
-      &PathBuilder::from_rect(rect),
+      &Path::from_rect(rect),
       FillRule::NonZero,
       &Shader::Image(image),
       true,

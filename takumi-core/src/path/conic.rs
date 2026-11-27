@@ -5,7 +5,7 @@ use super::Point;
 use crate::style::Affine;
 
 /// `SK_ScalarNearlyZero`.
-pub(crate) const NEARLY_ZERO: f32 = 1.0 / 4096.0;
+pub(crate) use crate::math::NEARLY_ZERO;
 
 /// `SK_ScalarRoot2Over2`, the weight of a quarter circle.
 pub(crate) const ROOT_2_OVER_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
@@ -161,12 +161,7 @@ impl Conic {
   /// `SkAutoConicToQuads::computeQuads`: the conic as quads within `tolerance`, their points after
   /// the start, two per quad.
   pub(crate) fn to_quads(self, tolerance: f32) -> Vec<Point<f32>> {
-    let bad_weight = self.weight < 0.0 || !self.weight.is_finite();
-    let mut pow2 = if bad_weight {
-      0
-    } else {
-      self.quad_pow2(tolerance)
-    };
+    let mut pow2 = self.quad_pow2(tolerance);
     let mut out = Vec::with_capacity(2 << pow2);
 
     if pow2 == MAX_CONIC_TO_QUAD_POW2 {
@@ -251,7 +246,6 @@ impl Conic {
 
     if dot < 1.0 {
       let cos_half = ((1.0 + dot) / 2.0).sqrt();
-
       let off_curve = with_length(last.x + x, last.y + y, 1.0 / cos_half).unwrap_or_default();
 
       if can_normalize(last.x - off_curve.x, last.y - off_curve.y) {

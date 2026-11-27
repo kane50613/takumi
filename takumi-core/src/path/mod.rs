@@ -17,7 +17,7 @@ pub use geometry::{
 pub use stroke::{Stroke, resolution_scale};
 
 use crate::{
-  geometry::{Point, Rect},
+  geometry::{PathCommand, Point, Rect},
   style::Affine,
 };
 
@@ -36,21 +36,6 @@ pub enum PathVerb {
   Close,
 }
 
-/// A path instruction with its points.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum PathSegment {
-  /// Starts a contour.
-  MoveTo(Point<f32>),
-  /// A line to a point.
-  LineTo(Point<f32>),
-  /// A quadratic through a control point to a point.
-  QuadTo(Point<f32>, Point<f32>),
-  /// A cubic through two control points to a point.
-  CubicTo(Point<f32>, Point<f32>, Point<f32>),
-  /// Closes the contour.
-  Close,
-}
-
 /// A finished, non-empty path with the bounds of its points.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Path {
@@ -60,14 +45,24 @@ pub struct Path {
 }
 
 impl Path {
-  /// The number of verbs.
-  pub fn len(&self) -> usize {
-    self.verbs.len()
-  }
-
-  /// Whether the path has no verbs, which a finished path never is.
-  pub fn is_empty(&self) -> bool {
-    self.verbs.is_empty()
+  /// The closed outline of `rect`, clockwise from its top left.
+  pub fn from_rect(rect: Rect<f32>) -> Self {
+    Path {
+      verbs: vec![
+        PathVerb::Move,
+        PathVerb::Line,
+        PathVerb::Line,
+        PathVerb::Line,
+        PathVerb::Close,
+      ],
+      points: vec![
+        Point::new(rect.left, rect.top),
+        Point::new(rect.right, rect.top),
+        Point::new(rect.right, rect.bottom),
+        Point::new(rect.left, rect.bottom),
+      ],
+      bounds: rect,
+    }
   }
 
   /// The bounds of every point, control points included.
@@ -102,18 +97,18 @@ impl Path {
   }
 
   /// The segments, each with the points it consumes.
-  pub fn segments(&self) -> impl Iterator<Item = PathSegment> + '_ {
+  pub fn segments(&self) -> impl Iterator<Item = PathCommand> + '_ {
     let mut points = self.points.iter().copied();
 
     self.verbs.iter().map(move |verb| {
       let mut next = || points.next().unwrap_or_default();
 
       match verb {
-        PathVerb::Move => PathSegment::MoveTo(next()),
-        PathVerb::Line => PathSegment::LineTo(next()),
-        PathVerb::Quad => PathSegment::QuadTo(next(), next()),
-        PathVerb::Cubic => PathSegment::CubicTo(next(), next(), next()),
-        PathVerb::Close => PathSegment::Close,
+        PathVerb::Move => PathCommand::MoveTo(next()),
+        PathVerb::Line => PathCommand::LineTo(next()),
+        PathVerb::Quad => PathCommand::QuadTo(next(), next()),
+        PathVerb::Cubic => PathCommand::CubicTo(next(), next(), next()),
+        PathVerb::Close => PathCommand::Close,
       }
     })
   }
@@ -130,11 +125,11 @@ impl Path {
 
     for segment in self.segments() {
       match segment {
-        PathSegment::MoveTo(point) | PathSegment::LineTo(point) => {
+        PathCommand::MoveTo(point) | PathCommand::LineTo(point) => {
           extend(point);
           last = point;
         }
-        PathSegment::QuadTo(control, to) => {
+        PathCommand::QuadTo(control, to) => {
           let quad = [last, control, to];
 
           for t in [
@@ -150,7 +145,7 @@ impl Path {
           extend(to);
           last = to;
         }
-        PathSegment::CubicTo(first, second, to) => {
+        PathCommand::CubicTo(first, second, to) => {
           let cubic = [last, first, second, to];
           let (xs, x_count) = find_cubic_extrema(last.x, first.x, second.x, to.x);
           let (ys, y_count) = find_cubic_extrema(last.y, first.y, second.y, to.y);
@@ -162,7 +157,7 @@ impl Path {
           extend(to);
           last = to;
         }
-        PathSegment::Close => {}
+        PathCommand::Close => {}
       }
     }
 
@@ -194,26 +189,6 @@ impl PathBuilder {
       points: Vec::new(),
       last_move_to_index: 0,
       move_to_required: true,
-    }
-  }
-
-  /// The closed outline of `rect`, clockwise from its top left.
-  pub fn from_rect(rect: Rect<f32>) -> Path {
-    Path {
-      verbs: vec![
-        PathVerb::Move,
-        PathVerb::Line,
-        PathVerb::Line,
-        PathVerb::Line,
-        PathVerb::Close,
-      ],
-      points: vec![
-        Point::new(rect.left, rect.top),
-        Point::new(rect.right, rect.top),
-        Point::new(rect.right, rect.bottom),
-        Point::new(rect.left, rect.bottom),
-      ],
-      bounds: rect,
     }
   }
 

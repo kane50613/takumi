@@ -5,7 +5,7 @@ use skrifa::{
   color::{ColorPalette, CompositeMode, Extend},
   instance::LocationRef,
 };
-use takumi_core::path::{Path, PathBuilder};
+use takumi_core::path::Path;
 use takumi_core::resources::color_glyph::{
   ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
 };
@@ -40,7 +40,7 @@ pub(crate) fn draw(
   let Some(bounds) = color_glyph.bounds.filter(|rect| !rect.is_empty()) else {
     return Some(());
   };
-  let bounds = PathBuilder::from_rect(bounds);
+  let bounds = Path::from_rect(bounds);
 
   surface.push_transform(&Affine::scale(1.0, -1.0));
   interpret(instructions, &bounds, surface);
