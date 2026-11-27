@@ -8,7 +8,7 @@
 use std::f32::consts::{FRAC_1_SQRT_2, SQRT_2};
 
 use crate::{
-  geometry::{PathBuilder, PathCommand, Point, Rect, Size},
+  geometry::{PathCommand, PathCommandSink, Point, Rect, Size},
   layout::border::append_shaped_corner,
   style::{Sides, SpacePair, Superellipse},
 };
@@ -186,11 +186,11 @@ impl Corner {
     });
     let v3 = normalize(origin.v3());
     let v2 = normalize(origin.v2());
-    let start_normal = scale(v3, unmapped_start.x) + scale(v2, unmapped_start.y);
-    let end_normal = scale(v3, unmapped_end.x) + scale(v2, unmapped_end.y);
-    let original_outer = self.outer - scale(v3, end_inset) - scale(v2, start_inset);
-    let mut start = original_outer + scale(v3, end_radius) + scale(start_normal, start_inset);
-    let mut end = original_outer + scale(v2, start_radius) + scale(end_normal, end_inset);
+    let start_normal = v3.scale(unmapped_start.x) + v2.scale(unmapped_start.y);
+    let end_normal = v3.scale(unmapped_end.x) + v2.scale(unmapped_end.y);
+    let original_outer = self.outer - v3.scale(end_inset) - v2.scale(start_inset);
+    let mut start = original_outer + v3.scale(end_radius) + start_normal.scale(start_inset);
+    let mut end = original_outer + v2.scale(start_radius) + end_normal.scale(end_inset);
     let start_tangent = Point {
       x: -start_normal.y,
       y: start_normal.x,
@@ -208,9 +208,9 @@ impl Corner {
       end = intersection(end, end + end_tangent, self.outer + v2, self.outer).unwrap_or(end);
     }
 
-    let height = dot(end - start, v2);
-    let outer = end - scale(v2, height);
-    let center = start + scale(v2, height);
+    let height = (end - start).dot(v2);
+    let outer = end - v2.scale(height);
+    let center = start + v2.scale(height);
 
     if parameter <= -1.0 || parameter >= 0.0 {
       return Self {
@@ -373,20 +373,16 @@ fn scale_quad(quad: &[Point<f32>; 4], origin: Point<f32>, scale: f32) -> [Point<
   })
 }
 
-fn cross(u: Point<f32>, v: Point<f32>) -> f32 {
-  u.x * v.y - u.y * v.x
-}
-
 /// Where the lines through `a`–`b` and `c`–`d` cross, as gfx's `LineF::IntersectionWith`.
 fn intersection(a: Point<f32>, b: Point<f32>, c: Point<f32>, d: Point<f32>) -> Option<Point<f32>> {
   let (ab, cd) = (b - a, d - c);
-  let denominator = cross(ab, cd);
+  let denominator = ab.cross(cd);
 
   if denominator == 0.0 {
     return None;
   }
 
-  let param = cross(c - a, cd) / denominator;
+  let param = (c - a).cross(cd) / denominator;
 
   Some(Point {
     x: a.x + ab.x * param,
@@ -410,7 +406,7 @@ fn fully_outside_one_edge(quad: &[Point<f32>; 4], other: &[Point<f32>; 4]) -> bo
 
   edges
     .iter()
-    .any(|&(base, edge)| other.iter().all(|&point| cross(edge, point - base) < 0.0))
+    .any(|&(base, edge)| other.iter().all(|&point| edge.cross(point - base) < 0.0))
 }
 
 /// gfx's `QuadF::IsCounterClockwise`, in screen coordinates with y pointing down.
@@ -422,19 +418,8 @@ fn counter_clockwise(quad: &[Point<f32>; 4]) -> bool {
   f64::from(p1.x) * p24 + f64::from(p2.x) * p31 < f64::from(p3.x) * p24 + f64::from(p4.x) * p31
 }
 
-fn dot(u: Point<f32>, v: Point<f32>) -> f32 {
-  u.x * v.x + u.y * v.y
-}
-
 fn length(v: Point<f32>) -> f32 {
-  dot(v, v).sqrt()
-}
-
-fn scale(v: Point<f32>, factor: f32) -> Point<f32> {
-  Point {
-    x: v.x * factor,
-    y: v.y * factor,
-  }
+  v.dot(v).sqrt()
 }
 
 fn normalize(v: Point<f32>) -> Point<f32> {
@@ -443,7 +428,7 @@ fn normalize(v: Point<f32>) -> Point<f32> {
   if length == 0.0 {
     v
   } else {
-    scale(v, 1.0 / length)
+    v.scale(1.0 / length)
   }
 }
 
@@ -474,14 +459,14 @@ impl Segment {
 
   fn at(&self, t: f32) -> Point<f32> {
     match *self {
-      Self::Line(start, end) => start + scale(end - start, t),
+      Self::Line(start, end) => start + (end - start).scale(t),
       Self::Cubic([p0, p1, p2, p3]) => {
         let u = 1.0 - t;
 
-        scale(p0, u * u * u)
-          + scale(p1, 3.0 * u * u * t)
-          + scale(p2, 3.0 * u * t * t)
-          + scale(p3, t * t * t)
+        p0.scale(u * u * u)
+          + p1.scale(3.0 * u * u * t)
+          + p2.scale(3.0 * u * t * t)
+          + p3.scale(t * t * t)
       }
     }
   }
@@ -513,7 +498,7 @@ impl Segment {
 
 /// A cubic split at `t` into its two halves.
 fn split_cubic([p0, p1, p2, p3]: [Point<f32>; 4], t: f32) -> ([Point<f32>; 4], [Point<f32>; 4]) {
-  let lerp = |a: Point<f32>, b: Point<f32>| a + scale(b - a, t);
+  let lerp = |a: Point<f32>, b: Point<f32>| a + (b - a).scale(t);
   let (p01, p12, p23) = (lerp(p0, p1), lerp(p1, p2), lerp(p2, p3));
   let (p012, p123) = (lerp(p01, p12), lerp(p12, p23));
   let mid = lerp(p012, p123);
@@ -620,8 +605,8 @@ fn inset_corner(
   let along_end = normalize(origin.v2());
   // Past the start edge while this grows through zero, and still inside the end edge while this
   // stays below zero.
-  let past_start = |point: Point<f32>| dot(point - target.outer, along_end);
-  let before_end = |point: Point<f32>| dot(point - target.outer, along_start);
+  let past_start = |point: Point<f32>| (point - target.outer).dot(along_end);
+  let before_end = |point: Point<f32>| (point - target.outer).dot(along_start);
   let segments = if origin.curvature <= NOTCH {
     vec![
       Segment::Line(aligned.start, aligned.center),
@@ -868,7 +853,7 @@ fn extend_inner_corner(corner: &mut CornerInfo) {
     y: unadjusted.y * direction.y,
   })
   .max(length(corner.inner.v2()));
-  let adjusted = scale(direction, reach);
+  let adjusted = direction.scale(reach);
   let inner = corner.inner;
 
   corner.inner = Corner {

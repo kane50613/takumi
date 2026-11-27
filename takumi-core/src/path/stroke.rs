@@ -2,7 +2,7 @@
 //! joins of `src/core/SkStrokerPriv.cpp`: the outline a stroke of a path fills. Approximate: a
 //! closed rect strokes as any other path, where Skia's `strokeRect` builds its outline directly.
 
-use crate::math::hash_f32;
+use crate::math::{NEARLY_ZERO, hash_f32};
 use std::{
   cmp::Ordering,
   hash::{Hash, Hasher},
@@ -10,7 +10,7 @@ use std::{
 
 use super::{
   Path, PathBuilder, PathVerb, Point, StrokeDash, chop_cubic_at,
-  conic::{CONIC_TOLERANCE, Conic, NEARLY_ZERO, ROOT_2_OVER_2, can_normalize, with_length},
+  conic::{CONIC_TOLERANCE, Conic, ROOT_2_OVER_2, can_normalize, with_length},
   eval_cubic_pos_at, eval_quad_at, find_unit_quad_roots,
 };
 use crate::style::{Affine, LineCap, LineJoin};
@@ -245,28 +245,8 @@ fn has_valid_tangent(records: &Records) -> bool {
   false
 }
 
-fn scale(a: Point<f32>, factor: f32) -> Point<f32> {
-  Point::new(a.x * factor, a.y * factor)
-}
-
-fn negate(a: Point<f32>) -> Point<f32> {
-  Point::new(-a.x, -a.y)
-}
-
-fn dot(a: Point<f32>, b: Point<f32>) -> f32 {
-  a.x * b.x + a.y * b.y
-}
-
-fn cross(a: Point<f32>, b: Point<f32>) -> f32 {
-  a.x * b.y - a.y * b.x
-}
-
-fn length_squared(a: Point<f32>) -> f32 {
-  a.x * a.x + a.y * a.y
-}
-
 fn distance_squared(a: Point<f32>, b: Point<f32>) -> f32 {
-  length_squared(a - b)
+  (a - b).length_squared()
 }
 
 fn degenerate_vector(v: Point<f32>) -> bool {
@@ -284,7 +264,7 @@ fn normals(vector: Point<f32>, radius: f32) -> Option<(Point<f32>, Point<f32>)> 
   // `SkPointPriv::RotateCCW`.
   let unit = Point::new(unit.y, -unit.x);
 
-  Some((scale(unit, radius), unit))
+  Some((unit.scale(radius), unit))
 }
 
 /// `SkQuadConstruct`: a quad stroke being fitted to a span of the original curve.
@@ -468,7 +448,7 @@ impl Stroker {
 
   fn pre_join_to(&mut self, point: Point<f32>, is_line: bool) -> Option<(Point<f32>, Point<f32>)> {
     let (normal, unit_normal) =
-      match normals(scale(point - self.prev_point, self.res_scale), self.radius) {
+      match normals((point - self.prev_point).scale(self.res_scale), self.radius) {
         Some(normals) => normals,
         // Square and round caps draw even a zero-length segment, upright.
         None if self.cap != LineCap::Butt => (Point::new(self.radius, 0.0), Point::new(1.0, 0.0)),
@@ -532,7 +512,7 @@ impl Stroker {
         self.outer.push_reversed(&self.inner);
         self.cap_to(
           self.first_point,
-          negate(self.first_normal),
+          self.first_normal.negate(),
           self.first_outer_point,
           self.prev_is_line,
         );
@@ -617,7 +597,7 @@ impl Stroker {
     self.quad_stroke(&quad, &mut quad_points);
 
     // `setQuadEndNormal`.
-    let (normal_bc, unit_bc) = normals(scale(quad[2] - quad[1], self.res_scale), self.radius)
+    let (normal_bc, unit_bc) = normals((quad[2] - quad[1]).scale(self.res_scale), self.radius)
       .unwrap_or((normal_ab, unit_ab));
 
     self.post_join_to(to, normal_bc, unit_bc);
@@ -805,18 +785,18 @@ impl Stroker {
     let end = quad_points.quad[2];
     let a = quad_points.tangent_start;
     let b = quad_points.tangent_end;
-    let denom = cross(a, b);
+    let denom = a.cross(b);
 
     if denom == 0.0 || !denom.is_finite() {
-      quad_points.opposite_tangents = dot(a, b) < 0.0;
+      quad_points.opposite_tangents = a.dot(b) < 0.0;
       return ResultType::Degenerate;
     }
 
     quad_points.opposite_tangents = false;
 
     let ab0 = start - end;
-    let mut numer_a = cross(b, ab0);
-    let numer_b = cross(a, ab0);
+    let mut numer_a = b.cross(ab0);
+    let numer_b = a.cross(ab0);
 
     if (numer_a >= 0.0) == (numer_b >= 0.0) {
       let dist1 = pt_to_tangent_line(start, end, quad_points.tangent_end);
@@ -833,13 +813,13 @@ impl Stroker {
 
     if numer_a > numer_a - 1.0 {
       if ray_type == RayType::ControlPoint {
-        quad_points.quad[1] = start + scale(quad_points.tangent_start, numer_a);
+        quad_points.quad[1] = start + quad_points.tangent_start.scale(numer_a);
       }
 
       return ResultType::Quad;
     }
 
-    quad_points.opposite_tangents = dot(a, b) < 0.0;
+    quad_points.opposite_tangents = a.dot(b) < 0.0;
     ResultType::Degenerate
   }
 
@@ -1151,11 +1131,11 @@ impl Stroker {
     pivot: Point<f32>,
     after_unit_normal: Point<f32>,
   ) {
-    let mut after = scale(after_unit_normal, self.radius);
+    let mut after = after_unit_normal.scale(self.radius);
     let ccw = !is_clockwise(before_unit_normal, after_unit_normal);
 
     if ccw {
-      after = negate(after);
+      after = after.negate();
     }
 
     let (outer, inner) = self.sides(ccw);
@@ -1171,13 +1151,13 @@ impl Stroker {
     pivot: Point<f32>,
     after_unit_normal: Point<f32>,
   ) {
-    if angle_type(dot(before_unit_normal, after_unit_normal)) == AngleType::NearlyLine {
+    if angle_type(before_unit_normal.dot(after_unit_normal)) == AngleType::NearlyLine {
       return;
     }
 
     let ccw = !is_clockwise(before_unit_normal, after_unit_normal);
     let (before, mut after) = if ccw {
-      (negate(before_unit_normal), negate(after_unit_normal))
+      (before_unit_normal.negate(), after_unit_normal.negate())
     } else {
       (before_unit_normal, after_unit_normal)
     };
@@ -1188,7 +1168,7 @@ impl Stroker {
       return;
     }
 
-    after = scale(after, radius);
+    after = after.scale(radius);
 
     let tolerance = self.conic_tolerance;
     let (outer, inner) = self.sides(ccw);
@@ -1213,7 +1193,7 @@ impl Stroker {
   ) {
     let radius = self.radius;
     let inv_miter_limit = self.inv_miter_limit;
-    let dot_product = dot(before_unit_normal, after_unit_normal);
+    let dot_product = before_unit_normal.dot(after_unit_normal);
     let angle = angle_type(dot_product);
     let mut before = before_unit_normal;
     let mut after = after_unit_normal;
@@ -1230,13 +1210,13 @@ impl Stroker {
       ccw = !is_clockwise(before, after);
 
       if ccw {
-        before = negate(before);
-        after = negate(after);
+        before = before.negate();
+        after = after.negate();
       }
 
       if dot_product == 0.0 && inv_miter_limit <= ONE_OVER_SQRT_2 {
         // An upright right angle, the common corner of a stroked rect.
-        Some(scale(before + after, radius))
+        Some((before + after).scale(radius))
       } else {
         let sin_half_angle = ((1.0 + dot_product) / 2.0).sqrt();
 
@@ -1247,7 +1227,7 @@ impl Stroker {
           let mut mid = if angle == AngleType::Sharp {
             let mid = Point::new(after.y - before.y, before.x - after.x);
 
-            if ccw { negate(mid) } else { mid }
+            if ccw { mid.negate() } else { mid }
           } else {
             before + after
           };
@@ -1274,7 +1254,7 @@ impl Stroker {
       }
     }
 
-    let after = scale(after, radius);
+    let after = after.scale(radius);
 
     if !is_line {
       outer.line_to(pivot.x + after.x, pivot.y + after.y);
@@ -1379,7 +1359,7 @@ fn cubic_end_normals(cubic: &[Point<f32>; 4], radius: f32) -> Option<(Point<f32>
 fn pt_to_line(point: Point<f32>, start: Point<f32>, end: Point<f32>) -> f32 {
   let dxy = end - start;
   let ab0 = point - start;
-  let t = dot(dxy, ab0) / dot(dxy, dxy);
+  let t = dxy.dot(ab0) / dxy.dot(dxy);
 
   if (0.0..=1.0).contains(&t) {
     let hit = Point::new(
@@ -1395,10 +1375,10 @@ fn pt_to_line(point: Point<f32>, start: Point<f32>, end: Point<f32>) -> f32 {
 
 fn pt_to_tangent_line(point: Point<f32>, start: Point<f32>, tangent: Point<f32>) -> f32 {
   let ab0 = point - start;
-  let t = dot(tangent, ab0) / dot(tangent, tangent);
+  let t = tangent.dot(ab0) / tangent.dot(tangent);
 
   if (0.0..=1.0).contains(&t) {
-    distance_squared(start + scale(tangent, t), point)
+    distance_squared(start + tangent.scale(t), point)
   } else {
     distance_squared(point, start)
   }
@@ -1411,8 +1391,8 @@ fn points_within_dist(near: Point<f32>, far: Point<f32>, limit: f32) -> bool {
 fn sharp_angle(quad: &[Point<f32>; 3]) -> bool {
   let mut smaller = quad[1] - quad[0];
   let mut larger = quad[1] - quad[2];
-  let smaller_length = length_squared(smaller);
-  let mut larger_length = length_squared(larger);
+  let smaller_length = smaller.length_squared();
+  let mut larger_length = larger.length_squared();
 
   if smaller_length > larger_length {
     std::mem::swap(&mut smaller, &mut larger);
@@ -1423,12 +1403,12 @@ fn sharp_angle(quad: &[Point<f32>; 3]) -> bool {
     return false;
   };
 
-  dot(smaller, larger) > 0.0
+  smaller.dot(larger) > 0.0
 }
 
 fn intersect_quad_ray(line: [Point<f32>; 2], quad: &[Point<f32>; 3]) -> ([f32; 2], usize) {
   let vector = line[1] - line[0];
-  let r = quad.map(|point| cross(vector, point - line[0]));
+  let r = quad.map(|point| vector.cross(point - line[0]));
   let (mut a, mut b, c) = (r[2], r[1], r[0]);
 
   a += c - 2.0 * b;
@@ -1564,7 +1544,7 @@ fn eval_quad_tangent(quad: &[Point<f32>; 3], t: f32) -> Point<f32> {
 
   let b = quad[1] - quad[0];
   let a = quad[2] - quad[1] - b;
-  let tangent = scale(a, t) + b;
+  let tangent = a.scale(t) + b;
 
   tangent + tangent
 }
@@ -1730,7 +1710,7 @@ fn find_cubic_max_curvature(cubic: &[Point<f32>; 4]) -> ([f32; 3], usize) {
 fn on_same_side(cubic: &[Point<f32>; 4], test: usize, line: usize) -> bool {
   let origin = cubic[line];
   let direction = cubic[line + 1] - origin;
-  let crosses = [0, 1].map(|index| cross(direction, cubic[test + index] - origin));
+  let crosses = [0, 1].map(|index| direction.cross(cubic[test + index] - origin));
 
   crosses[0] * crosses[1] >= 0.0
 }
@@ -1755,5 +1735,5 @@ fn find_cubic_cusp(cubic: &[Point<f32>; 4]) -> Option<f32> {
   values[..count]
     .iter()
     .copied()
-    .find(|&t| 0.0 < t && t < 1.0 && length_squared(eval_cubic_derivative(cubic, t)) < precision)
+    .find(|&t| 0.0 < t && t < 1.0 && (eval_cubic_derivative(cubic, t)).length_squared() < precision)
 }

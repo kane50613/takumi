@@ -3,11 +3,14 @@
 //! Parts left or right of the clip become vertical lines on its edge, so the winding of what stays
 //! inside is unchanged.
 
-use takumi_core::geometry::{Point, Rect};
+use takumi_core::{
+  geometry::{Point, Rect},
+  path::{chop_quad_at, cubic_split, find_unit_quad_roots},
+};
 
 use super::edge_builder::{
-  chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at, chop_quad_at_x_extrema,
-  chop_quad_at_y_extrema, cubic_split, find_unit_quad_roots, transpose,
+  chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at_x_extrema, chop_quad_at_y_extrema,
+  transpose,
 };
 
 /// A clipped segment, as `SkEdgeClipper::next` returns it.

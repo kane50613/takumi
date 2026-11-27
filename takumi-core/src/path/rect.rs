@@ -147,8 +147,9 @@ impl Hash for Rect<f32> {
 impl Size<f32> {
   /// The size, none where either side is not finite and above zero.
   pub fn positive(width: f32, height: f32) -> Option<Self> {
-    (width > 0.0 && height > 0.0 && width.is_finite() && height.is_finite())
-      .then_some(Self::new(width, height))
+    let size = Self::new(width, height);
+
+    size.has_area().then_some(size)
   }
 }
 

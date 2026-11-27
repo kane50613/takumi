@@ -5,15 +5,17 @@
 //! and a path past the limit strokes nothing, where `skpathutils::FillPathWithPaint` strokes it
 //! undashed.
 
-use crate::math::hash_f32;
+use crate::{
+  math::{NEARLY_ZERO, hash_f32},
+  style::lerp,
+};
 use std::{
   cmp::Ordering,
   hash::{Hash, Hasher},
 };
 
 use super::{
-  Path, PathBuilder, PathVerb, Point, chop_cubic_at, chop_quad_at, conic::NEARLY_ZERO,
-  eval_cubic_pos_at, eval_quad_at,
+  Path, PathBuilder, PathVerb, Point, chop_cubic_at, chop_quad_at, eval_cubic_pos_at, eval_quad_at,
 };
 
 /// `kMaxDashCount`: past this many dashes a path is not dashed.
@@ -239,11 +241,6 @@ struct ContourMeasures<'a> {
   tolerance: f32,
 }
 
-/// `SkScalarInterp`.
-fn interp(a: f32, b: f32, t: f32) -> f32 {
-  a + (b - a) * t
-}
-
 /// `tspan_big_enough`.
 fn tspan_big_enough(span: u32) -> bool {
   span >> 10 != 0
@@ -263,8 +260,8 @@ fn cheap_dist_exceeds_limit(point: Point<f32>, x: f32, y: f32, tolerance: f32) -
 fn cubic_too_curvy(points: &[Point<f32>; 4], tolerance: f32) -> bool {
   let at = |t: f32| {
     (
-      interp(points[0].x, points[3].x, t),
-      interp(points[0].y, points[3].y, t),
+      lerp(points[0].x, points[3].x, t),
+      lerp(points[0].y, points[3].y, t),
     )
   };
   let (x1, y1) = at(1.0 / 3.0);
@@ -640,8 +637,8 @@ impl ContourMeasure {
 
     match self.segments[index].kind {
       SegmentType::Line => Point::new(
-        interp(points[0].x, points[1].x, t),
-        interp(points[0].y, points[1].y, t),
+        lerp(points[0].x, points[1].x, t),
+        lerp(points[0].y, points[1].y, t),
       ),
       SegmentType::Quad => eval_quad_at(&[points[0], points[1], points[2]], t),
       SegmentType::Cubic => eval_cubic_pos_at(&[points[0], points[1], points[2], points[3]], t),
@@ -667,8 +664,8 @@ impl ContourMeasure {
           builder.line_to(points[1].x, points[1].y);
         } else {
           builder.line_to(
-            interp(points[0].x, points[1].x, stop_t),
-            interp(points[0].y, points[1].y, stop_t),
+            lerp(points[0].x, points[1].x, stop_t),
+            lerp(points[0].y, points[1].y, stop_t),
           );
         }
       }

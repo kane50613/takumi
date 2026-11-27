@@ -2,7 +2,7 @@ use smallvec::SmallVec;
 
 use crate::{
   context::RenderContext,
-  geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand as Command, Point, Rect, Size},
+  geometry::{LAYOUT_UNIT_EPSILON, PathCommand as Command, PathCommandSink, Point, Rect, Size},
   layout::{
     contoured_rect::{Corner, opposite_corners_factor},
     corner_shape::{CornerContour, KAPPA, corner_contour},

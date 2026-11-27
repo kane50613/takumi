@@ -107,27 +107,23 @@ pub fn eval_cubic_pos_at(cubic: &[Point<f32>; 4], t: f32) -> Point<f32> {
   )
 }
 
-fn lerp(a: Point<f32>, b: Point<f32>, t: f32) -> Point<f32> {
-  Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-}
-
 /// `SkChopQuadAt`: the two halves of `src` split at `t`, sharing their middle point.
 pub fn chop_quad_at(src: [Point<f32>; 3], t: f32) -> [Point<f32>; 5] {
-  let p01 = lerp(src[0], src[1], t);
-  let p12 = lerp(src[1], src[2], t);
+  let p01 = src[0].lerp(src[1], t);
+  let p12 = src[1].lerp(src[2], t);
 
-  [src[0], p01, lerp(p01, p12, t), p12, src[2]]
+  [src[0], p01, p01.lerp(p12, t), p12, src[2]]
 }
 
 /// The control points `SkChopCubicAt` interpolates at `t`: `ab`, `bc`, `cd`, `abc`, `bcd`, `abcd`.
 pub fn cubic_split(src: &[Point<f32>; 4], t: f32) -> [Point<f32>; 6] {
-  let ab = lerp(src[0], src[1], t);
-  let bc = lerp(src[1], src[2], t);
-  let cd = lerp(src[2], src[3], t);
-  let abc = lerp(ab, bc, t);
-  let bcd = lerp(bc, cd, t);
+  let ab = src[0].lerp(src[1], t);
+  let bc = src[1].lerp(src[2], t);
+  let cd = src[2].lerp(src[3], t);
+  let abc = ab.lerp(bc, t);
+  let bcd = bc.lerp(cd, t);
 
-  [ab, bc, cd, abc, bcd, lerp(abc, bcd, t)]
+  [ab, bc, cd, abc, bcd, abc.lerp(bcd, t)]
 }
 
 /// `SkChopCubicAt` into seven points.

@@ -3,10 +3,9 @@
 //! y-extrema chopping of `src/core/SkGeometry.cpp` and the convexity and rect tests of
 //! `src/core/SkPathPriv.cpp` that pick the scan converter's fast paths.
 
-use takumi_core::path::PathVerb;
 use takumi_core::{
   geometry::{Point, Rect},
-  path::Path,
+  path::{Path, PathVerb, chop_quad_at, cubic_split, find_cubic_extrema, find_quad_extrema},
 };
 
 use super::{
@@ -243,40 +242,12 @@ fn combine_vertical(edge: &Edge, last: &mut Edge) -> Combine {
   Combine::No
 }
 
-/// `valid_unit_divide` in `SkGeometry.cpp`.
-fn valid_unit_divide(mut numer: f32, mut denom: f32) -> Option<f32> {
-  if numer < 0.0 {
-    numer = -numer;
-    denom = -denom;
-  }
-
-  if denom == 0.0 || numer == 0.0 || numer >= denom {
-    return None;
-  }
-
-  let ratio = numer / denom;
-
-  (!ratio.is_nan() && ratio != 0.0).then_some(ratio)
-}
-
 /// `is_not_monotonic` in `SkGeometry.cpp`.
 fn is_not_monotonic(a: f32, b: f32, c: f32) -> bool {
   let ab = a - b;
   let bc = if ab < 0.0 { c - b } else { b - c };
 
   ab == 0.0 || bc < 0.0
-}
-
-fn lerp(a: Point<f32>, b: Point<f32>, t: f32) -> Point<f32> {
-  Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-}
-
-/// `SkChopQuadAt`: the two halves of `src` split at `t`, sharing their middle point.
-pub(super) fn chop_quad_at(src: [Point<f32>; 3], t: f32) -> [Point<f32>; 5] {
-  let p01 = lerp(src[0], src[1], t);
-  let p12 = lerp(src[1], src[2], t);
-
-  [src[0], p01, lerp(p01, p12, t), p12, src[2]]
 }
 
 /// `SkChopQuadAtYExtrema`: one or two y-monotonic quads.
@@ -287,7 +258,7 @@ pub(super) fn chop_quad_at_y_extrema(
   let (a, mut b, c) = (p0.y, p1.y, p2.y);
 
   if is_not_monotonic(a, b, c) {
-    if let Some(t) = valid_unit_divide(a - b, a - b - b + c) {
+    if let Some(t) = find_quad_extrema(a, b, c) {
       let [_, p01, mid, p12, _] = chop_quad_at(src, t);
 
       // `flatten_double_quad_extrema`.
@@ -326,72 +297,12 @@ pub(super) fn chop_cubic_at_x_extrema(
   chop_cubic_at_y_extrema(src.map(transpose)).map(|cubic| cubic.map(transpose))
 }
 
-/// `SkFindUnitQuadRoots`.
-pub(super) fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) {
-  let mut roots = [0.0; 2];
-  let mut count = 0;
-  let mut push = |root: Option<f32>| {
-    if let Some(root) = root {
-      roots[count] = root;
-      count += 1;
-    }
-  };
-
-  if a == 0.0 {
-    push(valid_unit_divide(-c, b));
-    return (roots, count);
-  }
-
-  let discriminant = f64::from(b) * f64::from(b) - 4.0 * f64::from(a) * f64::from(c);
-
-  if discriminant < 0.0 {
-    return (roots, 0);
-  }
-
-  let r = discriminant.sqrt() as f32;
-
-  if !r.is_finite() {
-    return (roots, 0);
-  }
-
-  let q = if b < 0.0 {
-    -(b - r) / 2.0
-  } else {
-    -(b + r) / 2.0
-  };
-
-  push(valid_unit_divide(q, a));
-  push(valid_unit_divide(c, q));
-
-  if count == 2 {
-    if roots[0] > roots[1] {
-      roots.swap(0, 1);
-    } else if roots[0] == roots[1] {
-      count = 1;
-    }
-  }
-
-  (roots, count)
-}
-
-/// The control points `SkChopCubicAt` interpolates at `t`: `ab`, `bc`, `cd`, `abc`, `bcd`, `abcd`.
-pub(super) fn cubic_split(src: &[Point<f32>; 4], t: f32) -> [Point<f32>; 6] {
-  let ab = lerp(src[0], src[1], t);
-  let bc = lerp(src[1], src[2], t);
-  let cd = lerp(src[2], src[3], t);
-  let abc = lerp(ab, bc, t);
-  let bcd = lerp(bc, cd, t);
-
-  [ab, bc, cd, abc, bcd, lerp(abc, bcd, t)]
-}
-
 /// `SkChopCubicAtYExtrema`: one to three y-monotonic cubics, sharing end points in `dst`.
 pub(super) fn chop_cubic_at_y_extrema(
   src: [Point<f32>; 4],
 ) -> impl Iterator<Item = [Point<f32>; 4]> {
-  // `SkFindCubicExtrema`.
   let [a, b, c, d] = src.map(|point| point.y);
-  let (roots, count) = find_unit_quad_roots(d - a + 3.0 * (b - c), 2.0 * (a - b - b + c), b - a);
+  let (roots, count) = find_cubic_extrema(a, b, c, d);
   let mut dst = [src[3]; 10];
 
   dst[..4].copy_from_slice(&src);
@@ -417,8 +328,8 @@ pub(super) fn chop_cubic_at_y_extrema(
         ab0,
         abc0,
         abcd0,
-        lerp(abc0, bcd0, t1),
-        lerp(abc1, bcd1, t0),
+        abc0.lerp(bcd0, t1),
+        abc1.lerp(bcd1, t0),
         abcd1,
         bcd1,
         cd1,
