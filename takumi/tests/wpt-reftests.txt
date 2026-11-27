@@ -2892,7 +2892,6 @@ css/css-transforms/transform-origin/svg-origin-relative-length-invalid-012.html
 !css/css-transforms/transform-overflow-001.html
 !css/css-transforms/transform-overflow-002.html
 !css/css-transforms/transform-rounding-001.html
-!css/css-transforms/transform-stresstest-001.html
 !css/css-transforms/transform-style-stacking-context.html
 !css/css-transforms/transform-table-001.html
 !css/css-transforms/transform-table-002.html
