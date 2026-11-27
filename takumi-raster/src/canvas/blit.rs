@@ -555,7 +555,7 @@ fn composite_bordered_source(
     } else {
       options
         .transform
-        .invert()
+        .skia_invert()
         .map(|inverse| logical_to_source * inverse)
     };
 

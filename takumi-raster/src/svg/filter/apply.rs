@@ -976,20 +976,31 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
   }
 }
 
-/// The pixels `bounds` covers, none unless it has area: the floor of the origin and the ceiling of
-/// the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds. Approximate: Skia rounds a decal crop
-/// out, so `[0.75, 1.75)` covers `[0, 2)` there and `[0, 1)` here.
+/// The pixels `bounds` covers, none unless it has area, rounded out as Skia's crop image filter
+/// rounds a decal crop rect (`SkCropImageFilter.cpp`).
 fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
   if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
     return None;
   }
 
-  let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
+  let edges = [
+    bounds.left.floor(),
+    bounds.top.floor(),
+    bounds.right.ceil(),
+    bounds.bottom.ceil(),
+  ];
 
-  Some(Rect {
-    left,
-    top,
-    right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
-    bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
-  })
+  edges
+    .iter()
+    .all(|edge| edge.abs() < i32::MAX as f32)
+    .then(|| {
+      let [left, top, right, bottom] = edges.map(|edge| edge as i32);
+
+      Rect {
+        left,
+        top,
+        right,
+        bottom,
+      }
+    })
 }
