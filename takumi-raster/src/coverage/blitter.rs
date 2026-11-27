@@ -149,7 +149,7 @@ impl Coverage {
   }
 
   /// `SkBlitter::blitAntiRect`.
-  pub(super) fn blit_anti_rect(
+  fn blit_anti_rect(
     &mut self,
     mut x: i32,
     y: i32,
@@ -258,7 +258,7 @@ const fn snap_alpha(alpha: u8) -> u8 {
 }
 
 /// `add_alpha`, whose `SkAlphaRuns::CatchOverflow` maps 256 to 255.
-pub(super) fn add_alpha(alpha: &mut u8, delta: u8) {
+fn add_alpha(alpha: &mut u8, delta: u8) {
   let sum = i32::from(*alpha) + i32::from(delta);
 
   *alpha = (sum - (sum >> 8)) as u8;

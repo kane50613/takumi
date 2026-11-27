@@ -2,7 +2,7 @@
 //! joins of `src/core/SkStrokerPriv.cpp`: the outline a stroke of a path fills. Approximate: a
 //! closed rect strokes as any other path, where Skia's `strokeRect` builds its outline directly.
 
-use crate::math::{NEARLY_ZERO, hash_f32};
+use crate::math::{NEARLY_ZERO, hash_f32, nearly_zero};
 use std::{
   cmp::Ordering,
   hash::{Hash, Hasher},
@@ -251,11 +251,6 @@ fn distance_squared(a: Point<f32>, b: Point<f32>) -> f32 {
 
 fn degenerate_vector(v: Point<f32>) -> bool {
   !can_normalize(v.x, v.y)
-}
-
-/// `SkScalarNearlyZero` with a tolerance.
-fn nearly_zero(value: f32, tolerance: f32) -> bool {
-  value.abs() <= tolerance
 }
 
 /// `set_normal_unitnormal`: the left-turned unit vector along `vector` and it scaled by `radius`.

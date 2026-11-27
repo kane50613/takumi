@@ -25,28 +25,6 @@ pub(super) trait BuiltEdge: Sized {
   }
 }
 
-impl BuiltEdge for Edge {
-  fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
-    Edge::line(p0, p1)
-  }
-
-  fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
-    Edge::quadratic(points)
-  }
-
-  fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
-    Edge::cubic(points)
-  }
-
-  fn combine_vertical(&self, last: &mut Self) -> Combine {
-    if self.dx == 0 {
-      combine_vertical(self, last)
-    } else {
-      Combine::No
-    }
-  }
-}
-
 /// `SkEdgeBuilder::buildEdges`, walking contours as `SkPathEdgeIter` does and clipping each
 /// segment when `clipper` is given.
 pub(super) fn build_edges<E: BuiltEdge>(path: &Path, clipper: Option<&EdgeClipper>) -> Vec<E> {
@@ -191,7 +169,7 @@ pub(super) enum Combine {
 }
 
 /// `SkAnalyticEdgeBuilder::combineVertical`.
-fn combine_vertical(edge: &Edge, last: &mut Edge) -> Combine {
+pub(super) fn combine_vertical(edge: &Edge, last: &mut Edge) -> Combine {
   let approximately_equal = |a: i32, b: i32| (a - b).abs() < 0x100;
 
   if !last.is_line || last.dx != 0 || edge.x != last.x {

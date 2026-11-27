@@ -4,7 +4,12 @@
 use std::hash::{Hash, Hasher};
 
 /// `SK_ScalarNearlyZero`: the tolerance Skia treats a float as zero within.
-pub(crate) const NEARLY_ZERO: f32 = 1.0 / 4096.0;
+pub const NEARLY_ZERO: f32 = 1.0 / 4096.0;
+
+/// `SkScalarNearlyZero` with a tolerance.
+pub fn nearly_zero(value: f32, tolerance: f32) -> bool {
+  value.abs() <= tolerance
+}
 
 /// Hashes `value` so that floats `==` holds equal hash equally, `-0.0` as `0.0`.
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
