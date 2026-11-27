@@ -63,11 +63,6 @@ yoke = "0.8"
 zune-core = "0.5"
 zune-jpeg = "0.5"
 
-[workspace.dependencies.tiny-skia]
-version = "0.12"
-default-features = false
-features = ["std", "simd"]
-
 [workspace.dependencies.quick_cache]
 version = "0.7"
 default-features = false

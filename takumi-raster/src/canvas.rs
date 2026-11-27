@@ -756,7 +756,7 @@ mod demultiply_tests {
   use super::demultiply_rgba_in_place;
   use takumi_core::resources::image_buffer::demultiplied;
 
-  /// Integer rounding may differ from tiny-skia's float division, but only
+  /// Truncating may differ from rounding, but only
   /// where the float lands within a rounding step of the true value.
   #[test]
   fn stays_within_one_step_of_rounding() {
