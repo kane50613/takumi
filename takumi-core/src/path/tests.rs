@@ -70,6 +70,7 @@ fn a_right_angle_miters_to_its_corner() {
   let outline = builder.finish().unwrap().stroke(&stroke, 1.0).unwrap();
 
   assert_eq!(bounds(&outline), (10.0, 8.0, 32.0, 30.0));
+  assert!(outline.points().contains(&Point::new(32.0, 8.0)));
 }
 
 #[test]

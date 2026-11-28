@@ -300,6 +300,7 @@ fn aliased_curves_agree_with_their_antialiased_coverage() {
     let aliased = fill_path_aliased(&path, fill_rule, size);
     let antialiased = fill_path(&path, fill_rule, size);
 
+    assert!(aliased.iter().all(|&alpha| alpha == 0 || alpha == 255));
     assert!(
       aliased.iter().filter(|&&alpha| alpha == 255).count() > 500,
       "{fill_rule:?}"
