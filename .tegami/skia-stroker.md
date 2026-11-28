@@ -4,9 +4,9 @@ packages:
   takumi-raster: patch
 ---
 
-# Strokes and dashes are outlined as in Chromium
+# Strokes and dashes are outlined closer to Chromium
 
-Strokes, dashed and dotted borders, and SVG strokes now match Chromium's outlines.
+Strokes, dashed and dotted borders, and SVG strokes now follow Chromium's outlines more closely.
 
 - A curve that doubles back on itself gets a rounded point where it turns.
 - A dashed line of no length draws its round or square cap.
