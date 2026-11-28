@@ -13,9 +13,9 @@ use super::{
 };
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
+  math::ApproxEq,
   resources::svg_size::ViewBox,
   style::{Affine, Angle, FromCssStr, Length, Overflow, VectorEffect},
-  svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 

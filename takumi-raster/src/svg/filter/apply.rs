@@ -6,26 +6,33 @@
 
 use std::{f32::consts::SQRT_2, rc::Rc};
 
-use tiny_skia::{BlendMode as TinyBlendMode, IntRect, Pixmap, PixmapPaint, PixmapRef, Transform};
+use tiny_skia::{IntRect, Pixmap, PixmapRef, Transform};
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
   LightSource, MorphologyOperator, Primitive, SpotLight, SvgFilter, Turbulence,
-  color_filter::{ColorFilter, ColorFilters},
-  composite,
-  lighting::Lighting,
-  turbulence,
+  color_filter::{ColorFilter, ColorFilters, convert_color},
+  composite, convolve_matrix, displacement_map,
+  lighting::{self, Lighting},
+  morphology, turbulence,
 };
-use crate::{
+use takumi_core::{
   blur::{MIN_SIGMA, blur_rgba_axes},
   geometry::{Point, Rect},
+  math::ApproxEq,
   resources::{
     image::{MAX_RASTER_PIXELS, within_raster_pixel_budget},
     image_buffer::premultiply_pixel,
   },
-  style::{Affine, Color, math::mul_div_255},
-  svg::approx_eq::ApproxEq,
-  svg_drawing::{draw as draw_svg, draw_over, tiny_blend_mode},
+  style::{
+    Affine, BlendMode, Color,
+    math::{div_255, mul_div_255},
+  },
+};
+
+use crate::{
+  blend::{blend_premultiplied_pixel, composite_premultiplied_over},
+  svg::drawing::{draw as draw_svg, draw_over},
 };
 
 /// A primitive's pixels over the filter region, with `filters` deferred as Skia's `FilterResult`
@@ -157,130 +164,132 @@ struct Run<'a> {
   later: &'a [Primitive],
 }
 
-impl SvgFilter {
-  /// Applies the filter to a layer, which `transform` maps the user space of the filter onto. A
-  /// filter that cannot run clears the layer.
-  pub(crate) fn apply(&self, transform: Transform, layer: &mut Pixmap) {
-    let (width, height) = (layer.width(), layer.height());
-    let Some(blank) = Pixmap::new(width, height) else {
-      return;
-    };
-    let source = std::mem::replace(layer, blank);
+/// Applies the filter to a layer, which `transform` maps the user space of the filter onto. A
+/// filter that cannot run clears the layer.
+pub(crate) fn apply(filter: &SvgFilter, transform: Transform, layer: &mut Pixmap) {
+  let (width, height) = (layer.width(), layer.height());
+  let Some(blank) = Pixmap::new(width, height) else {
+    return;
+  };
+  let source = std::mem::replace(layer, blank);
 
-    if let Some((image, region)) = self.run(transform.into(), source) {
-      if region == Rect::from_size(0, 0, width, height) {
-        *layer = image.take();
-      } else {
-        draw(
-          layer,
-          image.view(),
-          region.left,
-          region.top,
-          TinyBlendMode::SourceOver,
-        );
-      }
-    }
-  }
-
-  /// The output of the primitives on the layer, in sRGB, and the part of the layer it covers.
-  fn run(&self, transform: Affine, source: Pixmap) -> Option<(Image, Rect<i32>)> {
-    // The filter region comes straight from the filter, so it can be larger than the layer.
-    let layer = Rect::from_size(0, 0, source.width(), source.height());
-    let region = self.region.pixel_bounds(transform)?.intersection(&layer)?;
-    // Every input of a primitive is as large as the region.
-    let source = if region == layer {
-      source
+  if let Some((image, region)) = run(filter, transform.into(), source) {
+    if region == Rect::from_size(0, 0, width, height) {
+      *layer = image.take();
     } else {
-      source.clone_rect(IntRect::from_xywh(
-        region.left,
-        region.top,
-        region.width(),
-        region.height(),
-      )?)?
-    };
-    let mut graphic = Image::new(source, ColorSpace::Srgb);
-
-    graphic.region = region;
-
-    let alpha = self
-      .primitives
-      .iter()
-      .any(|primitive| primitive.kind.inputs().contains(&&Input::SourceAlpha))
-      .then(|| graphic.alpha());
-    let mut run = Run {
-      transform,
-      region,
-      source_graphic: Some(graphic),
-      source_alpha: alpha,
-      results: Vec::new(),
-      later: &self.primitives,
-    };
-
-    for (index, primitive) in self.primitives.iter().enumerate() {
-      run.later = &self.primitives[index + 1..];
-
-      let image = run.primitive(primitive)?;
-
-      run.results.push(FilterResult {
-        name: primitive.result.clone(),
-        image,
-      });
-
-      run.release(true);
-
-      if run.live_bytes() > MAX_LIVE_BYTES {
-        return None;
-      }
+      draw(layer, image.view(), region.left, region.top, Layer::Over);
     }
-
-    let image = run.results.pop()?.image;
-
-    Some((image.into_color_space(ColorSpace::Srgb), region))
   }
+}
 
-  /// Applies the filter to a premultiplied RGBA layer in place, `None` past the raster budget.
-  pub(crate) fn apply_to_layer(&self, layer: &mut [u8], width: u32, height: u32) -> Option<()> {
-    // The pixels of the region with its top-left corner at the origin, which the layer sits within
-    // at `dx`, `dy`.
-    let dx = (-self.region.left).round() as i32;
-    let dy = (-self.region.top).round() as i32;
-    let window = self
-      .region
-      .pixel_bounds(Transform::from_translate(-self.region.left, -self.region.top).into())?
-      .intersection(&Rect::from_size(dx, dy, width, height))?;
+/// The output of the primitives on the layer, in sRGB, and the part of the layer it covers.
+fn run(filter: &SvgFilter, transform: Affine, source: Pixmap) -> Option<(Image, Rect<i32>)> {
+  // The filter region comes straight from the filter, so it can be larger than the layer.
+  let layer = Rect::from_size(0, 0, source.width(), source.height());
+  let region = filter
+    .region
+    .transformed(transform)
+    .and_then(pixel_bounds)?
+    .intersection(&layer)?;
+  // Every input of a primitive is as large as the region.
+  let source = if region == layer {
+    source
+  } else {
+    source.clone_rect(IntRect::from_xywh(
+      region.left,
+      region.top,
+      region.width(),
+      region.height(),
+    )?)?
+  };
+  let mut graphic = Image::new(source, ColorSpace::Srgb);
 
-    if !within_raster_pixel_budget(window.width(), window.height()) {
+  graphic.region = region;
+
+  let alpha = filter
+    .primitives
+    .iter()
+    .any(|primitive| primitive.kind.inputs().contains(&&Input::SourceAlpha))
+    .then(|| graphic.alpha());
+  let mut run = Run {
+    transform,
+    region,
+    source_graphic: Some(graphic),
+    source_alpha: alpha,
+    results: Vec::new(),
+    later: &filter.primitives,
+  };
+
+  for (index, primitive) in filter.primitives.iter().enumerate() {
+    run.later = &filter.primitives[index + 1..];
+
+    let image = run.primitive(primitive)?;
+
+    run.results.push(FilterResult {
+      name: primitive.result.clone(),
+      image,
+    });
+
+    run.release(true);
+
+    if run.live_bytes() > MAX_LIVE_BYTES {
       return None;
     }
-
-    let mut sub = Pixmap::new(window.width(), window.height())?;
-    let transform = Transform::from_translate(
-      -self.region.left - window.left as f32,
-      -self.region.top - window.top as f32,
-    );
-
-    draw(
-      &mut sub,
-      PixmapRef::from_bytes(layer, width, height)?,
-      dx - window.left,
-      dy - window.top,
-      TinyBlendMode::SourceOver,
-    );
-    self.apply(transform, &mut sub);
-
-    let mut out = Pixmap::new(width, height)?;
-
-    draw(
-      &mut out,
-      sub.as_ref(),
-      window.left - dx,
-      window.top - dy,
-      TinyBlendMode::SourceOver,
-    );
-    layer.copy_from_slice(out.data());
-
-    Some(())
   }
+
+  let image = run.results.pop()?.image;
+
+  Some((image.into_color_space(ColorSpace::Srgb), region))
+}
+
+/// Applies the filter to a premultiplied RGBA layer in place, `None` past the raster budget.
+pub(crate) fn apply_to_layer(
+  filter: &SvgFilter,
+  layer: &mut [u8],
+  width: u32,
+  height: u32,
+) -> Option<()> {
+  // The pixels of the region with its top-left corner at the origin, which the layer sits within
+  // at `dx`, `dy`.
+  let dx = (-filter.region.left).round() as i32;
+  let dy = (-filter.region.top).round() as i32;
+  let window = filter
+    .region
+    .transformed(Transform::from_translate(-filter.region.left, -filter.region.top).into())
+    .and_then(pixel_bounds)?
+    .intersection(&Rect::from_size(dx, dy, width, height))?;
+
+  if !within_raster_pixel_budget(window.width(), window.height()) {
+    return None;
+  }
+
+  let mut sub = Pixmap::new(window.width(), window.height())?;
+  let transform = Transform::from_translate(
+    -filter.region.left - window.left as f32,
+    -filter.region.top - window.top as f32,
+  );
+
+  draw(
+    &mut sub,
+    PixmapRef::from_bytes(layer, width, height)?,
+    dx - window.left,
+    dy - window.top,
+    Layer::Over,
+  );
+  apply(filter, transform, &mut sub);
+
+  let mut out = Pixmap::new(width, height)?;
+
+  draw(
+    &mut out,
+    sub.as_ref(),
+    window.left - dx,
+    window.top - dy,
+    Layer::Over,
+  );
+  layer.copy_from_slice(out.data());
+
+  Some(())
 }
 
 /// Most bytes a filter's live results and sources hold at once, takumi's own limit.
@@ -301,7 +310,10 @@ impl Run<'_> {
 
   /// Runs one primitive, cutting its result to its subregion.
   fn primitive(&mut self, primitive: &Primitive) -> Option<Image> {
-    let mut subregion = primitive.subregion.pixel_bounds(self.transform)?;
+    let mut subregion = primitive
+      .subregion
+      .transformed(self.transform)
+      .and_then(pixel_bounds)?;
 
     // `feOffset` inherits its region from the input.
     if let Kind::Offset {
@@ -401,7 +413,7 @@ impl Run<'_> {
         let top = next()?.into_color_space(space);
         let mut pixmap = next()?.into_color_space(space).take();
 
-        draw(&mut pixmap, top.view(), 0, 0, tiny_blend_mode(*mode));
+        draw(&mut pixmap, top.view(), 0, 0, Layer::Blend(*mode));
         Some(Image::new(pixmap, space))
       }
       // `FEDropShadow` in `fe_drop_shadow.cc`.
@@ -454,7 +466,7 @@ impl Run<'_> {
           input.view(),
           offset.x as i32,
           offset.y as i32,
-          TinyBlendMode::SourceOver,
+          Layer::Over,
         );
         Some(Image::new(pixmap, input.color_space))
       }
@@ -477,13 +489,11 @@ impl Run<'_> {
 
         let mut pixmap = bottom.take();
         let blend = match operator {
-          CompositeOperator::In => TinyBlendMode::SourceIn,
-          CompositeOperator::Out => TinyBlendMode::SourceOut,
-          CompositeOperator::Atop => TinyBlendMode::SourceAtop,
-          CompositeOperator::Xor => TinyBlendMode::Xor,
-          CompositeOperator::Over | CompositeOperator::Arithmetic { .. } => {
-            TinyBlendMode::SourceOver
-          }
+          CompositeOperator::In => Layer::In,
+          CompositeOperator::Out => Layer::Out,
+          CompositeOperator::Atop => Layer::Atop,
+          CompositeOperator::Xor => Layer::Xor,
+          CompositeOperator::Over | CompositeOperator::Arithmetic { .. } => Layer::Over,
         };
 
         draw(&mut pixmap, top.view(), 0, 0, blend);
@@ -499,7 +509,7 @@ impl Run<'_> {
             input.into_color_space(space).view(),
             0,
             0,
-            TinyBlendMode::SourceOver,
+            Layer::Over,
           );
         }
         Some(Image::new(pixmap, space))
@@ -542,7 +552,7 @@ impl Run<'_> {
       Kind::DisplacementMap(fe) => self.displacement_map(fe, next()?, next()?, space, window),
       Kind::Turbulence(fe) => self.turbulence(fe, primitive.subregion, window, space),
       Kind::DiffuseLighting(fe) => self.lighting(
-        |light, color, depth| fe.lighting(light, color, depth),
+        |light, color, depth| lighting::diffuse_lighting(fe, light, color, depth),
         fe.light_source,
         fe.lighting_color,
         next()?,
@@ -550,7 +560,7 @@ impl Run<'_> {
         subregion,
       ),
       Kind::SpecularLighting(fe) => self.lighting(
-        |light, color, depth| fe.lighting(light, color, depth),
+        |light, color, depth| lighting::specular_lighting(fe, light, color, depth),
         fe.light_source,
         fe.lighting_color,
         next()?,
@@ -660,44 +670,39 @@ impl Run<'_> {
       shadow_pixmap.as_ref(),
       offset.x as i32,
       offset.y as i32,
-      TinyBlendMode::SourceOver,
+      Layer::Over,
     );
-    draw(&mut pixmap, input.as_ref(), 0, 0, TinyBlendMode::SourceOver);
+    draw(&mut pixmap, input.as_ref(), 0, 0, Layer::Over);
     Some(Image::new(pixmap, space))
   }
 
-  /// Blink's `FETile` in `fe_tile.cc`: the data of the input repeated across the region.
+  /// Blink's `FETile` in `fe_tile.cc`: the data of the input repeated across the region, copied as
+  /// Skia's `SkTileImageFilter` copies it.
   fn tile(&self, input: Image) -> Option<Image> {
-    let tile = input.region.translated(-self.region.left, -self.region.top);
-    let tile_pixmap = input.pixmap.clone_rect(tiny_skia::IntRect::from_xywh(
-      tile.left,
-      tile.top,
-      tile.width(),
-      tile.height(),
-    )?)?;
+    let tile = input
+      .region
+      .translated(-self.region.left, -self.region.top)
+      .intersection(&Rect::from_size(
+        0,
+        0,
+        input.pixmap.width(),
+        input.pixmap.height(),
+      ))?;
+    let (tile_width, tile_height) = (tile.width() as i32, tile.height() as i32);
     let mut pixmap = self.blank()?;
-    let rect = tiny_skia::Rect::from_xywh(
-      0.0,
-      0.0,
-      self.region.width() as f32,
-      self.region.height() as f32,
-    )?;
+    let width = pixmap.width() as i32;
+    let source_width = input.pixmap.width() as i32;
+    let source = input.pixmap.rgba();
+    let target = pixmap.rgba_mut();
 
-    pixmap.fill_rect(
-      rect,
-      &tiny_skia::Paint {
-        shader: tiny_skia::Pattern::new(
-          tile_pixmap.as_ref(),
-          tiny_skia::SpreadMode::Repeat,
-          tiny_skia::FilterQuality::Bicubic,
-          1.0,
-          Transform::from_translate(tile.left as f32, tile.top as f32),
-        ),
-        ..tiny_skia::Paint::default()
-      },
-      Transform::identity(),
-      None,
-    );
+    for (index, pixel) in target.iter_mut().enumerate() {
+      let (x, y) = (index as i32 % width, index as i32 / width);
+      let column = tile.left + (x - tile.left).rem_euclid(tile_width);
+      let row = tile.top + (y - tile.top).rem_euclid(tile_height);
+
+      *pixel = source[(row * source_width + column) as usize];
+    }
+
     Some(Image::new(pixmap, input.color_space))
   }
 
@@ -712,7 +717,7 @@ impl Run<'_> {
     let mut pixmap = input.blank_like()?;
     let width = pixmap.width() as usize;
 
-    fe.apply(input.pixmap.rgba(), width, window, pixmap.rgba_mut());
+    convolve_matrix::apply(fe, input.pixmap.rgba(), width, window, pixmap.rgba_mut());
     Some(Image::new(pixmap, space))
   }
 
@@ -727,7 +732,7 @@ impl Run<'_> {
     let radius = self.scaled(radius.0, radius.1);
     let width = pixmap.width() as usize;
 
-    operator.apply(radius.x, radius.y, pixmap.rgba_mut(), width);
+    morphology::apply(operator, radius.x, radius.y, pixmap.rgba_mut(), width);
     Some(Image::new(pixmap, space))
   }
 
@@ -744,7 +749,8 @@ impl Run<'_> {
     let mut pixmap = source.blank_like()?;
     let (sx, sy) = self.transform.row_scales();
 
-    fe.apply(
+    displacement_map::apply(
+      fe,
       [sx, sy],
       pixmap.width() as usize,
       window,
@@ -778,7 +784,8 @@ impl Run<'_> {
     };
     let width = pixmap.width() as usize;
 
-    fe.apply(
+    turbulence::apply(
+      fe,
       &canvas,
       (tile.width(), tile.height()),
       pixmap.rgba_mut(),
@@ -820,7 +827,7 @@ impl Run<'_> {
     };
     let (light, depth) = self.light_source(light);
 
-    lighting(light, space.convert_color(lighting_color), depth).apply(
+    lighting(light, convert_color(space, lighting_color), depth).apply(
       input.pixmap.rgba(),
       width,
       window,
@@ -868,30 +875,6 @@ impl Run<'_> {
   }
 }
 
-impl Kind {
-  /// The inputs the primitive reads, in the order it takes them.
-  fn inputs(&self) -> Vec<&Input> {
-    match self {
-      Kind::Blend { input1, input2, .. } | Kind::Composite { input1, input2, .. } => {
-        vec![input1, input2]
-      }
-      Kind::DisplacementMap(fe) => vec![&fe.input1, &fe.input2],
-      Kind::Merge { inputs } => inputs.iter().collect(),
-      Kind::ColorMatrix { input, .. }
-      | Kind::ComponentTransfer { input, .. }
-      | Kind::GaussianBlur { input, .. }
-      | Kind::Morphology { input, .. }
-      | Kind::Offset { input, .. }
-      | Kind::Tile { input } => vec![input],
-      Kind::ConvolveMatrix(fe) => vec![&fe.input],
-      Kind::DiffuseLighting(fe) => vec![&fe.input],
-      Kind::SpecularLighting(fe) => vec![&fe.input],
-      Kind::DropShadow(fe) => vec![&fe.input],
-      Kind::Flood { .. } | Kind::Image(_) | Kind::Turbulence(_) => Vec::new(),
-    }
-  }
-}
-
 /// Pixmap bytes as RGBA pixels.
 trait PixmapPixels {
   fn rgba(&self) -> &[[u8; 4]];
@@ -908,24 +891,71 @@ impl PixmapPixels for Pixmap {
   }
 }
 
-/// Draws `source` over `target` with its top-left corner at `x`, `y`.
-fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, blend_mode: TinyBlendMode) {
-  if blend_mode == TinyBlendMode::SourceOver {
+/// How [`draw`] joins a source to the target below it: source-over, the Porter-Duff operators of
+/// `feComposite`, or a blend mode.
+#[derive(Clone, Copy)]
+enum Layer {
+  Over,
+  In,
+  Out,
+  Atop,
+  Xor,
+  Blend(BlendMode),
+}
+
+/// Draws `source` onto `target` with its top-left corner at `x`, `y`, joined as `layer` has it.
+/// The Porter-Duff operators follow Skia's 8-bit `srcin`, `srcout`, `srcatop`, and `xor` stages.
+fn draw(target: &mut Pixmap, source: PixmapRef, x: i32, y: i32, layer: Layer) {
+  if let Layer::Over = layer {
     draw_over(&mut target.as_mut(), source, (x, y), 1.0, None);
     return;
   }
 
-  target.draw_pixmap(
-    x,
-    y,
-    source,
-    &PixmapPaint {
-      blend_mode,
-      ..PixmapPaint::default()
-    },
-    Transform::identity(),
-    None,
-  );
+  let target_width = target.width() as i32;
+  let (source_width, source_height) = (source.width() as i32, source.height() as i32);
+  let left = x.max(0);
+  let right = (x + source_width).min(target_width);
+  let top = y.max(0);
+  let bottom = (y + source_height).min(target.height() as i32);
+  let target_pixels: &mut [[u8; 4]] = target.data_mut().as_chunks_mut().0;
+  let source_pixels: &[[u8; 4]] = source.data().as_chunks().0;
+
+  for row in top..bottom {
+    for column in left..right {
+      let destination = &mut target_pixels[(row * target_width + column) as usize];
+      let source = source_pixels[((row - y) * source_width + column - x) as usize];
+      let (source_alpha, destination_alpha) = (source[3], destination[3]);
+
+      *destination = match layer {
+        Layer::Over => {
+          let mut over = *destination;
+
+          composite_premultiplied_over(&mut over, source);
+          over
+        }
+        Layer::In => source.map(|channel| mul_div_255(channel, destination_alpha)),
+        Layer::Out => source.map(|channel| mul_div_255(channel, 255 - destination_alpha)),
+        Layer::Atop => std::array::from_fn(|lane| {
+          div_255(
+            u16::from(source[lane]) * u16::from(destination_alpha)
+              + u16::from(destination[lane]) * u16::from(255 - source_alpha),
+          )
+        }),
+        Layer::Xor => std::array::from_fn(|lane| {
+          div_255(
+            u16::from(source[lane]) * u16::from(255 - destination_alpha)
+              + u16::from(destination[lane]) * u16::from(255 - source_alpha),
+          )
+        }),
+        Layer::Blend(mode) => {
+          let mut blended = *destination;
+
+          blend_premultiplied_pixel(&mut blended, source, mode);
+          blended
+        }
+      };
+    }
+  }
 }
 
 /// Blurs premultiplied pixels by a sigma for each axis.
@@ -950,4 +980,22 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
     line[..left].fill([0; 4]);
     line[right..].fill([0; 4]);
   }
+}
+
+/// The pixels `bounds` covers, none unless it has area: the floor of the origin and the ceiling of
+/// the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds. Approximate: Skia rounds a decal crop
+/// out, so `[0.75, 1.75)` covers `[0, 2)` there and `[0, 1)` here.
+fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
+  if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
+    return None;
+  }
+
+  let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
+
+  Some(Rect {
+    left,
+    top,
+    right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
+    bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
+  })
 }

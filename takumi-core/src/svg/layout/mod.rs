@@ -32,11 +32,11 @@ use self::{
 };
 use super::{
   HostReads, SvgDocument, SvgHost,
-  approx_eq::ApproxEq,
   element::SvgElementKind,
   length::{LengthAxis, SvgLengthContext},
   style::StyleResolver,
 };
+use crate::math::ApproxEq;
 #[cfg(feature = "svg-raster")]
 use crate::svg::filter::SvgFilter;
 use crate::{

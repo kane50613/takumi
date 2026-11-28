@@ -51,6 +51,18 @@ impl<T> Point<T> {
 impl Point<f32> {
   /// The origin.
   pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
+
+  /// `SkPoint::Length`: the distance from the origin, through doubles only where the floats
+  /// overflow.
+  pub fn length(self) -> f32 {
+    let squared = self.x * self.x + self.y * self.y;
+
+    if squared.is_finite() {
+      squared.sqrt()
+    } else {
+      (f64::from(self.x) * f64::from(self.x) + f64::from(self.y) * f64::from(self.y)).sqrt() as f32
+    }
+  }
 }
 
 impl<U, T: Add<U>> Add<Point<U>> for Point<T> {
@@ -248,26 +260,9 @@ impl Rect<f32> {
 }
 
 #[cfg(feature = "svg-raster")]
-impl Rect<f32> {
-  /// The pixels the rect covers under `transform`, none unless they have area: the floor of the
-  /// origin and the ceiling of the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds.
-  pub(crate) fn pixel_bounds(&self, transform: Affine) -> Option<Rect<i32>> {
-    let bounds = self.transformed(transform).filter(Self::has_area)?;
-    let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
-
-    Some(Rect {
-      left,
-      top,
-      right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
-      bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
-    })
-  }
-}
-
-#[cfg(feature = "svg-raster")]
 impl Rect<i32> {
   /// The rect at `x`, `y` of `width` by `height` pixels.
-  pub(crate) fn from_size(x: i32, y: i32, width: u32, height: u32) -> Self {
+  pub fn from_size(x: i32, y: i32, width: u32, height: u32) -> Self {
     Self {
       left: x,
       top: y,
@@ -276,16 +271,18 @@ impl Rect<i32> {
     }
   }
 
-  pub(crate) fn width(&self) -> u32 {
+  /// The distance between the left and right edges.
+  pub fn width(&self) -> u32 {
     self.right.abs_diff(self.left)
   }
 
-  pub(crate) fn height(&self) -> u32 {
+  /// The distance between the top and bottom edges.
+  pub fn height(&self) -> u32 {
     self.bottom.abs_diff(self.top)
   }
 
   /// The pixels both rects cover, none when there are none.
-  pub(crate) fn intersection(&self, other: &Self) -> Option<Self> {
+  pub fn intersection(&self, other: &Self) -> Option<Self> {
     let rect = Self {
       left: self.left.max(other.left),
       top: self.top.max(other.top),
@@ -297,7 +294,7 @@ impl Rect<i32> {
   }
 
   /// The rect moved by `dx` and `dy`.
-  pub(crate) fn translated(&self, dx: i32, dy: i32) -> Self {
+  pub fn translated(&self, dx: i32, dy: i32) -> Self {
     Self {
       left: self.left.saturating_add(dx),
       top: self.top.saturating_add(dy),
@@ -342,11 +339,13 @@ impl Rect<f32> {
     self.top
   }
 
-  pub(crate) fn width(&self) -> f32 {
+  /// The distance between the left and right edges.
+  pub fn width(&self) -> f32 {
     self.right - self.left
   }
 
-  pub(crate) fn height(&self) -> f32 {
+  /// The distance between the top and bottom edges.
+  pub fn height(&self) -> f32 {
     self.bottom - self.top
   }
 
@@ -366,7 +365,7 @@ impl Rect<f32> {
   }
 
   /// The bounds of the rect under `transform`, none when they are not finite.
-  pub(crate) fn transformed(&self, transform: Affine) -> Option<Self> {
+  pub fn transformed(&self, transform: Affine) -> Option<Self> {
     let (left, top, right, bottom) = transformed_rect_extents(
       self.top_left(),
       Size::new(self.width(), self.height()),

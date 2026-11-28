@@ -15,8 +15,8 @@ use super::{
 };
 use crate::{
   geometry::{PathCommand, Point, Rect, arclen_accuracy},
+  math::ApproxEq,
   style::{Affine, Angle, TextDecorationLines},
-  svg::approx_eq::ApproxEq,
 };
 
 /// The glyphs of a span that share one paint.
@@ -67,12 +67,8 @@ const ARCLEN_ACCURACY: f64 = 0.1;
 const ARCLEN_RELATIVE_ACCURACY: f64 = 1e-4;
 
 /// How closely `curve` is measured.
-fn curve_accuracy(curve: &CubicBez) -> f64 {
-  arclen_accuracy(
-    PathSeg::Cubic(*curve),
-    ARCLEN_ACCURACY,
-    ARCLEN_RELATIVE_ACCURACY,
-  )
+fn curve_accuracy(curve: PathSeg) -> f64 {
+  arclen_accuracy(curve, ARCLEN_ACCURACY, ARCLEN_RELATIVE_ACCURACY)
 }
 
 /// A point of a `textPath` a cluster sits on, and the direction of the path there.
@@ -359,15 +355,19 @@ impl Text {
 impl TextPathShape {
   /// The path with the curves its commands make and where each ends along it.
   pub(super) fn new(commands: Vec<PathCommand>) -> Self {
-    let curves = path_curves(&commands);
     let mut length = 0.0;
-    let ends = curves
-      .iter()
-      .map(|curve| {
-        length += curve.arclen(curve_accuracy(curve));
-        length
+    // `SkContourMeasure` keeps only segments that advance the distance.
+    let (curves, ends) = path_curves(&commands)
+      .into_iter()
+      .filter_map(|curve| {
+        let curve_length = curve.arclen(curve_accuracy(curve));
+
+        (curve_length > 0.0).then(|| {
+          length += curve_length;
+          (curve, length)
+        })
       })
-      .collect();
+      .unzip();
 
     Self {
       commands,
@@ -388,7 +388,7 @@ impl TextPathShape {
     }
 
     let index = self.ends.partition_point(|end| *end < offset);
-    let curve = self.curves.get(index)?;
+    let curve = *self.curves.get(index)?;
     let start = index
       .checked_sub(1)
       .map_or(0.0, |previous| self.ends[previous]);
@@ -396,7 +396,11 @@ impl TextPathShape {
       .inv_arclen(offset - start, curve_accuracy(curve))
       .clamp(0.0, 1.0);
     let point = curve.eval(position);
-    let derivative = curve.deriv().eval(position);
+    let derivative = match curve {
+      PathSeg::Line(line) => line.p1 - line.p0,
+      PathSeg::Quad(quad) => quad.deriv().eval(position).to_vec2(),
+      PathSeg::Cubic(cubic) => cubic.deriv().eval(position).to_vec2(),
+    };
     let tangent = Vec2::new(-derivative.y, derivative.x);
 
     Some(PathNormal {
@@ -609,14 +613,10 @@ fn decoration_line(
   Some((outline.commands, outline.control_bounds))
 }
 
-/// The curves of a path, with its lines and quadratics raised to cubics.
-fn path_curves(commands: &[PathCommand]) -> Vec<CubicBez> {
+/// The segments of a path, each measured exactly where it is a line, as `SkContourMeasure` is.
+fn path_curves(commands: &[PathCommand]) -> Vec<PathSeg> {
   let point = |point: Point<f32>| KurboPoint::new(f64::from(point.x), f64::from(point.y));
-  let line = |from: KurboPoint, to: KurboPoint| {
-    let line = Line::new(from, to);
-
-    CubicBez::new(line.p0, line.eval(0.33), line.eval(0.66), line.p1)
-  };
+  let line = |from: KurboPoint, to: KurboPoint| PathSeg::Line(Line::new(from, to));
   let first = commands.iter().find_map(|command| match command {
     PathCommand::MoveTo(to) => Some(point(*to)),
     _ => None,
@@ -635,16 +635,43 @@ fn path_curves(commands: &[PathCommand]) -> Vec<CubicBez> {
         continue;
       }
       PathCommand::LineTo(to) => line(current, point(to)),
-      PathCommand::QuadTo(control, to) => QuadBez::new(current, point(control), point(to)).raise(),
-      PathCommand::CubicTo(first, second, to) => {
-        CubicBez::new(current, point(first), point(second), point(to))
+      PathCommand::QuadTo(control, to) => {
+        PathSeg::Quad(QuadBez::new(current, point(control), point(to)))
       }
+      PathCommand::CubicTo(first, second, to) => PathSeg::Cubic(CubicBez::new(
+        current,
+        point(first),
+        point(second),
+        point(to),
+      )),
       PathCommand::Close => line(current, subpath_start),
     };
 
-    current = curve.p3;
+    current = curve.end();
     curves.push(curve);
   }
 
   curves
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn segments_of_no_length_leave_the_path_measurable() {
+    let at = |x: f32| Point::new(x, 10.0);
+    let shape = TextPathShape::new(vec![
+      PathCommand::MoveTo(at(0.0)),
+      PathCommand::LineTo(at(0.0)),
+      PathCommand::QuadTo(at(0.0), at(0.0)),
+      PathCommand::LineTo(at(100.0)),
+    ]);
+    let Some(start) = shape.normal_at(0.0) else {
+      unreachable!("the path has a point at its start");
+    };
+
+    assert_eq!(shape.length(), 100.0);
+    assert_eq!((start.x, start.y, start.angle), (0.0, 10.0, 0.0));
+  }
 }

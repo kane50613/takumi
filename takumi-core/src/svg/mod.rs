@@ -1,7 +1,6 @@
 //! SVG documents styled through takumi's cascade and laid out to drawing ops, after Blink's
 //! `SVGImage`.
 
-mod approx_eq;
 mod element;
 #[cfg(feature = "svg-raster")]
 pub(crate) mod filter;

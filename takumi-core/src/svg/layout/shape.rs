@@ -8,9 +8,9 @@ use super::{
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Rect},
+  math::ApproxEq,
   path_data::PathData,
   style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, VectorEffect, Visibility},
-  svg::approx_eq::ApproxEq,
   svg::{element::SvgElementKind, length::LengthAxis},
 };
 
@@ -38,6 +38,7 @@ impl LayoutObject {
       stroke_first: false,
       anti_alias: true,
       abs_transform: Affine::IDENTITY,
+      rectangle: true,
     })))
   }
 }
@@ -295,6 +296,7 @@ impl SvgLayout<'_> {
         ShapeRendering::CrispEdges | ShapeRendering::OptimizeSpeed
       ),
       abs_transform: path_transform,
+      rectangle: styled.kind == SvgElementKind::Rect && self.radii(styled, scope) == (0.0, 0.0),
     };
 
     shape.settle_paints(None);

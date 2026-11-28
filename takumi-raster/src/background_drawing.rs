@@ -17,6 +17,8 @@ use tiny_skia::{
 use crate::resources::image::RenderedImage;
 #[cfg(feature = "svg")]
 use crate::resources::image::{ImageSource, SvgRaster};
+#[cfg(feature = "svg")]
+use crate::svg::SvgPixmapRasterizer;
 use crate::{
   BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
   PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
@@ -618,6 +620,7 @@ pub(crate) fn render_tile(
             SvgRaster::whole(image_size, tile_w, tile_h),
             context.style.misc_inherited_data.image_rendering,
             context,
+            &SvgPixmapRasterizer,
           )?;
 
           Pixmap::try_from(buffer.as_ref())

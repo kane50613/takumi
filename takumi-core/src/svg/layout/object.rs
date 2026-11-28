@@ -115,6 +115,7 @@ impl Container {
       stroke_first: false,
       anti_alias: true,
       abs_transform: Affine::IDENTITY,
+      rectangle: false,
     })));
     root.finish();
     Some(root)
@@ -442,6 +443,9 @@ pub(super) struct Shape {
   pub(super) anti_alias: bool,
   /// The transform from the shape's space to the canvas.
   pub(super) abs_transform: Affine,
+  /// Whether the outline is a `rect` without radii, Blink's `GeometryType::kRectangle`, which it
+  /// fills as a rect rather than a path.
+  pub(super) rectangle: bool,
 }
 
 /// Blink's `LayoutSVGImage`: a bitmap or a nested SVG over its natural size.

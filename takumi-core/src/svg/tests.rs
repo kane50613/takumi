@@ -692,6 +692,17 @@ fn a_text_path_sets_text_along_a_curve() {
 }
 
 #[test]
+fn a_text_path_along_a_line_places_text_where_plain_text_sits() {
+  let plain = extent(&text_ops(r#"<text x="0" y="80">X</text>"#)).expect("text is drawn");
+  let on_path = extent(&text_ops(
+    r##"<defs><path id="p" d="M0,80h100"/></defs><text><textPath href="#p">X</textPath></text>"##,
+  ))
+  .expect("text is drawn");
+
+  assert_eq!(on_path, plain);
+}
+
+#[test]
 fn a_tref_draws_nothing_as_blink_removed_it() {
   let ops = text_ops(
     r##"<defs><text id="t">Hi</text></defs><text x="10" y="50"><tref href="#t"/></text>"##,

@@ -67,7 +67,7 @@ serde_json.workspace = true
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["html"]
+features = ["html", "png"]
 
 [lints]
 workspace = true

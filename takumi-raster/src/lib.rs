@@ -51,8 +51,11 @@ mod render;
 #[cfg(all(test, feature = "pages"))]
 mod render_pages_tests;
 mod scanline;
+mod shader;
 mod simd;
 mod stacking_context;
+#[cfg(feature = "svg")]
+mod svg;
 /// Text drawing functions
 mod text_drawing;
 mod webp;
@@ -69,6 +72,8 @@ pub(crate) use image_drawing::*;
 pub(crate) use node_paint::*;
 pub(crate) use path::*;
 pub use render::*;
+#[cfg(feature = "svg")]
+pub use svg::SvgPixmapRasterizer;
 pub(crate) use takumi_core::geometry::Placement;
 pub(crate) use text_drawing::*;
 pub use write::*;

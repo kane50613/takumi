@@ -185,7 +185,7 @@ impl Affine {
 
   /// The length of each row of the linear part, as tiny-skia's `Transform::get_scale` has them.
   #[cfg(feature = "svg")]
-  pub(crate) fn row_scales(self) -> (f32, f32) {
+  pub fn row_scales(self) -> (f32, f32) {
     (self.a.hypot(self.c), self.b.hypot(self.d))
   }
 
@@ -198,22 +198,26 @@ impl Affine {
     ((x * x + y * y) / 2.0).sqrt()
   }
 
-  /// Blink's `AffineTransform::Inverse` where `IsInvertible` holds: a normal determinant.
+  /// Blink's `AffineTransform::Inverse` where `IsInvertible` holds: a normal determinant. It
+  /// divides in double precision as Blink does. Approximate: the result rounds to `f32`, so a scale
+  /// times its inverse can miss one by an ulp, and the determinant is tested after an `f32` cast
+  /// where Blink tests the double.
   #[cfg(feature = "svg")]
   pub(crate) fn normal_inverse(self) -> Option<Self> {
-    let det = self.determinant();
+    let [a, b, c, d, x, y] = [self.a, self.b, self.c, self.d, self.x, self.y].map(f64::from);
+    let det = a * d - b * c;
 
-    if !det.is_normal() {
+    if !(det as f32).is_normal() {
       return None;
     }
 
     Some(Self {
-      a: self.d / det,
-      b: -self.b / det,
-      c: -self.c / det,
-      d: self.a / det,
-      x: (self.c * self.y - self.d * self.x) / det,
-      y: (self.b * self.x - self.a * self.y) / det,
+      a: (d / det) as f32,
+      b: (-b / det) as f32,
+      c: (-c / det) as f32,
+      d: (a / det) as f32,
+      x: ((c * y - d * x) / det) as f32,
+      y: ((b * x - a * y) / det) as f32,
     })
   }
 
@@ -363,6 +367,56 @@ impl Affine {
       x: (self.d * self.x - self.c * self.y) * -inv_det,
       y: (self.b * self.x - self.a * self.y) * inv_det,
     })
+  }
+
+  /// `SkMatrix::invert`: the inverse through doubles, none where the determinant is
+  /// nearly zero or the inverse leaves the finite range.
+  pub fn skia_invert(self) -> Option<Self> {
+    let Affine { a, b, c, d, x, y } = self;
+
+    if self == Affine::IDENTITY {
+      return Some(self);
+    }
+
+    let inverse = if b == 0.0 && c == 0.0 {
+      let (inv_x, inv_y) = (1.0 / a, 1.0 / d);
+
+      Affine {
+        a: inv_x,
+        b: 0.0,
+        c: 0.0,
+        d: inv_y,
+        x: -x * inv_x,
+        y: -y * inv_y,
+      }
+    } else {
+      let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
+      let nearly_zero = 1.0 / 4096.0_f32;
+
+      if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
+        return None;
+      }
+
+      let inv_det = 1.0 / det;
+      let cross_scale = |p: f32, q: f32, r: f32, s: f32| {
+        ((f64::from(p) * f64::from(q) - f64::from(r) * f64::from(s)) * inv_det) as f32
+      };
+
+      Affine {
+        a: (f64::from(d) * inv_det) as f32,
+        b: (-f64::from(b) * inv_det) as f32,
+        c: (-f64::from(c) * inv_det) as f32,
+        d: (f64::from(a) * inv_det) as f32,
+        x: cross_scale(c, y, d, x),
+        y: cross_scale(b, x, a, y),
+      }
+    };
+
+    inverse
+      .to_cols_array()
+      .iter()
+      .all(|value| value.is_finite())
+      .then_some(inverse)
   }
 
   /// The transforms composed left to right into an [`Affine`].
@@ -696,6 +750,32 @@ mod tests {
   use crate::style::FromCssStr;
   #[cfg(feature = "svg")]
   use crate::viewport::Viewport;
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn a_scale_and_its_normal_inverse_multiply_back_to_identity() {
+    let scale = Affine::scale(0.2, 0.2);
+    let inverse = scale.normal_inverse().expect("a scale inverts");
+
+    assert_eq!(
+      (scale * inverse).to_cols_array(),
+      Affine::IDENTITY.to_cols_array()
+    );
+  }
+
+  #[test]
+  fn a_zero_scale_has_no_skia_inverse() {
+    assert_eq!(Affine::scale(0.0, 1.0).skia_invert(), None);
+    assert_eq!(
+      Affine {
+        a: 1e-30,
+        x: 1e30,
+        ..Affine::IDENTITY
+      }
+      .skia_invert(),
+      None
+    );
+  }
 
   #[cfg(feature = "svg")]
   fn svg_matrix(text: &str) -> Option<[f32; 6]> {

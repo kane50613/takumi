@@ -890,7 +890,11 @@ mod tests {
   use crate::geometry::Placement;
   #[cfg(feature = "svg-raster")]
   use crate::{
-    Fonts, context::RenderContext, resources::image::RenderedImage, style::SizingContext,
+    Fonts,
+    context::RenderContext,
+    geometry::Size,
+    resources::image::{SvgOp, SvgRaster, SvgRasterizer},
+    style::{Affine, SizingContext},
     viewport::Viewport,
   };
 
@@ -978,6 +982,23 @@ mod tests {
     }
   }
 
+  /// A rasterizer that draws nothing, for tests of what the cache keeps.
+  #[cfg(feature = "svg-raster")]
+  struct BlankRasterizer;
+
+  #[cfg(feature = "svg-raster")]
+  impl SvgRasterizer for BlankRasterizer {
+    fn rasterize(
+      &self,
+      _ops: &[SvgOp],
+      _transform: Affine,
+      width: u32,
+      height: u32,
+    ) -> Option<ImageBuffer> {
+      ImageBuffer::new(width, height)
+    }
+  }
+
   /// The raster an SVG draws is kept in the cache of the render that draws it, not the one that
   /// decoded it.
   #[cfg(feature = "svg-raster")]
@@ -998,13 +1019,22 @@ mod tests {
         .cache(cache.clone())
         .build();
 
-      match source
-        .render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, &host)
+      let ImageSource::Svg(svg) = &source else {
+        panic!("expected an svg");
+      };
+      let viewport = Size {
+        width: 4.0,
+        height: 4.0,
+      };
+
+      svg
+        .rasterize_cached(
+          SvgRaster::whole(viewport, 4, 4),
+          ImageScalingAlgorithm::Auto,
+          &host,
+          &BlankRasterizer,
+        )
         .unwrap()
-      {
-        RenderedImage::Rasterized(buffer) => buffer,
-        _ => panic!("expected rasterized"),
-      }
     };
 
     assert!(Arc::ptr_eq(&raster(&drawing), &raster(&drawing)));
