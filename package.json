@@ -32,7 +32,7 @@
     "@types/bun": "^1.4.4",
     "knip": "^6.45.1",
     "lefthook": "^2.2.2",
-    "oxfmt": "^0.78.0",
+    "oxfmt": "^0.79.0",
     "oxlint": "^1.93.0",
     "publint": "^0.3.25",
     "tegami": "^1.5.0",
@@ -43,7 +43,7 @@
     "rolldown-plugin-dts": "0.30.2",
     "takumi-js": "workspace:*",
     "vite": "8.3.8",
-    "waku": "1.0.0-rc.4"
+    "waku": "1.0.0-rc.5"
   },
   "catalog": {
     "@tailwindcss/vite": "^4.3.5",

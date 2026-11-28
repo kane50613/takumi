@@ -40,7 +40,7 @@
     "tailwindcss": "catalog:",
     "takumi-js": "workspace:*",
     "twoslash": "^0.3.9",
-    "waku": "1.0.0-rc.4",
+    "waku": "1.0.0-rc.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -55,7 +55,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "csstype": "catalog:",
-    "portless": "^0.17.0",
+    "portless": "^0.18.0",
     "prettier": "^3.10.0",
     "takumi-paint": "workspace:*",
     "takumi-pdf": "workspace:*",
