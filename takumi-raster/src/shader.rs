@@ -80,17 +80,22 @@ impl<'a> ImageShader<'a> {
   }
 
   fn shade_row(&self, x: i32, y: i32, out: &mut [[u8; 4]]) {
+    match self.filter {
+      #[cfg(feature = "svg")]
+      ImageFilter::Nearest => self.sample_row(x, y, out, |u, v| self.nearest(u, v)),
+      ImageFilter::Linear => self.sample_row(x, y, out, |u, v| self.bilinear(u - 0.5, v - 0.5)),
+    }
+  }
+
+  /// `sample` at each pixel center of the row from `(x, y)`, mapped onto the image.
+  #[inline(always)]
+  fn sample_row(&self, x: i32, y: i32, out: &mut [[u8; 4]], sample: impl Fn(f32, f32) -> [u8; 4]) {
     for (offset, pixel) in out.iter_mut().enumerate() {
       let (u, v) = self
         .device_to_image
         .transform_point(x as f32 + offset as f32 + 0.5, y as f32 + 0.5);
-      let sample = match self.filter {
-        #[cfg(feature = "svg")]
-        ImageFilter::Nearest => self.nearest(u, v),
-        ImageFilter::Linear => self.bilinear(u - 0.5, v - 0.5),
-      };
 
-      *pixel = scale_premultiplied_pixel(sample, self.alpha);
+      *pixel = scale_premultiplied_pixel(sample(u, v), self.alpha);
     }
   }
 
@@ -98,11 +103,13 @@ impl<'a> ImageShader<'a> {
   fn bilinear(&self, u: f32, v: f32) -> [u8; 4] {
     let (x0, y0) = (u.floor(), v.floor());
     let (fx, fy) = (u - x0, v - y0);
+    let (left, right) = (self.column(x0), self.column(x0 + 1.0));
+    let (top, bottom) = (self.row_start(y0), self.row_start(y0 + 1.0));
     let corners = [
-      (self.texel(x0, y0), (1.0 - fx) * (1.0 - fy)),
-      (self.texel(x0 + 1.0, y0), fx * (1.0 - fy)),
-      (self.texel(x0, y0 + 1.0), (1.0 - fx) * fy),
-      (self.texel(x0 + 1.0, y0 + 1.0), fx * fy),
+      (self.pixels[top + left], (1.0 - fx) * (1.0 - fy)),
+      (self.pixels[top + right], fx * (1.0 - fy)),
+      (self.pixels[bottom + left], (1.0 - fx) * fy),
+      (self.pixels[bottom + right], fx * fy),
     ];
 
     std::array::from_fn(|channel| {
@@ -115,13 +122,17 @@ impl<'a> ImageShader<'a> {
     })
   }
 
-  /// The texel at `(x, y)` of the pixel grid, its coordinates tiled as `spread` has them.
-  fn texel(&self, x: f32, y: f32) -> [u8; 4] {
-    let index = |coordinate: f32, size: u32| {
-      self.tile(coordinate, size).clamp(0.0, size as f32 - 1.0) as usize
-    };
+  /// The column of the pixel grid at `x`, tiled as `spread` has it.
+  fn column(&self, x: f32) -> usize {
+    self.tile(x, self.width).clamp(0.0, self.width as f32 - 1.0) as usize
+  }
 
-    self.pixels[index(y, self.height) * self.width as usize + index(x, self.width)]
+  /// The index of the first texel of the pixel grid's row at `y`, tiled as `spread` has it.
+  fn row_start(&self, y: f32) -> usize {
+    self
+      .tile(y, self.height)
+      .clamp(0.0, self.height as f32 - 1.0) as usize
+      * self.width as usize
   }
 
   /// `gather_8888` under `roundDownAtInteger`, which `SkImageShader` sets for nearest sampling:
