@@ -976,15 +976,19 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
   }
 }
 
+/// `kRoundEpsilon` in `SkImageFilterTypes.cpp`: how far past a pixel edge a crop must reach to
+/// cover the next pixel, so float error in a near-integer edge does not add a row.
+const ROUND_EPSILON: f32 = 1e-3;
+
 /// The pixels `bounds` covers, none unless it has area, rounded out as Skia's crop image filter
-/// rounds a decal crop rect (`SkCropImageFilter.cpp`). Edges past `i32` saturate, so a huge region
-/// still meets the layer it covers.
+/// rounds a decal crop rect (`RoundOut` in `SkImageFilterTypes.cpp`). Edges past `i32` saturate, so
+/// a huge region still meets the layer it covers.
 fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
   (bounds.left < bounds.right && bounds.top < bounds.bottom).then(|| Rect {
-    left: bounds.left.floor() as i32,
-    top: bounds.top.floor() as i32,
-    right: bounds.right.ceil() as i32,
-    bottom: bounds.bottom.ceil() as i32,
+    left: (bounds.left + ROUND_EPSILON).floor() as i32,
+    top: (bounds.top + ROUND_EPSILON).floor() as i32,
+    right: (bounds.right - ROUND_EPSILON).ceil() as i32,
+    bottom: (bounds.bottom - ROUND_EPSILON).ceil() as i32,
   })
 }
 
@@ -999,6 +1003,18 @@ mod tests {
     assert_eq!(
       bounds.intersection(&Rect::from_size(0, 0, 16, 16)),
       Some(Rect::from_size(0, 0, 16, 16))
+    );
+  }
+
+  #[test]
+  fn a_near_integer_edge_rounds_to_that_integer() {
+    assert_eq!(
+      pixel_bounds(Rect::from_ltrb(0.5, -0.0005, 16.0005, 16.0).unwrap()),
+      Some(Rect::from_size(0, 0, 16, 16))
+    );
+    assert_eq!(
+      pixel_bounds(Rect::from_ltrb(0.75, 1.75, 1.75, 2.75).unwrap()),
+      Some(Rect::from_size(0, 1, 2, 2))
     );
   }
 }
