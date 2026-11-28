@@ -475,6 +475,15 @@ pub(crate) fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: B
 // copy of the non-normal blend machinery in the binary (wasm size).
 #[inline(never)]
 fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
+  // Blink paints `plus-lighter` as Skia's `kPlus`, a premultiplied sum.
+  if mode == BlendMode::PlusLighter {
+    for (channel, source) in dst.iter_mut().zip(src) {
+      *channel = channel.saturating_add(source);
+    }
+
+    return;
+  }
+
   if src[3] == u8::MAX && dst[3] == u8::MAX {
     let mut current = *dst;
     let color = src;
@@ -576,10 +585,19 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
 
   use crate::{
-    blend::{blend_pixel, composite_premultiplied_over},
+    blend::{blend_pixel, blend_premultiplied_pixel, composite_premultiplied_over},
     resources::image_buffer::composite_premultiplied_over_row,
     style::BlendMode,
   };
+
+  #[test]
+  fn plus_lighter_adds_translucent_premultiplied_pixels() {
+    let mut dst = [64, 64, 64, 64];
+
+    blend_premultiplied_pixel(&mut dst, [64, 64, 64, 64], BlendMode::PlusLighter);
+
+    assert_eq!(dst, [128, 128, 128, 128]);
+  }
 
   #[test]
   fn the_row_compositor_matches_the_pixel_one_for_every_input() {

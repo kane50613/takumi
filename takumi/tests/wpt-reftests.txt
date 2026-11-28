@@ -2891,7 +2891,6 @@ css/css-transforms/transform-origin/svg-origin-relative-length-invalid-011.html
 css/css-transforms/transform-origin/svg-origin-relative-length-invalid-012.html
 !css/css-transforms/transform-overflow-001.html
 !css/css-transforms/transform-overflow-002.html
-!css/css-transforms/transform-percent-008.html
 !css/css-transforms/transform-rounding-001.html
 !css/css-transforms/transform-style-stacking-context.html
 !css/css-transforms/transform-table-001.html
@@ -2967,17 +2966,12 @@ css/css-transforms/transform-origin/svg-origin-relative-length-invalid-012.html
 !css/css-transforms/transformed-preserve-3d-1.html
 !css/css-transforms/transformed-rotateX-3.html
 !css/css-transforms/transformed-rotateY-1.html
-!css/css-transforms/transforms-rotate-degree-45.html
 !css/css-transforms/transforms-rotateY-degree-60.html
-!css/css-transforms/transforms-skewX.html
-!css/css-transforms/transforms-skewY.html
 !css/css-transforms/translate-optional-second-001.html
 !css/css-transforms/translate/translate-and-transform-attribute-in-svg.html
 !css/css-transforms/translate/translate-and-transform-css-property-in-svg.html
 !css/css-transforms/translate/translate-in-svg.html
 !css/css-transforms/ttwf-css-3d-polygon-cycle.html
-!css/css-transforms/ttwf-transform-skewx-001.html
-!css/css-transforms/ttwf-transform-skewy-001.html
 !css/css-values/
 css/css-values/angle-units-001.html
 css/css-values/attr-in-slotted.html

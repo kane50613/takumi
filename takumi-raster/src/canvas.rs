@@ -5,16 +5,15 @@ mod composite;
 mod gradient;
 mod mask;
 mod paint_source;
-mod skia;
 
 use std::{
-  borrow::Cow,
   io,
   mem::{replace, take},
   sync::Arc,
 };
 
-use blit::{blit_paint_source_translation, blit_translucent_translation};
+pub(crate) use blit::blit_paint_source_translation;
+use blit::blit_translucent_translation;
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
 use mask::MaskStackEntry;
@@ -31,10 +30,7 @@ use takumi_core::{
   geometry::{Point, Size},
   resources::{glyph_cache::GlyphCache, image_buffer::demultiply_pixel},
 };
-use tiny_skia::{
-  BlendMode as TinyBlendMode, FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap,
-  PixmapMut, PixmapPaint, PixmapRef, Transform as TinyTransform,
-};
+use tiny_skia::{Pixmap, PixmapMut, PixmapRef};
 
 use crate::{
   BackgroundTile, Bitmap, BorderProperties, Placement, Result,
@@ -119,11 +115,6 @@ impl<'a> DrawTarget<'a, '_> {
       width: self.pixmap.width(),
       height: self.pixmap.height(),
     }
-  }
-
-  pub(crate) fn resolve_combined_mask(&mut self) -> Option<Cow<'a, TinyMask>> {
-    let size = self.size();
-    self.combined_mask.and_then(|mask| mask.resolve(size))
   }
 
   /// Blit-level coordinates are already localized, so the cull rect is the
@@ -300,8 +291,7 @@ impl Canvas {
     self.restore_subcanvas_state(origin, constraint_mask_stack);
     self.clip_layer(&mut isolated_image, offset);
 
-    // A fully opaque subcanvas lands whole-pixel over the parent, so it copies
-    // row by row; tiny-skia would take the same draw through its pipeline.
+    // A fully opaque subcanvas lands whole-pixel over the parent, so it copies row by row.
     if opacity == 1.0 && mode == BlendMode::Normal {
       blit_paint_source_translation(
         &mut self.image.as_mut(),
@@ -326,37 +316,20 @@ impl Canvas {
       return;
     }
 
-    let Ok(blend_mode) = TinyBlendMode::try_from(mode) else {
-      let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
+    let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
-      for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {
-        *pixel = scale_premultiplied_pixel(*pixel, alpha);
-      }
+    for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {
+      *pixel = scale_premultiplied_pixel(*pixel, alpha);
+    }
 
-      blit_paint_source_translation(
-        &mut self.image.as_mut(),
-        PaintSource::Pixmap(isolated_image.as_ref()),
-        Point {
-          x: offset.x as f32,
-          y: offset.y as f32,
-        },
-        mode,
-        None,
-      );
-      return;
-    };
-    let paint = PixmapPaint {
-      opacity,
-      blend_mode,
-      quality: TinyFilterQuality::Nearest,
-    };
-
-    self.image.draw_pixmap(
-      offset.x,
-      offset.y,
-      isolated_image.as_ref(),
-      &paint,
-      TinyTransform::identity(),
+    blit_paint_source_translation(
+      &mut self.image.as_mut(),
+      PaintSource::Pixmap(isolated_image.as_ref()),
+      Point {
+        x: offset.x as f32,
+        y: offset.y as f32,
+      },
+      mode,
       None,
     );
   }

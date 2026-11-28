@@ -5,7 +5,7 @@
 use tiny_skia::Point;
 
 pub(super) type Fixed = i32;
-type FDot6 = i32;
+pub(super) type FDot6 = i32;
 
 pub(super) const FIXED_ONE: Fixed = 1 << 16;
 /// `SK_MaxS32`.
@@ -42,7 +42,7 @@ const fn fixed_div(numer: i32, denom: i32) -> Fixed {
 }
 
 /// `SkFDot6Div`.
-const fn fdot6_div(a: FDot6, b: FDot6) -> Fixed {
+pub(super) const fn fdot6_div(a: FDot6, b: FDot6) -> Fixed {
   if a == a as i16 as i32 {
     left_shift(a, 16) / b
   } else {
@@ -51,17 +51,17 @@ const fn fdot6_div(a: FDot6, b: FDot6) -> Fixed {
 }
 
 /// `SkFDot6ToFixed`.
-const fn fdot6_to_fixed(value: FDot6) -> Fixed {
+pub(super) const fn fdot6_to_fixed(value: FDot6) -> Fixed {
   left_shift(value, 10)
 }
 
 /// `SkFixedToFDot6`.
-const fn fixed_to_fdot6(value: Fixed) -> FDot6 {
+pub(super) const fn fixed_to_fdot6(value: Fixed) -> FDot6 {
   value >> 10
 }
 
 /// `SkFDot6Round`.
-const fn fdot6_round(value: FDot6) -> i32 {
+pub(super) const fn fdot6_round(value: FDot6) -> i32 {
   (value + 32) >> 6
 }
 
@@ -141,7 +141,7 @@ const fn inverse_slope(dx: FDot6, dy: FDot6, slope: Fixed, abs_slope: i32) -> Fi
 }
 
 /// `SkScalarToFDot6` of `value` scaled by `1 << shift`.
-fn scalar_to_fdot6(value: f32, shift: u32) -> FDot6 {
+pub(super) fn scalar_to_fdot6(value: f32, shift: u32) -> FDot6 {
   (value * (1 << (shift + 6)) as f32) as i32
 }
 

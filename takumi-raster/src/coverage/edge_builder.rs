@@ -11,9 +11,43 @@ use super::{
   edge_clipper::{EdgeClipper, Segment},
 };
 
-/// `SkAnalyticEdgeBuilder::buildEdges`, walking contours as `SkPathEdgeIter` does and clipping
-/// each segment when `clipper` is given.
-pub(super) fn build_edges(path: &Path, clipper: Option<&EdgeClipper>) -> Vec<Edge> {
+/// An edge `SkEdgeBuilder` builds: an analytic edge, or an aliased fill's `SkEdge`.
+pub(super) trait BuiltEdge: Sized {
+  fn line(p0: Point, p1: Point) -> Option<Self>;
+  fn quadratic(points: &[Point; 3]) -> Option<Self>;
+  fn cubic(points: &[Point; 4]) -> Option<Self>;
+
+  /// `combineVertical`: how this vertical line merges into the edge before it.
+  fn combine_vertical(&self, _last: &mut Self) -> Combine {
+    Combine::No
+  }
+}
+
+impl BuiltEdge for Edge {
+  fn line(p0: Point, p1: Point) -> Option<Self> {
+    Edge::line(p0, p1)
+  }
+
+  fn quadratic(points: &[Point; 3]) -> Option<Self> {
+    Edge::quadratic(points)
+  }
+
+  fn cubic(points: &[Point; 4]) -> Option<Self> {
+    Edge::cubic(points)
+  }
+
+  fn combine_vertical(&self, last: &mut Self) -> Combine {
+    if self.dx == 0 {
+      combine_vertical(self, last)
+    } else {
+      Combine::No
+    }
+  }
+}
+
+/// `SkEdgeBuilder::buildEdges`, walking contours as `SkPathEdgeIter` does and clipping each
+/// segment when `clipper` is given.
+pub(super) fn build_edges<E: BuiltEdge>(path: &Path, clipper: Option<&EdgeClipper>) -> Vec<E> {
   let mut edges = Vec::with_capacity(path.points().len());
   let mut builder = Builder {
     edges: &mut edges,
@@ -63,13 +97,13 @@ pub(super) fn build_edges(path: &Path, clipper: Option<&EdgeClipper>) -> Vec<Edg
 }
 
 /// The edge list being built and the clipper its segments pass through, `SkEdgeBuilder::build`.
-struct Builder<'a> {
-  edges: &'a mut Vec<Edge>,
+struct Builder<'a, E> {
+  edges: &'a mut Vec<E>,
   clipper: Option<&'a EdgeClipper>,
   segments: Vec<Segment>,
 }
 
-impl Builder<'_> {
+impl<E: BuiltEdge> Builder<'_, E> {
   /// The line `SkPathEdgeIter` closes every contour with, back to its start.
   fn close_contour(&mut self, move_to: &mut Option<Point>, last: Point) {
     if let Some(start) = move_to.take() {
@@ -95,7 +129,7 @@ impl Builder<'_> {
       }
       None => {
         for mono in chop_quad_at_y_extrema(quad) {
-          self.edges.extend(Edge::quadratic(&mono));
+          self.edges.extend(E::quadratic(&mono));
         }
       }
     }
@@ -109,7 +143,7 @@ impl Builder<'_> {
       }
       None => {
         for mono in chop_cubic_at_y_extrema(cubic) {
-          self.edges.extend(Edge::cubic(&mono));
+          self.edges.extend(E::cubic(&mono));
         }
       }
     }
@@ -120,22 +154,22 @@ impl Builder<'_> {
     for segment in self.segments.drain(..) {
       match segment {
         Segment::Line(p0, p1) => add_line(self.edges, p0, p1),
-        Segment::Quad(quad) => self.edges.extend(Edge::quadratic(&quad)),
-        Segment::Cubic(cubic) => self.edges.extend(Edge::cubic(&cubic)),
+        Segment::Quad(quad) => self.edges.extend(E::quadratic(&quad)),
+        Segment::Cubic(cubic) => self.edges.extend(E::cubic(&cubic)),
       }
     }
   }
 }
 
-/// `SkAnalyticEdgeBuilder::addLine`, merging vertical lines with the previous edge.
-fn add_line(edges: &mut Vec<Edge>, p0: Point, p1: Point) {
-  let Some(edge) = Edge::line(p0, p1) else {
+/// `SkEdgeBuilder::addLine`, merging vertical lines with the previous edge.
+fn add_line<E: BuiltEdge>(edges: &mut Vec<E>, p0: Point, p1: Point) {
+  let Some(edge) = E::line(p0, p1) else {
     return;
   };
 
   let combine = match edges.last_mut() {
-    Some(last) if edge.dx == 0 => combine_vertical(&edge, last),
-    _ => Combine::No,
+    Some(last) => edge.combine_vertical(last),
+    None => Combine::No,
   };
 
   match combine {
@@ -148,7 +182,7 @@ fn add_line(edges: &mut Vec<Edge>, p0: Point, p1: Point) {
 }
 
 /// `SkEdgeBuilder::Combine`.
-enum Combine {
+pub(super) enum Combine {
   No,
   Partial,
   Total,
