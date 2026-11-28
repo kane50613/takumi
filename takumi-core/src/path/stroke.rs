@@ -84,145 +84,59 @@ pub fn resolution_scale(transform: Affine) -> f32 {
   1.0
 }
 
-/// `SkStroke::strokeRect`: the outline of a closed rect, grown by half the width with its corners
-/// joined, and the rect shrunk by it turning the other way where the stroke leaves a hole.
-fn stroke_rect(contour: RectContour, stroke: &Stroke) -> Option<Path> {
-  let radius = stroke.width / 2.0;
-  let RectContour {
-    rect, clockwise, ..
-  } = contour;
-  let outer = Rect {
-    left: rect.left - radius,
-    top: rect.top - radius,
-    right: rect.right + radius,
-    bottom: rect.bottom + radius,
-  };
-  let mut builder = PathBuilder::new();
-
-  match stroke.line_join {
-    LineJoin::Miter if stroke.miter_limit >= SQRT_2 => add_rect(&mut builder, outer, clockwise),
-    LineJoin::Round => add_round_rect(&mut builder, outer, radius, clockwise),
-    LineJoin::Miter | LineJoin::Bevel => {
-      // `addBevel`: the outer rect with its corners cut at the rect's edges.
-      let mut corners = [
-        Point::new(rect.left, outer.top),
-        Point::new(rect.right, outer.top),
-        Point::new(outer.right, rect.top),
-        Point::new(outer.right, rect.bottom),
-        Point::new(rect.right, outer.bottom),
-        Point::new(rect.left, outer.bottom),
-        Point::new(outer.left, rect.bottom),
-        Point::new(outer.left, rect.top),
-      ];
-
-      if !clockwise {
-        corners.reverse();
-      }
-
-      add_polygon(&mut builder, &corners);
-    }
-  }
-
-  if stroke.width < rect.width().min(rect.height()) {
-    let inner = Rect {
-      left: rect.left + radius,
-      top: rect.top + radius,
-      right: rect.right - radius,
-      bottom: rect.bottom - radius,
+impl RectContour {
+  /// `SkStroke::strokeRect`: the outline of a closed rect, grown by half the width with its corners
+  /// joined, and the rect shrunk by it turning the other way where the stroke leaves a hole.
+  fn stroke(self, stroke: &Stroke, resolution_scale: f32) -> Option<Path> {
+    let radius = stroke.width / 2.0;
+    let RectContour {
+      rect, clockwise, ..
+    } = self;
+    let outer = Rect {
+      left: rect.left - radius,
+      top: rect.top - radius,
+      right: rect.right + radius,
+      bottom: rect.bottom + radius,
     };
+    let mut builder = PathBuilder::new();
 
-    add_rect(&mut builder, inner, !clockwise);
+    match stroke.line_join {
+      LineJoin::Miter if stroke.miter_limit >= SQRT_2 => builder.push_rect(outer, clockwise),
+      LineJoin::Round => builder.push_round_rect(outer, radius, clockwise, CONIC_TOLERANCE),
+      LineJoin::Miter | LineJoin::Bevel => {
+        // `addBevel`: the outer rect with its corners cut at the rect's edges.
+        let mut corners = [
+          Point::new(rect.left, outer.top),
+          Point::new(rect.right, outer.top),
+          Point::new(outer.right, rect.top),
+          Point::new(outer.right, rect.bottom),
+          Point::new(rect.right, outer.bottom),
+          Point::new(rect.left, outer.bottom),
+          Point::new(outer.left, rect.bottom),
+          Point::new(outer.left, rect.top),
+        ];
+
+        if !clockwise {
+          corners.reverse();
+        }
+
+        builder.push_polygon(&corners);
+      }
+    }
+
+    if stroke.width < rect.width().min(rect.height()) {
+      let inner = Rect {
+        left: rect.left + radius,
+        top: rect.top + radius,
+        right: rect.right - radius,
+        bottom: rect.bottom - radius,
+      };
+
+      builder.push_rect(inner, !clockwise);
+    }
+
+    builder.finish()
   }
-
-  builder.finish()
-}
-
-/// `SkPathBuilder::addPolygon`, closed.
-fn add_polygon(builder: &mut PathBuilder, points: &[Point<f32>]) {
-  builder.move_to(points[0].x, points[0].y);
-
-  for point in &points[1..] {
-    builder.line_to(point.x, point.y);
-  }
-
-  builder.close();
-}
-
-/// `SkPathBuilder::addRect` from the top left corner.
-fn add_rect(builder: &mut PathBuilder, rect: Rect<f32>, clockwise: bool) {
-  let (top_right, bottom_left) = (
-    Point::new(rect.right, rect.top),
-    Point::new(rect.left, rect.bottom),
-  );
-  let (second, fourth) = if clockwise {
-    (top_right, bottom_left)
-  } else {
-    (bottom_left, top_right)
-  };
-
-  add_polygon(
-    builder,
-    &[
-      Point::new(rect.left, rect.top),
-      second,
-      Point::new(rect.right, rect.bottom),
-      fourth,
-    ],
-  );
-}
-
-/// `SkPathBuilder::addRRect` of `SkRRect::MakeRectXY(rect, radius, radius)` from its default start,
-/// the bottom of its left side clockwise and the top of it counterclockwise.
-fn add_round_rect(builder: &mut PathBuilder, rect: Rect<f32>, radius: f32, clockwise: bool) {
-  let Rect {
-    left,
-    top,
-    right,
-    bottom,
-  } = rect;
-  // `SkPath_RRectPointIterator`, clockwise from the left end of the top side.
-  let ends = [
-    Point::new(left + radius, top),
-    Point::new(right - radius, top),
-    Point::new(right, top + radius),
-    Point::new(right, bottom - radius),
-    Point::new(right - radius, bottom),
-    Point::new(left + radius, bottom),
-    Point::new(left, bottom - radius),
-    Point::new(left, top + radius),
-  ];
-  // `SkPath_RectPointIterator`, clockwise from the top left.
-  let corners = [
-    Point::new(left, top),
-    Point::new(right, top),
-    Point::new(right, bottom),
-    Point::new(left, bottom),
-  ];
-  let (start, corner_start, end_step, corner_step) = if clockwise {
-    (6, 3, 1, 1)
-  } else {
-    (7, 0, 7, 3)
-  };
-  let end = |index: usize| ends[(start + index * end_step) % 8];
-  let corner = |index: usize| corners[(corner_start + index * corner_step) % 4];
-
-  builder.move_to(end(0).x, end(0).y);
-
-  for side in 0..4 {
-    let (line_end, corner, conic_end) = (end(2 * side + 1), corner(side + 1), end(2 * side + 2));
-
-    builder.line_to(line_end.x, line_end.y);
-    builder.conic_to_within(
-      corner.x,
-      corner.y,
-      conic_end.x,
-      conic_end.y,
-      ROOT_2_OVER_2,
-      CONIC_TOLERANCE,
-    );
-  }
-
-  builder.close();
 }
 
 impl Path {
@@ -250,7 +164,7 @@ impl Path {
     }
 
     if let Some(contour) = self.rect_contour().filter(|contour| contour.closed) {
-      return stroke_rect(contour, stroke);
+      return contour.stroke(stroke, resolution_scale);
     }
 
     let mut stroker = Stroker::new(self, radius, stroke, resolution_scale);
@@ -1459,6 +1373,92 @@ impl PathBuilder {
   fn handle_inner_join(&mut self, pivot: Point<f32>, after: Point<f32>) {
     self.line_to(pivot.x, pivot.y);
     self.line_to(pivot.x - after.x, pivot.y - after.y);
+  }
+
+  /// `SkPathBuilder::addPolygon`, closed.
+  fn push_polygon(&mut self, points: &[Point<f32>]) {
+    self.move_to(points[0].x, points[0].y);
+
+    for point in &points[1..] {
+      self.line_to(point.x, point.y);
+    }
+
+    self.close();
+  }
+
+  /// `SkPathBuilder::addRect` from the top left corner.
+  fn push_rect(&mut self, rect: Rect<f32>, clockwise: bool) {
+    let (top_right, bottom_left) = (
+      Point::new(rect.right, rect.top),
+      Point::new(rect.left, rect.bottom),
+    );
+    let (second, fourth) = if clockwise {
+      (top_right, bottom_left)
+    } else {
+      (bottom_left, top_right)
+    };
+
+    self.push_polygon(&[
+      Point::new(rect.left, rect.top),
+      second,
+      Point::new(rect.right, rect.bottom),
+      fourth,
+    ]);
+  }
+
+  /// `SkPathBuilder::addRRect` of `SkRRect::MakeRectXY(rect, radius, radius)` from its default start,
+  /// the bottom of its left side clockwise and the top of it counterclockwise, its corners split
+  /// within `tolerance`.
+  fn push_round_rect(&mut self, rect: Rect<f32>, radius: f32, clockwise: bool, tolerance: f32) {
+    let Rect {
+      left,
+      top,
+      right,
+      bottom,
+    } = rect;
+    // `SkPath_RRectPointIterator`, clockwise from the left end of the top side.
+    let ends = [
+      Point::new(left + radius, top),
+      Point::new(right - radius, top),
+      Point::new(right, top + radius),
+      Point::new(right, bottom - radius),
+      Point::new(right - radius, bottom),
+      Point::new(left + radius, bottom),
+      Point::new(left, bottom - radius),
+      Point::new(left, top + radius),
+    ];
+    // `SkPath_RectPointIterator`, clockwise from the top left.
+    let corners = [
+      Point::new(left, top),
+      Point::new(right, top),
+      Point::new(right, bottom),
+      Point::new(left, bottom),
+    ];
+    let (start, corner_start, end_step, corner_step) = if clockwise {
+      (6, 3, 1, 1)
+    } else {
+      (7, 0, 7, 3)
+    };
+    let end = |index: usize| ends[(start + index * end_step) % 8];
+    let corner = |index: usize| corners[(corner_start + index * corner_step) % 4];
+
+    self.move_to(end(0).x, end(0).y);
+
+    for side in 0..4 {
+      let (line_end, corner, conic_end) = (end(2 * side + 1), corner(side + 1), end(2 * side + 2));
+
+      self.line_to(line_end.x, line_end.y);
+      self.conic_to_within(
+        corner.x,
+        corner.y,
+        conic_end.x,
+        conic_end.y,
+        ROOT_2_OVER_2,
+        tolerance,
+      );
+    }
+
+    self.close();
   }
 
   /// `SkPathBuilder::addCircle`: a clockwise circle of four conics from its right.

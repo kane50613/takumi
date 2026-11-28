@@ -70,7 +70,7 @@ impl Path {
     }
 
     Some(RectContour {
-      rect: sorted(points[0], points[2])?,
+      rect: Rect::from_points(&[points[0], points[2]])?,
       closed: true,
       clockwise: sides[0].x * sides[1].y - sides[0].y * sides[1].x > 0.0,
     })
@@ -176,14 +176,9 @@ impl Path {
     }
 
     Some(RectContour {
-      rect: sorted(first_corner, third_corner)?,
+      rect: Rect::from_points(&[first_corner, third_corner])?,
       closed: auto_close,
       clockwise: directions[0] == ((directions[1] + 1) & 3),
     })
   }
-}
-
-/// The rect with `a` and `b` at opposite corners.
-fn sorted(a: Point<f32>, b: Point<f32>) -> Option<Rect<f32>> {
-  Rect::from_ltrb(a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y))
 }
