@@ -12,6 +12,7 @@ use std::{
   sync::Arc,
 };
 
+use crate::pixmap::{Pixmap, PixmapMut, PixmapRef};
 pub(crate) use blit::blit_paint_source_translation;
 use blit::blit_translucent_translation;
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
@@ -30,7 +31,6 @@ use takumi_core::{
   geometry::{Point, Size},
   resources::{glyph_cache::GlyphCache, image_buffer::demultiply_pixel},
 };
-use tiny_skia::{Pixmap, PixmapMut, PixmapRef};
 
 use crate::{
   BackgroundTile, Bitmap, BorderProperties, Placement, Result,
@@ -752,28 +752,26 @@ mod tests {
 
 #[cfg(test)]
 mod demultiply_tests {
-  use tiny_skia::PremultipliedColorU8;
 
   use super::demultiply_rgba_in_place;
+  use takumi_core::resources::image_buffer::demultiplied;
 
   /// Integer rounding may differ from tiny-skia's float division, but only
   /// where the float lands within a rounding step of the true value.
   #[test]
-  fn stays_within_one_step_of_tiny_skia() {
+  fn stays_within_one_step_of_rounding() {
     for alpha in 0..=u8::MAX {
       for channel in 0..=alpha {
         let mut pixel = [channel, channel, channel, alpha];
         demultiply_rgba_in_place(&mut pixel);
 
-        let float = PremultipliedColorU8::from_rgba(channel, channel, channel, alpha)
-          .expect("a legal premultiplied colour")
-          .demultiply();
+        let rounded = demultiplied([channel, channel, channel, alpha]);
 
         assert!(
-          pixel[0].abs_diff(float.red()) <= 1,
+          pixel[0].abs_diff(rounded[0]) <= 1,
           "channel {channel} at alpha {alpha}: {} vs {}",
           pixel[0],
-          float.red()
+          rounded[0]
         );
         assert_eq!(pixel[3], alpha);
       }

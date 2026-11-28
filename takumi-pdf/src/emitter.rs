@@ -34,6 +34,7 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
+  resources::image_buffer::demultiplied,
   scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
@@ -768,8 +769,7 @@ impl Emitter<'_> {
             let t = i as f32 / SWEEP_STOPS as f32;
             let index =
               tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
-            let color = tile.lut.sample(index).demultiply();
-            let rgba = Color([color.red(), color.green(), color.blue(), color.alpha()]);
+            let rgba = Color(demultiplied(tile.lut.sample(index)));
 
             (t, self.filtered(rgba))
           })

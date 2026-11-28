@@ -252,6 +252,11 @@ impl Transform {
     Self(ts)
   }
 
+  /// The writer's copy of a core transform.
+  pub(crate) fn from_affine(affine: takumi_core::style::Affine) -> Self {
+    Self::from_row(affine.a, affine.b, affine.c, affine.d, affine.x, affine.y)
+  }
+
   pub(crate) fn to_pdf_transform(self) -> [f32; 6] {
     [
       self.0.sx, self.0.ky, self.0.kx, self.0.sy, self.0.tx, self.0.ty,
@@ -273,7 +278,28 @@ impl Hash for Transform {
 /// A path.
 pub struct Path(pub(crate) tiny_skia_path::Path);
 
-impl Path {}
+impl Path {
+  /// The writer's copy of a core path.
+  pub(crate) fn from_core(path: &takumi_core::path::Path) -> Option<Self> {
+    use takumi_core::path::PathSegment;
+
+    let mut builder = tiny_skia_path::PathBuilder::new();
+
+    for segment in path.segments() {
+      match segment {
+        PathSegment::MoveTo(to) => builder.move_to(to.x, to.y),
+        PathSegment::LineTo(to) => builder.line_to(to.x, to.y),
+        PathSegment::QuadTo(control, to) => builder.quad_to(control.x, control.y, to.x, to.y),
+        PathSegment::CubicTo(first, second, to) => {
+          builder.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
+        }
+        PathSegment::Close => builder.close(),
+      }
+    }
+
+    Some(Self(builder.finish()?))
+  }
+}
 
 /// A path builder.
 #[derive(Default)]

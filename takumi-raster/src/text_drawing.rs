@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use crate::path::Fill;
+use crate::pixmap::PixmapRef;
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{FillRule, IntSize, PathBuilder, PixmapRef, Rect};
+use takumi_core::path::{IntSize, PathBuilder, Rect};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
@@ -335,8 +337,8 @@ pub(crate) fn bitmap_coverage(
   let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
   let size = IntSize::from_wh(placement.width, placement.height)?;
   let outline =
-    PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local.into())?;
-  let coverage = coverage::fill_path_aliased(&outline, FillRule::Winding, size)?;
+    PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local)?;
+  let coverage = coverage::fill_path_aliased(&outline, Fill::NonZero, size)?;
   let shader = Shader::Image(ImageShader::new(
     bytemuck::cast_slice(source.data()),
     (source.width(), source.height()),

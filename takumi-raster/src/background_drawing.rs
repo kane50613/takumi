@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
+use crate::path::Fill;
+use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
 use smallvec::SmallVec;
+use takumi_core::path::{IntRect, IntSize, PathBuilder, Rect as TinyRect};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
@@ -8,10 +11,6 @@ use takumi_core::{
   },
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::{BoxBackground, SnappedBox},
-};
-use tiny_skia::{
-  FillRule as TinyFillRule, IntRect, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut,
-  PixmapRef, PremultipliedColorU8, Rect as TinyRect,
 };
 
 use crate::resources::image::RenderedImage;
@@ -108,8 +107,7 @@ impl TileLayer {
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage =
-      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), TinyFillRule::Winding, size)?;
+    let coverage = coverage::fill_path_aliased(&PathBuilder::from_rect(rect), Fill::NonZero, size)?;
 
     TinyMask::from_vec(coverage, size)
   }
@@ -248,7 +246,7 @@ pub(crate) fn rasterize_layers(
 }
 
 pub(crate) struct ColorTile {
-  premultiplied: PremultipliedColorU8,
+  premultiplied: [u8; 4],
   width: u32,
   height: u32,
 }
@@ -270,7 +268,7 @@ impl ColorTile {
     self.height
   }
 
-  pub(crate) fn get_pixel(&self, _x: u32, _y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn get_pixel(&self, _x: u32, _y: u32) -> [u8; 4] {
     self.premultiplied
   }
 }
@@ -321,7 +319,7 @@ impl<'a> SampledBitmapView<'a> {
 
   /// Keep the `(x + 0.5) * source / logical` form, casts included.
   #[inline]
-  pub(crate) fn sample(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn sample(&self, x: u32, y: u32) -> [u8; 4] {
     interpolate_with_footprint(
       self.source.into(),
       self.algorithm,
@@ -329,7 +327,7 @@ impl<'a> SampledBitmapView<'a> {
       (y as f32 + 0.5) * self.source.height() as f32 / self.logical_size.height.max(1) as f32,
       self.footprint,
     )
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+    .unwrap_or([0; 4])
   }
 
   /// Column lookups for bilinear sampling of destination columns `x_start..x_start + width`, or
@@ -490,7 +488,7 @@ impl BackgroundTile {
     (self.width(), self.height())
   }
 
-  pub(crate) fn get_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn get_pixel(&self, x: u32, y: u32) -> [u8; 4] {
     match self {
       Self::Linear(t) => t.sample_pixel(x, y),
       Self::Radial(t) => t.sample_pixel(x, y),
@@ -498,7 +496,7 @@ impl BackgroundTile {
       Self::Pixmap(t) => PaintSource::from(t.as_ref()).get_pixel(x, y),
       Self::SampledBitmap { .. } => self
         .sampled_bitmap_view()
-        .map_or(PremultipliedColorU8::TRANSPARENT, |view| view.sample(x, y)),
+        .map_or([0; 4], |view| view.sample(x, y)),
       Self::Color(t) => t.get_pixel(x, y),
     }
   }
@@ -840,11 +838,11 @@ fn rasterize_pattern(
           v * scale.height + 1.0,
           SamplingFootprint::new(scale.width, scale.height),
         )
-        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
-        _ => PremultipliedColorU8::TRANSPARENT,
+        .unwrap_or([0; 4]),
+        _ => [0; 4],
       };
 
-      *pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+      *pixel = color;
     }
   }
 
@@ -896,7 +894,7 @@ fn picture_tile(gradient: &impl GradientOverlayTile, tile: Size<f32>) -> Option<
         (i as u32, j as u32),
       );
 
-      *pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+      *pixel = color;
     }
   }
 
@@ -973,7 +971,7 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
     let pixels = (0..height).flat_map(|y| (0..width).map(move |x| (x, y)));
 
     for (alpha, (x, y)) in alpha.iter_mut().zip(pixels) {
-      *alpha = tile.get_pixel(x, y).alpha();
+      *alpha = tile.get_pixel(x, y)[3];
     }
   }
 

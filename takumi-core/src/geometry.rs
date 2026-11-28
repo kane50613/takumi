@@ -3,12 +3,15 @@
 use std::ops::{Add, Sub};
 
 use kurbo::PathSeg;
-#[cfg(feature = "svg")]
-use tiny_skia::PathSegment;
-use tiny_skia::{Path, PathBuilder as TinyPathBuilder};
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::{layout_unit::LayoutUnit, style::Affine};
+#[cfg(feature = "svg")]
+use crate::path::PathSegment;
+use crate::{
+  layout_unit::LayoutUnit,
+  path::{Path, PathBuilder as SkPathBuilder},
+  style::Affine,
+};
 
 /// The smallest difference between two layout values a browser can tell apart:
 /// Blink stores layout in 1/64px fixed point, so anything closer is one value
@@ -548,9 +551,9 @@ pub enum PathCommand {
 }
 
 impl PathCommand {
-  /// `paths` as a tiny-skia path; none for one with no segments.
+  /// `paths` as a [`Path`]; none for one with no segments.
   pub fn build_path(paths: &[Self]) -> Option<Path> {
-    let mut builder = TinyPathBuilder::new();
+    let mut builder = SkPathBuilder::new();
 
     for command in paths {
       match command {
@@ -579,10 +582,10 @@ impl PathCommand {
     ]
   }
 
-  /// The commands of a tiny-skia path.
+  /// The commands of a [`Path`].
   #[cfg(feature = "svg")]
   pub(crate) fn from_path(path: &Path) -> Vec<Self> {
-    let point = |point: tiny_skia::Point| Point::new(point.x, point.y);
+    let point = |point: crate::path::Point| Point::new(point.x, point.y);
 
     path
       .segments()
@@ -598,11 +601,11 @@ impl PathCommand {
       .collect()
   }
 
-  /// `paths` as tiny-skia's path builder normalizes them. None for commands that draw nothing.
+  /// `paths` as Skia's path builder normalizes them. None for commands that draw nothing.
   #[cfg(feature = "svg")]
   pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
     let path = Self::build_path(paths)?;
-    let edges = |bounds: tiny_skia::Rect| Rect {
+    let edges = |bounds: crate::path::Rect| Rect {
       left: bounds.left(),
       right: bounds.right(),
       top: bounds.top(),
@@ -675,7 +678,7 @@ impl PathCommand {
   }
 }
 
-/// A path as tiny-skia's builder normalizes it, with its bounds.
+/// A path as Skia's path builder normalizes it, with its bounds.
 #[cfg(feature = "svg")]
 pub(crate) struct NormalizedPath {
   pub(crate) commands: Vec<PathCommand>,

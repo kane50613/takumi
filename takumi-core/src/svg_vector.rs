@@ -186,14 +186,14 @@ impl SvgFilters {
   }
 
   /// The union of the filter regions in the group's coordinate space.
-  pub fn region(&self) -> Option<tiny_skia::Rect> {
+  pub fn region(&self) -> Option<crate::path::Rect> {
     self
       .0
       .iter()
       .map(|filter| filter.region())
       .reduce(|union, region| union.union(&region))
       .and_then(|region| {
-        tiny_skia::Rect::from_ltrb(region.left, region.top, region.right, region.bottom)
+        crate::path::Rect::from_ltrb(region.left, region.top, region.right, region.bottom)
       })
   }
 

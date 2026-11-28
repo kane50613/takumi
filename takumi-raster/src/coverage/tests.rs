@@ -1,4 +1,5 @@
-use tiny_skia::{FillRule, IntSize, Path, PathBuilder, Rect};
+use crate::path::Fill;
+use takumi_core::path::{IntSize, Path, PathBuilder, PathSegment, Rect};
 
 use super::{fill_path, fill_path_aliased};
 
@@ -13,7 +14,19 @@ fn polygon(points: &[(f32, f32)]) -> Path {
   builder.finish().unwrap()
 }
 
-fn fill(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
+/// Adds a circle of four cubics, the usual quarter-circle approximation.
+fn push_circle(builder: &mut PathBuilder, cx: f32, cy: f32, radius: f32) {
+  let k = 0.552_284_8 * radius;
+
+  builder.move_to(cx + radius, cy);
+  builder.cubic_to(cx + radius, cy + k, cx + k, cy + radius, cx, cy + radius);
+  builder.cubic_to(cx - k, cy + radius, cx - radius, cy + k, cx - radius, cy);
+  builder.cubic_to(cx - radius, cy - k, cx - k, cy - radius, cx, cy - radius);
+  builder.cubic_to(cx + k, cy - radius, cx + radius, cy - k, cx + radius, cy);
+  builder.close();
+}
+
+fn fill(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
   fill_path(path, fill_rule, IntSize::from_wh(width, height).unwrap()).unwrap()
 }
 
@@ -21,7 +34,7 @@ fn fill(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
 fn fractional_rect_edges_cover_their_area() {
   // Wider than `MaskAdditiveBlitter` takes, so the edges go through the run blitter.
   let path = polygon(&[(0.25, 0.5), (40.75, 0.5), (40.75, 6.25), (0.25, 6.25)]);
-  let mask = fill(&path, FillRule::Winding, 41, 7);
+  let mask = fill(&path, Fill::NonZero, 41, 7);
 
   assert_eq!(&mask[..3], &[96, 128, 128]);
   assert_eq!(&mask[41..44], &[191, 255, 255]);
@@ -31,7 +44,7 @@ fn fractional_rect_edges_cover_their_area() {
 #[test]
 fn small_rect_takes_the_fat_rect_blit() {
   let path = PathBuilder::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
-  let mask = fill(&path, FillRule::Winding, 5, 2);
+  let mask = fill(&path, Fill::NonZero, 5, 2);
 
   assert_eq!(mask, [95, 191, 191, 191, 95, 127, 255, 255, 255, 127]);
 }
@@ -39,7 +52,7 @@ fn small_rect_takes_the_fat_rect_blit() {
 #[test]
 fn diagonal_edge_covers_half_of_each_pixel() {
   let path = polygon(&[(0.0, 0.0), (40.0, 40.0), (0.0, 40.0)]);
-  let mask = fill(&path, FillRule::Winding, 40, 40);
+  let mask = fill(&path, Fill::NonZero, 40, 40);
 
   for y in 0..40 {
     assert_eq!(mask[y * 40 + y], 128, "row {y}");
@@ -58,8 +71,8 @@ fn even_odd_leaves_the_star_center_empty() {
   let star = polygon(&points);
   let center = 40 * 80 + 40;
 
-  assert_eq!(fill(&star, FillRule::Winding, 80, 80)[center], 255);
-  assert_eq!(fill(&star, FillRule::EvenOdd, 80, 80)[center], 0);
+  assert_eq!(fill(&star, Fill::NonZero, 80, 80)[center], 255);
+  assert_eq!(fill(&star, Fill::EvenOdd, 80, 80)[center], 0);
 }
 
 #[test]
@@ -74,9 +87,14 @@ fn rect_fill_rounds_edges_to_256ths() {
 /// edge pixels may move, by under a quarter.
 #[test]
 fn clipped_path_matches_its_unclipped_crop() {
-  let circle = |cx: f32| PathBuilder::from_circle(cx, 40.0, 37.3).unwrap();
-  let clipped = fill(&circle(10.5), FillRule::Winding, 40, 80);
-  let whole = fill(&circle(50.5), FillRule::Winding, 90, 80);
+  let circle = |cx: f32| {
+    let mut builder = PathBuilder::new();
+
+    push_circle(&mut builder, cx, 40.0, 37.3);
+    builder.finish().unwrap()
+  };
+  let clipped = fill(&circle(10.5), Fill::NonZero, 40, 80);
+  let whole = fill(&circle(50.5), Fill::NonZero, 90, 80);
   let mut total = 0u32;
 
   for y in 0..80 {
@@ -94,7 +112,7 @@ fn clipped_path_matches_its_unclipped_crop() {
 fn huge_coordinates_stay_in_range() {
   for extent in [1e9, 2.1e9, 3e9, i32::MAX as f32, 1e30] {
     let triangle = polygon(&[(-extent, -extent), (extent, -extent), (0.0, extent)]);
-    let mask = fill(&triangle, FillRule::Winding, 10, 10);
+    let mask = fill(&triangle, Fill::NonZero, 10, 10);
 
     assert_eq!(mask.len(), 100, "extent {extent}");
     assert!(mask.iter().all(|alpha| *alpha == 255), "extent {extent}");
@@ -106,7 +124,7 @@ fn path_far_outside_the_clip_leaves_the_mask_empty() {
   let far = polygon(&[(1e9, 1e9), (1e9 + 50.0, 1e9), (1e9, 1e9 + 50.0)]);
 
   assert!(
-    fill(&far, FillRule::Winding, 10, 10)
+    fill(&far, Fill::NonZero, 10, 10)
       .iter()
       .all(|alpha| *alpha == 0)
   );
@@ -134,7 +152,7 @@ fn whole_pixel_square_covers_its_edges_fully() {
       (2.0, 2.0 + size),
     ]);
     let width = size as u32 + 4;
-    let mask = fill(&path, FillRule::Winding, width, width);
+    let mask = fill(&path, Fill::NonZero, width, width);
     let at = |x: u32, y: u32| mask[(y * width + x) as usize];
 
     assert_eq!(
@@ -152,10 +170,29 @@ fn whole_pixel_square_covers_its_edges_fully() {
 }
 
 /// tiny-skia's aliased fill, a port of an older `SkScan::FillPath`, as the oracle.
-fn tiny_skia_aliased(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
+fn tiny_skia_aliased(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
   let mut mask = tiny_skia::Mask::new(width, height).unwrap();
+  let mut builder = tiny_skia::PathBuilder::new();
 
-  mask.fill_path(path, fill_rule, false, tiny_skia::Transform::identity());
+  for segment in path.segments() {
+    match segment {
+      PathSegment::MoveTo(to) => builder.move_to(to.x, to.y),
+      PathSegment::LineTo(to) => builder.line_to(to.x, to.y),
+      PathSegment::QuadTo(control, to) => builder.quad_to(control.x, control.y, to.x, to.y),
+      PathSegment::CubicTo(first, second, to) => {
+        builder.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
+      }
+      PathSegment::Close => builder.close(),
+    }
+  }
+
+  let path = builder.finish().unwrap();
+  let fill_rule = match fill_rule {
+    Fill::NonZero => tiny_skia::FillRule::Winding,
+    Fill::EvenOdd => tiny_skia::FillRule::EvenOdd,
+  };
+
+  mask.fill_path(&path, fill_rule, false, tiny_skia::Transform::identity());
   mask.data().to_vec()
 }
 
@@ -175,7 +212,7 @@ fn aliased_polygons_match_skias_fill() {
       .collect();
     let path = polygon(&points);
 
-    for fill_rule in [FillRule::Winding, FillRule::EvenOdd] {
+    for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
       assert_eq!(
         fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
         tiny_skia_aliased(&path, fill_rule, 64, 48),
@@ -189,14 +226,14 @@ fn aliased_polygons_match_skias_fill() {
 fn aliased_curves_match_skias_fill() {
   let mut builder = PathBuilder::new();
 
-  builder.push_circle(30.3, 25.7, 19.6);
+  push_circle(&mut builder, 30.3, 25.7, 19.6);
   builder.move_to(2.0, 40.0);
   builder.quad_to(30.0, -10.0, 60.0, 44.5);
   builder.close();
 
   let path = builder.finish().unwrap();
 
-  for fill_rule in [FillRule::Winding, FillRule::EvenOdd] {
+  for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
     assert_eq!(
       fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap(),
       tiny_skia_aliased(&path, fill_rule, 64, 48),
@@ -214,12 +251,7 @@ fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
     (width as f32, 2.0),
     (0.0, 2.0),
   ]);
-  let mask = fill_path_aliased(
-    &path,
-    FillRule::Winding,
-    IntSize::from_wh(width, 2).unwrap(),
-  )
-  .unwrap();
+  let mask = fill_path_aliased(&path, Fill::NonZero, IntSize::from_wh(width, 2).unwrap()).unwrap();
 
   let row = width as usize;
 

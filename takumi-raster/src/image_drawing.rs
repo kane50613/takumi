@@ -1,9 +1,9 @@
+use crate::pixmap::PixmapRef;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
   layout::{decoration::ClipBox, replaced::ReplacedPlacement},
   painter::{FillShape, PaintDevice},
 };
-use tiny_skia::PixmapRef;
 
 #[cfg(feature = "svg")]
 use crate::resources::image::SvgRaster;

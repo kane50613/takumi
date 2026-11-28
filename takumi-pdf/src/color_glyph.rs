@@ -5,10 +5,10 @@ use skrifa::{
   color::{ColorPalette, CompositeMode, Extend},
   instance::LocationRef,
 };
+use takumi_core::path::{Path, PathBuilder};
 use takumi_core::resources::color_glyph::{
   ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
 };
-use tiny_skia_path::{Path, PathBuilder};
 
 use crate::writer::{
   blend::BlendMode,
@@ -144,7 +144,7 @@ impl Colors<'_> {
           y2: p1.y,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_tsp(transform),
+          transform: Transform::from_affine(transform),
           anti_alias: false,
         }
         .into(),
@@ -168,7 +168,7 @@ impl Colors<'_> {
           cr: r1,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_tsp(transform),
+          transform: Transform::from_affine(transform),
           anti_alias: false,
         }
         .into(),
@@ -190,7 +190,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: Transform::from_tsp(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
+          transform: Transform::from_affine(transform).pre_concat(Transform::from_scale(1.0, -1.0)),
           anti_alias: false,
         }
         .into(),
@@ -255,10 +255,12 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         // Every clip but the last applies, and the last is the filled path, since filling the
         // clipped area whole leaves artifacts in Chrome's PDF viewer when zooming.
         let filled = clips.pop().unwrap_or_else(|| bounds.clone());
+
+        let clips: Vec<PdfPath> = clips.iter().filter_map(PdfPath::from_core).collect();
         let clip_count = clips.len();
 
-        for path in clips {
-          surface.push_clip_path(&PdfPath(path), &FillRule::NonZero);
+        for path in &clips {
+          surface.push_clip_path(path, &FillRule::NonZero);
         }
 
         let old_fill = surface.get_fill().cloned();
@@ -266,7 +268,9 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
 
         surface.set_fill(Some(*fill));
         surface.set_stroke(None);
-        surface.draw_path(&PdfPath(filled));
+        if let Some(filled) = PdfPath::from_core(&filled) {
+          surface.draw_path(&filled);
+        }
         surface.set_fill(old_fill);
         surface.set_stroke(old_stroke);
 

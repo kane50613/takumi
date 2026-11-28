@@ -2,6 +2,8 @@ use std::{borrow::Cow, sync::Arc};
 
 use smallvec::SmallVec;
 
+use crate::pixmap::Mask as TinyMask;
+use takumi_core::path::IntSize;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
@@ -9,12 +11,11 @@ use takumi_core::{
   resources::glyph_cache::GlyphCache,
   scene::SceneBounds,
 };
-use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BorderProperties, BoxMask, Command, Fill, Placement, RenderContext, Result, Style, checked_area,
-  coverage, create_mask, mul_div_255, placement_overlap, style::Affine,
+  coverage, create_mask, mul_div_255, path::stroke_path, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -718,17 +719,11 @@ fn rasterize_mask(
   let mut path = Command::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
-    if let Some(dash) = &stroke.dash
-      && let Some(dashed_path) = path.dash(dash, 1.0)
-    {
-      path = dashed_path;
-    }
-
-    path = path.stroke(&stroke, 1.0)?;
+    path = stroke_path(&path, &stroke, 1.0)?;
   }
 
   if let Some(transform) = transform {
-    path = path.transform(transform.into())?;
+    path = path.transform(transform)?;
   }
 
   let bounds = path.compute_tight_bounds()?;
@@ -750,7 +745,7 @@ fn rasterize_mask(
 
   checked_area(width, height, 1)?;
 
-  let local_path = path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))?;
+  let local_path = path.transform(Affine::translation(-(left as f32), -(top as f32)))?;
 
   Some((
     coverage::fill_path(&local_path, style.fill_rule(), size)?,

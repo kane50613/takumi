@@ -3,8 +3,9 @@
 //! scan lines is a set of trapezoids whose exact pixel coverage is computed from the edges'
 //! slopes, so no supersampling is involved.
 
+use crate::path::Fill;
 use smallvec::SmallVec;
-use tiny_skia::{FillRule, Path, Rect};
+use takumi_core::path::{Path, Rect};
 
 use super::{
   blitter::{
@@ -908,7 +909,7 @@ fn walk_edges(
   edges: &mut [Edge],
   head: usize,
   tail: usize,
-  fill_rule: FillRule,
+  fill_rule: Fill,
   target: &mut Target,
   start_y: i32,
   stop_y: i32,
@@ -936,11 +937,7 @@ fn walk_edges(
   }
   update_next_next_y(edges[edge].upper_y, y, &mut next_next_y);
 
-  let winding_mask = if fill_rule == FillRule::EvenOdd {
-    1
-  } else {
-    -1
-  };
+  let winding_mask = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
 
   loop {
     let mut winding = 0;
@@ -1073,7 +1070,7 @@ fn walk_edges(
 /// `SkScan::AAAFillPath` for a non-inverse `path` with rounded-out bounds `ir`, clipped to `clip`.
 pub(super) fn fill_path(
   path: &Path,
-  fill_rule: FillRule,
+  fill_rule: Fill,
   ir: IntBounds,
   clip: IntBounds,
   coverage: &mut Coverage,
@@ -1128,7 +1125,7 @@ pub(super) fn fill_path(
 /// `aaa_fill_path`, clipping the edges to `clip` when the path bounds `ir` leave it.
 fn fill_edges(
   path: &Path,
-  fill_rule: FillRule,
+  fill_rule: Fill,
   ir: IntBounds,
   clip: IntBounds,
   convex: bool,

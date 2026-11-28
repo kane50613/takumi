@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::pixmap::Pixmap;
 use skrifa::{FontRef, MetadataProvider};
+use takumi_core::path::IntRect;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::{
@@ -20,7 +22,6 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm, PaintPhase},
 };
-use tiny_skia::{IntRect, Pixmap};
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,

@@ -3,10 +3,10 @@ use std::fmt;
 use color::{ColorSpaceTag, HueDirection};
 use cssparser::{Parser, Token};
 use smallvec::{SmallVec, smallvec};
-use tiny_skia::PremultipliedColorU8;
 
 use crate::{
   geometry::Point,
+  resources::image_buffer::{demultiplied, premultiplied_or_transparent},
   sort_key::sort_by_key,
   style::{
     Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
@@ -70,12 +70,12 @@ macro_rules! gradient_tile_accessors {
     }
 
     #[inline(always)]
-    fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
+    fn sample_at(&self, lut_idx: usize) -> [u8; 4] {
       self.lut.sample(lut_idx)
     }
 
     #[inline(always)]
-    fn sample_dithered_at(&self, lut_idx: usize, x: u32, y: u32) -> PremultipliedColorU8 {
+    fn sample_dithered_at(&self, lut_idx: usize, x: u32, y: u32) -> [u8; 4] {
       self.lut.sample_dithered(lut_idx, x, y)
     }
 
@@ -245,11 +245,7 @@ pub(crate) fn write_gradient_css<W: fmt::Write>(
 }
 
 /// Interpolates two premultiplied colors directly in premultiplied RGBA space.
-pub(crate) fn interpolate_rgba_premultiplied(
-  c1: PremultipliedColorU8,
-  c2: PremultipliedColorU8,
-  t: f32,
-) -> PremultipliedColorU8 {
+pub(crate) fn interpolate_rgba_premultiplied(c1: [u8; 4], c2: [u8; 4], t: f32) -> [u8; 4] {
   if t <= f32::EPSILON {
     return c1;
   }
@@ -259,8 +255,8 @@ pub(crate) fn interpolate_rgba_premultiplied(
   }
 
   let mut result = [0u8; 4];
-  let c1_rgba = [c1.red(), c1.green(), c1.blue(), c1.alpha()];
-  let c2_rgba = [c2.red(), c2.green(), c2.blue(), c2.alpha()];
+  let c1_rgba = c1;
+  let c2_rgba = c2;
 
   for i in 0..4 {
     result[i] = (c1_rgba[i] as f32 * (1.0 - t) + c2_rgba[i] as f32 * t)
@@ -268,13 +264,12 @@ pub(crate) fn interpolate_rgba_premultiplied(
       .clamp(0.0, 255.0) as u8;
   }
 
-  PremultipliedColorU8::from_rgba(
+  [
     result[0].min(result[3]),
     result[1].min(result[3]),
     result[2].min(result[3]),
     result[3],
-  )
-  .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+  ]
 }
 
 /// A precomputed gradient that overlays its samples onto a destination buffer.
@@ -289,9 +284,9 @@ pub trait GradientOverlayTile {
   /// Number of LUT entries.
   fn lut_len(&self) -> usize;
   /// LUT entry at `lut_idx`.
-  fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8;
+  fn sample_at(&self, lut_idx: usize) -> [u8; 4];
   /// Dithered color for LUT entry `lut_idx` painted at `(x, y)`.
-  fn sample_dithered_at(&self, lut_idx: usize, _x: u32, _y: u32) -> PremultipliedColorU8 {
+  fn sample_dithered_at(&self, lut_idx: usize, _x: u32, _y: u32) -> [u8; 4] {
     self.sample_at(lut_idx)
   }
   /// Whether any LUT entry carries a fraction dithering can move.
@@ -301,9 +296,9 @@ pub trait GradientOverlayTile {
   /// LUT index of the point `(x, y)` in tile space, where pixel `(x, y)` samples its centre.
   fn point_lut_index(&self, x: f32, y: f32) -> usize;
   /// Color at the point `(x, y)` in tile space, dithered as pixel `dither` would be.
-  fn sample_point(&self, x: f32, y: f32, dither: (u32, u32)) -> PremultipliedColorU8 {
+  fn sample_point(&self, x: f32, y: f32, dither: (u32, u32)) -> [u8; 4] {
     let index = match self.lut_len() {
-      0 => return PremultipliedColorU8::TRANSPARENT,
+      0 => return [0; 4],
       1 => 0,
       _ => self.point_lut_index(x, y),
     };
@@ -315,9 +310,9 @@ pub trait GradientOverlayTile {
     self.sample_at(index)
   }
   /// Color at pixel `(x, y)`.
-  fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
+  fn sample_pixel(&self, x: u32, y: u32) -> [u8; 4];
   /// Color at pixel `(x, y)` with gradient dithering applied.
-  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> [u8; 4] {
     self.sample_pixel(x, y)
   }
   /// Initializes row state at the given row start.
@@ -335,8 +330,7 @@ pub trait GradientOverlayTile {
     }
 
     let mut row_state = self.begin_row(x_start, y, lut_len);
-    let bytes =
-      |color: PremultipliedColorU8| [color.red(), color.green(), color.blue(), color.alpha()];
+    let bytes = |color: [u8; 4]| color;
 
     if self.dither_active() {
       for (x, pixel) in (x_start..).zip(out) {
@@ -404,7 +398,7 @@ pub trait GradientOverlayTile {
           let lut_idx = self.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
           let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
-          *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+          *dst = pixel;
         }
       } else {
         const CHUNK: usize = 256;
@@ -420,7 +414,7 @@ pub trait GradientOverlayTile {
             debug_assert!(lut_idx < lut_len);
             let pixel = sample(lut_idx, src_x, src_y);
             src_x += 1;
-            *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+            *slot = pixel;
           }
           for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
             let src_a = src[3];
@@ -713,16 +707,9 @@ impl SrgbStop {
         let straddles = hard_stops
           .iter()
           .any(|(boundary, ..)| (offset - boundary).abs() < cell);
-        let straight = premultiplied.demultiply();
-
         (!straddles).then(|| Self {
           offset,
-          color: Color([
-            straight.red(),
-            straight.green(),
-            straight.blue(),
-            straight.alpha(),
-          ]),
+          color: Color(demultiplied(premultiplied)),
         })
       })
       .collect();
@@ -746,7 +733,7 @@ impl SrgbStop {
 /// dithered ones.
 #[derive(Debug, Clone, Default)]
 pub struct ColorLut {
-  colors: Vec<PremultipliedColorU8>,
+  colors: Vec<[u8; 4]>,
   hi: Vec<GradientLutHiEntry>,
   dither_active: bool,
 }
@@ -794,7 +781,7 @@ impl ColorLut {
   }
 
   /// The 8-bit entries.
-  pub fn colors(&self) -> &[PremultipliedColorU8] {
+  pub fn colors(&self) -> &[[u8; 4]] {
     &self.colors
   }
 
@@ -815,24 +802,23 @@ impl ColorLut {
 
   /// The entry at `index`.
   #[inline(always)]
-  pub fn sample(&self, index: usize) -> PremultipliedColorU8 {
+  pub fn sample(&self, index: usize) -> [u8; 4] {
     self.colors[index]
   }
 
   /// The entry at `index` quantized with the Bayer noise for pixel `(x, y)`.
   #[inline(always)]
-  pub(crate) fn sample_dithered(&self, index: usize, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn sample_dithered(&self, index: usize, x: u32, y: u32) -> [u8; 4] {
     let entry = self.hi[index];
     let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
     let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
 
-    PremultipliedColorU8::from_rgba(
+    premultiplied_or_transparent([
       channel(entry[0]),
       channel(entry[1]),
       channel(entry[2]),
       channel(entry[3]),
-    )
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+    ])
   }
 }
 
@@ -1367,11 +1353,11 @@ mod tests {
     .to_vec();
 
     for pair in lut.windows(2) {
-      assert!(pair[0].red() <= pair[1].red());
-      assert!(pair[0].green() <= pair[1].green());
-      assert!(pair[0].blue() <= pair[1].blue());
-      assert_eq!(pair[0].alpha(), 255);
-      assert_eq!(pair[1].alpha(), 255);
+      assert!(pair[0][0] <= pair[1][0]);
+      assert!(pair[0][1] <= pair[1][1]);
+      assert!(pair[0][2] <= pair[1][2]);
+      assert_eq!(pair[0][3], 255);
+      assert_eq!(pair[1][3], 255);
     }
   }
 

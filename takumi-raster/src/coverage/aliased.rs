@@ -4,7 +4,8 @@
 //! Vertical lines also skip `SkBasicEdgeBuilder::combineVertical`, and the unmerged edges walk to
 //! the same spans.
 
-use tiny_skia::{FillRule, Path, Point, Rect};
+use crate::path::Fill;
+use takumi_core::path::{Path, Point, Rect};
 
 use super::{
   blitter::IntBounds,
@@ -26,7 +27,7 @@ const CONSERVATIVE_ROUND_BIAS: f64 = 0.5 + 1.5 / 64.0;
 const CLIP_LIMIT: i32 = 32767 >> 1;
 
 /// Fills `path` by `fill_rule` into `mask`, `bounds`' width wide, setting covered pixels to 255.
-pub(super) fn fill_path(path: &Path, fill_rule: FillRule, bounds: IntBounds, mask: &mut [u8]) {
+pub(super) fn fill_path(path: &Path, fill_rule: Fill, bounds: IntBounds, mask: &mut [u8]) {
   let clip = bounds.intersect(IntBounds {
     left: -CLIP_LIMIT,
     top: -CLIP_LIMIT,
@@ -99,17 +100,13 @@ fn conservative_round_out(bounds: Rect) -> IntBounds {
 /// `span` as `left, y, right`, with an interval left open at `right_clip` closed there.
 fn walk_edges(
   edges: Vec<Edge>,
-  fill_rule: FillRule,
+  fill_rule: Fill,
   start_y: i32,
   stop_y: i32,
   right_clip: i32,
   span: &mut impl FnMut(i32, i32, i32),
 ) {
-  let winding_mask = if fill_rule == FillRule::EvenOdd {
-    1
-  } else {
-    -1
-  };
+  let winding_mask = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
   let mut pending = edges.into_iter().peekable();
   let mut active: Vec<Edge> = Vec::new();
   let mut y = start_y;

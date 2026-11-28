@@ -5,8 +5,6 @@ use std::array;
 #[cfg(feature = "png")]
 use png::{BitDepth, ColorType, Compression, Encoder, Filter};
 
-use tiny_skia::{IntSize, Pixmap, PixmapRef};
-
 use crate::style::math::mul_div_255;
 
 /// A decoded image as premultiplied, row-major RGBA bytes.
@@ -126,25 +124,6 @@ impl ImageBuffer {
 }
 
 /// A zero-copy view, or `Err` when the image is empty.
-impl<'a> TryFrom<&'a ImageBuffer> for PixmapRef<'a> {
-  type Error = ();
-
-  fn try_from(buffer: &'a ImageBuffer) -> Result<Self, Self::Error> {
-    PixmapRef::from_bytes(buffer.data(), buffer.width(), buffer.height()).ok_or(())
-  }
-}
-
-/// An owned copy, or `Err` when the image is empty.
-impl TryFrom<&ImageBuffer> for Pixmap {
-  type Error = ();
-
-  fn try_from(buffer: &ImageBuffer) -> Result<Self, Self::Error> {
-    let size = IntSize::from_wh(buffer.width(), buffer.height()).ok_or(())?;
-
-    Pixmap::from_vec(buffer.data().to_vec(), size).ok_or(())
-  }
-}
-
 /// Byte length of a `width` x `height` RGBA buffer, or `None` when it overflows `usize`.
 pub fn rgba_len(width: u32, height: u32) -> Option<usize> {
   (width as usize)
@@ -196,6 +175,22 @@ pub fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
     } else {
       over
     };
+  }
+}
+
+/// `pixel` converted to straight alpha by [`demultiply_pixel`].
+pub fn demultiplied(mut pixel: [u8; 4]) -> [u8; 4] {
+  demultiply_pixel(&mut pixel);
+  pixel
+}
+
+/// `pixel` when it is a valid premultiplied color, no channel above its alpha, and transparent
+/// otherwise.
+pub fn premultiplied_or_transparent(pixel: [u8; 4]) -> [u8; 4] {
+  if pixel[..3].iter().all(|&channel| channel <= pixel[3]) {
+    pixel
+  } else {
+    [0; 4]
   }
 }
 
@@ -254,7 +249,13 @@ pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-  use super::{demultiply_pixel, has_opaque_alpha};
+  use super::{demultiplied, demultiply_pixel, has_opaque_alpha};
+
+  #[test]
+  fn demultiplying_an_exact_half_rounds_up() {
+    // 86 × 255 / 172 is exactly 127.5, which a floating-point divide by 172 / 255 lands under.
+    assert_eq!(demultiplied([0, 86, 172, 172]), [0, 128, 255, 172]);
+  }
 
   #[test]
   fn demultiply_matches_rounded_division_for_every_byte() {

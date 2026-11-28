@@ -1,12 +1,12 @@
 //! Gradient tile overlay fast paths and their reference-parity tests.
 
+use crate::pixmap::PixmapMut;
 use takumi_core::{
   geometry::{Point, Size},
   paint::{
     GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
   },
 };
-use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
@@ -175,7 +175,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
           for (i, dst) in row_segment.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let pixel = pattern[(src_x_start + i) & 7];
             if fast_path.fully_opaque {
-              *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+              *dst = pixel;
             } else {
               blend_premultiplied_pixel_normal(dst, pixel);
             }
@@ -188,10 +188,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
           let row_segment = &mut row[dest_byte_start..dest_byte_end];
           let pixel = src_pixels[row_offset];
           if fast_path.fully_opaque {
-            fill_repeated_premultiplied_pixel(
-              row_segment,
-              [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
-            );
+            fill_repeated_premultiplied_pixel(row_segment, pixel);
           } else {
             blend_repeated_premultiplied_pixel(row_segment, pixel);
           }
@@ -465,8 +462,8 @@ pub(crate) fn overlay_radial_gradient_tile(
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
+  use crate::pixmap::PixmapMut;
   use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
-  use tiny_skia::PixmapMut;
 
   use super::*;
   use crate::{
@@ -535,7 +532,7 @@ mod tests {
         // The canvas demultiplies on the way out, so the reference has to use
         // the same rounding or this compares two conversions, not two paths.
         let color = tile.sample_pixel_dithered(x, y);
-        let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+        let mut pixel = color;
         demultiply_rgba_in_place(&mut pixel);
         pixel
       },

@@ -843,9 +843,8 @@ mod tests {
 
   /// tiny-skia ports the same Skia gradient code, so its pixels are the reference here.
   fn tiny_skia_pixels(shape: GradientShape, stops: &[GradientStop], size: u32) -> Vec<[u8; 4]> {
-    use tiny_skia::{
-      Color, GradientStop as TinyStop, Paint, Pixmap, Point, Rect, SpreadMode, Transform,
-    };
+    use tiny_skia::{Color, GradientStop as TinyStop, Paint, Pixmap, SpreadMode};
+    use tiny_skia::{Point, Rect, Transform};
 
     let tiny_stops = stops
       .iter()
