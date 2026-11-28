@@ -2,14 +2,15 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use takumi_core::resources::image::SvgSpreadMethod;
+use takumi_core::style::Affine;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
 use takumi_core::{
-  path::{Stroke as PathStroke, StrokeDash as PathDash},
-  style::{LineCap as CoreLineCap, LineJoin as CoreLineJoin},
+  path::Stroke as PathStroke,
+  style::{FillRule, LineCap, LineJoin},
 };
 
-use crate::writer::geom::Transform;
 use crate::writer::graphics::color::{Color, luma, rgb};
 use crate::writer::num::NormalizedF32;
 use crate::writer::stream::Stream;
@@ -26,9 +27,9 @@ pub struct LinearGradient {
   /// The y coordinate of the second point.
   pub y2: f32,
   /// A transform that should be applied to the linear gradient.
-  pub transform: Transform,
+  pub transform: Affine,
   /// The spread method of the linear gradient.
-  pub spread_method: SpreadMethod,
+  pub spread_method: SvgSpreadMethod,
   /// The color stops of the linear gradient.
   ///
   /// Note that all stops need to be in the same color space.
@@ -68,12 +69,12 @@ pub struct RadialGradient {
   /// The radius of the end circle.
   pub cr: f32,
   /// A transform that should be applied to the radial gradient.
-  pub transform: Transform,
+  pub transform: Affine,
   /// The spread method of the radial gradient.
   ///
   /// _Note_: The spread methods `Repeat`/`Reflect` are currently not supported
   /// for radial gradients, and will fall back to `Pad`.
-  pub spread_method: SpreadMethod,
+  pub spread_method: SvgSpreadMethod,
   /// The color stops of the radial gradient.
   ///
   /// Note that all stops need to be in the same color space.
@@ -113,9 +114,9 @@ pub struct SweepGradient {
   /// The end angle.
   pub end_angle: f32,
   /// A transform that should be applied to the sweep gradient.
-  pub transform: Transform,
+  pub transform: Affine,
   /// The spread method of the sweep gradient.
-  pub spread_method: SpreadMethod,
+  pub spread_method: SvgSpreadMethod,
   /// The color stops of the sweep gradient.
   ///
   /// Note that all stops need to be in the same color space.
@@ -148,7 +149,7 @@ pub struct Pattern {
   /// The stream of the pattern.
   pub stream: Stream,
   /// A transform that should be applied to the pattern.
-  pub transform: Transform,
+  pub transform: Affine,
   /// The width of the pattern.
   pub width: f32,
   /// The height of the pattern.
@@ -234,18 +235,6 @@ impl From<Pattern> for Paint {
   }
 }
 
-/// A spread method.
-#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone, Default)]
-pub enum SpreadMethod {
-  /// The pad spread method.
-  #[default]
-  Pad,
-  /// The reflect spread method.
-  Reflect,
-  /// The repeat spread method.
-  Repeat,
-}
-
 /// A color stop in a gradient.
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 #[allow(private_bounds)]
@@ -258,103 +247,46 @@ pub struct Stop {
   pub opacity: NormalizedF32,
 }
 
-/// A line cap.
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Default, Hash)]
-pub enum LineCap {
-  /// The butt line cap.
-  #[default]
-  Butt,
-  /// The round line cap.
-  Round,
-  /// The square line cap, which only SVG strokes ask for.
-  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
-  Square,
-}
-
-impl LineCap {
-  pub(crate) fn to_pdf_line_cap(self) -> LineCapStyle {
-    match self {
-      LineCap::Butt => LineCapStyle::ButtCap,
-      LineCap::Round => LineCapStyle::RoundCap,
-      LineCap::Square => LineCapStyle::ProjectingSquareCap,
-    }
+/// The PDF line cap a stroke's cap writes as.
+pub(crate) fn line_cap_style(cap: LineCap) -> LineCapStyle {
+  match cap {
+    LineCap::Butt => LineCapStyle::ButtCap,
+    LineCap::Round => LineCapStyle::RoundCap,
+    LineCap::Square => LineCapStyle::ProjectingSquareCap,
   }
 }
 
-/// A line join.
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Default, Hash)]
-pub enum LineJoin {
-  /// The miter line join.
-  #[default]
-  Miter,
-  /// The round line join.
-  Round,
-  /// The bevel line join, which only SVG strokes ask for.
-  #[cfg_attr(not(feature = "svg"), expect(dead_code))]
-  Bevel,
-}
-
-impl LineJoin {
-  pub(crate) fn to_pdf_line_join(self) -> LineJoinStyle {
-    match self {
-      LineJoin::Miter => LineJoinStyle::MiterJoin,
-      LineJoin::Round => LineJoinStyle::RoundJoin,
-      LineJoin::Bevel => LineJoinStyle::BevelJoin,
-    }
+/// The PDF line join a stroke's join writes as.
+pub(crate) fn line_join_style(join: LineJoin) -> LineJoinStyle {
+  match join {
+    LineJoin::Miter => LineJoinStyle::MiterJoin,
+    LineJoin::Round => LineJoinStyle::RoundJoin,
+    LineJoin::Bevel => LineJoinStyle::BevelJoin,
   }
 }
 
-/// A stroke dash.
-#[derive(Debug, Clone, PartialEq)]
-pub struct StrokeDash {
-  /// The dash array.
-  pub array: Vec<f32>,
-  /// The offset of the dash.
-  pub offset: f32,
-}
-
-impl Eq for StrokeDash {}
-
-impl Hash for StrokeDash {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    for el in &self.array {
-      el.to_bits().hash(state);
-    }
-
-    self.offset.to_bits().hash(state);
-  }
-}
-
-/// A stroke.
-#[derive(Debug, Clone, PartialEq)]
+/// A stroke: its paint and opacity, and the outline it draws.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Stroke {
   /// The paint of the stroke.
   pub paint: Paint,
-  /// The width of the stroke.
-  pub width: f32,
-  /// The miter limit of the stroke.
-  pub miter_limit: f32,
-  /// The line cap of the stroke.
-  pub line_cap: LineCap,
-  /// The line join of the stroke.
-  pub line_join: LineJoin,
   /// The opacity of the stroke.
   pub opacity: NormalizedF32,
-  /// The (optional) dash of the stroke.
-  pub dash: Option<StrokeDash>,
+  /// The width, caps, joins, miter limit, and dashes.
+  pub outline: PathStroke,
 }
 
-impl Eq for Stroke {}
-
-impl Hash for Stroke {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.paint.hash(state);
-    self.width.to_bits().hash(state);
-    self.miter_limit.to_bits().hash(state);
-    self.line_cap.hash(state);
-    self.line_join.hash(state);
-    self.opacity.hash(state);
-    self.dash.hash(state);
+impl Stroke {
+  /// A solid stroke of `width` with PDF's default miter limit of 10.
+  pub(crate) fn solid(paint: Paint, opacity: NormalizedF32, width: f32) -> Self {
+    Self {
+      paint,
+      opacity,
+      outline: PathStroke {
+        width,
+        ..Self::default().outline
+      },
+    }
   }
 }
 
@@ -362,49 +294,13 @@ impl Default for Stroke {
   fn default() -> Self {
     Stroke {
       paint: luma::Color::black().into(),
-      width: 1.0,
-      miter_limit: 10.0,
-      line_cap: LineCap::default(),
-      line_join: LineJoin::default(),
       opacity: NormalizedF32::ONE,
-      dash: None,
+      outline: PathStroke {
+        miter_limit: 10.0,
+        ..PathStroke::default()
+      },
     }
   }
-}
-
-impl Stroke {
-  /// The outline this stroke draws and the dashes it cuts first, for its bounds.
-  pub(crate) fn outline(self) -> (PathStroke, Option<PathDash>) {
-    (
-      PathStroke {
-        width: self.width,
-        miter_limit: self.miter_limit,
-        line_cap: match self.line_cap {
-          LineCap::Butt => CoreLineCap::Butt,
-          LineCap::Round => CoreLineCap::Round,
-          LineCap::Square => CoreLineCap::Square,
-        },
-        line_join: match self.line_join {
-          LineJoin::Miter => CoreLineJoin::Miter,
-          LineJoin::Round => CoreLineJoin::Round,
-          LineJoin::Bevel => CoreLineJoin::Bevel,
-        },
-      },
-      self
-        .dash
-        .and_then(|dash| PathDash::new(dash.array, dash.offset)),
-    )
-  }
-}
-
-/// A fill rule.
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Default)]
-pub enum FillRule {
-  /// The `non-zero` fill rule.
-  #[default]
-  NonZero,
-  /// The `even-odd` fill rule.
-  EvenOdd,
 }
 
 /// A fill.

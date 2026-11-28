@@ -1,10 +1,11 @@
 //! The pages of a document: their geometry, and the walk that draws each.
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use takumi_core::style::Affine;
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{Point as CorePoint, Rect, Size},
+  geometry::{Point, Rect, Size},
   layout::{
     node::Node,
     page_container::{PageContainer, PageContainers, PageFragment},
@@ -32,13 +33,7 @@ use crate::{
   paint::paint_page_background,
   tree::{PreparedTree, TreeInputs},
   window::{ContentWindow, Window},
-  writer::{
-    Document,
-    destination::XyzDestination,
-    geom::{Point, Size as PdfSize, Transform},
-    page::PageSettings,
-    surface::Surface,
-  },
+  writer::{Document, destination::XyzDestination, page::PageSettings, surface::Surface},
 };
 
 /// One page's geometry: everything derived from [`PageOptions`] and the measured band heights.
@@ -47,7 +42,7 @@ pub(crate) struct PageFrame {
   /// Page size in px.
   pub(crate) size: Size<f32>,
   /// Page size in pt, the unit pages are written in.
-  pub(crate) page_size: PdfSize,
+  pub(crate) page_size: Size<f32>,
   pub(crate) margin: Rect<f32>,
   pub(crate) content_width: f32,
   pub(crate) window_height: f32,
@@ -66,7 +61,7 @@ impl PageFrame {
     page: &PageOptions,
     (header_height, footer_height): (Option<f32>, Option<f32>),
   ) -> Result<Self, PdfError> {
-    let page_size = PdfSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
+    let page_size = Size::positive(page.width * PT_PER_PX, page.height * PT_PER_PX)
       .ok_or(PdfError::InvalidPageSize)?;
     let margin = page
       .margin
@@ -118,7 +113,7 @@ impl PageFrame {
 
     Ok(Self {
       size,
-      page_size: PdfSize::from_wh(size.width * PT_PER_PX, size.height * PT_PER_PX)
+      page_size: Size::positive(size.width * PT_PER_PX, size.height * PT_PER_PX)
         .ok_or(PdfError::InvalidPageSize)?,
       margin: Rect {
         top: origin.y,
@@ -263,7 +258,7 @@ impl Destinations<'_> {
 
     Some(xyz_destination(
       emitted,
-      Point::from_xy(margin.left * PT_PER_PX, y * PT_PER_PX),
+      Point::new(margin.left * PT_PER_PX, y * PT_PER_PX),
       path,
       self.structural,
     ))
@@ -647,7 +642,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
 
     ContentWindow {
       clip: (0.0, 0.0, frame.size.width, frame.size.height),
-      translate: CorePoint {
+      translate: Point {
         x: fragment.offset.x,
         y: fragment.offset.y,
       },
@@ -690,7 +685,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
     let mut pdf_page = pdf.start_page_with(PageSettings::new(frame.page_size));
     let mut surface = pdf_page.surface();
 
-    surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+    surface.push_transform(&Affine::scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(self.background, frame.size, &mut surface);
 
     let container = self.page_container(frame, slice, pages);
@@ -724,7 +719,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       &mut pdf_page,
       &links,
       (slice.start, slice.end),
-      CorePoint {
+      Point {
         x: frame.margin.left,
         y: frame.margin.top,
       },
@@ -736,7 +731,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
       &mut pdf_page,
       resolved.iter().flat_map(RepeatablePage::links),
       (0.0, frame.window_height),
-      CorePoint {
+      Point {
         x: frame.margin.left,
         y: frame.margin.top,
       },
@@ -763,7 +758,7 @@ impl<'c, 'g> PageComposer<'c, 'g> {
         frame.content_width,
         frame.window_height,
       ),
-      translate: CorePoint {
+      translate: Point {
         x: frame.margin.left,
         y: frame.margin.top - slice.start,
       },

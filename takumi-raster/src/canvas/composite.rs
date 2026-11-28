@@ -634,7 +634,6 @@ mod scaled_rows_tests {
 mod tests {
   use crate::pixmap::Mask;
   use takumi_core::geometry::{Point, Size};
-  use takumi_core::path::IntSize;
 
   use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
   use crate::{Placement, style::BlendMode};
@@ -658,7 +657,7 @@ mod tests {
     let canvas = Size::new(23, 17);
     let clip = Mask::from_vec(
       (0..20 * 15).map(|index| coverage(index, 7)).collect(),
-      IntSize::from_wh(20, 15).unwrap(),
+      Size::checked_new(20, 15).unwrap(),
     )
     .unwrap();
 

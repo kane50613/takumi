@@ -7,7 +7,6 @@
 use std::{f32::consts::SQRT_2, rc::Rc};
 
 use crate::pixmap::{Pixmap, PixmapRef};
-use takumi_core::path::IntRect;
 
 use super::{
   ColorSpace, CompositeOperator, ConvolveMatrix, DisplacementMap, DropShadow, Input, Kind,
@@ -196,7 +195,7 @@ fn run(filter: &SvgFilter, transform: Affine, source: Pixmap) -> Option<(Image, 
   let source = if region == layer {
     source
   } else {
-    source.clone_rect(IntRect::from_xywh(
+    source.clone_rect(Rect::checked_from_size(
       region.left,
       region.top,
       region.width(),

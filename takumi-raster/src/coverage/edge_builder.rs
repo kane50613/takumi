@@ -4,7 +4,10 @@
 //! `src/core/SkPathPriv.cpp` that pick the scan converter's fast paths.
 
 use takumi_core::path::PathVerb;
-use takumi_core::path::{Path, Point, Rect};
+use takumi_core::{
+  geometry::{Point, Rect},
+  path::Path,
+};
 
 use super::{
   edge::Edge,
@@ -13,9 +16,9 @@ use super::{
 
 /// An edge `SkEdgeBuilder` builds: an analytic edge, or an aliased fill's `SkEdge`.
 pub(super) trait BuiltEdge: Sized {
-  fn line(p0: Point, p1: Point) -> Option<Self>;
-  fn quadratic(points: &[Point; 3]) -> Option<Self>;
-  fn cubic(points: &[Point; 4]) -> Option<Self>;
+  fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self>;
+  fn quadratic(points: &[Point<f32>; 3]) -> Option<Self>;
+  fn cubic(points: &[Point<f32>; 4]) -> Option<Self>;
 
   /// `combineVertical`: how this vertical line merges into the edge before it.
   fn combine_vertical(&self, _last: &mut Self) -> Combine {
@@ -24,15 +27,15 @@ pub(super) trait BuiltEdge: Sized {
 }
 
 impl BuiltEdge for Edge {
-  fn line(p0: Point, p1: Point) -> Option<Self> {
+  fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
     Edge::line(p0, p1)
   }
 
-  fn quadratic(points: &[Point; 3]) -> Option<Self> {
+  fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
     Edge::quadratic(points)
   }
 
-  fn cubic(points: &[Point; 4]) -> Option<Self> {
+  fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
     Edge::cubic(points)
   }
 
@@ -57,7 +60,7 @@ pub(super) fn build_edges<E: BuiltEdge>(path: &Path, clipper: Option<&EdgeClippe
   let points = path.points();
   let mut index = 0;
   let mut move_to = None;
-  let mut last = Point::zero();
+  let mut last = Point::ZERO;
 
   for verb in path.verbs() {
     match verb {
@@ -105,13 +108,13 @@ struct Builder<'a, E> {
 
 impl<E: BuiltEdge> Builder<'_, E> {
   /// The line `SkPathEdgeIter` closes every contour with, back to its start.
-  fn close_contour(&mut self, move_to: &mut Option<Point>, last: Point) {
+  fn close_contour(&mut self, move_to: &mut Option<Point<f32>>, last: Point<f32>) {
     if let Some(start) = move_to.take() {
       self.line(last, start);
     }
   }
 
-  fn line(&mut self, p0: Point, p1: Point) {
+  fn line(&mut self, p0: Point<f32>, p1: Point<f32>) {
     match self.clipper {
       Some(clipper) => {
         clipper.clip_line(p0, p1, &mut self.segments);
@@ -121,7 +124,7 @@ impl<E: BuiltEdge> Builder<'_, E> {
     }
   }
 
-  fn quad(&mut self, quad: [Point; 3]) {
+  fn quad(&mut self, quad: [Point<f32>; 3]) {
     match self.clipper {
       Some(clipper) => {
         clipper.clip_quad(quad, &mut self.segments);
@@ -135,7 +138,7 @@ impl<E: BuiltEdge> Builder<'_, E> {
     }
   }
 
-  fn cubic(&mut self, cubic: [Point; 4]) {
+  fn cubic(&mut self, cubic: [Point<f32>; 4]) {
     match self.clipper {
       Some(clipper) => {
         clipper.clip_cubic(cubic, &mut self.segments);
@@ -162,7 +165,7 @@ impl<E: BuiltEdge> Builder<'_, E> {
 }
 
 /// `SkEdgeBuilder::addLine`, merging vertical lines with the previous edge.
-fn add_line<E: BuiltEdge>(edges: &mut Vec<E>, p0: Point, p1: Point) {
+fn add_line<E: BuiltEdge>(edges: &mut Vec<E>, p0: Point<f32>, p1: Point<f32>) {
   let Some(edge) = E::line(p0, p1) else {
     return;
   };
@@ -264,12 +267,12 @@ fn is_not_monotonic(a: f32, b: f32, c: f32) -> bool {
   ab == 0.0 || bc < 0.0
 }
 
-fn lerp(a: Point, b: Point, t: f32) -> Point {
-  Point::from_xy(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+fn lerp(a: Point<f32>, b: Point<f32>, t: f32) -> Point<f32> {
+  Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
 }
 
 /// `SkChopQuadAt`: the two halves of `src` split at `t`, sharing their middle point.
-pub(super) fn chop_quad_at(src: [Point; 3], t: f32) -> [Point; 5] {
+pub(super) fn chop_quad_at(src: [Point<f32>; 3], t: f32) -> [Point<f32>; 5] {
   let p01 = lerp(src[0], src[1], t);
   let p12 = lerp(src[1], src[2], t);
 
@@ -277,7 +280,9 @@ pub(super) fn chop_quad_at(src: [Point; 3], t: f32) -> [Point; 5] {
 }
 
 /// `SkChopQuadAtYExtrema`: one or two y-monotonic quads.
-pub(super) fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
+pub(super) fn chop_quad_at_y_extrema(
+  src: [Point<f32>; 3],
+) -> impl Iterator<Item = [Point<f32>; 3]> {
   let [p0, p1, p2] = src;
   let (a, mut b, c) = (p0.y, p1.y, p2.y);
 
@@ -287,8 +292,8 @@ pub(super) fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [P
 
       // `flatten_double_quad_extrema`.
       return [
-        Some([p0, Point::from_xy(p01.x, mid.y), mid]),
-        Some([mid, Point::from_xy(p12.x, mid.y), p2]),
+        Some([p0, Point::new(p01.x, mid.y), mid]),
+        Some([mid, Point::new(p12.x, mid.y), p2]),
       ]
       .into_iter()
       .flatten();
@@ -298,22 +303,26 @@ pub(super) fn chop_quad_at_y_extrema(src: [Point; 3]) -> impl Iterator<Item = [P
     b = if (a - b).abs() < (b - c).abs() { a } else { c };
   }
 
-  [Some([p0, Point::from_xy(p1.x, b), p2]), None]
+  [Some([p0, Point::new(p1.x, b), p2]), None]
     .into_iter()
     .flatten()
 }
 
-pub(super) fn transpose(point: Point) -> Point {
-  Point::from_xy(point.y, point.x)
+pub(super) fn transpose(point: Point<f32>) -> Point<f32> {
+  Point::new(point.y, point.x)
 }
 
 /// `SkChopQuadAtXExtrema`, through [`chop_quad_at_y_extrema`] on the transposed quad.
-pub(super) fn chop_quad_at_x_extrema(src: [Point; 3]) -> impl Iterator<Item = [Point; 3]> {
+pub(super) fn chop_quad_at_x_extrema(
+  src: [Point<f32>; 3],
+) -> impl Iterator<Item = [Point<f32>; 3]> {
   chop_quad_at_y_extrema(src.map(transpose)).map(|quad| quad.map(transpose))
 }
 
 /// `SkChopCubicAtXExtrema`, through [`chop_cubic_at_y_extrema`] on the transposed cubic.
-pub(super) fn chop_cubic_at_x_extrema(src: [Point; 4]) -> impl Iterator<Item = [Point; 4]> {
+pub(super) fn chop_cubic_at_x_extrema(
+  src: [Point<f32>; 4],
+) -> impl Iterator<Item = [Point<f32>; 4]> {
   chop_cubic_at_y_extrema(src.map(transpose)).map(|cubic| cubic.map(transpose))
 }
 
@@ -366,7 +375,7 @@ pub(super) fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) 
 }
 
 /// The control points `SkChopCubicAt` interpolates at `t`: `ab`, `bc`, `cd`, `abc`, `bcd`, `abcd`.
-pub(super) fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
+pub(super) fn cubic_split(src: &[Point<f32>; 4], t: f32) -> [Point<f32>; 6] {
   let ab = lerp(src[0], src[1], t);
   let bc = lerp(src[1], src[2], t);
   let cd = lerp(src[2], src[3], t);
@@ -377,7 +386,9 @@ pub(super) fn cubic_split(src: &[Point; 4], t: f32) -> [Point; 6] {
 }
 
 /// `SkChopCubicAtYExtrema`: one to three y-monotonic cubics, sharing end points in `dst`.
-pub(super) fn chop_cubic_at_y_extrema(src: [Point; 4]) -> impl Iterator<Item = [Point; 4]> {
+pub(super) fn chop_cubic_at_y_extrema(
+  src: [Point<f32>; 4],
+) -> impl Iterator<Item = [Point<f32>; 4]> {
   // `SkFindCubicExtrema`.
   let [a, b, c, d] = src.map(|point| point.y);
   let (roots, count) = find_unit_quad_roots(d - a + 3.0 * (b - c), 2.0 * (a - b - b + c), b - a);
@@ -447,10 +458,10 @@ enum DirChange {
 
 /// `Convexicator` in `SkPathPriv.cpp`, for a single contour.
 struct Convexicator {
-  first_point: Point,
-  first_vector: Point,
-  last_point: Point,
-  last_vector: Point,
+  first_point: Point<f32>,
+  first_vector: Point<f32>,
+  last_point: Point<f32>,
+  last_vector: Point<f32>,
   expected: DirChange,
   first_direction_known: bool,
   reversals: u32,
@@ -459,23 +470,23 @@ struct Convexicator {
 impl Convexicator {
   fn new() -> Self {
     Self {
-      first_point: Point::zero(),
-      first_vector: Point::zero(),
-      last_point: Point::zero(),
-      last_vector: Point::zero(),
+      first_point: Point::ZERO,
+      first_vector: Point::ZERO,
+      last_point: Point::ZERO,
+      last_vector: Point::ZERO,
       expected: DirChange::Invalid,
       first_direction_known: false,
       reversals: 0,
     }
   }
 
-  fn set_move_point(&mut self, point: Point) {
+  fn set_move_point(&mut self, point: Point<f32>) {
     self.first_point = point;
     self.last_point = point;
     self.expected = DirChange::Invalid;
   }
 
-  fn add_point(&mut self, point: Point) -> bool {
+  fn add_point(&mut self, point: Point<f32>) -> bool {
     if self.last_point == point {
       return true;
     }
@@ -484,7 +495,7 @@ impl Convexicator {
 
     if self.first_point == self.last_point
       && self.expected == DirChange::Invalid
-      && self.last_vector == Point::zero()
+      && self.last_vector == Point::ZERO
     {
       self.last_vector = vector;
       self.first_vector = vector;
@@ -500,7 +511,7 @@ impl Convexicator {
     self.add_point(self.first_point) && self.add_vector(self.first_vector)
   }
 
-  fn direction_change(&self, vector: Point) -> DirChange {
+  fn direction_change(&self, vector: Point<f32>) -> DirChange {
     let cross = self.last_vector.x * vector.y - self.last_vector.y * vector.x;
 
     if !cross.is_finite() {
@@ -522,7 +533,7 @@ impl Convexicator {
     }
   }
 
-  fn add_vector(&mut self, vector: Point) -> bool {
+  fn add_vector(&mut self, vector: Point<f32>) -> bool {
     match self.direction_change(vector) {
       direction @ (DirChange::Left | DirChange::Right) => {
         if self.expected == DirChange::Invalid {
@@ -548,7 +559,7 @@ impl Convexicator {
 }
 
 /// `Convexicator::IsConcaveBySign`: whether the points change sign in x or y more than three times.
-fn is_concave_by_sign(points: &[Point]) -> bool {
+fn is_concave_by_sign(points: &[Point<f32>]) -> bool {
   if points.len() <= 3 {
     return false;
   }
@@ -562,7 +573,7 @@ fn is_concave_by_sign(points: &[Point]) -> bool {
   for point in points[1..].iter().chain([&points[0]]) {
     let vector = *point - current;
 
-    if vector != Point::zero() {
+    if vector != Point::ZERO {
       if !vector.x.is_finite() || !vector.y.is_finite() {
         return true;
       }
@@ -653,7 +664,7 @@ pub(super) fn is_convex(path: &Path) -> bool {
 ///
 /// Approximate: `SkPathPriv::IsRectContour` also accepts rects with collinear or repeated points
 /// and implicit closes, which fall back to the general scan here.
-pub(super) fn trivial_rect(path: &Path) -> Option<Rect> {
+pub(super) fn trivial_rect(path: &Path) -> Option<Rect<f32>> {
   let (verbs, points) = (path.verbs(), path.points());
 
   if verbs
@@ -675,9 +686,9 @@ pub(super) fn trivial_rect(path: &Path) -> Option<Rect> {
     points[3] - points[2],
     points[0] - points[3],
   ];
-  let axis_aligned = |v: Point| (v.x == 0.0) ^ (v.y == 0.0);
+  let axis_aligned = |v: Point<f32>| (v.x == 0.0) ^ (v.y == 0.0);
   let orthogonal =
-    |a: Point, b: Point| ((a.x == 0.0) ^ (b.x == 0.0)) & ((a.y == 0.0) ^ (b.y == 0.0));
+    |a: Point<f32>, b: Point<f32>| ((a.x == 0.0) ^ (b.x == 0.0)) & ((a.y == 0.0) ^ (b.y == 0.0));
 
   if !(axis_aligned(sides[0])
     & orthogonal(sides[0], sides[1])

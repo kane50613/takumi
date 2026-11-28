@@ -1,9 +1,9 @@
 use std::ops::Range;
+use takumi_core::style::Affine;
 
 use skrifa::MetadataProvider;
 
 use crate::writer::color::rgb;
-use crate::writer::geom::Transform;
 use crate::writer::surface::Surface;
 use crate::writer::text::Font;
 
@@ -37,11 +37,11 @@ pub(crate) fn draw_color_glyph(
   font: Font,
   context_color: rgb::Color,
   glyph: GlyphId,
-  base_transform: Transform,
+  base_transform: Affine,
   surface: &mut Surface,
 ) -> Option<()> {
   surface.push_transform(&base_transform);
-  surface.push_transform(&Transform::from_scale(1.0, -1.0));
+  surface.push_transform(&Affine::scale(1.0, -1.0));
 
   // Note: See the comment in krilla-svg in `render_svg_glyph` for why we prefer
   // COLR over SVG. For Noto Color Emoji specifically, using SVG will be slow when
@@ -89,7 +89,7 @@ pub(crate) fn draw_glyph(
   font: Font,
   context_color: rgb::Color,
   glyph: GlyphId,
-  base_transform: Transform,
+  base_transform: Affine,
   surface: &mut Surface,
 ) -> Option<()> {
   draw_color_glyph(font.clone(), context_color, glyph, base_transform, surface)

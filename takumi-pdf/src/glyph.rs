@@ -1,6 +1,7 @@
 //! The writer [`Glyph`] implementation and its ToUnicode span mapping.
 
 use std::ops::Range;
+use takumi_core::path::Path;
 
 use indexmap::IndexSet;
 
@@ -14,7 +15,6 @@ use crate::{
   options::{PdfError, UncoveredText},
   paint::{normalized, pdf_path},
   writer::{
-    geom::Path as PdfPath,
     num::NormalizedF32,
     surface::{Location, Surface},
     text::{Glyph, GlyphId},
@@ -25,7 +25,7 @@ use crate::{
 pub(crate) struct ColorGlyphs<'r> {
   /// The colour-layered outlines, placed, each with the alpha its layer paints at; the opaque
   /// layers joined into one path.
-  outlines: Vec<(NormalizedF32, PdfPath)>,
+  outlines: Vec<(NormalizedF32, Path)>,
   /// The bitmap glyphs, each with its origin.
   #[cfg_attr(not(feature = "images"), expect(dead_code))]
   pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Point<f32>)>,

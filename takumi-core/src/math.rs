@@ -1,5 +1,12 @@
 //! Float math that renders the same on every platform, unlike libm, for finite pixel-scale inputs.
 
+use std::hash::{Hash, Hasher};
+
+/// Hashes `value` so that floats `==` holds equal hash equally, `-0.0` as `0.0`.
+pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
+  (value + 0.0).to_bits().hash(state);
+}
+
 /// The angle of `(x, y)` as a turn in `[0, 1)`, Skia's `xy_to_unit_angle` polynomial.
 #[inline(always)]
 pub(crate) fn xy_to_unit_angle(x: f32, y: f32) -> f32 {

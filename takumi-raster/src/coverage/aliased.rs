@@ -4,8 +4,11 @@
 //! Vertical lines also skip `SkBasicEdgeBuilder::combineVertical`, and the unmerged edges walk to
 //! the same spans.
 
-use crate::path::Fill;
-use takumi_core::path::{Path, Point, Rect};
+use crate::style::FillRule;
+use takumi_core::{
+  geometry::{Point, Rect},
+  path::Path,
+};
 
 use super::{
   blitter::IntBounds,
@@ -27,7 +30,7 @@ const CONSERVATIVE_ROUND_BIAS: f64 = 0.5 + 1.5 / 64.0;
 const CLIP_LIMIT: i32 = 32767 >> 1;
 
 /// Fills `path` by `fill_rule` into `mask`, `bounds`' width wide, setting covered pixels to 255.
-pub(super) fn fill_path(path: &Path, fill_rule: Fill, bounds: IntBounds, mask: &mut [u8]) {
+pub(super) fn fill_path(path: &Path, fill_rule: FillRule, bounds: IntBounds, mask: &mut [u8]) {
   let clip = bounds.intersect(IntBounds {
     left: -CLIP_LIMIT,
     top: -CLIP_LIMIT,
@@ -84,15 +87,15 @@ pub(super) fn fill_path(path: &Path, fill_rule: Fill, bounds: IntBounds, mask: &
 }
 
 /// `conservative_round_to_int`: `bounds` rounded out a little past `SkRect::round`.
-fn conservative_round_out(bounds: Rect) -> IntBounds {
+fn conservative_round_out(bounds: Rect<f32>) -> IntBounds {
   let down = |value: f32| (f64::from(value) - CONSERVATIVE_ROUND_BIAS).ceil() as i32;
   let up = |value: f32| (f64::from(value) + CONSERVATIVE_ROUND_BIAS).floor() as i32;
 
   IntBounds {
-    left: down(bounds.left()),
-    top: down(bounds.top()),
-    right: up(bounds.right()),
-    bottom: up(bounds.bottom()),
+    left: down(bounds.left),
+    top: down(bounds.top),
+    right: up(bounds.right),
+    bottom: up(bounds.bottom),
   }
 }
 
@@ -100,13 +103,17 @@ fn conservative_round_out(bounds: Rect) -> IntBounds {
 /// `span` as `left, y, right`, with an interval left open at `right_clip` closed there.
 fn walk_edges(
   edges: Vec<Edge>,
-  fill_rule: Fill,
+  fill_rule: FillRule,
   start_y: i32,
   stop_y: i32,
   right_clip: i32,
   span: &mut impl FnMut(i32, i32, i32),
 ) {
-  let winding_mask = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
+  let winding_mask = if fill_rule == FillRule::EvenOdd {
+    1
+  } else {
+    -1
+  };
   let mut pending = edges.into_iter().peekable();
   let mut active: Vec<Edge> = Vec::new();
   let mut y = start_y;
@@ -290,7 +297,7 @@ impl Edge {
 
 impl BuiltEdge for Edge {
   /// `SkEdge::setLine`.
-  fn line(p0: Point, p1: Point) -> Option<Self> {
+  fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
     let (mut x0, mut y0) = (scalar_to_fdot6(p0.x, 0), scalar_to_fdot6(p0.y, 0));
     let (mut x1, mut y1) = (scalar_to_fdot6(p1.x, 0), scalar_to_fdot6(p1.y, 0));
     let mut winding = 1;
@@ -308,7 +315,7 @@ impl BuiltEdge for Edge {
   }
 
   /// `SkQuadraticEdge::setQuadratic`.
-  fn quadratic(points: &[Point; 3]) -> Option<Self> {
+  fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
     let [mut x0, x1, mut x2] = points.map(|point| scalar_to_fdot6(point.x, 0));
     let [mut y0, y1, mut y2] = points.map(|point| scalar_to_fdot6(point.y, 0));
     let mut winding = 1;
@@ -347,7 +354,7 @@ impl BuiltEdge for Edge {
   }
 
   /// `SkCubicEdge::setCubic`.
-  fn cubic(points: &[Point; 4]) -> Option<Self> {
+  fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
     let [mut x0, mut x1, mut x2, mut x3] = points.map(|point| scalar_to_fdot6(point.x, 0));
     let [mut y0, mut y1, mut y2, mut y3] = points.map(|point| scalar_to_fdot6(point.y, 0));
     let mut winding = 1;

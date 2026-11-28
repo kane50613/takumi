@@ -808,7 +808,7 @@ impl Normalizer {
     self.closed = false;
   }
 
-  /// A moveto right after a moveto replaces it, as tiny-skia's `PathBuilder::move_to`.
+  /// A moveto right after a moveto replaces it, as [`crate::path::PathBuilder::move_to`] does.
   fn move_to(&mut self, point: (f64, f64)) {
     let command = PathCommand::MoveTo(single(point));
 

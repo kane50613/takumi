@@ -6,8 +6,10 @@ use std::sync::Arc;
 use crate::svg::filter::SvgFilter;
 use crate::{
   geometry::{PathCommand, Point, Rect},
+  path::{Stroke, StrokeDash},
+  resources::image::SvgSpreadMethod,
   resources::{image_buffer::ImageBuffer, image_decoder::decode_image},
-  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, LineCap, LineJoin},
 };
 
 /// Draws an SVG's ops into pixels, which only a raster backend can.
@@ -186,15 +188,13 @@ impl SvgFilters {
   }
 
   /// The union of the filter regions in the group's coordinate space.
-  pub fn region(&self) -> Option<crate::path::Rect> {
+  pub fn region(&self) -> Option<Rect<f32>> {
     self
       .0
       .iter()
       .map(|filter| filter.region())
       .reduce(|union, region| union.union(&region))
-      .and_then(|region| {
-        crate::path::Rect::from_ltrb(region.left, region.top, region.right, region.bottom)
-      })
+      .and_then(|region| Rect::from_ltrb(region.left, region.top, region.right, region.bottom))
   }
 
   /// The filters, in the order they apply.
@@ -231,6 +231,30 @@ pub struct SvgStrokeStyle {
   pub join: SvgLineJoin,
   /// Dash pattern as `(array, offset)`.
   pub dash: Option<(Vec<f32>, f32)>,
+}
+
+impl SvgStrokeStyle {
+  /// The outline this stroke draws, dashes included.
+  pub fn outline(&self) -> Stroke {
+    Stroke {
+      width: self.width,
+      miter_limit: self.miter_limit,
+      line_cap: match self.cap {
+        SvgLineCap::Butt => LineCap::Butt,
+        SvgLineCap::Round => LineCap::Round,
+        SvgLineCap::Square => LineCap::Square,
+      },
+      line_join: match self.join {
+        SvgLineJoin::Miter => LineJoin::Miter,
+        SvgLineJoin::Round => LineJoin::Round,
+        SvgLineJoin::Bevel => LineJoin::Bevel,
+      },
+      dash: self
+        .dash
+        .as_ref()
+        .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
+    }
+  }
 }
 
 /// Line cap for [`SvgStrokeStyle`].
@@ -304,17 +328,6 @@ pub struct SvgGradient {
   pub spread: SvgSpreadMethod,
   /// Color stops, offsets ascending in `0..=1`.
   pub stops: Vec<SvgGradientStop>,
-}
-
-/// Gradient spread method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SvgSpreadMethod {
-  /// Clamp to the edge stops.
-  Pad,
-  /// Mirror-repeat.
-  Reflect,
-  /// Repeat.
-  Repeat,
 }
 
 /// One gradient color stop.

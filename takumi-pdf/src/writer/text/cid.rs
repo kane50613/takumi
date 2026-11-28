@@ -1,4 +1,6 @@
 use crate::subsetter::{GlyphRemapper, Tag as SubsetTag, subset};
+use crate::writer::geom::UNIT_RECT;
+use crate::writer::geom::pdf_rect;
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use pdf_writer::writers::WMode;
 use pdf_writer::{Finish, Name, Ref, Str};
@@ -8,12 +10,12 @@ use skrifa::raw::{TableProvider, TopLevelTable};
 use std::hash::Hash;
 use std::ops::DerefMut;
 use std::sync::Arc;
+use takumi_core::geometry::Rect;
 
 use super::{CIDIdentifier, FontIdentifier, PDF_UNITS_PER_EM};
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::error::{WriterError, WriterResult};
-use crate::writer::geom::Rect;
 use crate::writer::serialize::SerializeContext;
 use crate::writer::stream::FilterStreamBuilder;
 use crate::writer::surface::Location;
@@ -316,14 +318,15 @@ impl CIDFont {
     flags.insert(FontFlags::SYMBOLIC);
     flags.insert(FontFlags::SMALL_CAP);
 
-    let bbox = Rect::from_ltrb(
-      to_pdf_units(global_bbox.left()),
-      to_pdf_units(global_bbox.top()),
-      to_pdf_units(global_bbox.right()),
-      to_pdf_units(global_bbox.bottom()),
-    )
-    .unwrap_or_else(Rect::unit)
-    .to_pdf_rect();
+    let bbox = pdf_rect(
+      Rect::from_ltrb(
+        to_pdf_units(global_bbox.left),
+        to_pdf_units(global_bbox.top),
+        to_pdf_units(global_bbox.right),
+        to_pdf_units(global_bbox.bottom),
+      )
+      .unwrap_or(UNIT_RECT),
+    );
 
     let italic_angle = self.font.italic_angle();
     let ascender = to_pdf_units(self.font.ascent());
@@ -423,7 +426,7 @@ pub(crate) fn base_font_name<T: Hash>(font: &Font, data: &T) -> String {
   format!("{subset_tag}+{trimmed}")
 }
 
-fn subset_font(font: Font, glyph_remapper: &GlyphRemapper) -> WriterResult<(Font, Rect)> {
+fn subset_font(font: Font, glyph_remapper: &GlyphRemapper) -> WriterResult<(Font, Rect<f32>)> {
   let variation_coordinates = font
     .variation_coordinates()
     .iter()

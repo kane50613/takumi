@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// A `<fill-rule>`.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum FillRule {
   /// The default rule - counts the number of times a ray from the point crosses the shape's edges
   #[default]

@@ -1,9 +1,10 @@
 //! Alpha and luminosity masks.
 
 use pdf_writer::{Finish, Name, Ref};
+use takumi_core::style::MaskType;
+use takumi_core::{geometry::Rect, style::Affine};
 
 use crate::writer::chunk_container::ChunkContainer;
-use crate::writer::geom::{Rect, Transform};
 use crate::writer::graphics::shading_function::{GradientProperties, ShadingFunction};
 use crate::writer::graphics::xobject::XObject;
 use crate::writer::resource;
@@ -27,7 +28,7 @@ pub struct Mask {
   /// transparencies, we create a custom mask where we call the shading operator. In this case,
   /// we want to manually set the bbox of the underlying XObject to match the shape that the
   /// gradient is being applied to.
-  custom_bbox: Option<Rect>,
+  custom_bbox: Option<Rect<f32>>,
 }
 
 impl Mask {
@@ -44,8 +45,8 @@ impl Mask {
   /// Create a new mask for a shading to encode the opacity channels.
   pub(crate) fn new_from_shading(
     gradient_properties: GradientProperties,
-    shading_transform: Transform,
-    bbox: Rect,
+    shading_transform: Affine,
+    bbox: Rect<f32>,
     serializer_context: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
   ) -> Option<Self> {
@@ -76,28 +77,17 @@ impl Mask {
 
     Some(Self {
       stream: shading_stream,
-      mask_type: MaskType::Luminosity,
+      mask_type: MaskType::Luminance,
       custom_bbox: Some(bbox),
     })
   }
 }
 
-/// A mask type.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum MaskType {
-  /// A luminosity mask.
-  Luminosity,
-  /// An alpha mask.
-  Alpha,
-}
-
-impl MaskType {
-  /// Return the PDF name of the mask type.
-  pub(crate) fn to_name(self) -> Name<'static> {
-    match self {
-      MaskType::Alpha => Name(b"Alpha"),
-      MaskType::Luminosity => Name(b"Luminosity"),
-    }
+/// The PDF name of `mask_type`.
+pub(crate) fn mask_type_name(mask_type: MaskType) -> Name<'static> {
+  match mask_type {
+    MaskType::Alpha => Name(b"Alpha"),
+    MaskType::Luminance => Name(b"Luminosity"),
   }
 }
 
@@ -116,7 +106,7 @@ impl Cacheable for Mask {
     let chunk = &mut chunk_container.non_stream.masks;
     let mut dict = chunk.indirect(root_ref).dict();
     dict.pair(Name(b"Type"), Name(b"Mask"));
-    dict.pair(Name(b"S"), self.mask_type.to_name());
+    dict.pair(Name(b"S"), mask_type_name(self.mask_type));
     dict.pair(Name(b"G"), x_object);
 
     dict.finish();

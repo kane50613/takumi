@@ -1,11 +1,12 @@
+use crate::writer::geom::pdf_rect;
 use std::ops::DerefMut;
 use std::sync::Arc;
+use takumi_core::geometry::Rect;
 
 use pdf_writer::{Finish, Name, Ref};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
-use crate::writer::geom::Rect;
 use crate::writer::graphics::color::{DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::writer::resource;
 use crate::writer::resource::{Resource, Resourceable};
@@ -18,7 +19,7 @@ struct Repr {
   stream: Stream,
   isolated: bool,
   transparency_group_color_space: bool,
-  custom_bbox: Option<Rect>,
+  custom_bbox: Option<Rect<f32>>,
 }
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
@@ -29,7 +30,7 @@ impl XObject {
     stream: Stream,
     isolated: bool,
     mut transparency_group_color_space: bool,
-    custom_bbox: Option<Rect>,
+    custom_bbox: Option<Rect<f32>>,
   ) -> Self {
     // In case a mask was invoked in the content stream, we _always_ create
     // a new transparency group. Please see <https://github.com/typst/typst/issues/5509>.
@@ -55,7 +56,7 @@ impl XObject {
     self.0.stream.is_empty()
   }
 
-  pub(crate) fn bbox(&self) -> Rect {
+  pub(crate) fn bbox(&self) -> Rect<f32> {
     self.0.custom_bbox.unwrap_or(self.0.stream.bbox)
   }
 }
@@ -108,13 +109,7 @@ impl Cacheable for XObject {
       sc,
       &mut chunk_container.non_stream.resource_dictionaries,
     );
-    x_object.bbox(
-      self
-        .0
-        .custom_bbox
-        .unwrap_or(self.0.stream.bbox)
-        .to_pdf_rect(),
-    );
+    x_object.bbox(pdf_rect(self.0.custom_bbox.unwrap_or(self.0.stream.bbox)));
 
     if use_transparency_group {
       let mut group = x_object.group();

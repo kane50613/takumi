@@ -26,6 +26,7 @@
 
 use std::borrow::Cow;
 use std::ops::DerefMut;
+use takumi_core::{geometry::Rect, style::Affine};
 
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
@@ -37,7 +38,6 @@ use crate::writer::SerializeSettings;
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::content::ContentBuilder;
-use crate::writer::geom::{Rect, Transform};
 use crate::writer::resource::{ResourceDictionary, ResourceDictionaryBuilder};
 use crate::writer::serialize::SerializeContext;
 use crate::writer::surface::Surface;
@@ -50,7 +50,7 @@ use crate::writer::surface::Surface;
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct Stream {
   pub(crate) content: Vec<u8>,
-  pub(crate) bbox: Rect,
+  pub(crate) bbox: Rect<f32>,
   // Important: Each object that uses a stream must ensure to pass on the validation
   // errors to the `SerializeContext` at some point. Currently, only `Mask`,
   // `TilingPattern`, `InternalPage` and `XObject` require that.
@@ -62,7 +62,7 @@ pub struct Stream {
 impl Stream {
   pub(crate) fn new(
     content: Vec<u8>,
-    bbox: Rect,
+    bbox: Rect<f32>,
     validation_errors: Vec<ValidationError>,
     resource_dictionary: ResourceDictionary,
     uses_mask: bool,
@@ -83,7 +83,7 @@ impl Stream {
   pub(crate) fn empty() -> Self {
     Self {
       content: vec![],
-      bbox: Rect::empty(),
+      bbox: Rect::default(),
       validation_errors: vec![],
       resource_dictionary: ResourceDictionaryBuilder::new().finish(),
       uses_mask: false,
@@ -118,7 +118,7 @@ impl<'a> StreamBuilder<'a> {
     Surface::new(
       self.sc,
       self.chunk_container,
-      ContentBuilder::new(Transform::identity(), true, self.sc),
+      ContentBuilder::new(Affine::IDENTITY, true, self.sc),
       None,
       finish_fn,
     )

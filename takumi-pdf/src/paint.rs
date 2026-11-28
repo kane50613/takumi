@@ -5,6 +5,7 @@ use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "images")]
 use rustc_hash::FxHashMap;
+use takumi_core::resources::image::SvgSpreadMethod;
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -13,18 +14,17 @@ use takumi_core::{
     image_buffer::{ImageBuffer, demultiply_pixel},
   },
 };
+use takumi_core::{geometry::Rect, path::Path, path::PathBuilder};
 use takumi_core::{
   geometry::{PathCommand, Point, Size},
   painter::FillShape,
-  style::{Affine, BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
+  style::{Color, FillRule, ResolvedGradientStop},
 };
 
 use crate::writer::{
-  blend::BlendMode as PdfBlendMode,
   color::rgb,
-  geom::{Path as PdfPath, PathBuilder, Rect as PdfRect, Transform},
   num::NormalizedF32,
-  paint::{Fill, FillRule, SpreadMethod, Stop},
+  paint::{Fill, Stop},
   stream::Stream,
   surface::Surface,
 };
@@ -33,7 +33,7 @@ use crate::{filter::ColorFilter, raster::embedded_image, writer::image::Image as
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
-pub(crate) fn empty_path(origin: Point<f32>) -> Option<PdfPath> {
+pub(crate) fn empty_path(origin: Point<f32>) -> Option<Path> {
   let mut builder = PathBuilder::new();
 
   builder.move_to(origin.x, origin.y);
@@ -42,16 +42,8 @@ pub(crate) fn empty_path(origin: Point<f32>) -> Option<PdfPath> {
   builder.finish()
 }
 
-/// A single-rectangle writer path.
-pub(crate) fn rect_path(rect: PdfRect) -> Option<PdfPath> {
-  let mut builder = PathBuilder::new();
-
-  builder.push_rect(rect);
-  builder.finish()
-}
-
 /// Converts takumi-core path commands to a writer path translated by `origin`.
-pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<PdfPath> {
+pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<Path> {
   let Point { x, y } = origin;
   let mut builder = PathBuilder::new();
 
@@ -70,10 +62,10 @@ pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<P
 }
 
 /// A fill shape as a writer path translated by `origin`.
-pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<PdfPath> {
+pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<Path> {
   match shape {
     FillShape::Rect(size) => {
-      PdfRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
+      Rect::from_xywh(origin.x, origin.y, size.width, size.height).map(PathBuilder::from_rect)
     }
     _ => pdf_path(&shape.to_commands(), origin),
   }
@@ -192,11 +184,11 @@ impl RasterizedImages {
   }
 }
 
-pub(crate) const fn spread(repeating: bool) -> SpreadMethod {
+pub(crate) const fn spread(repeating: bool) -> SvgSpreadMethod {
   if repeating {
-    SpreadMethod::Repeat
+    SvgSpreadMethod::Repeat
   } else {
-    SpreadMethod::Pad
+    SvgSpreadMethod::Pad
   }
 }
 
@@ -443,64 +435,13 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   stops
 }
 
-impl From<CoreFillRule> for FillRule {
-  fn from(rule: CoreFillRule) -> Self {
-    match rule {
-      CoreFillRule::EvenOdd => Self::EvenOdd,
-      _ => Self::NonZero,
-    }
-  }
-}
-
-/// An affine in takumi-core's column order, `[a, b, c, d, e, f]`.
-impl From<Affine> for Transform {
-  fn from(Affine { a, b, c, d, x, y }: Affine) -> Self {
-    Self::from_row(a, b, c, d, x, y)
-  }
-}
-
-impl From<Transform> for Affine {
-  fn from(transform: Transform) -> Self {
-    Self {
-      a: transform.sx(),
-      b: transform.ky(),
-      c: transform.kx(),
-      d: transform.sy(),
-      x: transform.tx(),
-      y: transform.ty(),
-    }
-  }
-}
-
-impl From<BlendMode> for PdfBlendMode {
-  fn from(mode: BlendMode) -> Self {
-    match mode {
-      BlendMode::Multiply => Self::Multiply,
-      BlendMode::Screen => Self::Screen,
-      BlendMode::Overlay => Self::Overlay,
-      BlendMode::Darken => Self::Darken,
-      BlendMode::Lighten => Self::Lighten,
-      BlendMode::ColorDodge => Self::ColorDodge,
-      BlendMode::ColorBurn => Self::ColorBurn,
-      BlendMode::HardLight => Self::HardLight,
-      BlendMode::SoftLight => Self::SoftLight,
-      BlendMode::Difference => Self::Difference,
-      BlendMode::Exclusion => Self::Exclusion,
-      BlendMode::Hue => Self::Hue,
-      BlendMode::Saturation => Self::Saturation,
-      BlendMode::Color => Self::Color,
-      BlendMode::Luminosity => Self::Luminosity,
-      _ => Self::Normal,
-    }
-  }
-}
-
 /// Fills the page box, an unset color leaving it empty as Chromium's print path does.
 pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surface: &mut Surface) {
   let Some(color) = color else {
     return;
   };
-  let Some(path) = PdfRect::from_xywh(0.0, 0.0, size.width, size.height).and_then(rect_path) else {
+  let Some(path) = Rect::from_xywh(0.0, 0.0, size.width, size.height).map(PathBuilder::from_rect)
+  else {
     return;
   };
 

@@ -19,7 +19,7 @@ pub(crate) const CONIC_TOLERANCE: f32 = 0.25;
 /// A conic through `points`, its middle point pulled by `weight`.
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct Conic {
-  pub(crate) points: [Point; 3],
+  pub(crate) points: [Point<f32>; 3],
   pub(crate) weight: f32,
 }
 
@@ -30,16 +30,16 @@ pub(crate) fn can_normalize(dx: f32, dy: f32) -> bool {
 
 /// `SkPoint::setLength`: `(x, y)` scaled to `length` through doubles, none where it has no
 /// direction or leaves the finite range.
-pub(crate) fn with_length(x: f32, y: f32, length: f32) -> Option<Point> {
+pub(crate) fn with_length(x: f32, y: f32, length: f32) -> Option<Point<f32>> {
   let magnitude = (f64::from(x) * f64::from(x) + f64::from(y) * f64::from(y)).sqrt();
   let scale = f64::from(length) / magnitude;
   let (x, y) = ((f64::from(x) * scale) as f32, (f64::from(y) * scale) as f32);
 
-  (x.is_finite() && y.is_finite() && (x != 0.0 || y != 0.0)).then_some(Point::from_xy(x, y))
+  (x.is_finite() && y.is_finite() && (x != 0.0 || y != 0.0)).then_some(Point::new(x, y))
 }
 
 /// `SkPointPriv::EqualsWithinTolerance` without a tolerance: no direction between them.
-fn equals_within_tolerance(a: Point, b: Point) -> bool {
+fn equals_within_tolerance(a: Point<f32>, b: Point<f32>) -> bool {
   !can_normalize(a.x - b.x, a.y - b.y)
 }
 
@@ -54,8 +54,8 @@ impl Conic {
     let scale = 1.0 / (1.0 + self.weight);
     let weight = (0.5 + self.weight * 0.5).sqrt();
     let [p0, p1, p2] = self.points;
-    let weighted = Point::from_xy(self.weight * p1.x, self.weight * p1.y);
-    let mut middle = Point::from_xy(
+    let weighted = Point::new(self.weight * p1.x, self.weight * p1.y);
+    let mut middle = Point::new(
       (p0.x + (weighted.x + weighted.x) + p2.x) * scale * 0.5,
       (p0.y + (weighted.y + weighted.y) + p2.y) * scale * 0.5,
     );
@@ -67,14 +67,14 @@ impl Conic {
         ((f64::from(a) + w * 2.0 * f64::from(b) + f64::from(c)) * scale_half) as f32
       };
 
-      middle = Point::from_xy(axis(p0.x, p1.x, p2.x), axis(p0.y, p1.y, p2.y));
+      middle = Point::new(axis(p0.x, p1.x, p2.x), axis(p0.y, p1.y, p2.y));
     }
 
     [
       Self {
         points: [
           p0,
-          Point::from_xy((p0.x + weighted.x) * scale, (p0.y + weighted.y) * scale),
+          Point::new((p0.x + weighted.x) * scale, (p0.y + weighted.y) * scale),
           middle,
         ],
         weight,
@@ -82,7 +82,7 @@ impl Conic {
       Self {
         points: [
           middle,
-          Point::from_xy((weighted.x + p2.x) * scale, (weighted.y + p2.y) * scale),
+          Point::new((weighted.x + p2.x) * scale, (weighted.y + p2.y) * scale),
           p2,
         ],
         weight,
@@ -121,7 +121,7 @@ impl Conic {
 
   /// `subdivide` in `SkGeometry.cpp`: the control and end points of `2^level` quads, keeping a
   /// y-monotonic conic's quads monotonic.
-  fn subdivide(&self, level: u32, out: &mut Vec<Point>) {
+  fn subdivide(&self, level: u32, out: &mut Vec<Point<f32>>) {
     if level == 0 {
       out.extend_from_slice(&self.points[1..]);
       return;
@@ -160,7 +160,7 @@ impl Conic {
 
   /// `SkAutoConicToQuads::computeQuads`: the conic as quads within `tolerance`, their points after
   /// the start, two per quad.
-  pub(crate) fn to_quads(self, tolerance: f32) -> Vec<Point> {
+  pub(crate) fn to_quads(self, tolerance: f32) -> Vec<Point<f32>> {
     let bad_weight = self.weight < 0.0 || !self.weight.is_finite();
     let mut pow2 = if bad_weight {
       0
@@ -198,11 +198,11 @@ impl Conic {
   /// `SkConic::BuildUnitArc`: the conics of the unit arc from `start` to `stop`, clockwise unless
   /// `ccw`, mapped by scaling by `radius` and moving to `center`.
   pub(crate) fn unit_arc(
-    start: Point,
-    stop: Point,
+    start: Point<f32>,
+    stop: Point<f32>,
     ccw: bool,
     radius: f32,
-    center: Point,
+    center: Point<f32>,
   ) -> Vec<Self> {
     let x = start.x * stop.x + start.y * stop.y;
     let mut y = start.x * stop.y - start.y * stop.x;
@@ -223,14 +223,14 @@ impl Conic {
       usize::from(y < 0.0) * 2 + usize::from((x < 0.0) != (y < 0.0))
     };
     let quadrant_points = [
-      Point::from_xy(1.0, 0.0),
-      Point::from_xy(1.0, 1.0),
-      Point::from_xy(0.0, 1.0),
-      Point::from_xy(-1.0, 1.0),
-      Point::from_xy(-1.0, 0.0),
-      Point::from_xy(-1.0, -1.0),
-      Point::from_xy(0.0, -1.0),
-      Point::from_xy(1.0, -1.0),
+      Point::new(1.0, 0.0),
+      Point::new(1.0, 1.0),
+      Point::new(0.0, 1.0),
+      Point::new(-1.0, 1.0),
+      Point::new(-1.0, 0.0),
+      Point::new(-1.0, -1.0),
+      Point::new(0.0, -1.0),
+      Point::new(1.0, -1.0),
     ];
     let mut conics: Vec<Self> = (0..quadrant)
       .map(|index| Self {
@@ -256,7 +256,7 @@ impl Conic {
 
       if can_normalize(last.x - off_curve.x, last.y - off_curve.y) {
         conics.push(Self {
-          points: [last, off_curve, Point::from_xy(x, y)],
+          points: [last, off_curve, Point::new(x, y)],
           weight: cos_half,
         });
       }
@@ -278,7 +278,7 @@ impl Conic {
       conic.points = conic.points.map(|point| {
         let (x, y) = matrix.transform_point(point.x, point.y);
 
-        Point::from_xy(x, y)
+        Point::new(x, y)
       });
     }
 

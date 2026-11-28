@@ -5,19 +5,19 @@
 //! operations such as applying linear transformations, showing text or images and drawing paths.
 
 use std::num::NonZeroU64;
+#[cfg(feature = "images")]
+use takumi_core::geometry::Size;
+use takumi_core::style::FillRule;
+use takumi_core::{geometry::Point, path::Path, style::Affine};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::content::ContentBuilder;
-use crate::writer::geom::Path;
-#[cfg(feature = "images")]
-use crate::writer::geom::Size;
-use crate::writer::geom::{Point, Transform};
-use crate::writer::graphics::blend::BlendMode;
+use crate::writer::graphics::blend::pdf_blend_mode;
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
-use crate::writer::graphics::paint::{Fill, FillRule, Stroke};
+use crate::writer::graphics::paint::{Fill, Stroke};
 use crate::writer::graphics::shading_function::ShadingFunction;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::writer::graphics::{graphics_state::ExtGState, xobject::XObject};
@@ -28,6 +28,7 @@ use crate::writer::serialize::SerializeContext;
 use crate::writer::stream::{Stream, StreamBuilder};
 use crate::writer::text::Font;
 use crate::writer::text::{Glyph, draw_glyph};
+use takumi_core::style::BlendMode;
 
 /// Can be used to associate render operations with a unique identifier.
 /// This is useful if you want to backtrack a validation error to a specific
@@ -129,14 +130,14 @@ impl<'a> Surface<'a> {
     if self.fill.is_some() || self.stroke.is_some() {
       if self.has_complex_fill_or_stroke() {
         self.bd.get_mut().draw_path(
-          &path.0,
+          path,
           self.fill.as_ref(),
           None,
           self.sc,
           self.chunk_container,
         );
         self.bd.get_mut().draw_path(
-          &path.0,
+          path,
           None,
           self.stroke.as_ref(),
           self.sc,
@@ -144,7 +145,7 @@ impl<'a> Surface<'a> {
         );
       } else {
         self.bd.get_mut().draw_path(
-          &path.0,
+          path,
           self.fill.as_ref(),
           self.stroke.as_ref(),
           self.sc,
@@ -154,7 +155,7 @@ impl<'a> Surface<'a> {
     } else {
       // Draw with black by default.
       self.bd.get_mut().draw_path(
-        &path.0,
+        path,
         Some(&Fill::default()),
         None,
         self.sc,
@@ -207,21 +208,22 @@ impl<'a> Surface<'a> {
     &mut self,
     glyphs: &[impl Glyph],
     context_color: rgb::Color,
-    start: Point,
+    start: Point<f32>,
     font: Font,
     font_size: f32,
   ) {
     let (mut cur_x, mut cur_y) = (start.x, start.y);
 
     for glyph in glyphs {
-      let base_transform = Transform::from_translate(
+      let base_transform = Affine::translation(
         cur_x + glyph.x_offset(font_size),
         cur_y - glyph.y_offset(font_size),
       );
-      let base_transform = base_transform.pre_concat(Transform::from_scale(
-        font_size / font.units_per_em(),
-        -font_size / font.units_per_em(),
-      ));
+      let base_transform = base_transform
+        * Affine::scale(
+          font_size / font.units_per_em(),
+          -font_size / font.units_per_em(),
+        );
       draw_glyph(
         font.clone(),
         context_color,
@@ -242,7 +244,7 @@ impl<'a> Surface<'a> {
   /// logic for dealing with bidirectional text, font fallback, text layouting, etc.
   pub fn draw_glyphs(
     &mut self,
-    start: Point,
+    start: Point<f32>,
     glyphs: &[impl Glyph],
     font: Font,
     text: &str,
@@ -335,18 +337,18 @@ impl<'a> Surface<'a> {
   }
 
   /// The current transformation matrix composed through every open group.
-  pub(crate) fn page_transform(&self) -> Transform {
+  pub(crate) fn page_transform(&self) -> Affine {
     self
       .bd
       .sub_builders
       .iter()
       .fold(self.bd.root_builder.cur_transform(), |outer, builder| {
-        outer.pre_concat(builder.cur_transform())
+        outer * builder.cur_transform()
       })
   }
 
   /// Concatenate a new transform to the current transformation matrix.
-  pub fn push_transform(&mut self, transform: &Transform) {
+  pub fn push_transform(&mut self, transform: &Affine) {
     self.push_instructions.push(PushInstruction::Transform);
     self.bd.get_mut().save_graphics_state();
     self.bd.get_mut().concat_transform(transform);
@@ -356,13 +358,13 @@ impl<'a> Surface<'a> {
   pub fn push_blend_mode(&mut self, blend_mode: BlendMode) {
     self.push_instructions.push(PushInstruction::BlendMode);
     self.bd.get_mut().save_graphics_state();
-    self.bd.get_mut().set_blend_mode(blend_mode.to_pdf());
+    self.bd.get_mut().set_blend_mode(pdf_blend_mode(blend_mode));
   }
 
   /// Push a new clip path.
   pub fn push_clip_path(&mut self, path: &Path, clip_rule: &FillRule) {
     self.push_instructions.push(PushInstruction::ClipPath);
-    self.bd.get_mut().push_clip_path(&path.0, clip_rule);
+    self.bd.get_mut().push_clip_path(path, clip_rule);
   }
 
   /// Push a new mask.
@@ -373,7 +375,7 @@ impl<'a> Surface<'a> {
     self
       .bd
       .sub_builders
-      .push(ContentBuilder::new(Transform::identity(), true, self.sc));
+      .push(ContentBuilder::new(Affine::IDENTITY, true, self.sc));
   }
 
   /// Push a new opacity, meaning that each subsequent graphics object will be
@@ -390,7 +392,7 @@ impl<'a> Surface<'a> {
       self
         .bd
         .sub_builders
-        .push(ContentBuilder::new(Transform::identity(), true, self.sc));
+        .push(ContentBuilder::new(Affine::IDENTITY, true, self.sc));
     }
   }
 
@@ -400,7 +402,7 @@ impl<'a> Surface<'a> {
     self
       .bd
       .sub_builders
-      .push(ContentBuilder::new(Transform::identity(), true, self.sc));
+      .push(ContentBuilder::new(Affine::IDENTITY, true, self.sc));
   }
 
   /// Pop the last `push` instruction. A `pop` without a `push` does nothing.
@@ -451,7 +453,7 @@ impl<'a> Surface<'a> {
 
   #[cfg(feature = "images")]
   /// Draw a new bitmap image.
-  pub fn draw_image(&mut self, image: Image, size: Size) {
+  pub fn draw_image(&mut self, image: Image, size: Size<f32>) {
     self
       .bd
       .get_mut()
@@ -528,7 +530,7 @@ impl Drop for Surface<'_> {
   fn drop(&mut self) {
     let root_builder = std::mem::replace(
       &mut self.bd.root_builder,
-      ContentBuilder::new(Transform::identity(), false, self.sc),
+      ContentBuilder::new(Affine::IDENTITY, false, self.sc),
     );
     let num_mcids = match self.page_identifier {
       Some(pi) => pi.mcid,

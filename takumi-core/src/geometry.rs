@@ -55,6 +55,11 @@ impl Point<f32> {
   /// The origin.
   pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
 
+  /// Whether both coordinates are finite.
+  pub fn is_finite(self) -> bool {
+    self.x.is_finite() && self.y.is_finite()
+  }
+
   /// `SkPoint::Length`: the distance from the origin, through doubles only where the floats
   /// overflow.
   pub fn length(self) -> f32 {
@@ -65,6 +70,11 @@ impl Point<f32> {
     } else {
       (f64::from(self.x) * f64::from(self.x) + f64::from(self.y) * f64::from(self.y)).sqrt() as f32
     }
+  }
+
+  /// `SkPoint::Distance`: how far `other` is.
+  pub fn distance(self, other: Self) -> f32 {
+    Point::new(self.x - other.x, self.y - other.y).length()
   }
 }
 
@@ -262,7 +272,6 @@ impl Rect<f32> {
   }
 }
 
-#[cfg(feature = "svg-raster")]
 impl Rect<i32> {
   /// The rect at `x`, `y` of `width` by `height` pixels.
   pub fn from_size(x: i32, y: i32, width: u32, height: u32) -> Self {
@@ -307,10 +316,9 @@ impl Rect<i32> {
   }
 }
 
-#[cfg(feature = "svg")]
 impl Rect<f32> {
   /// The rect between the edges, none unless it is finite and not inverted.
-  pub(crate) fn from_ltrb(left: f32, top: f32, right: f32, bottom: f32) -> Option<Self> {
+  pub fn from_ltrb(left: f32, top: f32, right: f32, bottom: f32) -> Option<Self> {
     let rect = Self {
       left,
       right,
@@ -325,20 +333,17 @@ impl Rect<f32> {
   }
 
   /// The rect at `x`, `y` of `width` by `height`, none unless it is finite and not inverted.
-  pub(crate) fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+  pub fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
     Self::from_ltrb(x, y, width + x, height + y)
   }
 
-  /// [`Self::from_xywh`], but with both dimensions above zero.
-  pub(crate) fn positive_from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
-    Self::from_xywh(x, y, width, height).filter(Self::has_area)
-  }
-
-  pub(crate) fn x(&self) -> f32 {
+  /// The left edge.
+  pub fn x(&self) -> f32 {
     self.left
   }
 
-  pub(crate) fn y(&self) -> f32 {
+  /// The top edge.
+  pub fn y(&self) -> f32 {
     self.top
   }
 
@@ -350,6 +355,25 @@ impl Rect<f32> {
   /// The distance between the top and bottom edges.
   pub fn height(&self) -> f32 {
     self.bottom - self.top
+  }
+
+  /// The bounds of the rect under `transform`, none when they are not finite.
+  pub fn transformed(&self, transform: Affine) -> Option<Self> {
+    let (left, top, right, bottom) = transformed_rect_extents(
+      self.top_left(),
+      Size::new(self.width(), self.height()),
+      transform,
+    )?;
+
+    Self::from_ltrb(left, top, right, bottom)
+  }
+}
+
+#[cfg(feature = "svg")]
+impl Rect<f32> {
+  /// [`Self::from_xywh`], but with both dimensions above zero.
+  pub(crate) fn positive_from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+    Self::from_xywh(x, y, width, height).filter(Self::has_area)
   }
 
   /// Whether the rect has both dimensions above zero.
@@ -365,17 +389,6 @@ impl Rect<f32> {
       top: self.top.min(other.top),
       bottom: self.bottom.max(other.bottom),
     }
-  }
-
-  /// The bounds of the rect under `transform`, none when they are not finite.
-  pub fn transformed(&self, transform: Affine) -> Option<Self> {
-    let (left, top, right, bottom) = transformed_rect_extents(
-      self.top_left(),
-      Size::new(self.width(), self.height()),
-      transform,
-    )?;
-
-    Self::from_ltrb(left, top, right, bottom)
   }
 
   /// The edges as bits, to key a cache by the rect.
@@ -408,8 +421,7 @@ impl Rect<f32> {
 
 #[cfg(feature = "svg")]
 impl Size<f32> {
-  /// The size scaled to fit inside `target` keeping its ratio, or to cover it when `expand`, after
-  /// tiny-skia's `Size::scale_to` and `Size::expand_to`.
+  /// The size scaled to fit inside `target` keeping its ratio, or to cover it when `expand`.
   pub(crate) fn fitted_to(self, target: Self, expand: bool) -> Self {
     let width = target.height * self.width / self.height;
     let fits_height = if expand {
@@ -585,17 +597,13 @@ impl PathCommand {
   /// The commands of a [`Path`].
   #[cfg(feature = "svg")]
   pub(crate) fn from_path(path: &Path) -> Vec<Self> {
-    let point = |point: crate::path::Point| Point::new(point.x, point.y);
-
     path
       .segments()
       .map(|segment| match segment {
-        PathSegment::MoveTo(to) => Self::MoveTo(point(to)),
-        PathSegment::LineTo(to) => Self::LineTo(point(to)),
-        PathSegment::QuadTo(control, to) => Self::QuadTo(point(control), point(to)),
-        PathSegment::CubicTo(first, second, to) => {
-          Self::CubicTo(point(first), point(second), point(to))
-        }
+        PathSegment::MoveTo(to) => Self::MoveTo(to),
+        PathSegment::LineTo(to) => Self::LineTo(to),
+        PathSegment::QuadTo(control, to) => Self::QuadTo(control, to),
+        PathSegment::CubicTo(first, second, to) => Self::CubicTo(first, second, to),
         PathSegment::Close => Self::Close,
       })
       .collect()
@@ -605,17 +613,11 @@ impl PathCommand {
   #[cfg(feature = "svg")]
   pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
     let path = Self::build_path(paths)?;
-    let edges = |bounds: crate::path::Rect| Rect {
-      left: bounds.left(),
-      right: bounds.right(),
-      top: bounds.top(),
-      bottom: bounds.bottom(),
-    };
 
     Some(NormalizedPath {
       commands: Self::from_path(&path),
-      bounds: edges(path.compute_tight_bounds()?),
-      control_bounds: edges(path.bounds()),
+      bounds: path.compute_tight_bounds()?,
+      control_bounds: path.bounds(),
     })
   }
 

@@ -1,20 +1,22 @@
 use std::sync::Arc;
 
-use crate::path::Fill;
 use crate::pixmap::PixmapRef;
+use crate::style::FillRule;
 use skrifa::color::ColorPalette;
-use takumi_core::geometry::{Point, Size};
-use takumi_core::path::{IntSize, PathBuilder, Rect};
+use takumi_core::geometry::{Point, Rect, Size};
+use takumi_core::path::PathBuilder;
 use xxhash_rust::xxh3::Xxh3;
 
+use takumi_core::{path::Stroke, resources::image::SvgSpreadMethod};
+
 use crate::{
-  Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Style,
   checked_area, coverage, cull_bounds, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
     glyph_cache::GlyphCache,
   },
-  shader::{ImageFilter, ImageShader, Shader, Spread},
+  shader::{ImageFilter, ImageShader, Shader},
   style::{Affine, BlendMode, Color, PaintPhase, math::mul_div_255},
 };
 
@@ -55,7 +57,7 @@ impl GlyphBucket {
   }
 
   /// Identifies the mask by everything that changes its pixels: outline, transform, and stroke.
-  fn mask_key(self, glyph_signature: u64, stroke: Option<Stroke>) -> u64 {
+  fn mask_key(self, glyph_signature: u64, stroke: Option<&Stroke>) -> u64 {
     let Affine { a, b, c, d, x, y } = self.mask_transform;
     let mut hasher = Xxh3::new();
     hasher.update(&glyph_signature.to_le_bytes());
@@ -66,7 +68,7 @@ impl GlyphBucket {
 
     match stroke {
       Some(stroke) => {
-        hasher.update(&[1, stroke.join as u8, stroke.cap as u8]);
+        hasher.update(&[1, stroke.line_join as u8, stroke.line_cap as u8]);
         hasher.update(&stroke.width.to_le_bytes());
       }
       None => hasher.update(&[0]),
@@ -75,11 +77,11 @@ impl GlyphBucket {
     hasher.digest()
   }
 
-  fn render_mask(self, paths: &[Command], stroke: Option<Stroke>) -> (Vec<u8>, Placement) {
+  fn render_mask(self, paths: &[Command], stroke: Option<&Stroke>) -> (Vec<u8>, Placement) {
     render_mask(
       paths,
       Some(self.mask_transform),
-      stroke.map(Into::into),
+      stroke.cloned().map(Style::Stroke),
       None,
     )
   }
@@ -104,7 +106,7 @@ fn draw_mask_with_cache(
   glyph_signature: u64,
   paths: &[Command],
   transform: Affine,
-  stroke: Option<Stroke>,
+  stroke: Option<&Stroke>,
   color: Color,
 ) {
   let bucket = GlyphBucket::of(transform);
@@ -113,7 +115,7 @@ fn draw_mask_with_cache(
     let (mask, placement) = render_mask(
       paths,
       Some(bucket.snapped()),
-      stroke.map(Into::into),
+      stroke.cloned().map(Style::Stroke),
       Some(canvas.viewport()),
     );
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
@@ -132,7 +134,7 @@ pub(crate) fn cached_glyph_mask(
   glyph_signature: u64,
   paths: &[Command],
   transform: Affine,
-  stroke: Option<Stroke>,
+  stroke: Option<&Stroke>,
 ) -> (Arc<Vec<u8>>, Placement) {
   let bucket = GlyphBucket::of(transform);
   let (mask, placement) = glyphs.glyph_mask(bucket.mask_key(glyph_signature, stroke), || {
@@ -172,9 +174,11 @@ impl<'a, 'b> GlyphPaintCtx<'a, 'b> {
 
   /// A stroke of `width` joined the way the text's `stroke-linejoin` asks.
   fn stroke_of(&self, width: f32) -> Stroke {
-    let mut stroke = Stroke::new(width);
-    stroke.join = self.style.parent.misc_inherited_data.stroke_linejoin;
-    stroke
+    Stroke {
+      width,
+      line_join: self.style.parent.misc_inherited_data.stroke_linejoin,
+      ..Stroke::default()
+    }
   }
 
   /// The `-webkit-text-stroke`, in glyph space so transforms and `text-fit` scale it.
@@ -204,7 +208,7 @@ impl<'a, 'b> GlyphPaintCtx<'a, 'b> {
       self.glyph_signature,
       self.paths,
       self.transform,
-      Some(stroke),
+      Some(&stroke),
       color,
     );
   }
@@ -334,15 +338,15 @@ pub(crate) fn bitmap_coverage(
 
   // The source rect filled without antialiasing and sampled bilinearly.
   let local = Affine::translation(-placement.left as f32, -placement.top as f32) * transform;
-  let size = IntSize::from_wh(placement.width, placement.height)?;
+  let size = Size::checked_new(placement.width, placement.height)?;
   let outline =
     PathBuilder::from_rect(Rect::from_xywh(0.0, 0.0, width, height)?).transform(local)?;
-  let coverage = coverage::fill_path_aliased(&outline, Fill::NonZero, size)?;
+  let coverage = coverage::fill_path_aliased(&outline, FillRule::NonZero, size)?;
   let shader = Shader::Image(ImageShader::new(
     bytemuck::cast_slice(source.data()),
     (source.width(), source.height()),
     local,
-    Spread::Pad,
+    SvgSpreadMethod::Pad,
     ImageFilter::Linear,
     1.0,
   )?);

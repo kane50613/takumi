@@ -1,5 +1,6 @@
-use crate::path::Fill;
-use takumi_core::path::{IntSize, Path, PathBuilder, Rect};
+use crate::style::FillRule;
+use takumi_core::geometry::{Rect, Size};
+use takumi_core::path::{Path, PathBuilder};
 
 use super::{fill_path, fill_path_aliased};
 
@@ -26,15 +27,15 @@ fn push_circle(builder: &mut PathBuilder, cx: f32, cy: f32, radius: f32) {
   builder.close();
 }
 
-fn fill(path: &Path, fill_rule: Fill, width: u32, height: u32) -> Vec<u8> {
-  fill_path(path, fill_rule, IntSize::from_wh(width, height).unwrap()).unwrap()
+fn fill(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
+  fill_path(path, fill_rule, Size::checked_new(width, height).unwrap()).unwrap()
 }
 
 #[test]
 fn fractional_rect_edges_cover_their_area() {
   // Wider than `MaskAdditiveBlitter` takes, so the edges go through the run blitter.
   let path = polygon(&[(0.25, 0.5), (40.75, 0.5), (40.75, 6.25), (0.25, 6.25)]);
-  let mask = fill(&path, Fill::NonZero, 41, 7);
+  let mask = fill(&path, FillRule::NonZero, 41, 7);
 
   assert_eq!(&mask[..3], &[96, 128, 128]);
   assert_eq!(&mask[41..44], &[191, 255, 255]);
@@ -44,7 +45,7 @@ fn fractional_rect_edges_cover_their_area() {
 #[test]
 fn small_rect_takes_the_fat_rect_blit() {
   let path = PathBuilder::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
-  let mask = fill(&path, Fill::NonZero, 5, 2);
+  let mask = fill(&path, FillRule::NonZero, 5, 2);
 
   assert_eq!(mask, [95, 191, 191, 191, 95, 127, 255, 255, 255, 127]);
 }
@@ -52,7 +53,7 @@ fn small_rect_takes_the_fat_rect_blit() {
 #[test]
 fn diagonal_edge_covers_half_of_each_pixel() {
   let path = polygon(&[(0.0, 0.0), (40.0, 40.0), (0.0, 40.0)]);
-  let mask = fill(&path, Fill::NonZero, 40, 40);
+  let mask = fill(&path, FillRule::NonZero, 40, 40);
 
   for y in 0..40 {
     assert_eq!(mask[y * 40 + y], 128, "row {y}");
@@ -71,13 +72,13 @@ fn even_odd_leaves_the_star_center_empty() {
   let star = polygon(&points);
   let center = 40 * 80 + 40;
 
-  assert_eq!(fill(&star, Fill::NonZero, 80, 80)[center], 255);
-  assert_eq!(fill(&star, Fill::EvenOdd, 80, 80)[center], 0);
+  assert_eq!(fill(&star, FillRule::NonZero, 80, 80)[center], 255);
+  assert_eq!(fill(&star, FillRule::EvenOdd, 80, 80)[center], 0);
 }
 
 #[test]
 fn rect_fill_rounds_edges_to_256ths() {
-  let mask = super::fill_rect([0.5, 0.25, 3.75, 1.0], IntSize::from_wh(4, 1).unwrap()).unwrap();
+  let mask = super::fill_rect([0.5, 0.25, 3.75, 1.0], Size::checked_new(4, 1).unwrap()).unwrap();
 
   // `antifilldot8` with T = 64, B = 256: a single scanline of alpha `B - T - 1`.
   assert_eq!(mask, [95, 191, 191, 143]);
@@ -93,8 +94,8 @@ fn clipped_path_matches_its_unclipped_crop() {
     push_circle(&mut builder, cx, 40.0, 37.3);
     builder.finish().unwrap()
   };
-  let clipped = fill(&circle(10.5), Fill::NonZero, 40, 80);
-  let whole = fill(&circle(50.5), Fill::NonZero, 90, 80);
+  let clipped = fill(&circle(10.5), FillRule::NonZero, 40, 80);
+  let whole = fill(&circle(50.5), FillRule::NonZero, 90, 80);
   let mut total = 0u32;
 
   for y in 0..80 {
@@ -112,7 +113,7 @@ fn clipped_path_matches_its_unclipped_crop() {
 fn huge_coordinates_stay_in_range() {
   for extent in [1e9, 2.1e9, 3e9, i32::MAX as f32, 1e30] {
     let triangle = polygon(&[(-extent, -extent), (extent, -extent), (0.0, extent)]);
-    let mask = fill(&triangle, Fill::NonZero, 10, 10);
+    let mask = fill(&triangle, FillRule::NonZero, 10, 10);
 
     assert_eq!(mask.len(), 100, "extent {extent}");
     assert!(mask.iter().all(|alpha| *alpha == 255), "extent {extent}");
@@ -124,7 +125,7 @@ fn path_far_outside_the_clip_leaves_the_mask_empty() {
   let far = polygon(&[(1e9, 1e9), (1e9 + 50.0, 1e9), (1e9, 1e9 + 50.0)]);
 
   assert!(
-    fill(&far, Fill::NonZero, 10, 10)
+    fill(&far, FillRule::NonZero, 10, 10)
       .iter()
       .all(|alpha| *alpha == 0)
   );
@@ -152,7 +153,7 @@ fn whole_pixel_square_covers_its_edges_fully() {
       (2.0, 2.0 + size),
     ]);
     let width = size as u32 + 4;
-    let mask = fill(&path, Fill::NonZero, width, width);
+    let mask = fill(&path, FillRule::NonZero, width, width);
     let at = |x: u32, y: u32| mask[(y * width + x) as usize];
 
     assert_eq!(
@@ -176,13 +177,17 @@ fn whole_pixel_square_covers_its_edges_fully() {
 /// ambiguous.
 fn aliased_reference(
   points: &[(f32, f32)],
-  fill_rule: Fill,
+  fill_rule: FillRule,
   width: u32,
   height: u32,
 ) -> (Vec<u8>, Vec<bool>) {
   let grid = |value: f32| f64::from((value * 64.0) as i32) / 64.0;
   let vertices: Vec<(f64, f64)> = points.iter().map(|&(x, y)| (grid(x), grid(y))).collect();
-  let mask_bits = if fill_rule == Fill::EvenOdd { 1 } else { -1 };
+  let mask_bits = if fill_rule == FillRule::EvenOdd {
+    1
+  } else {
+    -1
+  };
   let (mut mask, mut ambiguous) = (
     vec![0; (width * height) as usize],
     vec![false; (width * height) as usize],
@@ -261,8 +266,8 @@ fn aliased_polygons_match_their_winding_at_pixel_centers() {
       .collect();
     let path = polygon(&points);
 
-    for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
-      let ours = fill_path_aliased(&path, fill_rule, IntSize::from_wh(64, 48).unwrap()).unwrap();
+    for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
+      let ours = fill_path_aliased(&path, fill_rule, Size::checked_new(64, 48).unwrap()).unwrap();
       let (reference, ambiguous) = aliased_reference(&points, fill_rule, 64, 48);
 
       assert!(ambiguous.iter().filter(|&&ambiguous| ambiguous).count() < 64 * 48 / 20);
@@ -289,9 +294,9 @@ fn aliased_curves_agree_with_their_antialiased_coverage() {
   builder.close();
 
   let path = builder.finish().unwrap();
-  let size = IntSize::from_wh(64, 48).unwrap();
+  let size = Size::checked_new(64, 48).unwrap();
 
-  for fill_rule in [Fill::NonZero, Fill::EvenOdd] {
+  for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
     let aliased = fill_path_aliased(&path, fill_rule, size).unwrap();
     let antialiased = fill_path(&path, fill_rule, size).unwrap();
 
@@ -319,7 +324,12 @@ fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
     (width as f32, 2.0),
     (0.0, 2.0),
   ]);
-  let mask = fill_path_aliased(&path, Fill::NonZero, IntSize::from_wh(width, 2).unwrap()).unwrap();
+  let mask = fill_path_aliased(
+    &path,
+    FillRule::NonZero,
+    Size::checked_new(width, 2).unwrap(),
+  )
+  .unwrap();
 
   let row = width as usize;
 
