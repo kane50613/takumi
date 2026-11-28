@@ -1,3 +1,4 @@
+use super::conic::{CONIC_TOLERANCE, Conic};
 use super::{Path, PathBuilder, RectContour, Stroke, StrokeDash};
 use crate::geometry::{Point, Rect};
 use crate::style::{LineCap, LineJoin};
@@ -269,4 +270,18 @@ fn a_closed_rect_strokes_to_its_outer_and_inner_rects() {
     Point::new(8.0, 20.0)
   );
   assert_eq!(outline(12.0, LineJoin::Miter).points().len(), 4);
+}
+
+#[test]
+fn a_heavy_conic_whose_halves_nearly_meet_splits_into_two_lines() {
+  let conic = Conic {
+    points: [
+      Point::new(0.0, 0.0),
+      Point::new(1000.0, 0.0),
+      Point::new(1000.0, 1000.0),
+    ],
+    weight: 1e7,
+  };
+
+  assert_eq!(conic.to_quads(CONIC_TOLERANCE).len(), 4);
 }
