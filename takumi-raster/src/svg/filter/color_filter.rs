@@ -4,6 +4,7 @@
 use std::sync::OnceLock;
 
 use super::{BYTE_TO_FLOAT, ColorSpace};
+use crate::blend::unorm_to_byte;
 use takumi_core::{
   filter::ColorMatrixChain,
   style::{Color, TransferTable},
@@ -68,29 +69,27 @@ impl ColorFilters {
         continue;
       }
 
-      lanes.load(chunk);
-
-      for filter in &self.0 {
-        filter.apply(&mut lanes);
-      }
-
-      lanes.store(chunk);
+      self.run_chunk(&mut lanes, chunk);
     }
   }
 
   /// The filters over one premultiplied pixel.
   fn run(&self, pixel: [u8; 4]) -> [u8; 4] {
-    let mut lanes = Lanes::default();
     let mut pixels = [pixel];
 
-    lanes.load(&pixels);
+    self.run_chunk(&mut Lanes::default(), &mut pixels);
+    pixels[0]
+  }
+
+  /// The filters over at most a [`CHUNK`] of premultiplied pixels, through `lanes`.
+  fn run_chunk(&self, lanes: &mut Lanes, pixels: &mut [[u8; 4]]) {
+    lanes.load(pixels);
 
     for filter in &self.0 {
-      filter.apply(&mut lanes);
+      filter.apply(lanes);
     }
 
-    lanes.store(&mut pixels);
-    pixels[0]
+    lanes.store(pixels);
   }
 }
 
@@ -129,7 +128,7 @@ impl Lanes {
 
   fn store(&self, pixels: &mut [[u8; 4]]) {
     for (index, pixel) in pixels.iter_mut().enumerate() {
-      *pixel = std::array::from_fn(|channel| to_byte(self.channels[channel][index]));
+      *pixel = std::array::from_fn(|channel| unorm_to_byte(self.channels[channel][index]));
     }
   }
 }
@@ -147,17 +146,14 @@ fn space_table(space: ColorSpace) -> &'static [[u8; 256]; 256] {
 
   cell.get_or_init(|| {
     let filters = ColorFilters(vec![ColorFilter::Space(space)]);
+    let mut lanes = Lanes::default();
     let mut table = Box::new([[0; 256]; 256]);
 
     for (alpha, row) in table.iter_mut().enumerate() {
       let mut pixels: [[u8; 4]; 256] = std::array::from_fn(|byte| [byte as u8, 0, 0, alpha as u8]);
 
       for chunk in pixels.chunks_mut(CHUNK) {
-        let mut lanes = Lanes::default();
-
-        lanes.load(chunk);
-        filters.0[0].apply(&mut lanes);
-        lanes.store(chunk);
+        filters.run_chunk(&mut lanes, chunk);
       }
 
       *row = pixels.map(|pixel| pixel[0]);
@@ -219,7 +215,7 @@ impl ColorFilter {
         {
           if let Some(table) = table {
             for value in channel.iter_mut() {
-              *value = f32::from(table[usize::from(to_byte(*value))]) * BYTE_TO_FLOAT;
+              *value = f32::from(table[usize::from(unorm_to_byte(*value))]) * BYTE_TO_FLOAT;
             }
           }
         }
@@ -248,7 +244,12 @@ pub(super) fn convert_color(space: ColorSpace, Color([red, green, blue, alpha]):
       let [red, green, blue, _] = SRGB_TO_LINEAR
         .on_colors([red, green, blue, alpha].map(|channel| f32::from(channel) * BYTE_TO_FLOAT));
 
-      Color([to_byte(red), to_byte(green), to_byte(blue), alpha])
+      Color([
+        unorm_to_byte(red),
+        unorm_to_byte(green),
+        unorm_to_byte(blue),
+        alpha,
+      ])
     }
   }
 }
@@ -337,11 +338,6 @@ fn approx_pow2(x: f32) -> f32 {
   approx = approx.max(0.0).min(0x7f80_0000_u32 as f32);
 
   f32::from_bits(approx.round_ties_even() as u32)
-}
-
-/// A channel as `store_8888` writes it: clamped to `0..=1` and rounded.
-fn to_byte(channel: f32) -> u8 {
-  (channel.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
 #[cfg(test)]

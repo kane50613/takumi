@@ -18,13 +18,8 @@ use takumi_core::path::Path;
 use blitter::{Coverage, IntBounds, round_out};
 
 /// The coverage of `path` over a `size` mask at the origin, filled by `fill_rule`.
-pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: Size<u32>) -> Option<Vec<u8>> {
-  let mask_bounds = IntBounds {
-    left: 0,
-    top: 0,
-    right: size.width as i32,
-    bottom: size.height as i32,
-  };
+pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: Size<u32>) -> Vec<u8> {
+  let mask_bounds = IntBounds::of_size(size);
   let ir = round_out(path.bounds());
   let fits = |bounds: IntBounds| mask_bounds.contains(bounds);
   // A path inside the mask would lie inside a device-sized clip even where its control points
@@ -62,31 +57,17 @@ pub(crate) fn fill_path(path: &Path, fill_rule: FillRule, size: Size<u32>) -> Op
     scan::fill_path(path, fill_rule, ir, clip, &mut coverage);
   }
 
-  Some(coverage.data)
+  coverage.data
 }
 
 /// The coverage of `path` over a `size` mask at the origin without anti-aliasing, as
 /// `SkScan::FillPath` fills it.
-pub(crate) fn fill_path_aliased(
-  path: &Path,
-  fill_rule: FillRule,
-  size: Size<u32>,
-) -> Option<Vec<u8>> {
+pub(crate) fn fill_path_aliased(path: &Path, fill_rule: FillRule, size: Size<u32>) -> Vec<u8> {
   let mut mask = vec![0; size.width as usize * size.height as usize];
 
-  aliased::fill_path(
-    path,
-    fill_rule,
-    IntBounds {
-      left: 0,
-      top: 0,
-      right: size.width as i32,
-      bottom: size.height as i32,
-    },
-    &mut mask,
-  );
+  aliased::fill_path(path, fill_rule, IntBounds::of_size(size), &mut mask);
 
-  Some(mask)
+  mask
 }
 
 /// The coverage of the axis-aligned rect `[left, top, right, bottom]` over a `size` mask at the

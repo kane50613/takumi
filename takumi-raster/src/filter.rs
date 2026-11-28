@@ -291,19 +291,15 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
     match filter.categorize() {
       FilterCategory::Pixel(f) => pending_pixel_filters.push(f),
       FilterCategory::Complex(f) => {
-        apply_batched_pixel_filters(
-          bytemuck::cast_slice_mut(pixmap.pixels_mut()),
-          &pending_pixel_filters,
-        );
+        apply_batched_pixel_filters(pixmap.data_mut(), &pending_pixel_filters);
         pending_pixel_filters.clear();
 
         match f {
           Filter::Blur(blur) => {
             let width = pixmap.width();
             let height = pixmap.height();
-            let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
             apply_blur_rgba_bytes(
-              raw,
+              pixmap.data_mut(),
               width,
               height,
               blur.to_px(sizing, 1.0),
@@ -338,10 +334,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
     }
   }
 
-  apply_batched_pixel_filters(
-    bytemuck::cast_slice_mut(pixmap.pixels_mut()),
-    &pending_pixel_filters,
-  );
+  apply_batched_pixel_filters(pixmap.data_mut(), &pending_pixel_filters);
 
   Ok(())
 }
@@ -401,7 +394,7 @@ impl Backdrop {
       return Ok(None);
     };
     let Some(mut backdrop_pixmap) =
-      PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
+      PixmapMut::from_bytes(&mut padded.raw, Size::new(padded.width, padded.height))
     else {
       return Ok(None);
     };
@@ -552,7 +545,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     return Ok(());
   }
 
-  let canvas_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let canvas_data = pixmap.data_mut();
   for y in start_y..end_y {
     let shadow_y = (y - dest_top) as u32;
     for x in start_x..end_x {
@@ -670,7 +663,7 @@ mod tests {
       .build();
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), Size::new(width, height)).unwrap();
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
@@ -712,7 +705,7 @@ mod tests {
     let mut image = Bitmap::new(16, 16);
     let width = image.width();
     let height = image.height();
-    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), width, height).unwrap();
+    let mut pixmap = PixmapMut::from_bytes(image.as_raw_mut(), Size::new(width, height)).unwrap();
 
     let shadow = SizedShadow {
       offset_x: 1.0,

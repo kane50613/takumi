@@ -255,11 +255,9 @@ pub(crate) fn interpolate_rgba_premultiplied(c1: [u8; 4], c2: [u8; 4], t: f32) -
   }
 
   let mut result = [0u8; 4];
-  let c1_rgba = c1;
-  let c2_rgba = c2;
 
   for i in 0..4 {
-    result[i] = (c1_rgba[i] as f32 * (1.0 - t) + c2_rgba[i] as f32 * t)
+    result[i] = (c1[i] as f32 * (1.0 - t) + c2[i] as f32 * t)
       .round()
       .clamp(0.0, 255.0) as u8;
   }
@@ -330,15 +328,14 @@ pub trait GradientOverlayTile {
     }
 
     let mut row_state = self.begin_row(x_start, y, lut_len);
-    let bytes = |color: [u8; 4]| color;
 
     if self.dither_active() {
       for (x, pixel) in (x_start..).zip(out) {
-        *pixel = bytes(self.sample_dithered_at(self.next_lut_index(&mut row_state), x, y));
+        *pixel = self.sample_dithered_at(self.next_lut_index(&mut row_state), x, y);
       }
     } else {
       for pixel in out {
-        *pixel = bytes(self.sample_at(self.next_lut_index(&mut row_state)));
+        *pixel = self.sample_at(self.next_lut_index(&mut row_state));
       }
     }
   }
@@ -347,10 +344,10 @@ pub trait GradientOverlayTile {
     false
   }
 
-  /// Overlays the tile onto `data` with source-over blending, no clip.
+  /// Overlays the tile onto `pixels` with source-over blending, no clip.
   fn overlay_unconstrained(
     &self,
-    data: &mut [u8],
+    pixels: &mut [[u8; 4]],
     bottom_width: u32,
     bottom_height: u32,
     offset: Point<f32>,
@@ -372,7 +369,6 @@ pub trait GradientOverlayTile {
       return;
     }
 
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
     let row_pixels = bottom_width as usize;
     let dest_x_min_usize = dest_x_min as usize;
     let dest_x_max_usize = dest_x_max as usize;
@@ -397,8 +393,7 @@ pub trait GradientOverlayTile {
         for (i, dst) in row.iter_mut().enumerate() {
           let lut_idx = self.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
-          let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
-          *dst = pixel;
+          *dst = sample(lut_idx, src_x_start + i as u32, src_y);
         }
       } else {
         const CHUNK: usize = 256;
@@ -412,9 +407,8 @@ pub trait GradientOverlayTile {
           for slot in buf.iter_mut().take(n) {
             let lut_idx = self.next_lut_index(&mut row_state);
             debug_assert!(lut_idx < lut_len);
-            let pixel = sample(lut_idx, src_x, src_y);
+            *slot = sample(lut_idx, src_x, src_y);
             src_x += 1;
-            *slot = pixel;
           }
           for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
             let src_a = src[3];
@@ -640,6 +634,17 @@ fn interpolate_hi(
 /// Stops sampled from a gradient's colour LUT, enough that a consumer interpolating in sRGB
 /// matches another interpolation colour space such as Oklab.
 const SRGB_SAMPLED_STOPS: usize = 64;
+
+/// Gradient spread method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpreadMethod {
+  /// Clamp to the edge stops.
+  Pad,
+  /// Mirror-repeat.
+  Reflect,
+  /// Repeat.
+  Repeat,
+}
 
 /// A gradient stop in straight sRGB, placed along the gradient from 0 to 1.
 #[derive(Debug, Clone, Copy, PartialEq)]

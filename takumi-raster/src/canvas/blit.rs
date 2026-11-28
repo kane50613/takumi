@@ -148,7 +148,7 @@ fn blit_sampled_paint_source_translation(
     return;
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   let resolved = source.resolve();
 
   if let Some(rows) = ScaledRows::new(
@@ -350,21 +350,23 @@ pub(crate) fn blit_paint_source_translation(
     return;
   };
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   let rows = source.rows(
     (bounds.x_min - bounds.offset_x) as u32,
     (bounds.x_max - bounds.x_min) as u32,
   );
   match rows {
     RowSource::Copy { source, x_start } if mode == BlendMode::Normal && combined_mask.is_none() => {
-      let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+      let source_pixels = source.pixels();
       let source_width = source.width() as usize;
       let copy_width = (bounds.x_max - bounds.x_min) as usize;
       for dest_y in bounds.y_min..bounds.y_max {
         let src_start = (dest_y - bounds.offset_y) as usize * source_width + x_start as usize;
         let dst_start = (dest_y as u32 * canvas_width + bounds.x_min as u32) as usize;
-        let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_start + copy_width]);
-        composite_premultiplied_over_span(dst, &source_pixels[src_start..src_start + copy_width]);
+        composite_premultiplied_over_span(
+          &mut pixels[dst_start..dst_start + copy_width],
+          &source_pixels[src_start..src_start + copy_width],
+        );
       }
     }
     rows => blit_rows(
@@ -395,11 +397,11 @@ pub(super) fn blit_translucent_translation(
   ) else {
     return;
   };
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+  let pixels = pixmap.pixels_mut();
+  let source_pixels = source.pixels();
   let source_width = source.width() as usize;
   let width = (bounds.x_max - bounds.x_min) as usize;
-  let alpha = (opacity.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+  let alpha = unorm_to_byte(opacity);
 
   for dest_y in bounds.y_min..bounds.y_max {
     let source_start = (dest_y - bounds.offset_y) as usize * source_width
@@ -442,17 +444,14 @@ fn blit_solid_translation(
     return;
   };
 
-  let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
-    let row_stride = canvas_width as usize * 4;
-    let x_byte_start = bounds.x_min as usize * 4;
-    let x_byte_end = bounds.x_max as usize * 4;
     for dest_y in bounds.y_min..bounds.y_max {
-      let row_start = dest_y as usize * row_stride;
-      let row = &mut data[row_start + x_byte_start..row_start + x_byte_end];
+      let row_start = dest_y as usize * canvas_width as usize;
+      let row = &mut pixels[row_start + bounds.x_min as usize..row_start + bounds.x_max as usize];
       if color[3] == u8::MAX {
-        fill_repeated_premultiplied_pixel(row, color);
+        row.fill(color);
       } else {
         blend_repeated_premultiplied_pixel(row, premultiplied_or_transparent(color));
       }
@@ -460,7 +459,6 @@ fn blit_solid_translation(
     return;
   }
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   blit_rows(
     pixels,
     canvas_width,
@@ -614,19 +612,14 @@ pub(crate) fn overlay_sampled_paint_source(
 #[cfg(test)]
 mod tests {
   use crate::Bitmap;
-  use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapRef};
+  use crate::pixmap::{Mask, Pixmap, PixmapRef};
   use takumi_core::geometry::Size;
 
   use super::*;
   use crate::{
-    BorderProperties, Canvas, PaintSource, PlacedMask, Result,
+    BorderProperties, Canvas, PaintSource, PlacedMask, Result, canvas::noise,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
-
-  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
-  fn noise(index: usize, salt: u32) -> u8 {
-    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
-  }
 
   #[test]
   fn an_opaque_row_blends_to_the_bytes_it_copies() {
@@ -679,7 +672,7 @@ mod tests {
   #[test]
   fn normal_rows_match_the_pixel_path() {
     let canvas = Size::new(29, 13);
-    let clip = TinyMask::from_vec(
+    let clip = Mask::from_vec(
       (0..24 * 11)
         .map(|index| match noise(index / 12, 1) % 3 {
           0 => 0,
@@ -687,7 +680,7 @@ mod tests {
           _ => noise(index, 2),
         })
         .collect(),
-      takumi_core::geometry::Size::checked_new(24, 11).unwrap(),
+      Size::checked_new(24, 11).unwrap(),
     )
     .unwrap();
     let view = MaskView {
@@ -749,7 +742,7 @@ mod tests {
 
   /// A pixmap of valid premultiplied pixels, varied by `seed`.
   fn noisy_pixmap(width: u32, height: u32, seed: u32) -> Pixmap {
-    let mut pixmap = Pixmap::new(width, height).unwrap();
+    let mut pixmap = Pixmap::new(Size::new(width, height)).unwrap();
     let mut state = seed;
 
     for pixel in pixmap.pixels_mut() {
@@ -798,7 +791,7 @@ mod tests {
     ] {
       let before = noisy_pixmap(50, 40, 11);
       let mut ours = before.clone();
-      let alpha = u32::from((opacity * 255.0 + 0.5) as u8);
+      let alpha = u32::from(unorm_to_byte(opacity));
 
       blit_translucent_translation(&mut ours.as_mut(), source.as_ref(), offset, opacity);
 
@@ -952,12 +945,12 @@ mod tests {
       height: 10,
     });
 
-    let mut parent_mask = TinyMask::new(10, 10).unwrap();
+    let mut parent_mask = Mask::new(Size::new(10, 10)).unwrap();
     parent_mask.data_mut()[0..50].fill(255);
     canvas.push_mask(PlacedMask::covering(canvas.viewport(), parent_mask));
 
     let image_data = [0u8, 255, 0, 255].repeat(16);
-    let image_pixmap = PixmapRef::from_bytes(&image_data, 4, 4).unwrap();
+    let image_pixmap = PixmapRef::from_bytes(&image_data, Size::new(4, 4)).unwrap();
     let paint_source = PaintSource::Pixmap(image_pixmap);
 
     let border = BorderProperties {

@@ -1,13 +1,12 @@
 //! The writer [`Glyph`] implementation and its ToUnicode span mapping.
 
 use std::ops::Range;
-use takumi_core::path::Path;
 
 use indexmap::IndexSet;
-
 use takumi_core::{
   geometry::{PathCommand, Point},
   layout::inline::{PositionedInlineRun, ShapedRun},
+  path::Path,
   resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
 };
 

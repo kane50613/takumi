@@ -2,6 +2,7 @@
 use rayon::prelude::*;
 
 use super::Turbulence;
+use crate::blend::unorm_to_byte;
 use takumi_core::geometry::Rect;
 
 /// Skia's `SkPerlinNoiseShader::kBlockSize`, the lattice points per axis before it repeats.
@@ -226,7 +227,7 @@ impl Noise {
       sum[2].clamp(0.0, 1.0) * alpha,
       alpha,
     ]
-    .map(|channel| (channel * 255.0 + 0.5) as u8)
+    .map(unorm_to_byte)
   }
 }
 

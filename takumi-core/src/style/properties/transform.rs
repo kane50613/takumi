@@ -4,7 +4,10 @@ use std::{
   ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
-use crate::math::hash_f32;
+use crate::{
+  geometry::Rect,
+  math::{NEARLY_ZERO, eq_f32, hash_f32},
+};
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
@@ -97,7 +100,7 @@ impl Animatable for Transform {
 // | b d y |
 // | 0 0 1 |
 /// An affine transform matrix, representing a combination of translation, rotation, scaling, and skewing.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Affine {
   /// Horizontal scaling / cosine of rotation
   pub a: f32,
@@ -111,6 +114,16 @@ pub struct Affine {
   pub x: f32,
   /// Vertical translation (always orthogonal regardless of rotation)
   pub y: f32,
+}
+
+impl PartialEq for Affine {
+  fn eq(&self, other: &Self) -> bool {
+    self
+      .to_cols_array()
+      .into_iter()
+      .zip(other.to_cols_array())
+      .all(|(a, b)| eq_f32(a, b))
+  }
 }
 
 impl Eq for Affine {}
@@ -309,6 +322,23 @@ impl Affine {
     )
   }
 
+  /// `rect` under the transform where it stays a rect, as `SkMatrix::rectStaysRect` and `mapRect` do.
+  pub fn map_rect(self, rect: Rect<f32>) -> Option<Rect<f32>> {
+    if !(self.b == 0.0 && self.c == 0.0 || self.a == 0.0 && self.d == 0.0) {
+      return None;
+    }
+
+    let (x0, y0) = self.transform_point(rect.left, rect.top);
+    let (x1, y1) = self.transform_point(rect.right, rect.bottom);
+
+    Some(Rect {
+      left: x0.min(x1),
+      right: x0.max(x1),
+      top: y0.min(y1),
+      bottom: y0.max(y1),
+    })
+  }
+
   /// Skia's `SkMatrix::mapVector`: `(x, y)` under the linear part alone, translation left out.
   pub fn transform_vector(self, x: f32, y: f32) -> (f32, f32) {
     (self.a * x + self.c * y, self.b * x + self.d * y)
@@ -389,9 +419,8 @@ impl Affine {
       }
     } else {
       let det = f64::from(a) * f64::from(d) - f64::from(c) * f64::from(b);
-      let nearly_zero = 1.0 / 4096.0_f32;
 
-      if (det as f32).abs() <= nearly_zero * nearly_zero * nearly_zero {
+      if (det as f32).abs() <= NEARLY_ZERO * NEARLY_ZERO * NEARLY_ZERO {
         return None;
       }
 

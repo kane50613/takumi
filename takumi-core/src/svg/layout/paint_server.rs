@@ -11,10 +11,8 @@ use super::{
 use crate::{
   geometry::{Point, Rect, Size},
   math::ApproxEq,
-  resources::{
-    image::{SvgGradientStop, SvgSpreadMethod},
-    svg_size::ViewBox,
-  },
+  paint::SpreadMethod,
+  resources::{image::SvgGradientStop, svg_size::ViewBox},
   style::{Affine, Color, FromCssStr, Length, PercentageNumber},
   svg::{
     element::SvgElementKind,
@@ -296,11 +294,11 @@ impl SvgLayout<'_> {
     }
   }
 
-  fn spread_method(&self, index: usize) -> SvgSpreadMethod {
+  fn spread_method(&self, index: usize) -> SpreadMethod {
     match self.attribute(self.resolve_attr(index, "spreadMethod"), "spreadMethod") {
-      Some("reflect") => SvgSpreadMethod::Reflect,
-      Some("repeat") => SvgSpreadMethod::Repeat,
-      _ => SvgSpreadMethod::Pad,
+      Some("reflect") => SpreadMethod::Reflect,
+      Some("repeat") => SpreadMethod::Repeat,
+      _ => SpreadMethod::Pad,
     }
   }
 

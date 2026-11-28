@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::num::NonZeroU16;
 use std::rc::Rc;
 use std::sync::Arc;
-use takumi_core::geometry::Size;
 
 use indexmap::IndexMap;
 use pdf_writer::types::{StructRole, StructRole2};
 use pdf_writer::writers::{OutputIntent, StructTreeRoot};
 use pdf_writer::{Chunk, Content, Finish, Limits, Name, Obj, Pdf, Ref, Settings, Str, TextStr};
 use rustc_hash::FxHashMap;
+use takumi_core::geometry::Size;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::{CieBasedColorSpace, DeviceColorSpace};
@@ -108,9 +108,7 @@ pub struct SerializeSettings {
   /// Written as `/Producer` and `pdf:Producer`, whether or not the document
   /// carries metadata.
   pub producer: String,
-  /// A function that should be used to render SVG glyphs. If you don't need this, yu can
-  /// just use the default function which doesn't render them at all. If you do want this, it
-  /// is recommended that you use the function provided by the `krilla-svg` crate.
+  /// Draws an SVG glyph. The default draws nothing.
   pub render_svg_glyph_fn: RenderSvgGlyphFn,
 }
 

@@ -8,12 +8,12 @@ use std::{
 };
 
 use takumi_core::{
+  paint::SpreadMethod,
   path_data::path_data,
   resources::image::{
-    SvgGradient, SvgImageData, SvgLineCap, SvgLineJoin, SvgOp, SvgOpPaint, SvgSpreadMethod,
-    SvgStrokeStyle, sniff_mime, to_data_url,
+    SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgStrokeStyle, sniff_mime, to_data_url,
   },
-  style::{Affine, FillRule, ImageScalingAlgorithm, ToCss},
+  style::{Affine, FillRule, ImageScalingAlgorithm, LineCap, LineJoin, ToCss},
 };
 
 use crate::{Frame, GradientStop, ImageKey, Rgba, SvgDocument, matrix_attr, num, push_opacity};
@@ -138,14 +138,14 @@ impl SvgDocument {
       attrs.push(("stroke-miterlimit", num(stroke.miter_limit).into()));
     }
     match stroke.cap {
-      SvgLineCap::Butt => {}
-      SvgLineCap::Round => attrs.push(("stroke-linecap", "round".into())),
-      SvgLineCap::Square => attrs.push(("stroke-linecap", "square".into())),
+      LineCap::Butt => {}
+      LineCap::Round => attrs.push(("stroke-linecap", "round".into())),
+      LineCap::Square => attrs.push(("stroke-linecap", "square".into())),
     }
     match stroke.join {
-      SvgLineJoin::Miter => {}
-      SvgLineJoin::Round => attrs.push(("stroke-linejoin", "round".into())),
-      SvgLineJoin::Bevel => attrs.push(("stroke-linejoin", "bevel".into())),
+      LineJoin::Miter => {}
+      LineJoin::Round => attrs.push(("stroke-linejoin", "round".into())),
+      LineJoin::Bevel => attrs.push(("stroke-linejoin", "bevel".into())),
     }
     if let Some((array, offset)) = &stroke.dash {
       let array: Vec<String> = array.iter().copied().map(num).collect();
@@ -247,14 +247,14 @@ impl SvgDocument {
     if !transform.is_identity() {
       geometry.push(("gradientTransform", matrix_attr(transform).into()));
     }
-    if gradient.spread == SvgSpreadMethod::Reflect {
+    if gradient.spread == SpreadMethod::Reflect {
       geometry.push(("spreadMethod", "reflect".into()));
     }
 
     self.gradient(
       name,
       id_prefix,
-      gradient.spread == SvgSpreadMethod::Repeat,
+      gradient.spread == SpreadMethod::Repeat,
       geometry,
       &stops,
     )

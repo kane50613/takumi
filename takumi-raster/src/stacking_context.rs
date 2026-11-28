@@ -367,7 +367,7 @@ fn apply_filters(
   {
     let mut region_raw = canvas.read_region(region);
     let Some(mut region_pixmap) =
-      PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
+      PixmapMut::from_bytes(&mut region_raw, Size::new(region.width, region.height))
     else {
       return Ok(());
     };

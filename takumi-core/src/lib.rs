@@ -59,7 +59,6 @@ pub mod keyframes;
 pub(crate) mod layout_unit;
 /// Selector matching against an abstract node tree.
 pub(crate) mod matching;
-/// Deterministic float math shared by the painting paths.
 pub mod math;
 /// A render tree laid out a page at a time, painted from the pages that settle.
 #[cfg(feature = "fragmentation")]
@@ -69,7 +68,6 @@ pub mod paint_property;
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
-/// Skia's path geometry: building, filling, stroking, and dashing outlines.
 pub mod path;
 pub mod path_data;
 /// Font and image resource management.
@@ -99,7 +97,7 @@ pub mod paint {
   pub use crate::style::properties::{
     conic_gradient::ConicGradientTile,
     filter::compose_transfer_table,
-    gradient_utils::{ColorLut, GradientOverlayTile, SrgbStop},
+    gradient_utils::{ColorLut, GradientOverlayTile, SpreadMethod, SrgbStop},
     linear_gradient::{LinearGradientFastPathKind, LinearGradientGeometry, LinearGradientTile},
     radial_gradient::{RadialGradientGeometry, RadialGradientTile},
   };

@@ -1,4 +1,5 @@
 use crate::pixmap::Pixmap;
+use takumi_core::geometry::Size;
 use takumi_core::resources::image::parse_svg_filter;
 use takumi_core::style::Affine;
 
@@ -28,7 +29,7 @@ fn lighting_a_layer_larger_than_the_filter_region_stays_in_bounds() {
     )
     .expect("the markup parses")
     .expect("a filter");
-    let mut layer = Pixmap::new(12, 12).expect("a pixmap");
+    let mut layer = Pixmap::new(Size::new(12, 12)).expect("a pixmap");
 
     layer.pixels_mut().fill([0, 0, 0, 255]);
     apply(&filter, Affine::IDENTITY, &mut layer);

@@ -1,10 +1,9 @@
 use std::{array, cell::RefCell};
 
-use crate::pixmap::PixmapRef;
+use crate::pixmap::{Pixmap, PixmapRef};
 
 use crate::{
   BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
-  blend::premultiplied_from_pixel,
   style::{Affine, ImageScalingAlgorithm},
 };
 
@@ -76,7 +75,7 @@ impl<'a> PaintSource<'a> {
           return [0; 4];
         }
         let index = (y * width + x) as usize;
-        pixmap.data().as_chunks::<4>().0[index]
+        pixmap.pixels()[index]
       }
       Self::BackgroundTile(tile) => tile.get_pixel(x, y),
       Self::ColorTile(tile) => tile.get_pixel(x, y),
@@ -137,10 +136,8 @@ impl<'a> PaintSource<'a> {
 
   pub(crate) fn premultiplied_constant(self) -> Option<[u8; 4]> {
     match self {
-      Self::ColorTile(tile) => Some(premultiplied_from_pixel(tile.get_pixel(0, 0))),
-      Self::BackgroundTile(BackgroundTile::Color(tile)) => {
-        Some(premultiplied_from_pixel(tile.get_pixel(0, 0)))
-      }
+      Self::ColorTile(tile) => Some(tile.get_pixel(0, 0)),
+      Self::BackgroundTile(BackgroundTile::Color(tile)) => Some(tile.get_pixel(0, 0)),
       _ => None,
     }
   }
@@ -197,16 +194,14 @@ impl RowSource<'_> {
     match self {
       Self::Copy { source, x_start } => {
         let start = y as usize * source.width() as usize + *x_start as usize;
-        dst.copy_from_slice(bytemuck::cast_slice(
-          &source.pixels()[start..start + dst.len()],
-        ));
+        dst.copy_from_slice(&source.pixels()[start..start + dst.len()]);
       }
       Self::Bilinear(rows) => rows.fill(y, dst),
       Self::Box(rows) => rows.fill(y, dst),
       Self::Constant(color) => dst.fill(*color),
       Self::Sampled { source, x_start } => {
         for (i, pixel) in dst.iter_mut().enumerate() {
-          *pixel = premultiplied_from_pixel(source.get_pixel(x_start + i as u32, y));
+          *pixel = source.get_pixel(x_start + i as u32, y);
         }
       }
     }
@@ -225,8 +220,8 @@ impl<'a> From<PixmapRef<'a>> for PaintSource<'a> {
   }
 }
 
-impl<'a> From<&'a crate::pixmap::Pixmap> for PaintSource<'a> {
-  fn from(value: &'a crate::pixmap::Pixmap) -> Self {
+impl<'a> From<&'a Pixmap> for PaintSource<'a> {
+  fn from(value: &'a Pixmap) -> Self {
     Self::Pixmap(value.as_ref())
   }
 }
@@ -241,17 +236,6 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
   fn from(value: &'a ColorTile) -> Self {
     Self::ColorTile(value)
   }
-}
-
-#[inline(always)]
-pub(super) fn sample_paint_source(
-  source: ResolvedSource<'_>,
-  algorithm: ImageScalingAlgorithm,
-  x: f32,
-  y: f32,
-  footprint: SamplingFootprint,
-) -> Option<[u8; 4]> {
-  interpolate_with_footprint(source, algorithm, x, y, footprint).map(premultiplied_from_pixel)
 }
 
 /// One axis of a bilinear lookup, casts included, so every sampler matches byte for byte.
@@ -323,14 +307,14 @@ impl LerpedRows {
 
     let slot = usize::from(self.0[0].0 == Some(keep) && index != keep);
     let stride = source.width() as usize;
-    let pixels = &source.data().as_chunks::<4>().0[index * stride..][..stride];
+    let pixels = &source.pixels()[index * stride..][..stride];
     let (row, lerped) = &mut self.0[slot];
 
     *row = Some(index);
     lerped.clear();
     lerped.extend(columns.iter().map(|column| {
-      let left = premultiplied_from_pixel(pixels[column.floor]);
-      let right = premultiplied_from_pixel(pixels[column.ceil]);
+      let left = pixels[column.floor];
+      let right = pixels[column.ceil];
       let ratio = column.ratio as u16;
 
       array::from_fn(|channel| {
@@ -357,7 +341,7 @@ impl BilinearAxis {
 
   pub(crate) fn rows(self, source: PixmapRef<'_>) -> BilinearRow<'_> {
     let stride = source.width() as usize;
-    let pixels = source.data().as_chunks::<4>().0;
+    let pixels = source.pixels();
 
     BilinearRow {
       axis: self,
@@ -507,7 +491,7 @@ impl<'a> ScaledRows<'a> {
       ScaledColumns::Shift { start } => {
         let row = BilinearAxis::new(sample_y, self.source.height());
         let stride = self.source.width() as usize;
-        let source: &[[u8; 4]] = bytemuck::cast_slice(self.source.pixels());
+        let source = self.source.pixels();
 
         if row.ratio == 0 {
           out.copy_from_slice(&source[row.floor * stride + start..][..out.len()]);
@@ -587,7 +571,7 @@ fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8
     return Some(p00);
   }
 
-  let [r, g, b, a] = mix_taps(
+  Some(mix_taps(
     [
       p00,
       tap(column.ceil, row.floor),
@@ -595,9 +579,7 @@ fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<[u8
       tap(column.ceil, row.ceil),
     ],
     column.weights(row),
-  );
-
-  Some([r, g, b, a])
+  ))
 }
 
 fn interpolate_box(
@@ -659,14 +641,14 @@ impl BoxAxis {
   /// Box-averages `source` across this row span under each of `columns`, into `out`.
   pub(crate) fn fill_row(self, source: PixmapRef<'_>, columns: &[BoxAxis], out: &mut [[u8; 4]]) {
     let stride = source.width() as usize;
-    let pixels = source.data().as_chunks::<4>().0;
+    let pixels = source.pixels();
 
     for (dst, &column) in out.iter_mut().zip(columns) {
       let average = box_average(column, self, |x, y| {
         pixels[y as usize * stride + x as usize]
       });
 
-      *dst = premultiplied_from_pixel(average.unwrap_or([0; 4]));
+      *dst = average.unwrap_or([0; 4]);
     }
   }
 }
@@ -713,10 +695,11 @@ fn box_average(
 #[cfg(test)]
 mod tests {
   use crate::pixmap::Pixmap;
+  use takumi_core::geometry::Size;
 
   use super::{
     BilinearAxis, BilinearColumns, SamplingFootprint, ScaledColumns, ScaledRows,
-    interpolate_bilinear, interpolate_with_footprint, sample_paint_source,
+    interpolate_bilinear, interpolate_with_footprint,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
 
@@ -754,7 +737,7 @@ mod tests {
 
   /// A 97x61 pixmap of legal premultiplied noise.
   fn noisy_pixmap() -> Pixmap {
-    let mut pixmap = Pixmap::new(97, 61).unwrap();
+    let mut pixmap = Pixmap::new(Size::new(97, 61)).unwrap();
 
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
@@ -795,7 +778,7 @@ mod tests {
 
         rows.fill(y, &mut row);
         for &pixel in &row {
-          let expected = sample_paint_source(
+          let expected = interpolate_with_footprint(
             source,
             ImageScalingAlgorithm::Auto,
             sample_x,
@@ -829,7 +812,7 @@ mod tests {
 
         rows.fill(y as f32 + 0.5, &mut row);
         for &pixel in &row {
-          let expected = sample_paint_source(
+          let expected = interpolate_with_footprint(
             source,
             ImageScalingAlgorithm::Auto,
             sample_x,
@@ -849,7 +832,7 @@ mod tests {
   /// must read a texel exactly, not blend two of them.
   #[test]
   fn sampling_a_pixel_centre_reads_that_pixel() -> Result<(), &'static str> {
-    let mut pixmap = Pixmap::new(2, 1).ok_or("failed to create pixmap")?;
+    let mut pixmap = Pixmap::new(Size::new(2, 1)).ok_or("failed to create pixmap")?;
     let pixels = pixmap.pixels_mut();
     pixels[0] = [0, 0, 0, 255];
     pixels[1] = [255, 255, 255, 255];
@@ -871,7 +854,7 @@ mod tests {
 
   #[test]
   fn minified_sampling_averages_high_frequency_content() -> Result<(), &'static str> {
-    let mut pixmap = Pixmap::new(8, 1).ok_or("failed to create pixmap")?;
+    let mut pixmap = Pixmap::new(Size::new(8, 1)).ok_or("failed to create pixmap")?;
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
       let value = if index % 2 == 0 { 0 } else { 255 };
       *pixel = [value, value, value, 255];

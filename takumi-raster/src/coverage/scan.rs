@@ -1142,13 +1142,7 @@ fn fill_edges(
     None
   } else {
     // A convex path needs both edges even past the clip's right side.
-    Rect::from_ltrb(
-      clip.left as f32,
-      clip.top as f32,
-      clip.right as f32,
-      clip.bottom as f32,
-    )
-    .map(|rect| EdgeClipper::new(rect, !convex))
+    clip.to_rect().map(|rect| EdgeClipper::new(rect, !convex))
   };
   let mut edges: Vec<Edge> = build_edges(path, clipper.as_ref());
   let count = edges.len();

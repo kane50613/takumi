@@ -1,34 +1,33 @@
 //! A low-level abstraction over a single content stream.
 
-use crate::writer::geom::{UNIT_RECT, expand};
-use crate::writer::graphics::paint::{line_cap_style, line_join_style};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::slice;
 use std::sync::Arc;
-#[cfg(feature = "images")]
-use takumi_core::geometry::Size;
-use takumi_core::style::{FillRule, LineCap, LineJoin};
-use takumi_core::{geometry::Rect, style::Affine};
 
 use float_cmp::approx_eq;
 use pdf_writer::types::TextRenderingMode;
 use pdf_writer::{Content, Finish, Name, Str, TextStr};
+#[cfg(feature = "images")]
+use takumi_core::geometry::Size;
 use takumi_core::{
-  geometry::Point,
-  path::{Path, PathSegment, PathVerb},
+  geometry::{PathCommand, Point, Rect},
+  path::{Path, PathVerb},
+  style::{Affine, FillRule, LineCap, LineJoin},
 };
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::color::rgb;
 use crate::writer::configure::ValidationError;
+use crate::writer::geom::{UNIT_RECT, expand};
 use crate::writer::graphics::color::{Color, ColorSpace};
 use crate::writer::graphics::graphics_state::{ExtGState, GraphicsStates};
 #[cfg(feature = "images")]
 use crate::writer::graphics::image::Image;
 use crate::writer::graphics::mask::Mask;
-use crate::writer::graphics::paint::{Fill, InnerPaint, Paint, Stroke};
+use crate::writer::graphics::paint::{Fill, InnerPaint, PDF_MITER_LIMIT, Paint, Stroke};
+use crate::writer::graphics::paint::{line_cap_style, line_join_style};
 use crate::writer::graphics::shading_function::{
   GradientProperties, GradientPropertiesExt, ShadingFunction,
 };
@@ -211,9 +210,7 @@ impl ContentBuilder {
     }
 
     // See issue 199.
-    let is_line = path.verbs().len() == 2
-      && path.verbs()[0] == PathVerb::Move
-      && path.verbs()[1] == PathVerb::Line;
+    let is_line = matches!(path.verbs(), [PathVerb::Move, PathVerb::Line]);
     let dont_fill = bounds.width() == 0.0 || bounds.height() == 0.0 || is_line;
 
     if dont_fill {
@@ -538,17 +535,9 @@ impl ContentBuilder {
       .rd_builder
       .register_resource(sc.register_font_identifier(font_identifier));
     self.content.set_font(font_name.to_pdf_name(), size);
-    self.content.set_text_matrix(
-      Affine {
-        a: 1.0,
-        b: 0.0,
-        c: 0.0,
-        d: -1.0,
-        x: *cur_x,
-        y: cur_y,
-      }
-      .to_cols_array(),
-    );
+    self
+      .content
+      .set_text_matrix([1.0, 0.0, 0.0, -1.0, *cur_x, cur_y]);
 
     for glyph in glyphs {
       if glyph.glyph_id() == GlyphId::new(0)
@@ -1255,7 +1244,7 @@ impl ContentBuilder {
       self.content.set_line_width(stroke.outline.width);
     }
 
-    if stroke.outline.miter_limit != 10.0 {
+    if stroke.outline.miter_limit != PDF_MITER_LIMIT {
       self.content.set_miter_limit(stroke.outline.miter_limit);
     }
 
@@ -1278,7 +1267,7 @@ impl ContentBuilder {
     }
   }
 
-  fn content_draw_path(&mut self, path_data: impl Iterator<Item = PathSegment>) {
+  fn content_draw_path(&mut self, path_data: impl Iterator<Item = PathCommand>) {
     // Taken from resvg
     fn calc(n1: f32, n2: f32) -> f32 {
       (n1 + n2 * 2.0) / 3.0
@@ -1296,15 +1285,15 @@ impl ContentBuilder {
       };
 
       match operation {
-        PathSegment::MoveTo(p) => {
+        PathCommand::MoveTo(p) => {
           self.content.move_to(p.x, p.y);
           p_prev = Some(p);
         }
-        PathSegment::LineTo(p) => {
+        PathCommand::LineTo(p) => {
           self.content.line_to(p.x, p.y);
           p_prev = Some(p);
         }
-        PathSegment::QuadTo(p1, p2) => {
+        PathCommand::QuadTo(p1, p2) => {
           // Since PDF doesn't support quad curves, we need to convert them into
           // cubic.
           let Some(prev) = p_prev else {
@@ -1320,11 +1309,11 @@ impl ContentBuilder {
           );
           p_prev = Some(p2);
         }
-        PathSegment::CubicTo(p1, p2, p3) => {
+        PathCommand::CubicTo(p1, p2, p3) => {
           self.content.cubic_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
           p_prev = Some(p3);
         }
-        PathSegment::Close => {
+        PathCommand::Close => {
           self.content.close_path();
         }
       };
@@ -1334,7 +1323,7 @@ impl ContentBuilder {
 
 /// One drawing operation of a simplified path.
 enum PathOp {
-  Segment(PathSegment),
+  Segment(PathCommand),
   /// An axis-aligned rectangle, which `re` writes in four numbers instead of
   /// four operators.
   Rect {
@@ -1351,11 +1340,11 @@ enum PathOp {
 /// point repeated, from the zero-radius arcs, and with the closing edge written
 /// out before the close. Neither paints anything. What is left of a rectangle is
 /// then four points, which `re` states in one operator.
-fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
+fn simplify_path(path_data: impl Iterator<Item = PathCommand>) -> Vec<PathOp> {
   let mut out = Vec::new();
-  let mut subpath: Vec<PathSegment> = Vec::new();
+  let mut subpath: Vec<PathCommand> = Vec::new();
 
-  let flush = |subpath: &mut Vec<PathSegment>, out: &mut Vec<PathOp>, closed: bool| {
+  let flush = |subpath: &mut Vec<PathCommand>, out: &mut Vec<PathOp>, closed: bool| {
     // `re` appends a closed subpath, so it stands in for the close as well.
     if closed && let Some(rect) = as_rect(subpath) {
       subpath.clear();
@@ -1366,24 +1355,24 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
     out.extend(subpath.drain(..).map(PathOp::Segment));
 
     if closed {
-      out.push(PathOp::Segment(PathSegment::Close));
+      out.push(PathOp::Segment(PathCommand::Close));
     }
   };
 
   for segment in path_data {
     match segment {
-      PathSegment::MoveTo(_) => {
+      PathCommand::MoveTo(_) => {
         flush(&mut subpath, &mut out, false);
         subpath.push(segment);
       }
       // A segment that goes nowhere. One right after the move stays until another segment
       // draws, since a round-capped stroke paints `m` then `l` to the same point as a dot but
       // paints nothing for a bare `m`.
-      PathSegment::LineTo(p)
+      PathCommand::LineTo(p)
         if subpath.len() > 1 && subpath.last().and_then(end_point) == Some(p) => {}
-      PathSegment::Close => {
+      PathCommand::Close => {
         // `h` draws the closing edge itself.
-        if let (Some(PathSegment::MoveTo(start)), Some(PathSegment::LineTo(last))) =
+        if let (Some(PathCommand::MoveTo(start)), Some(PathCommand::LineTo(last))) =
           (subpath.first().copied(), subpath.last().copied())
           && start == last
         {
@@ -1393,7 +1382,7 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
         flush(&mut subpath, &mut out, true);
       }
       _ => {
-        if let [PathSegment::MoveTo(start), PathSegment::LineTo(end)] = subpath[..]
+        if let [PathCommand::MoveTo(start), PathCommand::LineTo(end)] = subpath[..]
           && start == end
         {
           subpath.pop();
@@ -1408,23 +1397,23 @@ fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
   out
 }
 
-fn end_point(segment: &PathSegment) -> Option<Point<f32>> {
+fn end_point(segment: &PathCommand) -> Option<Point<f32>> {
   match *segment {
-    PathSegment::MoveTo(p) | PathSegment::LineTo(p) => Some(p),
-    PathSegment::QuadTo(_, p) | PathSegment::CubicTo(_, _, p) => Some(p),
-    PathSegment::Close => None,
+    PathCommand::MoveTo(p) | PathCommand::LineTo(p) => Some(p),
+    PathCommand::QuadTo(_, p) | PathCommand::CubicTo(_, _, p) => Some(p),
+    PathCommand::Close => None,
   }
 }
 
 /// Matches a subpath that `re` traces point for point: a horizontal edge, then a
 /// vertical one, then a horizontal one back. Any other winding or start point
 /// stays as it is, so the fill rule and the dash phase cannot shift.
-fn as_rect(subpath: &[PathSegment]) -> Option<PathOp> {
+fn as_rect(subpath: &[PathCommand]) -> Option<PathOp> {
   let [
-    PathSegment::MoveTo(p0),
-    PathSegment::LineTo(p1),
-    PathSegment::LineTo(p2),
-    PathSegment::LineTo(p3),
+    PathCommand::MoveTo(p0),
+    PathCommand::LineTo(p1),
+    PathCommand::LineTo(p2),
+    PathCommand::LineTo(p3),
   ] = subpath
   else {
     return None;
@@ -1495,24 +1484,24 @@ fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font)
 mod tests {
   use super::{PathOp, simplify_path};
 
-  use takumi_core::{geometry::Point, path::PathSegment};
+  use takumi_core::geometry::{PathCommand, Point};
 
-  fn line(x: f32, y: f32) -> PathSegment {
-    PathSegment::LineTo(Point::new(x, y))
+  fn line(x: f32, y: f32) -> PathCommand {
+    PathCommand::LineTo(Point::new(x, y))
   }
 
-  fn start(x: f32, y: f32) -> PathSegment {
-    PathSegment::MoveTo(Point::new(x, y))
+  fn start(x: f32, y: f32) -> PathCommand {
+    PathCommand::MoveTo(Point::new(x, y))
   }
 
-  fn describe(segments: Vec<PathSegment>) -> Vec<String> {
+  fn describe(segments: Vec<PathCommand>) -> Vec<String> {
     simplify_path(segments.into_iter())
       .into_iter()
       .map(|op| match op {
         PathOp::Rect { x, y, w, h } => format!("re {x} {y} {w} {h}"),
-        PathOp::Segment(PathSegment::MoveTo(p)) => format!("m {} {}", p.x, p.y),
-        PathOp::Segment(PathSegment::LineTo(p)) => format!("l {} {}", p.x, p.y),
-        PathOp::Segment(PathSegment::Close) => "h".to_string(),
+        PathOp::Segment(PathCommand::MoveTo(p)) => format!("m {} {}", p.x, p.y),
+        PathOp::Segment(PathCommand::LineTo(p)) => format!("l {} {}", p.x, p.y),
+        PathOp::Segment(PathCommand::Close) => "h".to_string(),
         PathOp::Segment(_) => "curve".to_string(),
       })
       .collect()
@@ -1529,7 +1518,7 @@ mod tests {
       line(36.0, 57.0),
       line(36.0, 57.0),
       line(36.0, 55.0),
-      PathSegment::Close,
+      PathCommand::Close,
     ];
 
     assert_eq!(describe(path), ["re 36 55 323 2"]);
@@ -1542,7 +1531,7 @@ mod tests {
       line(0.0, 10.0),
       line(20.0, 10.0),
       line(20.0, 0.0),
-      PathSegment::Close,
+      PathCommand::Close,
     ];
 
     assert_eq!(

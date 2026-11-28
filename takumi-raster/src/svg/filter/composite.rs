@@ -1,4 +1,5 @@
 use super::BYTE_TO_FLOAT;
+use crate::blend::unorm_to_byte;
 
 /// Blink's `FEComposite` arithmetic as Skia's `sk_arithmetic_blend` runs it.
 pub(super) fn arithmetic(
@@ -21,6 +22,6 @@ pub(super) fn arithmetic(
       color[channel] = color[channel].min(color[3]);
     }
 
-    *out = color.map(|channel| (channel * 255.0 + 0.5) as u8);
+    *out = color.map(unorm_to_byte);
   }
 }

@@ -9,26 +9,24 @@ use takumi::{
   render,
 };
 
-fn render_node(fonts: &Fonts, node: Node) {
+fn render_with_cache(fonts: &Fonts, node: Node, cache: Cache) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((512, 512)))
     .node(node)
     .fonts(fonts)
+    .cache(cache)
     .build();
   let image = render(options).unwrap();
   black_box(image);
 }
 
+fn render_node(fonts: &Fonts, node: Node) {
+  render_with_cache(fonts, node, Cache::shared());
+}
+
 /// [`render_node`] with a cache of its own, so an SVG image rasterizes again on every render.
 fn render_uncached(fonts: &Fonts, node: Node) {
-  let options = RenderOptions::builder()
-    .viewport(Viewport::new((512, 512)))
-    .node(node)
-    .fonts(fonts)
-    .cache(Cache::default())
-    .build();
-  let image = render(options).unwrap();
-  black_box(image);
+  render_with_cache(fonts, node, Cache::default());
 }
 
 fn effect_node(effect_tw: &str) -> Node {

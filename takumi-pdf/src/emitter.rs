@@ -1,24 +1,21 @@
 //! The scene walker that emits boxes, text and images onto a writer surface.
 
-use crate::writer::geom::rotation_at;
 #[cfg(all(feature = "svg", feature = "images"))]
 use std::collections::hash_map::Entry;
 use std::{cell::RefCell, rc::Rc};
-use takumi_core::path::{Path, PathBuilder};
-use takumi_core::{
-  path::Stroke as PathStroke,
-  resources::image::SvgSpreadMethod,
-  style::{LineJoin, MaskType},
-};
 
 use rustc_hash::FxHashMap;
-
+#[cfg(all(feature = "svg", feature = "images"))]
+use takumi_core::resources::image::SvgPicture;
 #[cfg(all(feature = "images", feature = "svg"))]
 use takumi_core::resources::image::{ImageSource, SvgSource};
 #[cfg(feature = "images")]
 use takumi_core::{
+  blur::blur_rgba,
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
+  resources::glyph::ResolvedBitmapGlyph,
+  style::BlurType,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
@@ -30,7 +27,7 @@ use takumi_core::{
     inline_box::resolve_inline_box,
     tree::{NodeOrigin, RenderNode},
   },
-  paint::ConicGradientTile,
+  paint::{ConicGradientTile, SpreadMethod},
   paint_chunk::{ChunkPart, ConversionContext, PropertySink},
   paint_property::{ClipId, ClipKind, ClipNode, EffectId, EffectKind, EffectNode},
   painter::{
@@ -39,17 +36,19 @@ use takumi_core::{
     PendingOutline, ShadowShape, StripBackground, StrokeStyle, TableDecorations, TextClip,
     UNBOUNDED, paint_collapsed_borders,
   },
+  path::{Path, PathBuilder, Stroke as PathStroke},
   resources::image_buffer::demultiplied,
   scene::{NodePaint, SceneView},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Display, FillRule, Filter, Isolation,
-    Lang, PaintPhase, ResolvedGradientStop,
+    Lang, LineJoin, MaskType, PaintPhase, ResolvedGradientStop,
   },
 };
 
 #[cfg(feature = "images")]
 use crate::paint::{RasterizedImages, rasterized_image};
+use crate::writer::geom::rotation_at;
 #[cfg(feature = "images")]
 use crate::writer::image::Image as PdfImage;
 use crate::{
@@ -71,7 +70,7 @@ use crate::{
     mask::Mask,
     num::NormalizedF32,
     paint::{
-      Fill, LinearGradient as PdfLinearGradient, Paint, Pattern,
+      Fill, LinearGradient as PdfLinearGradient, PDF_MITER_LIMIT, Paint, Pattern,
       RadialGradient as PdfRadialGradient, Stroke, SweepGradient,
     },
     stream::Stream,
@@ -82,10 +81,6 @@ use crate::{
 };
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::{svg::SvgPainter, writer::xobject::XObject};
-#[cfg(all(feature = "svg", feature = "images"))]
-use takumi_core::resources::image::SvgPicture;
-#[cfg(feature = "images")]
-use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
@@ -529,7 +524,7 @@ impl Emitter<'_> {
       origin.x + dest.right,
       origin.y + dest.bottom,
     )
-    .map(PathBuilder::from_rect) else {
+    .map(Path::from_rect) else {
       return;
     };
     let (xs, ys) = tiling.origins();
@@ -621,7 +616,7 @@ impl Emitter<'_> {
     let Some((paint, clip)) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
-    let Some(path) = Rect::from_xywh(at.x, at.y, w, h).map(PathBuilder::from_rect) else {
+    let Some(path) = Rect::from_xywh(at.x, at.y, w, h).map(Path::from_rect) else {
       return;
     };
 
@@ -746,7 +741,7 @@ impl Emitter<'_> {
           cx: 0.0,
           cy: 0.0,
           cr: extent,
-          transform: (pattern_space
+          transform: pattern_space
             * Affine {
               a: scale_x,
               b: 0.0,
@@ -754,8 +749,8 @@ impl Emitter<'_> {
               d: scale_y,
               x: x + cx,
               y: y + cy,
-            }),
-          spread_method: SvgSpreadMethod::Pad,
+            },
+          spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
         }
@@ -787,8 +782,8 @@ impl Emitter<'_> {
           cy: ccy,
           start_angle: 0.0,
           end_angle: 360.0,
-          transform: (pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy)),
-          spread_method: SvgSpreadMethod::Pad,
+          transform: pattern_space * rotation_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
+          spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
         }
@@ -993,7 +988,7 @@ impl Emitter<'_> {
     };
     let clip_path = replaced.clip.and_then(|clip| {
       if clip.border.is_zero() {
-        Rect::from_xywh(bx, by, w, h).map(PathBuilder::from_rect)
+        Rect::from_xywh(bx, by, w, h).map(Path::from_rect)
       } else {
         shape_path(&clip.into(), frame.origin)
       }
@@ -1088,8 +1083,7 @@ impl Emitter<'_> {
   #[cfg(all(feature = "svg", feature = "images"))]
   /// Paints `picture`, laid out at `viewport`, clipped to its canvas.
   fn paint_picture(&self, picture: &SvgPicture, viewport: Size<f32>, surface: &mut Surface) {
-    let canvas =
-      Rect::from_xywh(0.0, 0.0, viewport.width, viewport.height).map(PathBuilder::from_rect);
+    let canvas = Rect::from_xywh(0.0, 0.0, viewport.width, viewport.height).map(Path::from_rect);
 
     if let Some(canvas) = &canvas {
       surface.push_clip_path(canvas, &FillRule::NonZero);
@@ -1398,7 +1392,7 @@ impl Emitter<'_> {
         frame.origin.x + right,
         frame.origin.y + bottom,
       )
-      .map(PathBuilder::from_rect)
+      .map(Path::from_rect)
     };
 
     if let Some(color) = background.color {
@@ -1941,7 +1935,7 @@ impl SurfaceDevice<'_, '_> {
       paint,
       opacity,
       outline: PathStroke {
-        miter_limit: Stroke::default().outline.miter_limit,
+        miter_limit: PDF_MITER_LIMIT,
         ..stroke.outline()
       },
     };

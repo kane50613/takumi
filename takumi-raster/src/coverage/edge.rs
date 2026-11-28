@@ -4,6 +4,8 @@
 
 use takumi_core::geometry::Point;
 
+use super::edge_builder::{BuiltEdge, Combine, combine_vertical};
+
 pub(super) type Fixed = i32;
 pub(super) type FDot6 = i32;
 
@@ -16,7 +18,7 @@ pub(super) const MIN_S32: i32 = -i32::MAX;
 /// `SkAnalyticEdge::kDefaultAccuracy`: y snaps to a quarter pixel.
 pub(super) const ACCURACY: u32 = 2;
 /// `MAX_COEFF_SHIFT` in `SkAnalyticEdge.cpp`.
-const MAX_COEFF_SHIFT: i32 = 6;
+pub(super) const MAX_COEFF_SHIFT: i32 = 6;
 
 /// `SkLeftShift`.
 pub(super) const fn left_shift(value: i32, shift: u32) -> i32 {
@@ -101,7 +103,7 @@ const fn round_to_fixed(value: Fixed) -> Fixed {
 }
 
 /// `SkAnalyticEdge::SnapY`.
-pub(super) const fn snap_y(y: Fixed) -> Fixed {
+const fn snap_y(y: Fixed) -> Fixed {
   let shift = 16 - ACCURACY;
 
   ((((y as u32).wrapping_add((FIXED_ONE >> (ACCURACY + 1)) as u32)) >> shift) << shift) as i32
@@ -157,14 +159,14 @@ const fn cheap_distance(dx: FDot6, dy: FDot6) -> FDot6 {
 }
 
 /// `diff_to_shift` in `SkAnalyticEdge.cpp`.
-const fn diff_to_shift(dx: FDot6, dy: FDot6, shift_aa: u32) -> i32 {
+pub(super) const fn diff_to_shift(dx: FDot6, dy: FDot6, shift_aa: u32) -> i32 {
   let dist = (cheap_distance(dx, dy) + (1 << (2 + shift_aa))) >> (3 + shift_aa);
 
   (32 - dist.leading_zeros() as i32) >> 1
 }
 
 /// `cubic_delta_from_line` in `SkAnalyticEdge.cpp`.
-const fn cubic_delta_from_line(a: FDot6, b: FDot6, c: FDot6, d: FDot6) -> FDot6 {
+pub(super) const fn cubic_delta_from_line(a: FDot6, b: FDot6, c: FDot6, d: FDot6) -> FDot6 {
   let one_third = ((a * 8 - b * 15 + 6 * c + d) * 19) >> 9;
   let two_third = ((a + 6 * b - c * 15 + d * 8) * 19) >> 9;
 
@@ -259,49 +261,6 @@ impl Edge {
     }
   }
 
-  /// `SkAnalyticEdge::setLine`.
-  pub(super) fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
-    let multiplier = (1 << ACCURACY) as f32;
-    let mut x0 = fdot6_to_fixed(scalar_to_fdot6(p0.x * multiplier, 0)) >> ACCURACY;
-    let mut y0 = snap_y(fdot6_to_fixed(scalar_to_fdot6(p0.y * multiplier, 0)) >> ACCURACY);
-    let mut x1 = fdot6_to_fixed(scalar_to_fdot6(p1.x * multiplier, 0)) >> ACCURACY;
-    let mut y1 = snap_y(fdot6_to_fixed(scalar_to_fdot6(p1.y * multiplier, 0)) >> ACCURACY);
-
-    let mut winding = 1;
-
-    if y0 > y1 {
-      (x0, x1) = (x1, x0);
-      (y0, y1) = (y1, y0);
-      winding = -1;
-    }
-
-    let dy = fixed_to_fdot6(y1 - y0);
-
-    if dy == 0 {
-      return None;
-    }
-
-    let dx = fixed_to_fdot6(x1 - x0);
-    let slope = quick_div(dx, dy);
-
-    Some(Self {
-      next: u32::MAX,
-      prev: u32::MAX,
-      x: x0,
-      dx: slope,
-      upper_x: x0,
-      y: y0,
-      upper_y: y0,
-      lower_y: y1,
-      dy: inverse_slope(dx, dy, slope, slope.abs()),
-      curve_count: 0,
-      curve_shift: 0,
-      winding,
-      is_line: true,
-      curve: Curve::Line,
-    })
-  }
-
   /// `SkAnalyticEdge::updateLine`.
   fn update_line(
     &mut self,
@@ -378,75 +337,8 @@ impl Edge {
     }
   }
 
-  /// `SkAnalyticQuadraticEdge::setQuadratic` for a y-monotonic quad.
-  pub(super) fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
-    let shift = ACCURACY;
-    let mut x0 = scalar_to_fdot6(points[0].x, shift);
-    let mut y0 = scalar_to_fdot6(points[0].y, shift);
-    let x1 = scalar_to_fdot6(points[1].x, shift);
-    let y1 = scalar_to_fdot6(points[1].y, shift);
-    let mut x2 = scalar_to_fdot6(points[2].x, shift);
-    let mut y2 = scalar_to_fdot6(points[2].y, shift);
-
-    let mut winding = 1;
-
-    if y0 > y2 {
-      (x0, x2) = (x2, x0);
-      (y0, y2) = (y2, y0);
-      winding = -1;
-    }
-
-    if fdot6_round(y0) == fdot6_round(y2) {
-      return None;
-    }
-
-    let dx = (left_shift(x1, 1) - x0 - x2) >> 2;
-    let dy = (left_shift(y1, 1) - y0 - y2) >> 2;
-    let curve_shift = diff_to_shift(dx, dy, shift).clamp(1, MAX_COEFF_SHIFT) as u32;
-
-    // A and B are stored at half their value, so `fCurveShift` is one less than the shift.
-    let a = left_shift(x0 - x1 - x1 + x2, 16 - 6 - 1);
-    let b = fdot6_to_fixed(x1 - x0);
-    let qx = fdot6_to_fixed(x0);
-    let qdx = b + (a >> curve_shift);
-    let qddx = a >> (curve_shift - 1);
-
-    let a = left_shift(y0 - y1 - y1 + y2, 16 - 6 - 1);
-    let b = fdot6_to_fixed(y1 - y0);
-    let qy = fdot6_to_fixed(y0);
-    let qdy = b + (a >> curve_shift);
-    let qddy = a >> (curve_shift - 1);
-
-    let qy = snap_y(qy >> ACCURACY);
-    let qx = qx >> ACCURACY;
-
-    let quad = QuadState {
-      qx,
-      qy,
-      qdx: qdx >> ACCURACY,
-      qdy: qdy >> ACCURACY,
-      qddx: qddx >> ACCURACY,
-      qddy: qddy >> ACCURACY,
-      qlast_x: fdot6_to_fixed(x2) >> ACCURACY,
-      qlast_y: snap_y(fdot6_to_fixed(y2) >> ACCURACY),
-      snapped_x: qx,
-      snapped_y: qy,
-    };
-
-    let mut edge = Self {
-      curve_count: (1 << curve_shift) as i8,
-      curve_shift: (curve_shift - 1) as u8,
-      winding,
-      is_line: false,
-      curve: Curve::Quad(quad),
-      ..Self::sentinel(0, 0)
-    };
-
-    edge.update_quadratic().then_some(edge)
-  }
-
   /// `SkAnalyticQuadraticEdge::updateQuadratic`.
-  pub(super) fn update_quadratic(&mut self) -> bool {
+  fn update_quadratic(&mut self) -> bool {
     let Curve::Quad(mut quad) = self.curve else {
       return false;
     };
@@ -537,8 +429,190 @@ impl Edge {
     success
   }
 
+  /// `SkAnalyticCubicEdge::updateCubic`.
+  fn update_cubic(&mut self) -> bool {
+    let Curve::Cubic(mut cubic) = self.curve else {
+      return false;
+    };
+
+    let mut success;
+    let mut count = self.curve_count as i32;
+    let mut old_x = cubic.cx;
+    let mut old_y = cubic.cy;
+    let dd_shift = self.curve_shift as u32;
+    let d_shift = cubic.to_fixed_shift as u32;
+    let (mut new_x, mut new_y);
+
+    loop {
+      count += 1;
+
+      if count < 0 {
+        new_x = old_x + (cubic.cdx >> d_shift);
+        cubic.cdx += cubic.cddx >> dd_shift;
+        cubic.cddx += cubic.cdddx;
+
+        new_y = old_y + (cubic.cdy >> d_shift);
+        cubic.cdy += cubic.cddy >> dd_shift;
+        cubic.cddy += cubic.cdddy;
+      } else {
+        new_x = cubic.clast_x;
+        new_y = cubic.clast_y;
+      }
+
+      // Finite fixed point does not always keep y increasing, so it is pinned here.
+      if new_y < old_y {
+        new_y = old_y;
+      }
+
+      let mut new_snapped_y = snap_y(new_y);
+
+      if cubic.clast_y < new_snapped_y {
+        new_snapped_y = cubic.clast_y;
+        count = 0;
+      }
+
+      let slope = if fixed_to_fdot6(new_snapped_y - cubic.snapped_y) == 0 {
+        MAX_S32
+      } else {
+        fdot6_div(
+          fixed_to_fdot6(new_x - old_x),
+          fixed_to_fdot6(new_snapped_y - cubic.snapped_y),
+        )
+      };
+
+      success = self.update_line(old_x, cubic.snapped_y, new_x, new_snapped_y, slope);
+
+      old_x = new_x;
+      old_y = new_y;
+      cubic.snapped_y = new_snapped_y;
+
+      if count >= 0 || success {
+        break;
+      }
+    }
+
+    cubic.cx = new_x;
+    cubic.cy = new_y;
+    self.curve = Curve::Cubic(cubic);
+    self.curve_count = count as i8;
+
+    success
+  }
+}
+
+impl BuiltEdge for Edge {
+  /// `SkAnalyticEdge::setLine`.
+  fn line(p0: Point<f32>, p1: Point<f32>) -> Option<Self> {
+    let multiplier = (1 << ACCURACY) as f32;
+    let mut x0 = fdot6_to_fixed(scalar_to_fdot6(p0.x * multiplier, 0)) >> ACCURACY;
+    let mut y0 = snap_y(fdot6_to_fixed(scalar_to_fdot6(p0.y * multiplier, 0)) >> ACCURACY);
+    let mut x1 = fdot6_to_fixed(scalar_to_fdot6(p1.x * multiplier, 0)) >> ACCURACY;
+    let mut y1 = snap_y(fdot6_to_fixed(scalar_to_fdot6(p1.y * multiplier, 0)) >> ACCURACY);
+
+    let mut winding = 1;
+
+    if y0 > y1 {
+      (x0, x1) = (x1, x0);
+      (y0, y1) = (y1, y0);
+      winding = -1;
+    }
+
+    let dy = fixed_to_fdot6(y1 - y0);
+
+    if dy == 0 {
+      return None;
+    }
+
+    let dx = fixed_to_fdot6(x1 - x0);
+    let slope = quick_div(dx, dy);
+
+    Some(Self {
+      next: u32::MAX,
+      prev: u32::MAX,
+      x: x0,
+      dx: slope,
+      upper_x: x0,
+      y: y0,
+      upper_y: y0,
+      lower_y: y1,
+      dy: inverse_slope(dx, dy, slope, slope.abs()),
+      curve_count: 0,
+      curve_shift: 0,
+      winding,
+      is_line: true,
+      curve: Curve::Line,
+    })
+  }
+
+  /// `SkAnalyticQuadraticEdge::setQuadratic` for a y-monotonic quad.
+  fn quadratic(points: &[Point<f32>; 3]) -> Option<Self> {
+    let shift = ACCURACY;
+    let mut x0 = scalar_to_fdot6(points[0].x, shift);
+    let mut y0 = scalar_to_fdot6(points[0].y, shift);
+    let x1 = scalar_to_fdot6(points[1].x, shift);
+    let y1 = scalar_to_fdot6(points[1].y, shift);
+    let mut x2 = scalar_to_fdot6(points[2].x, shift);
+    let mut y2 = scalar_to_fdot6(points[2].y, shift);
+
+    let mut winding = 1;
+
+    if y0 > y2 {
+      (x0, x2) = (x2, x0);
+      (y0, y2) = (y2, y0);
+      winding = -1;
+    }
+
+    if fdot6_round(y0) == fdot6_round(y2) {
+      return None;
+    }
+
+    let dx = (left_shift(x1, 1) - x0 - x2) >> 2;
+    let dy = (left_shift(y1, 1) - y0 - y2) >> 2;
+    let curve_shift = diff_to_shift(dx, dy, shift).clamp(1, MAX_COEFF_SHIFT) as u32;
+
+    // A and B are stored at half their value, so `fCurveShift` is one less than the shift.
+    let a = left_shift(x0 - x1 - x1 + x2, 16 - 6 - 1);
+    let b = fdot6_to_fixed(x1 - x0);
+    let qx = fdot6_to_fixed(x0);
+    let qdx = b + (a >> curve_shift);
+    let qddx = a >> (curve_shift - 1);
+
+    let a = left_shift(y0 - y1 - y1 + y2, 16 - 6 - 1);
+    let b = fdot6_to_fixed(y1 - y0);
+    let qy = fdot6_to_fixed(y0);
+    let qdy = b + (a >> curve_shift);
+    let qddy = a >> (curve_shift - 1);
+
+    let qy = snap_y(qy >> ACCURACY);
+    let qx = qx >> ACCURACY;
+
+    let quad = QuadState {
+      qx,
+      qy,
+      qdx: qdx >> ACCURACY,
+      qdy: qdy >> ACCURACY,
+      qddx: qddx >> ACCURACY,
+      qddy: qddy >> ACCURACY,
+      qlast_x: fdot6_to_fixed(x2) >> ACCURACY,
+      qlast_y: snap_y(fdot6_to_fixed(y2) >> ACCURACY),
+      snapped_x: qx,
+      snapped_y: qy,
+    };
+
+    let mut edge = Self {
+      curve_count: (1 << curve_shift) as i8,
+      curve_shift: (curve_shift - 1) as u8,
+      winding,
+      is_line: false,
+      curve: Curve::Quad(quad),
+      ..Self::sentinel(0, 0)
+    };
+
+    edge.update_quadratic().then_some(edge)
+  }
+
   /// `SkAnalyticCubicEdge::setCubic` for a y-monotonic cubic.
-  pub(super) fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
+  fn cubic(points: &[Point<f32>; 4]) -> Option<Self> {
     let shift = ACCURACY;
     let mut x0 = scalar_to_fdot6(points[0].x, shift);
     let mut y0 = scalar_to_fdot6(points[0].y, shift);
@@ -621,74 +695,12 @@ impl Edge {
     edge.update_cubic().then_some(edge)
   }
 
-  /// `SkAnalyticCubicEdge::updateCubic`.
-  pub(super) fn update_cubic(&mut self) -> bool {
-    let Curve::Cubic(mut cubic) = self.curve else {
-      return false;
-    };
-
-    let mut success;
-    let mut count = self.curve_count as i32;
-    let mut old_x = cubic.cx;
-    let mut old_y = cubic.cy;
-    let dd_shift = self.curve_shift as u32;
-    let d_shift = cubic.to_fixed_shift as u32;
-    let (mut new_x, mut new_y);
-
-    loop {
-      count += 1;
-
-      if count < 0 {
-        new_x = old_x + (cubic.cdx >> d_shift);
-        cubic.cdx += cubic.cddx >> dd_shift;
-        cubic.cddx += cubic.cdddx;
-
-        new_y = old_y + (cubic.cdy >> d_shift);
-        cubic.cdy += cubic.cddy >> dd_shift;
-        cubic.cddy += cubic.cdddy;
-      } else {
-        new_x = cubic.clast_x;
-        new_y = cubic.clast_y;
-      }
-
-      // Finite fixed point does not always keep y increasing, so it is pinned here.
-      if new_y < old_y {
-        new_y = old_y;
-      }
-
-      let mut new_snapped_y = snap_y(new_y);
-
-      if cubic.clast_y < new_snapped_y {
-        new_snapped_y = cubic.clast_y;
-        count = 0;
-      }
-
-      let slope = if fixed_to_fdot6(new_snapped_y - cubic.snapped_y) == 0 {
-        MAX_S32
-      } else {
-        fdot6_div(
-          fixed_to_fdot6(new_x - old_x),
-          fixed_to_fdot6(new_snapped_y - cubic.snapped_y),
-        )
-      };
-
-      success = self.update_line(old_x, cubic.snapped_y, new_x, new_snapped_y, slope);
-
-      old_x = new_x;
-      old_y = new_y;
-      cubic.snapped_y = new_snapped_y;
-
-      if count >= 0 || success {
-        break;
-      }
+  fn combine_vertical(&self, last: &mut Self) -> Combine {
+    if self.dx == 0 {
+      combine_vertical(self, last)
+    } else {
+      Combine::No
     }
-
-    cubic.cx = new_x;
-    cubic.cy = new_y;
-    self.curve = Curve::Cubic(cubic);
-    self.curve_count = count as i8;
-
-    success
   }
 }
 

@@ -5,13 +5,12 @@ use skrifa::{
   color::{ColorPalette, CompositeMode, Extend},
   instance::LocationRef,
 };
-use takumi_core::path::{Path, PathBuilder};
-use takumi_core::resources::color_glyph::{
-  ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop,
+use takumi_core::{
+  paint::SpreadMethod,
+  path::Path,
+  resources::color_glyph::{ColorGlyph, ColorInstruction, ColorPaint, ColorRef, ColorStop},
+  style::{Affine, BlendMode, FillRule, MaskType},
 };
-use takumi_core::resources::image::SvgSpreadMethod;
-use takumi_core::style::Affine;
-use takumi_core::style::{BlendMode, FillRule, MaskType};
 
 use crate::writer::{
   color::rgb,
@@ -40,7 +39,7 @@ pub(crate) fn draw(
   let Some(bounds) = color_glyph.bounds.filter(|rect| !rect.is_empty()) else {
     return Some(());
   };
-  let bounds = PathBuilder::from_rect(bounds);
+  let bounds = Path::from_rect(bounds);
 
   surface.push_transform(&Affine::scale(1.0, -1.0));
   interpret(instructions, &bounds, surface);
@@ -191,7 +190,7 @@ impl Colors<'_> {
           end_angle,
           stops: self.stops(stops)?,
           spread_method: spread_method(extend),
-          transform: (transform * Affine::scale(1.0, -1.0)),
+          transform: transform * Affine::scale(1.0, -1.0),
           anti_alias: false,
         }
         .into(),
@@ -207,11 +206,11 @@ impl Colors<'_> {
   }
 }
 
-fn spread_method(extend: Extend) -> SvgSpreadMethod {
+fn spread_method(extend: Extend) -> SpreadMethod {
   match extend {
-    Extend::Repeat => SvgSpreadMethod::Repeat,
-    Extend::Reflect => SvgSpreadMethod::Reflect,
-    Extend::Pad | Extend::Unknown => SvgSpreadMethod::Pad,
+    Extend::Repeat => SpreadMethod::Repeat,
+    Extend::Reflect => SpreadMethod::Reflect,
+    Extend::Pad | Extend::Unknown => SpreadMethod::Pad,
   }
 }
 
@@ -257,7 +256,6 @@ fn interpret(instructions: Vec<Instruction>, bounds: &Path, surface: &mut Surfac
         // clipped area whole leaves artifacts in Chrome's PDF viewer when zooming.
         let filled = clips.pop().unwrap_or_else(|| bounds.clone());
 
-        let clips: Vec<Path> = clips.into_iter().collect();
         let clip_count = clips.len();
 
         for path in &clips {

@@ -5,11 +5,9 @@ use std::ops::{Add, Sub};
 use kurbo::PathSeg;
 use xxhash_rust::xxh3::Xxh3;
 
-#[cfg(feature = "svg")]
-use crate::path::PathSegment;
 use crate::{
   layout_unit::LayoutUnit,
-  path::{Path, PathBuilder as SkPathBuilder},
+  path::{Path, PathBuilder},
   style::Affine,
 };
 
@@ -70,6 +68,39 @@ impl Point<f32> {
     } else {
       (f64::from(self.x) * f64::from(self.x) + f64::from(self.y) * f64::from(self.y)).sqrt() as f32
     }
+  }
+
+  /// Both coordinates times `factor`.
+  pub(crate) fn scale(self, factor: f32) -> Self {
+    Point::new(self.x * factor, self.y * factor)
+  }
+
+  /// Both coordinates negated.
+  pub(crate) fn negate(self) -> Self {
+    Point::new(-self.x, -self.y)
+  }
+
+  /// The dot product with `other`.
+  pub(crate) fn dot(self, other: Self) -> f32 {
+    self.x * other.x + self.y * other.y
+  }
+
+  /// The z component of the cross product with `other`.
+  pub(crate) fn cross(self, other: Self) -> f32 {
+    self.x * other.y - self.y * other.x
+  }
+
+  /// The squared distance from the origin.
+  pub(crate) fn length_squared(self) -> f32 {
+    self.x * self.x + self.y * self.y
+  }
+
+  /// The point `t` of the way from `self` to `other`.
+  pub fn lerp(self, other: Self, t: f32) -> Self {
+    Point::new(
+      self.x + (other.x - self.x) * t,
+      self.y + (other.y - self.y) * t,
+    )
   }
 
   /// `SkPoint::Distance`: how far `other` is.
@@ -565,7 +596,7 @@ pub enum PathCommand {
 impl PathCommand {
   /// `paths` as a [`Path`]; none for one with no segments.
   pub fn build_path(paths: &[Self]) -> Option<Path> {
-    let mut builder = SkPathBuilder::new();
+    let mut builder = PathBuilder::new();
 
     for command in paths {
       match command {
@@ -594,28 +625,13 @@ impl PathCommand {
     ]
   }
 
-  /// The commands of a [`Path`].
-  #[cfg(feature = "svg")]
-  pub(crate) fn from_path(path: &Path) -> Vec<Self> {
-    path
-      .segments()
-      .map(|segment| match segment {
-        PathSegment::MoveTo(to) => Self::MoveTo(to),
-        PathSegment::LineTo(to) => Self::LineTo(to),
-        PathSegment::QuadTo(control, to) => Self::QuadTo(control, to),
-        PathSegment::CubicTo(first, second, to) => Self::CubicTo(first, second, to),
-        PathSegment::Close => Self::Close,
-      })
-      .collect()
-  }
-
   /// `paths` as Skia's path builder normalizes them. None for commands that draw nothing.
   #[cfg(feature = "svg")]
   pub(crate) fn normalize(paths: &[Self]) -> Option<NormalizedPath> {
     let path = Self::build_path(paths)?;
 
     Some(NormalizedPath {
-      commands: Self::from_path(&path),
+      commands: path.segments().collect(),
       bounds: path.compute_tight_bounds()?,
       control_bounds: path.bounds(),
     })
@@ -690,9 +706,8 @@ pub(crate) struct NormalizedPath {
   pub(crate) control_bounds: Rect<f32>,
 }
 
-/// Push-style sugar over a [`PathCommand`] list, shared by the geometry and rasterization path
-/// builders.
-pub trait PathBuilder {
+/// Push-style sugar over a [`PathCommand`] list.
+pub trait PathCommandSink {
   /// Starts a new subpath at the given point.
   fn move_to(&mut self, point: (f32, f32));
   /// Draws a line to the given point.
@@ -703,7 +718,7 @@ pub trait PathBuilder {
   fn close(&mut self);
 }
 
-impl PathBuilder for Vec<PathCommand> {
+impl PathCommandSink for Vec<PathCommand> {
   fn move_to(&mut self, point: (f32, f32)) {
     self.push(PathCommand::MoveTo(Point::new(point.0, point.1)));
   }

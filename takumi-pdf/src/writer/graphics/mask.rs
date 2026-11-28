@@ -1,8 +1,10 @@
 //! Alpha and luminosity masks.
 
 use pdf_writer::{Finish, Name, Ref};
-use takumi_core::style::MaskType;
-use takumi_core::{geometry::Rect, style::Affine};
+use takumi_core::{
+  geometry::Rect,
+  style::{Affine, MaskType},
+};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::graphics::shading_function::{GradientProperties, ShadingFunction};

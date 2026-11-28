@@ -61,7 +61,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   painter::{BoxFrame, FillShape, StrokeStyle},
   path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
-  resources::{glyph::ResolvedOutlineGlyph, image_buffer::demultiply_pixel},
+  resources::glyph::ResolvedOutlineGlyph,
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -72,14 +72,6 @@ pub(crate) struct Rgba(pub [u8; 4]);
 
 impl Rgba {
   pub(crate) const TRANSPARENT: Self = Self([0, 0, 0, 0]);
-
-  /// Unpremultiplies a premultiplied pixel.
-  pub(crate) fn demultiplied(color: [u8; 4]) -> Self {
-    let mut pixel = color;
-
-    demultiply_pixel(&mut pixel);
-    Self(pixel)
-  }
 
   /// `#rgb` or `#rrggbb` hex; alpha goes in a separate `*-opacity`.
   fn hex(self) -> String {

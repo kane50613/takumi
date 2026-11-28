@@ -7,7 +7,7 @@ use super::{
   object::{Container, ContextSource, Fill, LayoutObject, Paint, Shape, Stroke},
 };
 use crate::{
-  geometry::{PathBuilder, PathCommand, Point, Rect},
+  geometry::{PathCommand, PathCommandSink, Point, Rect},
   math::ApproxEq,
   path_data::PathData,
   style::{Affine, Color, Length, PaintPhase, ShapeRendering, Size, VectorEffect, Visibility},

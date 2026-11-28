@@ -1,8 +1,8 @@
 use std::hash::Hash;
 use std::sync::Arc;
-use takumi_core::style::Affine;
 
 use pdf_writer::{Finish, Name, Ref};
+use takumi_core::style::Affine;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::graphics::shading_function::{GradientProperties, ShadingFunction};

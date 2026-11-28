@@ -7,7 +7,7 @@ use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
   blit::{OverlayBounds, apply_mask_row, blend_row_masked, composite_run_over},
   mask::MaskRow,
-  paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
+  paint_source::{ResolvedSource, ScaledRows, interpolate_with_footprint},
   whole_pixel_translation,
 };
 use crate::{
@@ -86,7 +86,7 @@ pub(super) fn constant(
   let Some(region) = DestRegion::new(Size::new(pixmap.width(), pixmap.height()), placement) else {
     return;
   };
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
   if mode == BlendMode::Normal {
     match combined_mask {
       None => constant_normal(pixels, mask, color, region),
@@ -316,8 +316,8 @@ fn try_translation_blit(
   let bounds = region.bounds;
   let source_width = source_pixmap.width() as i32;
   let source_height = source_pixmap.height() as i32;
-  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source_pixmap.pixels());
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let source_pixels = source_pixmap.pixels();
+  let pixels = pixmap.pixels_mut();
   let sample_dx = sample_offset.x as i32;
   let sample_dy = sample_offset.y as i32;
   // The destination columns whose source column lies inside the source.
@@ -390,7 +390,7 @@ fn source_general(
     return;
   }
 
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
 
   PixelSampler {
     resolved,
@@ -451,7 +451,7 @@ impl PixelSampler<'_> {
         let sampled = if mask_alpha == 0 {
           None
         } else {
-          sample_paint_source(self.resolved, self.algorithm, sample_x, sample_y, footprint)
+          interpolate_with_footprint(self.resolved, self.algorithm, sample_x, sample_y, footprint)
         };
 
         sample_x += self.transform.a;
@@ -482,7 +482,7 @@ fn source_scaled_rows(
   let bounds = region.bounds;
   let mut row = vec![[0u8; 4]; region.span()];
   let mut clip_alphas = vec![0u8; region.span()];
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let pixels = pixmap.pixels_mut();
 
   for dest_y in bounds.y_min..bounds.y_max {
     let combined_row = options
@@ -549,7 +549,7 @@ mod scaled_rows_tests {
   use crate::style::ImageScalingAlgorithm;
 
   fn source() -> Pixmap {
-    let mut source = Pixmap::new(7, 5).unwrap();
+    let mut source = Pixmap::new(Size::new(7, 5)).unwrap();
 
     for (i, pixel) in source.pixels_mut().iter_mut().enumerate() {
       let alpha = [255u8, 200, 90, 0, 255][i % 5];
@@ -567,7 +567,7 @@ mod scaled_rows_tests {
 
   fn render(scaled: bool, transform: Affine, mode: BlendMode) -> Vec<u8> {
     let source = source();
-    let mut canvas = Pixmap::new(40, 30).unwrap();
+    let mut canvas = Pixmap::new(Size::new(40, 30)).unwrap();
 
     for (i, pixel) in canvas.pixels_mut().iter_mut().enumerate() {
       *pixel = [0, (i % 100) as u8, 20, 120];
@@ -615,7 +615,7 @@ mod scaled_rows_tests {
       .unwrap();
       source_scaled_rows(&mut pixmap, &mask, &rows, &options, region);
     } else {
-      let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+      let pixels = pixmap.pixels_mut();
       PixelSampler {
         resolved: PaintSource::Pixmap(source.as_ref()).resolve(),
         transform,
@@ -672,12 +672,7 @@ mod tests {
   use takumi_core::geometry::{Point, Size};
 
   use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
-  use crate::{Placement, style::BlendMode};
-
-  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
-  fn noise(index: usize, salt: u32) -> u8 {
-    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
-  }
+  use crate::{Placement, canvas::noise, style::BlendMode};
 
   /// Coverage that runs empty or full, as glyph and clip masks do.
   fn coverage(index: usize, salt: u32) -> u8 {

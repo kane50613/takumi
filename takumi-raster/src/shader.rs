@@ -1,11 +1,12 @@
 //! What a path fill paints with, after Skia's shaders: a solid color, a gradient, or an image as
 //! `SkImageShader` samples one.
 
-use takumi_core::{resources::image::SvgSpreadMethod, style::Affine};
+use takumi_core::{paint::SpreadMethod, style::Affine};
 
-use crate::blend::scale_premultiplied_pixel;
+use crate::blend::{scale_premultiplied_pixel, unorm_to_byte};
 #[cfg(feature = "svg")]
 use crate::gradient::Gradient;
+use crate::pixmap::PixmapRef;
 
 /// What a fill paints each pixel with.
 pub(crate) enum Shader<'a> {
@@ -47,35 +48,30 @@ pub(crate) struct ImageShader<'a> {
   height: u32,
   /// Maps a device pixel center onto the image's pixel grid.
   device_to_image: Affine,
-  spread: SvgSpreadMethod,
+  spread: SpreadMethod,
   filter: ImageFilter,
   /// The paint alpha the samples scale by, `scale_1_float`.
   alpha: u8,
 }
 
 impl<'a> ImageShader<'a> {
-  /// The premultiplied `width` by `height` `pixels`, drawn under `transform` from image pixels to
-  /// device pixels at `opacity`. `None` for an empty image or a transform that does not invert.
+  /// `image` drawn under `transform` from image pixels to device pixels at `opacity`. `None` for a
+  /// transform that does not invert.
   pub(crate) fn new(
-    pixels: &'a [[u8; 4]],
-    (width, height): (u32, u32),
+    image: PixmapRef<'a>,
     transform: Affine,
-    spread: SvgSpreadMethod,
+    spread: SpreadMethod,
     filter: ImageFilter,
     opacity: f32,
   ) -> Option<Self> {
-    if width == 0 || height == 0 || pixels.len() != width as usize * height as usize {
-      return None;
-    }
-
     Some(Self {
-      pixels,
-      width,
-      height,
+      pixels: image.pixels(),
+      width: image.width(),
+      height: image.height(),
       device_to_image: transform.invert()?,
       spread,
       filter,
-      alpha: (opacity.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
+      alpha: unorm_to_byte(opacity),
     })
   }
 
@@ -156,8 +152,8 @@ impl<'a> ImageShader<'a> {
   /// `coordinate` tiled across `size` texels as `spread` has it.
   fn tile(&self, coordinate: f32, size: u32) -> f32 {
     match self.spread {
-      SvgSpreadMethod::Repeat => coordinate - (coordinate / size as f32).floor() * size as f32,
-      SvgSpreadMethod::Pad | SvgSpreadMethod::Reflect => coordinate,
+      SpreadMethod::Repeat => coordinate - (coordinate / size as f32).floor() * size as f32,
+      SpreadMethod::Pad | SpreadMethod::Reflect => coordinate,
     }
   }
 }
@@ -165,16 +161,19 @@ impl<'a> ImageShader<'a> {
 #[cfg(all(test, feature = "svg"))]
 mod tests {
   use super::*;
+  use takumi_core::geometry::Size;
 
   #[test]
   fn nearest_sampling_on_a_texel_edge_takes_the_texel_before_it() {
     let (red, blue) = ([255, 0, 0, 255], [0, 0, 255, 255]);
     let pixels = [red, blue, red, blue];
+    let Some(image) = PixmapRef::from_bytes(pixels.as_flattened(), Size::new(4, 1)) else {
+      unreachable!("four pixels make a 4 by 1 image");
+    };
     let Some(shader) = ImageShader::new(
-      &pixels,
-      (4, 1),
+      image,
       Affine::scale(0.5, 1.0),
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       ImageFilter::Nearest,
       1.0,
     ) else {

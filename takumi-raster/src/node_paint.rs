@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::pixmap::Pixmap;
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
@@ -16,6 +16,7 @@ use takumi_core::{
     FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice, PendingOutline, ShadowShape,
     StripBackground, StrokeStyle, TableDecorations, TextClip,
   },
+  path::Stroke,
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
   shadow::SizedShadow,
@@ -27,12 +28,11 @@ use super::{
   SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
   draw_image, rasterize_layers,
 };
-use takumi_core::path::Stroke;
 
 use crate::{
-  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, PlacedMask, Placement, Result,
-  Style, alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes,
-  cached_glyph_mask, checked_area, draw_glyph, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Error, MaskSamplingOptions, PlacedMask, Placement, Result, Style,
+  alpha_mask, attenuate_alpha_by_mask, bitmap_coverage, blur_alpha_region_bytes, cached_glyph_mask,
+  checked_area, draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   placement_overlap, render_mask, render_rect_mask,
   style::{Affine, BlendMode},
@@ -276,19 +276,7 @@ impl<'c> CanvasDevice<'c> {
       );
     }
 
-    if let FillShape::Rect(size) = shape
-      && style.stroke().is_none()
-      && let Some(coverage) = render_rect_mask(*size, device, Some(self.canvas.viewport()))
-    {
-      return coverage;
-    }
-
-    render_mask(
-      &shape.to_commands(),
-      Some(device),
-      Some(style),
-      Some(self.canvas.viewport()),
-    )
+    shape_coverage(shape, style, device, self.canvas.viewport())
   }
 
   /// Limits `coverage` to the open clips that `casts_shadow` selects, or `None` when nothing is
@@ -435,7 +423,7 @@ impl<'c> CanvasDevice<'c> {
   fn draw_shadow_of(
     &mut self,
     shadow: SizedShadow,
-    commands: &[Command],
+    commands: &[PathCommand],
     style: Style,
     transform: Affine,
   ) {
@@ -644,6 +632,24 @@ impl<'c> CanvasDevice<'c> {
   }
 }
 
+/// `shape` filled or stroked as `style` under `device` within `cull`, a rect fill through
+/// [`render_rect_mask`] where it applies and anything else as a path.
+fn shape_coverage(
+  shape: &FillShape,
+  style: Style,
+  device: Affine,
+  cull: CanvasViewport,
+) -> (Vec<u8>, Placement) {
+  if let FillShape::Rect(size) = shape
+    && style.stroke().is_none()
+    && let Some(coverage) = render_rect_mask(*size, device, Some(cull))
+  {
+    return coverage;
+  }
+
+  render_mask(&shape.to_commands(), Some(device), Some(style), Some(cull))
+}
+
 impl PaintDevice for CanvasDevice<'_> {
   fn transform(&self) -> Affine {
     self.transform
@@ -652,18 +658,7 @@ impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     if let Some(shadow) = self.shadow {
       return self.draw_blurred(shadow, transform, |device, cull| {
-        if let FillShape::Rect(size) = shape
-          && let Some(coverage) = render_rect_mask(*size, device, Some(cull))
-        {
-          return coverage;
-        }
-
-        render_mask(
-          &shape.to_commands(),
-          Some(device),
-          Some(shape.rule().into()),
-          Some(cull),
-        )
+        shape_coverage(shape, shape.rule().into(), device, cull)
       });
     }
 

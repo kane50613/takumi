@@ -1,9 +1,25 @@
-//! Float math that renders the same on every platform, unlike libm, for finite pixel-scale inputs.
+//! Float helpers shared across the crate: Skia's nearly-zero tolerance, hashing and approximate
+//! comparison of floats, and an angle polynomial that renders the same on every platform.
 
 use std::hash::{Hash, Hasher};
 
-/// Hashes `value` so that floats `==` holds equal hash equally, `-0.0` as `0.0`.
+/// `SK_ScalarNearlyZero`: the tolerance Skia treats a float as zero within.
+pub const NEARLY_ZERO: f32 = 1.0 / 4096.0;
+
+/// `SkScalarNearlyZero` with a tolerance.
+pub fn nearly_zero(value: f32, tolerance: f32) -> bool {
+  value.abs() <= tolerance
+}
+
+/// Whether `a` and `b` are equal, any two NaNs included so that [`Eq`] holds.
+pub(crate) fn eq_f32(a: f32, b: f32) -> bool {
+  a == b || (a.is_nan() && b.is_nan())
+}
+
+/// Hashes `value` as [`eq_f32`] equates floats, `-0.0` as `0.0` and every NaN as one.
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
+  let value = if value.is_nan() { f32::NAN } else { value };
+
   (value + 0.0).to_bits().hash(state);
 }
 
@@ -41,14 +57,6 @@ pub trait ApproxEq {
 }
 
 impl ApproxEq for f32 {
-  fn approx_eq(self, other: Self) -> bool {
-    self == other
-      || (self.is_sign_negative() == other.is_sign_negative()
-        && self.to_bits().abs_diff(other.to_bits()) <= 4)
-  }
-}
-
-impl ApproxEq for f64 {
   fn approx_eq(self, other: Self) -> bool {
     self == other
       || (self.is_sign_negative() == other.is_sign_negative()

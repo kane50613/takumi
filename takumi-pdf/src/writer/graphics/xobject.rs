@@ -1,12 +1,12 @@
-use crate::writer::geom::pdf_rect;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use takumi_core::geometry::Rect;
 
 use pdf_writer::{Finish, Name, Ref};
+use takumi_core::geometry::Rect;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
+use crate::writer::geom::pdf_rect;
 use crate::writer::graphics::color::{DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB, rgb};
 use crate::writer::resource;
 use crate::writer::resource::{Resource, Resourceable};
@@ -109,7 +109,7 @@ impl Cacheable for XObject {
       sc,
       &mut chunk_container.non_stream.resource_dictionaries,
     );
-    x_object.bbox(pdf_rect(self.0.custom_bbox.unwrap_or(self.0.stream.bbox)));
+    x_object.bbox(pdf_rect(self.bbox()));
 
     if use_transparency_group {
       let mut group = x_object.group();

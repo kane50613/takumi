@@ -153,7 +153,7 @@ impl Canvas {
       return None;
     }
 
-    let image = Pixmap::new(size.width, size.height)?;
+    let image = Pixmap::new(size)?;
     Some(Self {
       image,
       origin: Point { x: 0, y: 0 },
@@ -194,7 +194,7 @@ impl Canvas {
       return Err(Error::InvalidViewport);
     }
 
-    Pixmap::new(size.width, size.height).ok_or_else(dimension_mismatch)
+    Pixmap::new(size).ok_or_else(dimension_mismatch)
   }
 
   /// Keeps the output clip on the parent device, as Skia's `internalSaveLayer` does.
@@ -291,22 +291,7 @@ impl Canvas {
     self.restore_subcanvas_state(origin, constraint_mask_stack);
     self.clip_layer(&mut isolated_image, offset);
 
-    // A fully opaque subcanvas lands whole-pixel over the parent, so it copies row by row.
-    if opacity == 1.0 && mode == BlendMode::Normal {
-      blit_paint_source_translation(
-        &mut self.image.as_mut(),
-        PaintSource::Pixmap(isolated_image.as_ref()),
-        Point {
-          x: offset.x as f32,
-          y: offset.y as f32,
-        },
-        mode,
-        None,
-      );
-      return;
-    }
-
-    if mode == BlendMode::Normal {
+    if mode == BlendMode::Normal && opacity != 1.0 {
       blit_translucent_translation(
         &mut self.image.as_mut(),
         isolated_image.as_ref(),
@@ -316,12 +301,15 @@ impl Canvas {
       return;
     }
 
-    let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
+    if mode != BlendMode::Normal {
+      let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
 
-    for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {
-      *pixel = scale_premultiplied_pixel(*pixel, alpha);
+      for pixel in isolated_image.pixels_mut() {
+        *pixel = scale_premultiplied_pixel(*pixel, alpha);
+      }
     }
 
+    // A fully opaque normal subcanvas lands whole-pixel over the parent, so it copies row by row.
     blit_paint_source_translation(
       &mut self.image.as_mut(),
       PaintSource::Pixmap(isolated_image.as_ref()),
@@ -346,7 +334,7 @@ impl Canvas {
       canvas_origin: self.origin,
     };
     let width = layer.width() as usize;
-    let pixels = bytemuck::cast_slice_mut::<_, [u8; 4]>(layer.data_mut());
+    let pixels = layer.pixels_mut();
 
     for (y, row) in pixels.chunks_exact_mut(width).enumerate() {
       let (first, alphas) = clip.row(offset.y + y as i32, offset.x).covered(width);
@@ -654,6 +642,12 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   });
 }
 
+/// Bytes from a fixed hash of `index`, so every test run sees the same noise.
+#[cfg(test)]
+fn noise(index: usize, salt: u32) -> u8 {
+  ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+}
+
 /// Mask bytes tested at once for a uniformly empty or full run.
 pub(crate) const MASK_RUN: usize = 8;
 
@@ -754,29 +748,6 @@ mod tests {
 mod demultiply_tests {
 
   use super::demultiply_rgba_in_place;
-  use takumi_core::resources::image_buffer::demultiplied;
-
-  /// Truncating may differ from rounding, but only
-  /// where the float lands within a rounding step of the true value.
-  #[test]
-  fn stays_within_one_step_of_rounding() {
-    for alpha in 0..=u8::MAX {
-      for channel in 0..=alpha {
-        let mut pixel = [channel, channel, channel, alpha];
-        demultiply_rgba_in_place(&mut pixel);
-
-        let rounded = demultiplied([channel, channel, channel, alpha]);
-
-        assert!(
-          pixel[0].abs_diff(rounded[0]) <= 1,
-          "channel {channel} at alpha {alpha}: {} vs {}",
-          pixel[0],
-          rounded[0]
-        );
-        assert_eq!(pixel[3], alpha);
-      }
-    }
-  }
 
   fn reference(pixel: [u8; 4]) -> [u8; 4] {
     let alpha = pixel[3] as u32;

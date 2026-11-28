@@ -26,13 +26,13 @@
 
 use std::borrow::Cow;
 use std::ops::DerefMut;
-use takumi_core::{geometry::Rect, style::Affine};
 
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use pdf_writer::{Array, Dict, Name};
 #[cfg(feature = "images")]
 use pdf_writer::{Finish, Null};
+use takumi_core::{geometry::Rect, style::Affine};
 
 use crate::writer::SerializeSettings;
 use crate::writer::chunk_container::ChunkContainer;

@@ -1,7 +1,7 @@
 use std::ops::Range;
-use takumi_core::style::Affine;
 
 use skrifa::MetadataProvider;
+use takumi_core::style::Affine;
 
 use crate::writer::color::rgb;
 use crate::writer::surface::Surface;
@@ -43,9 +43,7 @@ pub(crate) fn draw_color_glyph(
   surface.push_transform(&base_transform);
   surface.push_transform(&Affine::scale(1.0, -1.0));
 
-  // Note: See the comment in krilla-svg in `render_svg_glyph` for why we prefer
-  // COLR over SVG. For Noto Color Emoji specifically, using SVG will be slow when
-  // rendering multiple glyphs.
+  // COLR is tried before SVG because drawing SVG glyphs is slow, notably Noto Color Emoji's.
   let drawn = crate::color_glyph::draw(
     font.font_ref(),
     font.location_ref(),

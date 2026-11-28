@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::pixmap::{Mask as TinyMask, Pixmap, PixmapMut, PixmapRef};
+use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
 use crate::style::FillRule;
 use smallvec::SmallVec;
-use takumi_core::path::PathBuilder;
+use takumi_core::path::Path;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Placement, Point, Rect, Size},
   layout::background_image_geometry::{
@@ -98,7 +98,7 @@ impl TileLayer {
   }
 
   /// A mask over a `size` pixmap, `offset` from the border box, keeping only `dest`.
-  fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<TinyMask> {
+  fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<Mask> {
     let dest = self.dest?;
     let size = Size::checked_new(size.width, size.height)?;
     let rect = Rect::from_ltrb(
@@ -107,10 +107,9 @@ impl TileLayer {
       dest.right + offset.x,
       dest.bottom + offset.y,
     )?;
-    let coverage =
-      coverage::fill_path_aliased(&PathBuilder::from_rect(rect), FillRule::NonZero, size)?;
+    let coverage = coverage::fill_path_aliased(&Path::from_rect(rect), FillRule::NonZero, size);
 
-    TinyMask::from_vec(coverage, size)
+    Mask::from_vec(coverage, size)
   }
 }
 
@@ -179,7 +178,7 @@ pub(crate) fn rasterize_layers(
     return Ok(None);
   };
   let mut composed = vec![0; composed_len];
-  let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
+  let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size) else {
     return Ok(None);
   };
 
@@ -523,7 +522,7 @@ impl BackgroundTile {
       return pixmap.clone_rect(part);
     }
 
-    let mut cut = Pixmap::new(part.width(), part.height())?;
+    let mut cut = Pixmap::new(part.size())?;
     let rows = self.rows(self.width());
     let mut row = vec![0; self.width() as usize * 4];
     let start = part.left as usize * 4;
@@ -854,7 +853,7 @@ fn rasterize_pattern(
 /// as Skia's repeat tiling filters across the seam, and transparent on one with spacing.
 fn padded_tile(source: PixmapRef<'_>, spacing: Size<f32>) -> Option<Pixmap> {
   let (width, height) = (source.width() as usize, source.height() as usize);
-  let mut padded = Pixmap::new(width as u32 + 2, height as u32 + 2)?;
+  let mut padded = Pixmap::new(Size::new(width as u32 + 2, height as u32 + 2))?;
   let pixels = source.pixels();
   let target = padded.pixels_mut();
   let wrap = |index: usize, len: usize, gap: f32| match index {
@@ -1030,7 +1029,6 @@ mod tests {
   use super::*;
   use crate::{
     Fonts, RenderOptions,
-    blend::premultiplied_from_pixel,
     layout::node::Node,
     render,
     resources::image::ImageSource,
@@ -1067,7 +1065,7 @@ mod tests {
         for (x, &pixel) in row.iter().enumerate() {
           assert_eq!(
             pixel,
-            premultiplied_from_pixel(view.sample(x as u32, y)),
+            view.sample(x as u32, y),
             "at {x},{y} drawn {logical_width}x{logical_height}"
           );
         }

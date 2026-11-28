@@ -46,22 +46,9 @@ impl FiniteF32 {
   }
 }
 
-macro_rules! finite_ordering {
+macro_rules! finite_hash {
   ($name:ident) => {
     impl Eq for $name {}
-
-    impl Ord for $name {
-      fn cmp(&self, other: &Self) -> Ordering {
-        // Finite floats always compare.
-        self.0.partial_cmp(&other.0).unwrap_or(Ordering::Equal)
-      }
-    }
-
-    impl PartialOrd for $name {
-      fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-      }
-    }
 
     impl Hash for $name {
       fn hash<H: Hasher>(&self, state: &mut H) {
@@ -71,5 +58,18 @@ macro_rules! finite_ordering {
   };
 }
 
-finite_ordering!(NormalizedF32);
-finite_ordering!(FiniteF32);
+finite_hash!(NormalizedF32);
+finite_hash!(FiniteF32);
+
+impl Ord for NormalizedF32 {
+  fn cmp(&self, other: &Self) -> Ordering {
+    // Finite floats always compare.
+    self.0.partial_cmp(&other.0).unwrap_or(Ordering::Equal)
+  }
+}
+
+impl PartialOrd for NormalizedF32 {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}

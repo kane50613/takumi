@@ -94,16 +94,6 @@ impl Rect<f32> {
       self.bottom.max(other.bottom),
     )
   }
-
-  /// `SkRect::intersect`: the overlap with `other`, none where it is not a rect.
-  pub fn intersect(&self, other: &Self) -> Option<Self> {
-    Self::from_ltrb(
-      self.left.max(other.left),
-      self.top.max(other.top),
-      self.right.min(other.right),
-      self.bottom.min(other.bottom),
-    )
-  }
 }
 
 impl Rect<i32> {
@@ -157,8 +147,9 @@ impl Hash for Rect<f32> {
 impl Size<f32> {
   /// The size, none where either side is not finite and above zero.
   pub fn positive(width: f32, height: f32) -> Option<Self> {
-    (width > 0.0 && height > 0.0 && width.is_finite() && height.is_finite())
-      .then_some(Self::new(width, height))
+    let size = Self::new(width, height);
+
+    size.has_area().then_some(size)
   }
 }
 

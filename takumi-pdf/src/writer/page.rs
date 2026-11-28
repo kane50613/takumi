@@ -1,19 +1,22 @@
 //! Working with pages of a PDF document.
 
-use crate::writer::geom::UNIT_RECT;
-use crate::writer::geom::pdf_rect;
 use std::cell::OnceCell;
 use std::ops::DerefMut;
-use takumi_core::{geometry::Rect, geometry::Size, style::Affine};
 
 use pdf_writer::types::TabOrder;
 use pdf_writer::{Chunk, Finish, Ref};
+use takumi_core::{
+  geometry::{Rect, Size},
+  style::Affine,
+};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::configure::validate::VersionedFeature;
 use crate::writer::content::ContentBuilder;
 use crate::writer::error::WriterResult;
+use crate::writer::geom::UNIT_RECT;
+use crate::writer::geom::pdf_rect;
 use crate::writer::interactive::annotation::Annotation;
 use crate::writer::interchange::tagging::{AnnotationIdentifier, Identifier, PageTagIdentifier};
 use crate::writer::resource::ResourceDictionary;

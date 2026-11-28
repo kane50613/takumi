@@ -416,11 +416,11 @@ impl ToCss for ConicGradient {
 
 #[cfg(test)]
 mod tests {
-  use crate::resources::image_buffer::demultiplied;
   use color::{ColorSpaceTag, HueDirection};
 
   use super::*;
   use crate::{
+    resources::image_buffer::demultiplied,
     style::{
       Color, FromCssStr, Length, SpacePair, StopPosition,
       properties::gradient_utils::red_blue_stops,

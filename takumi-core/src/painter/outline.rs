@@ -6,7 +6,7 @@ use super::{
   border::StyledLine,
 };
 use crate::{
-  geometry::{PathBuilder, PathCommand, Point, Size},
+  geometry::{PathCommand, PathCommandSink, Point, Size},
   layout::{
     border::BorderProperties,
     decoration::OutlineGeometry,

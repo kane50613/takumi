@@ -1,9 +1,9 @@
 use std::hash::Hash;
 use std::sync::Arc;
-use takumi_core::{geometry::Rect, style::Affine};
 
 use pdf_writer::types::BlendMode;
 use pdf_writer::{Finish, Name, Ref};
+use takumi_core::{geometry::Rect, style::Affine};
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;

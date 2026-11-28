@@ -3,11 +3,15 @@
 //! Parts left or right of the clip become vertical lines on its edge, so the winding of what stays
 //! inside is unchanged.
 
-use takumi_core::geometry::{Point, Rect};
+use takumi_core::{
+  geometry::{Point, Rect},
+  math::{NEARLY_ZERO, nearly_zero},
+  path::{chop_quad_at, cubic_split, find_unit_quad_roots},
+};
 
 use super::edge_builder::{
-  chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at, chop_quad_at_x_extrema,
-  chop_quad_at_y_extrema, cubic_split, find_unit_quad_roots, transpose,
+  chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at_x_extrema, chop_quad_at_y_extrema,
+  transpose,
 };
 
 /// A clipped segment, as `SkEdgeClipper::next` returns it.
@@ -29,14 +33,9 @@ fn pin_unsorted(value: f64, limit0: f64, limit1: f64) -> f64 {
   value.clamp(limit0.min(limit1), limit0.max(limit1))
 }
 
-/// `SkScalarNearlyZero` with its default tolerance, `SK_ScalarNearlyZero`.
-fn nearly_zero(value: f32) -> bool {
-  value.abs() <= 1.0 / (1 << 12) as f32
-}
-
 /// `sect_with_horizontal`: the x where `p0`-`p1` crosses `y`.
 fn sect_with_horizontal(p0: Point<f32>, p1: Point<f32>, y: f32) -> f32 {
-  if nearly_zero(p1.y - p0.y) {
+  if nearly_zero(p1.y - p0.y, NEARLY_ZERO) {
     return (p0.x + p1.x) * 0.5;
   }
 
@@ -52,7 +51,7 @@ fn sect_with_horizontal(p0: Point<f32>, p1: Point<f32>, y: f32) -> f32 {
 
 /// `sect_with_vertical`: the y where `p0`-`p1` crosses `x`.
 fn sect_with_vertical(p0: Point<f32>, p1: Point<f32>, x: f32) -> f32 {
-  if nearly_zero(p1.x - p0.x) {
+  if nearly_zero(p1.x - p0.x, NEARLY_ZERO) {
     return (p0.y + p1.y) * 0.5;
   }
 

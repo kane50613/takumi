@@ -4,7 +4,7 @@ use std::f32::consts::SQRT_2;
 
 use crate::{
   context::RenderContext,
-  geometry::{PathBuilder, PathCommand, Point, Rect, Size},
+  geometry::{PathCommand, PathCommandSink, Point, Rect, Size},
   layout::border::BorderProperties,
   painter::FillShape,
   path_data::PathData,

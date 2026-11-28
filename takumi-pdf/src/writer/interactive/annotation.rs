@@ -6,7 +6,6 @@
 //! that are supported are "link annotations", which allow you associate a certain region of
 //! the page with a link.
 
-use crate::writer::geom::pdf_rect;
 use pdf_writer::types::AnnotationFlags;
 use pdf_writer::{Finish, Name, Ref, TextStr};
 use takumi_core::geometry::Rect;
@@ -14,6 +13,7 @@ use takumi_core::geometry::Rect;
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::error::WriterResult;
+use crate::writer::geom::pdf_rect;
 use crate::writer::interactive::action::LinkAction;
 use crate::writer::interactive::destination::Destination;
 use crate::writer::page::page_root_transform;

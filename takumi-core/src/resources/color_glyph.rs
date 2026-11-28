@@ -11,7 +11,7 @@ use skrifa::{
   FontRef, GlyphId, MetadataProvider,
   color::{Brush, ColorPainter, ColorStop as SkrifaColorStop, CompositeMode, Extend},
   instance::{LocationRef, Size},
-  outline::{DrawSettings, OutlinePen},
+  outline::DrawSettings,
   raw::types::BoundingBox,
 };
 
@@ -308,7 +308,7 @@ impl ColorPainter for Recorder<'_> {
 
   fn push_clip_glyph(&mut self, glyph_id: GlyphId) {
     let outline_glyphs = self.font.outline_glyphs();
-    let mut builder = PathRecorder(PathBuilder::new());
+    let mut builder = PathBuilder::new();
     let drawn = outline_glyphs.get(glyph_id).is_some_and(|outline| {
       draw_outline(
         &outline,
@@ -317,7 +317,7 @@ impl ColorPainter for Recorder<'_> {
       )
       .is_ok()
     });
-    let path = drawn.then(|| builder.0.finish()).flatten();
+    let path = drawn.then(|| builder.finish()).flatten();
 
     match self.transformed(path) {
       Some(path) => self.push_clip(path),
@@ -405,31 +405,6 @@ impl ColorPainter for Recorder<'_> {
     }
 
     stack.push(ColorInstruction::Layer(composite, instructions));
-  }
-}
-
-/// Records a glyph outline into a path, in font units with the y-axis pointing up.
-struct PathRecorder(PathBuilder);
-
-impl OutlinePen for PathRecorder {
-  fn move_to(&mut self, x: f32, y: f32) {
-    self.0.move_to(x, y);
-  }
-
-  fn line_to(&mut self, x: f32, y: f32) {
-    self.0.line_to(x, y);
-  }
-
-  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self.0.quad_to(cx0, cy0, x, y);
-  }
-
-  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-    self.0.cubic_to(cx0, cy0, cx1, cy1, x, y);
-  }
-
-  fn close(&mut self) {
-    self.0.close();
   }
 }
 

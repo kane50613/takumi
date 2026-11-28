@@ -8,6 +8,7 @@ use takumi_core::{
   layout::background_image_geometry::{BackgroundLayer, ImageTiling},
   paint::{ConicGradientTile, SrgbStop},
   path_data::{APPROX_CHARS_PER_NUMBER, PathData},
+  resources::image_buffer::demultiplied,
   style::{
     BackgroundImage, BlendMode, ConicGradient, FillRule, LinearGradient, RadialGradient, ToCss,
   },
@@ -247,7 +248,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       let mid = (a0 + a1) / 2.0;
       let adjusted = (mid - tile.start_rad).rem_euclid(TAU);
       let idx = tile.lut_index_for_adjusted_angle_with_len(adjusted, lut_len);
-      let fill = Rgba::demultiplied(tile.lut.sample(idx));
+      let fill = Rgba(demultiplied(tile.lut.sample(idx)));
       if fill.0[3] == 0 {
         continue;
       }

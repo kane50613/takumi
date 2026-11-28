@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{
   context::RenderContext,
-  geometry::{PathBuilder, PathCommand, Point, Size},
+  geometry::{PathCommand, PathCommandSink, Point, Size},
   layout::corner_shape::KAPPA,
   layout_unit::UnitRect,
   sort_key::sort_by_key,

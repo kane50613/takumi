@@ -135,6 +135,7 @@
 //! [`parse_html`]: https://docs.rs/takumi-core/latest/takumi_core/html/fn.parse_html.html
 //! [`render`]: https://docs.rs/takumi-pdf/latest/takumi_pdf/fn.render.html
 use std::{mem::take, rc::Rc};
+
 use takumi_core::{geometry::Size, style::Affine};
 
 mod bands;

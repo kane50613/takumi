@@ -1,7 +1,6 @@
 //! The pages of a document: their geometry, and the walk that draws each.
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use takumi_core::style::Affine;
 
 use takumi_core::{
   context::RenderContext,
@@ -15,7 +14,7 @@ use takumi_core::{
   page_stream::Settle,
   scene::{SceneRef, SceneView},
   style::{
-    Color, PageName,
+    Affine, Color, PageName,
     page_rule::{PageContext, PageStyles},
   },
   viewport::{MediaTarget, Viewport},

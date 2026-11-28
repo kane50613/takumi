@@ -28,7 +28,7 @@ fn push_circle(builder: &mut PathBuilder, cx: f32, cy: f32, radius: f32) {
 }
 
 fn fill(path: &Path, fill_rule: FillRule, width: u32, height: u32) -> Vec<u8> {
-  fill_path(path, fill_rule, Size::checked_new(width, height).unwrap()).unwrap()
+  fill_path(path, fill_rule, Size::checked_new(width, height).unwrap())
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn fractional_rect_edges_cover_their_area() {
 
 #[test]
 fn small_rect_takes_the_fat_rect_blit() {
-  let path = PathBuilder::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
+  let path = Path::from_rect(Rect::from_ltrb(0.5, 0.25, 4.5, 2.0).unwrap());
   let mask = fill(&path, FillRule::NonZero, 5, 2);
 
   assert_eq!(mask, [95, 191, 191, 191, 95, 127, 255, 255, 255, 127]);
@@ -267,7 +267,7 @@ fn aliased_polygons_match_their_winding_at_pixel_centers() {
     let path = polygon(&points);
 
     for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
-      let ours = fill_path_aliased(&path, fill_rule, Size::checked_new(64, 48).unwrap()).unwrap();
+      let ours = fill_path_aliased(&path, fill_rule, Size::checked_new(64, 48).unwrap());
       let (reference, ambiguous) = aliased_reference(&points, fill_rule, 64, 48);
 
       assert!(ambiguous.iter().filter(|&&ambiguous| ambiguous).count() < 64 * 48 / 20);
@@ -297,9 +297,10 @@ fn aliased_curves_agree_with_their_antialiased_coverage() {
   let size = Size::checked_new(64, 48).unwrap();
 
   for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
-    let aliased = fill_path_aliased(&path, fill_rule, size).unwrap();
-    let antialiased = fill_path(&path, fill_rule, size).unwrap();
+    let aliased = fill_path_aliased(&path, fill_rule, size);
+    let antialiased = fill_path(&path, fill_rule, size);
 
+    assert!(aliased.iter().all(|&alpha| alpha == 0 || alpha == 255));
     assert!(
       aliased.iter().filter(|&&alpha| alpha == 255).count() > 500,
       "{fill_rule:?}"
@@ -328,8 +329,7 @@ fn an_aliased_fill_wider_than_the_clip_limit_keeps_its_rows() {
     &path,
     FillRule::NonZero,
     Size::checked_new(width, 2).unwrap(),
-  )
-  .unwrap();
+  );
 
   let row = width as usize;
 

@@ -12,8 +12,8 @@ use super::{
 use crate::resources::image::SvgFilters;
 use crate::{
   geometry::{PathCommand, Point, Rect},
-  resources::image::{SvgFill, SvgImageData, SvgLineCap, SvgOp, SvgStrokeStyle},
-  style::{Affine, BlendMode},
+  resources::image::{SvgFill, SvgImageData, SvgOp, SvgStrokeStyle},
+  style::{Affine, BlendMode, LineCap},
 };
 
 /// Writes ops for the objects it is handed into one list, within a budget that charges a
@@ -506,8 +506,8 @@ fn draw_bounds(path: &[PathCommand], stroke: Option<&SvgStrokeStyle>) -> ScopeBo
   };
   let bounds = if let Some(stroke) = stroke {
     let cap_reach = match stroke.cap {
-      SvgLineCap::Square => std::f32::consts::SQRT_2,
-      SvgLineCap::Butt | SvgLineCap::Round => 1.0,
+      LineCap::Square => std::f32::consts::SQRT_2,
+      LineCap::Butt | LineCap::Round => 1.0,
     };
     let reach = stroke.width * stroke.miter_limit.max(cap_reach) * 0.5;
 

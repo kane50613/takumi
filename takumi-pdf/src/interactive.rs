@@ -6,13 +6,12 @@ use std::{
   collections::{HashMap, hash_map::Entry},
   str::from_utf8,
 };
-use takumi_core::geometry::Rect;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use takumi_core::{
   context::BoxId,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size, transformed_rect_extents},
   layout::{layout_view::LayoutView, node::Node, page_sizes::PageSizes, tree::RenderNode},
   painter::OwnContent,
   scene::{NodePaint, PageWindows, SceneRef, SceneView},

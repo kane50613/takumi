@@ -1,4 +1,4 @@
-use takumi_core::{geometry::PathCommand, path::Stroke};
+use takumi_core::path::Stroke;
 
 use crate::style::FillRule;
 
@@ -41,5 +41,3 @@ impl Style {
     }
   }
 }
-
-pub(crate) type Command = PathCommand;

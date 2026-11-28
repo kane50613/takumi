@@ -570,11 +570,11 @@ impl ToCss for RadialGradient {
 
 #[cfg(test)]
 mod tests {
-  use crate::resources::image_buffer::demultiplied;
   use color::{ColorSpaceTag, HueDirection};
 
   use super::*;
   use crate::{
+    resources::image_buffer::demultiplied,
     style::{
       Color, FromCssStr, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
       PositionValue, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,

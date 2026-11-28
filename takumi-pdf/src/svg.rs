@@ -1,11 +1,10 @@
 //! Draws flattened SVG ops onto a writer surface, leaving out a group's SVG filters.
 
 use takumi_core::{
-  geometry::Point,
+  geometry::{Point, Size},
   resources::image::{SvgFill, SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgStrokeStyle},
-  style::{Color, FillRule, MaskType},
+  style::{Affine, Color, FillRule, MaskType},
 };
-use takumi_core::{geometry::Size, style::Affine};
 
 use crate::{
   filter::{ColorFilter, filtered},
@@ -191,7 +190,7 @@ impl<'a> SvgPainter<'a> {
       } => (
         Pattern {
           stream: draw_stream(surface, |tile| self.draw_ops(tile, ops)),
-          transform: (*transform),
+          transform: *transform,
           width: *width,
           height: *height,
         }

@@ -2,9 +2,9 @@ use std::{borrow::Cow, sync::Arc};
 
 use smallvec::SmallVec;
 
-use crate::pixmap::Mask as TinyMask;
+use crate::pixmap::Mask;
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
+  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
   painter::{BackgroundClipArea, FillShape},
   resources::glyph_cache::GlyphCache,
@@ -13,12 +13,12 @@ use takumi_core::{
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, BoxMask, Command, Placement, RenderContext, Result, Style, checked_area,
-  coverage, create_mask, mul_div_255, placement_overlap, style::Affine,
+  BorderProperties, BoxMask, Placement, RenderContext, Result, Style, checked_area, coverage,
+  create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
-  Shell(TinyMask),
+  Shell(Mask),
   SkipRendering,
 }
 
@@ -128,7 +128,7 @@ impl CanvasViewport {
 /// The masks a node's `mask-image` lays over the box and its descendants.
 #[derive(Default)]
 pub(crate) struct NodeMasks {
-  pub(crate) shell: SmallVec<[TinyMask; 2]>,
+  pub(crate) shell: SmallVec<[Mask; 2]>,
 }
 
 impl NodeMasks {
@@ -186,13 +186,13 @@ impl NodeMasks {
 /// A mask over part of the canvas: `mask`'s pixels from `origin`, in the coordinates of the
 /// viewport origin. Everything outside it is masked out.
 pub(crate) struct PlacedMask {
-  pub(crate) mask: TinyMask,
+  pub(crate) mask: Mask,
   pub(crate) origin: Point<i32>,
 }
 
 impl PlacedMask {
   /// `mask` over the whole of `viewport`.
-  pub(crate) fn covering(viewport: CanvasViewport, mask: TinyMask) -> Self {
+  pub(crate) fn covering(viewport: CanvasViewport, mask: Mask) -> Self {
     Self {
       mask,
       origin: viewport.origin,
@@ -214,7 +214,7 @@ impl PlacedMask {
     );
     // The mask is culled to the viewport, so its placement starts inside it.
     let covered = Size::checked_new(placement.width, placement.height)
-      .and_then(|size| TinyMask::from_vec(mask, size));
+      .and_then(|size| Mask::from_vec(mask, size));
 
     Some(match covered {
       Some(mask) => Self {
@@ -225,7 +225,7 @@ impl PlacedMask {
         },
       },
       // A clip that covers no pixel masks out everything.
-      None => Self::covering(viewport, TinyMask::new(1, 1)?),
+      None => Self::covering(viewport, Mask::new(Size::new(1, 1))?),
     })
   }
 }
@@ -431,7 +431,7 @@ pub(crate) fn attenuate_alpha_by_mask(
 }
 
 fn copy_mask_into_canvas(
-  canvas_mask: &mut TinyMask,
+  canvas_mask: &mut Mask,
   canvas_origin: Point<i32>,
   mask: &[u8],
   placement: Placement,
@@ -466,14 +466,14 @@ fn viewport_mask(
   viewport: CanvasViewport,
   mask: Cow<'_, [u8]>,
   placement: Placement,
-) -> Option<TinyMask> {
+) -> Option<Mask> {
   if placement == viewport.placement() {
     let size = Size::checked_new(placement.width, placement.height)?;
 
-    return TinyMask::from_vec(mask.into_owned(), size);
+    return Mask::from_vec(mask.into_owned(), size);
   }
 
-  let mut full_mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
+  let mut full_mask = Mask::new(viewport.size)?;
   copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
   Some(full_mask)
 }
@@ -482,8 +482,8 @@ fn rasterize_constraint_mask(
   viewport: CanvasViewport,
   placement: Placement,
   alpha_at: impl Fn(u32, u32) -> u8,
-) -> Option<TinyMask> {
-  let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
+) -> Option<Mask> {
+  let mut mask = Mask::new(viewport.size)?;
 
   let start_x = placement.left.max(viewport.origin.x);
   let start_y = placement.top.max(viewport.origin.y);
@@ -576,7 +576,7 @@ pub(crate) fn alpha_mask(pixels: &[u8]) -> Vec<u8> {
 /// `cull` rejects a mask outside it and cuts an oversized one to it with a halo, as Blink's
 /// `ClipPathClipper::PaintClipPath` clips by the cull rect.
 pub(crate) fn render_mask(
-  paths: &[Command],
+  paths: &[PathCommand],
   transform: Option<Affine>,
   style: Option<Style>,
   cull: Option<CanvasViewport>,
@@ -592,16 +592,17 @@ pub(crate) fn render_rect_mask(
   transform: Affine,
   cull: Option<CanvasViewport>,
 ) -> Option<(Vec<u8>, Placement)> {
-  let Affine { a, b, c, d, .. } = transform;
-
-  if !(b == 0.0 && c == 0.0 || a == 0.0 && d == 0.0) {
-    return None;
-  }
-
-  let (x0, y0) = transform.transform_point(0.0, 0.0);
-  let (x1, y1) = transform.transform_point(size.width, size.height);
-  let (left, right) = (x0.min(x1), x0.max(x1));
-  let (top, bottom) = (y0.min(y1), y0.max(y1));
+  let Rect {
+    left,
+    top,
+    right,
+    bottom,
+  } = transform.map_rect(Rect {
+    left: 0.0,
+    right: size.width,
+    top: 0.0,
+    bottom: size.height,
+  })?;
 
   // `SkDraw::drawRect` fills a rect past `SkRectPriv::FitsInFixed` as a path.
   if [left, top, right, bottom]
@@ -644,7 +645,7 @@ fn fits_glyph_cache(glyphs: &GlyphCache, size: Size<f32>, transform: Affine) -> 
 /// [`render_mask`] of `paths`, cached when it [fits](fits_glyph_cache).
 pub(crate) fn render_cached_mask(
   glyphs: &GlyphCache,
-  paths: &[Command],
+  paths: &[PathCommand],
   size: Size<f32>,
   transform: Affine,
   cull: CanvasViewport,
@@ -662,7 +663,7 @@ pub(crate) fn render_cached_mask(
   let mut hasher = Xxh3::new();
 
   hasher.update(b"filled-shape");
-  hasher.update(&Command::digest(paths).to_le_bytes());
+  hasher.update(&PathCommand::digest(paths).to_le_bytes());
   for value in [a, b, c, d, x, y] {
     hasher.update(&value.to_bits().to_le_bytes());
   }
@@ -710,12 +711,12 @@ pub(crate) fn cull_bounds(
 }
 
 fn rasterize_mask(
-  paths: &[Command],
+  paths: &[PathCommand],
   transform: Option<Affine>,
   style: Style,
   cull: Option<CanvasViewport>,
 ) -> Option<(Vec<u8>, Placement)> {
-  let mut path = Command::build_path(paths)?;
+  let mut path = PathCommand::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
     path = path.stroke(stroke, 1.0)?;
@@ -747,7 +748,7 @@ fn rasterize_mask(
   let local_path = path.transform(Affine::translation(-(left as f32), -(top as f32)))?;
 
   Some((
-    coverage::fill_path(&local_path, style.fill_rule(), size)?,
+    coverage::fill_path(&local_path, style.fill_rule(), size),
     Placement {
       left,
       top,
@@ -759,13 +760,13 @@ fn rasterize_mask(
 
 #[derive(Clone)]
 pub(crate) struct MaskStackEntry {
-  pub(crate) mask: Arc<TinyMask>,
+  pub(crate) mask: Arc<Mask>,
   pub(crate) origin: Point<i32>,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct MaskView<'a> {
-  pub(crate) mask: &'a TinyMask,
+  pub(crate) mask: &'a Mask,
   pub(crate) origin: Point<i32>,
   pub(crate) canvas_origin: Point<i32>,
 }
@@ -920,7 +921,7 @@ mod tests {
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
-    let mask = TinyMask::from_vec((0..12).collect(), Size::checked_new(4, 3).unwrap()).unwrap();
+    let mask = Mask::from_vec((0..12).collect(), Size::checked_new(4, 3).unwrap()).unwrap();
     let view = |x: i32| MaskView {
       mask: &mask,
       origin: Point { x, y: 0 },

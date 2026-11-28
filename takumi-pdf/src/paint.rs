@@ -5,7 +5,6 @@ use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "images")]
 use rustc_hash::FxHashMap;
-use takumi_core::resources::image::SvgSpreadMethod;
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
@@ -14,10 +13,11 @@ use takumi_core::{
     image_buffer::{ImageBuffer, demultiply_pixel},
   },
 };
-use takumi_core::{geometry::Rect, path::Path, path::PathBuilder};
 use takumi_core::{
-  geometry::{PathCommand, Point, Size},
+  geometry::{PathCommand, Point, Rect, Size},
+  paint::SpreadMethod,
   painter::FillShape,
+  path::{Path, PathBuilder},
   style::{Color, FillRule, ResolvedGradientStop},
 };
 
@@ -42,7 +42,7 @@ pub(crate) fn empty_path(origin: Point<f32>) -> Option<Path> {
   builder.finish()
 }
 
-/// Converts takumi-core path commands to a writer path translated by `origin`.
+/// `commands` as a path translated by `origin`.
 pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<Path> {
   let Point { x, y } = origin;
   let mut builder = PathBuilder::new();
@@ -61,11 +61,11 @@ pub(crate) fn pdf_path(commands: &[PathCommand], origin: Point<f32>) -> Option<P
   builder.finish()
 }
 
-/// A fill shape as a writer path translated by `origin`.
+/// `shape` as a path translated by `origin`.
 pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<Path> {
   match shape {
     FillShape::Rect(size) => {
-      Rect::from_xywh(origin.x, origin.y, size.width, size.height).map(PathBuilder::from_rect)
+      Rect::from_xywh(origin.x, origin.y, size.width, size.height).map(Path::from_rect)
     }
     _ => pdf_path(&shape.to_commands(), origin),
   }
@@ -184,11 +184,11 @@ impl RasterizedImages {
   }
 }
 
-pub(crate) const fn spread(repeating: bool) -> SvgSpreadMethod {
+pub(crate) const fn spread(repeating: bool) -> SpreadMethod {
   if repeating {
-    SvgSpreadMethod::Repeat
+    SpreadMethod::Repeat
   } else {
-    SvgSpreadMethod::Pad
+    SpreadMethod::Pad
   }
 }
 
@@ -440,8 +440,7 @@ pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surfa
   let Some(color) = color else {
     return;
   };
-  let Some(path) = Rect::from_xywh(0.0, 0.0, size.width, size.height).map(PathBuilder::from_rect)
-  else {
+  let Some(path) = Rect::from_xywh(0.0, 0.0, size.width, size.height).map(Path::from_rect) else {
     return;
   };
 

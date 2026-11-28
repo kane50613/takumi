@@ -1,21 +1,22 @@
-use crate::subsetter::{GlyphRemapper, Tag as SubsetTag, subset};
-use crate::writer::geom::UNIT_RECT;
-use crate::writer::geom::pdf_rect;
+use std::hash::Hash;
+use std::ops::DerefMut;
+use std::sync::Arc;
+
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use pdf_writer::writers::WMode;
 use pdf_writer::{Finish, Name, Ref, Str};
 use rustc_hash::FxHashMap;
 use skrifa::raw::tables::cff::Cff;
 use skrifa::raw::{TableProvider, TopLevelTable};
-use std::hash::Hash;
-use std::ops::DerefMut;
-use std::sync::Arc;
 use takumi_core::geometry::Rect;
 
 use super::{CIDIdentifier, FontIdentifier, PDF_UNITS_PER_EM};
+use crate::subsetter::{GlyphRemapper, Tag as SubsetTag, subset};
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;
 use crate::writer::error::{WriterError, WriterResult};
+use crate::writer::geom::UNIT_RECT;
+use crate::writer::geom::pdf_rect;
 use crate::writer::serialize::SerializeContext;
 use crate::writer::stream::FilterStreamBuilder;
 use crate::writer::surface::Location;

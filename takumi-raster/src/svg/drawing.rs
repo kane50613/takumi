@@ -6,7 +6,7 @@ use std::{ops::Range, slice::Iter};
 use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
 use crate::style::FillRule;
 use takumi_core::geometry::{Rect, Size};
-use takumi_core::path::{Path, PathBuilder, resolution_scale};
+use takumi_core::path::{Path, resolution_scale};
 
 use super::filter::apply as apply_filter;
 use crate::{
@@ -18,6 +18,7 @@ use crate::{
 };
 use takumi_core::{
   geometry::PathCommand,
+  paint::SpreadMethod,
   resources::{
     image::within_raster_pixel_budget,
     image_buffer::{composite_premultiplied_over_row, premultiply_pixel},
@@ -25,7 +26,7 @@ use takumi_core::{
   resources::{
     image::{
       SvgFill, SvgFilters, SvgGradient, SvgImageData, SvgOp, SvgOpPaint, SvgRasterizer,
-      SvgSpreadMethod, SvgStrokeStyle,
+      SvgStrokeStyle,
     },
     image_buffer::ImageBuffer,
   },
@@ -183,7 +184,7 @@ impl<'a, 'b> Target<'a, 'b> {
       skip_scope(ops);
       return;
     };
-    let Some(mut layer) = Pixmap::new(bounds.width(), bounds.height()) else {
+    let Some(mut layer) = Pixmap::new(bounds.size()) else {
       skip_scope(ops);
       return;
     };
@@ -209,7 +210,7 @@ impl<'a, 'b> Target<'a, 'b> {
     }
     if let Some(mask) = &composite.mask {
       // Skia's `DestinationIn` with the mask's coverage.
-      let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(layer.pixels_mut());
+      let pixels = layer.pixels_mut();
 
       for (pixel, alpha) in pixels.iter_mut().zip(mask.data()) {
         *pixel = scale_premultiplied_pixel(*pixel, *alpha);
@@ -251,11 +252,9 @@ impl<'a, 'b> Target<'a, 'b> {
     if !within_raster_pixel_budget(scope.width(), scope.height()) {
       return false;
     }
-    let Some(mut layer) = Pixmap::new(scope.width(), scope.height()) else {
+    let Some(mut layer) = self.pixmap.as_ref().clone_rect(scope) else {
       return false;
     };
-
-    copy_to_layer(self.pixmap.as_ref(), &mut layer, scope);
     let transform = Affine::translation(-(scope.left as f32), -(scope.top as f32)) * self.transform;
     let Some(limit) = self.limit.checked_translated(-scope.left, -scope.top) else {
       return false;
@@ -281,7 +280,7 @@ impl<'a, 'b> Target<'a, 'b> {
   /// their unpremultiplied color times their alpha, rounded up.
   fn mask(&self, ops: &[SvgOp], luminance: bool) -> Option<Mask> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
-    let mut drawn = Pixmap::new(width, height)?;
+    let mut drawn = Pixmap::new(Size::new(width, height))?;
 
     draw(ops, self.transform, &mut drawn.as_mut());
 
@@ -323,18 +322,14 @@ impl<'a, 'b> Target<'a, 'b> {
     anti_alias: bool,
     rect: bool,
   ) {
-    let Some(path) = tiny_path(commands) else {
+    let Some(path) = PathCommand::build_path(commands) else {
       return;
     };
 
     if let Some(fill) = fill {
       // Horizontal and vertical lines have no area to fill.
       if path.bounds().width() != 0.0 && path.bounds().height() != 0.0 {
-        let rule = if fill.evenodd {
-          FillRule::EvenOdd
-        } else {
-          FillRule::NonZero
-        };
+        let rule = fill_rule(fill.evenodd);
         let mut tile = None;
 
         if let Some(shader) = shader_of(&fill.paint, fill.opacity, self.transform, &mut tile) {
@@ -378,34 +373,22 @@ impl<'a, 'b> Target<'a, 'b> {
       coverage::fill_path_aliased(&local, rule, bounds.size())
     };
 
-    if let Some(coverage) = coverage {
-      self.blit(&coverage, bounds, shader);
-    }
+    self.blit(&coverage, bounds, shader);
   }
 
   /// Fills the rect `path` outlines with `shader` as Skia's `SkDraw::drawRect` does: through
   /// `SkScan::AntiFillRect` where the transform keeps it a rect, and as a path otherwise.
   fn fill_rect(&mut self, path: &Path, shader: &Shader) {
-    let Affine {
-      a: sx,
-      b: ky,
-      c: kx,
-      d: sy,
-      x: tx,
-      y: ty,
-    } = self.transform;
-
-    // `SkMatrix::rectStaysRect`: axis aligned, or turned a quarter.
-    if !(kx == 0.0 && ky == 0.0 || sx == 0.0 && sy == 0.0) {
+    let Some(Rect {
+      left,
+      top,
+      right,
+      bottom,
+    }) = self.transform.map_rect(path.bounds())
+    else {
       self.fill(path, FillRule::NonZero, shader, true);
       return;
-    }
-
-    let map = |x: f32, y: f32| (x * sx + y * kx + tx, x * ky + y * sy + ty);
-    let rect = path.bounds();
-    let ((x0, y0), (x1, y1)) = (map(rect.left, rect.top), map(rect.right, rect.bottom));
-    let (left, right) = (x0.min(x1), x0.max(x1));
-    let (top, bottom) = (y0.min(y1), y0.max(y1));
+    };
     let Some(bounds) =
       Rect::from_ltrb(left, top, right, bottom).and_then(|device| self.device_bounds(device))
     else {
@@ -443,7 +426,7 @@ impl<'a, 'b> Target<'a, 'b> {
     let canvas_width = self.pixmap.width() as usize;
     let span = bounds.width() as usize;
     let clip = self.clip.as_ref().map(Mask::data);
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(self.pixmap.pixels_mut());
+    let pixels = self.pixmap.pixels_mut();
     let mut row = vec![[0; 4]; span];
 
     for (index, y) in (bounds.top..bounds.bottom).enumerate() {
@@ -495,11 +478,13 @@ impl<'a, 'b> Target<'a, 'b> {
         width / buffer.width() as f32,
         height / buffer.height() as f32,
       );
+    let Ok(source) = PixmapRef::try_from(&buffer) else {
+      return;
+    };
     let Some(image) = ImageShader::new(
-      bytemuck::cast_slice(buffer.data()),
-      (buffer.width(), buffer.height()),
+      source,
       image_to_device,
-      SvgSpreadMethod::Pad,
+      SpreadMethod::Pad,
       if rendering == ImageScalingAlgorithm::Pixelated {
         ImageFilter::Nearest
       } else {
@@ -511,7 +496,7 @@ impl<'a, 'b> Target<'a, 'b> {
     };
 
     self.fill(
-      &PathBuilder::from_rect(rect),
+      &Path::from_rect(rect),
       FillRule::NonZero,
       &Shader::Image(image),
       true,
@@ -550,8 +535,8 @@ fn shader_of<'t>(
       gradient: stops,
     } => gradient(
       GradientShape::Linear {
-        start: [start.x, start.y],
-        end: [end.x, end.y],
+        start: *start,
+        end: *end,
       },
       stops,
     ),
@@ -563,9 +548,9 @@ fn shader_of<'t>(
       gradient: stops,
     } => gradient(
       GradientShape::Conical {
-        start: [focal.x, focal.y],
+        start: *focal,
         start_radius: *focal_radius,
-        end: [center.x, center.y],
+        end: *center,
         end_radius: *radius,
       },
       stops,
@@ -586,7 +571,7 @@ fn shader_of<'t>(
         return None;
       }
 
-      let mut pixmap = Pixmap::new(tile_width, tile_height)?;
+      let mut pixmap = Pixmap::new(Size::new(tile_width, tile_height))?;
 
       draw(ops, Affine::scale(scale_x, scale_y), &mut pixmap.as_mut());
 
@@ -595,10 +580,9 @@ fn shader_of<'t>(
         transform * pattern_transform * Affine::scale(1.0 / scale_x, 1.0 / scale_y);
 
       ImageShader::new(
-        bytemuck::cast_slice(tile.pixels()),
-        (tile.width(), tile.height()),
+        tile.as_ref(),
         tile_to_device,
-        SvgSpreadMethod::Repeat,
+        SpreadMethod::Repeat,
         ImageFilter::Linear,
         opacity,
       )
@@ -627,7 +611,7 @@ impl SvgRasterizer for SvgPixmapRasterizer {
     width: u32,
     height: u32,
   ) -> Option<ImageBuffer> {
-    let mut pixmap = Pixmap::new(width, height)?;
+    let mut pixmap = Pixmap::new(Size::new(width, height))?;
 
     draw(ops, transform, &mut pixmap.as_mut());
     ImageBuffer::from_premultiplied_rgba(pixmap.take(), width, height)
@@ -641,7 +625,7 @@ pub(crate) fn draw(ops: &[SvgOp], transform: Affine, pixmap: &mut PixmapMut) {
   }
 }
 
-/// Draws `source` over `target` with its top left at `origin`, at `opacity` and inside `clip` when
+/// Draws `source` over `target` with its top left at `(x, y)`, at `opacity` and inside `clip` when
 /// there is one, in integers.
 pub(crate) fn draw_over(
   target: &mut PixmapMut,
@@ -656,15 +640,15 @@ pub(crate) fn draw_over(
   let right = (x + source_width).min(target_width);
   let top = y.max(0);
   let bottom = (y + source.height() as i32).min(target_height);
-  let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+  let alpha = to_u8(opacity);
 
   if left >= right || top >= bottom || alpha == 0 {
     return;
   }
 
   let span = (right - left) as usize;
-  let target_pixels = target.data_mut().as_chunks_mut::<4>().0;
-  let source_pixels = source.data().as_chunks::<4>().0;
+  let target_pixels = target.pixels_mut();
+  let source_pixels = source.pixels();
   let mut covered = Vec::new();
 
   for row in top..bottom {
@@ -677,7 +661,7 @@ pub(crate) fn draw_over(
         covered.extend(
           source_row
             .iter()
-            .map(|pixel| pixel.map(|channel| mul_div_255(channel, alpha))),
+            .map(|&pixel| scale_premultiplied_pixel(pixel, alpha)),
         );
         &covered
       }
@@ -685,10 +669,8 @@ pub(crate) fn draw_over(
         let coverage = &clip.data()[target_start..][..span];
 
         covered.clear();
-        covered.extend(source_row.iter().zip(coverage).map(|(pixel, &coverage)| {
-          let coverage = mul_div_255(coverage, alpha);
-
-          pixel.map(|channel| mul_div_255(channel, coverage))
+        covered.extend(source_row.iter().zip(coverage).map(|(&pixel, &coverage)| {
+          scale_premultiplied_pixel(pixel, mul_div_255(coverage, alpha))
         }));
         &covered
       }
@@ -698,8 +680,8 @@ pub(crate) fn draw_over(
   }
 }
 
-/// Blends `source` into `target` under `mode` with its top left at `origin`, at `opacity` and inside
-/// `clip` when there is one.
+/// Blends `source` into `target` under `mode` with its top left at `(x, y)`, at `opacity` and
+/// inside `clip` when there is one.
 fn draw_blended(
   target: &mut PixmapMut,
   source: PixmapRef,
@@ -714,8 +696,8 @@ fn draw_blended(
   let top = y.max(0);
   let bottom = (y + source.height() as i32).min(target.height() as i32);
   let alpha = to_u8(opacity);
-  let target_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(target.pixels_mut());
-  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+  let target_pixels = target.pixels_mut();
+  let source_pixels = source.pixels();
 
   for row in top..bottom {
     for column in left..right {
@@ -731,21 +713,6 @@ fn draw_blended(
 
       blend_premultiplied_pixel(&mut target_pixels[index], pixel, mode);
     }
-  }
-}
-
-fn copy_to_layer(source: PixmapRef, target: &mut Pixmap, bounds: Rect<i32>) {
-  let width = bounds.width() as usize;
-  let source_width = source.width() as usize;
-  let source_x = bounds.left as usize;
-  let source_y = bounds.top as usize;
-
-  for row in 0..bounds.height() as usize {
-    let source_start = ((source_y + row) * source_width + source_x) * 4;
-    let target_start = row * width * 4;
-
-    target.data_mut()[target_start..][..width * 4]
-      .copy_from_slice(&source.data()[source_start..][..width * 4]);
   }
 }
 
@@ -811,16 +778,13 @@ fn clipped(
   evenodd: bool,
   target: &Target,
 ) -> Option<Mask> {
-  let rule = if evenodd {
-    FillRule::EvenOdd
-  } else {
-    FillRule::NonZero
-  };
+  let rule = fill_rule(evenodd);
   let size = Size::checked_new(target.pixmap.width(), target.pixmap.height())?;
-  let mut coverage = match tiny_path(commands).and_then(|path| path.transform(target.transform)) {
-    Some(path) => coverage::fill_path(&path, rule, size)?,
-    None => vec![0; size.width as usize * size.height as usize],
-  };
+  let mut coverage =
+    match PathCommand::build_path(commands).and_then(|path| path.transform(target.transform)) {
+      Some(path) => coverage::fill_path(&path, rule, size),
+      None => vec![0; size.width as usize * size.height as usize],
+    };
 
   if let Some(outer) = outer {
     for (alpha, outer) in coverage.iter_mut().zip(outer.data()) {
@@ -829,22 +793,6 @@ fn clipped(
   }
 
   Mask::from_vec(coverage, size)
-}
-
-fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
-  let mut builder = PathBuilder::new();
-
-  for command in commands {
-    match command {
-      PathCommand::MoveTo(p) => builder.move_to(p.x, p.y),
-      PathCommand::LineTo(p) => builder.line_to(p.x, p.y),
-      PathCommand::QuadTo(c, p) => builder.quad_to(c.x, c.y, p.x, p.y),
-      PathCommand::CubicTo(c1, c2, p) => builder.cubic_to(c1.x, c1.y, c2.x, c2.y, p.x, p.y),
-      PathCommand::Close => builder.close(),
-    }
-  }
-
-  builder.finish()
 }
 
 fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {
@@ -891,6 +839,14 @@ fn covered_spans(alphas: &[u8]) -> impl Iterator<Item = Range<usize>> + '_ {
 
     Some(first * MASK_RUN..(run * MASK_RUN).min(alphas.len()))
   })
+}
+
+fn fill_rule(evenodd: bool) -> FillRule {
+  if evenodd {
+    FillRule::EvenOdd
+  } else {
+    FillRule::NonZero
+  }
 }
 
 fn to_u8(opacity: f32) -> u8 {
@@ -959,8 +915,6 @@ mod tests {
     )
   }
 
-  /// An SVG in an `image` lays out at the image's rectangle, which its viewport units measure, as
-  /// Blink's `SVGImagePainter::ComputeImageViewportSize` gives it.
   #[test]
   fn a_fill_past_the_i32_range_still_covers_the_target() {
     let image = draw(
@@ -971,6 +925,8 @@ mod tests {
     assert_eq!(image.pixel(5, 5), [128, 0, 0, 128]);
   }
 
+  /// An SVG in an `image` lays out at the image's rectangle, which its viewport units measure, as
+  /// Blink's `SVGImagePainter::ComputeImageViewportSize` gives it.
   #[test]
   fn a_nested_svg_lays_out_at_its_image_rectangle() {
     let image = draw(
@@ -1123,14 +1079,14 @@ mod tests {
     else {
       panic!("expected a filter op");
     };
-    let mut root = Pixmap::new(10, 10).unwrap();
+    let mut root = Pixmap::new(Size::new(10, 10)).unwrap();
     let mut root_view = root.as_mut();
     let root_target = Target::root(&mut root_view, Affine::IDENTITY).unwrap();
     let bounds = root_target.layer_bounds(None, Some(filters)).unwrap();
 
     assert_eq!(bounds, Rect::checked_from_size(-20, -20, 50, 50).unwrap());
 
-    let mut layer = Pixmap::new(bounds.width(), bounds.height()).unwrap();
+    let mut layer = Pixmap::new(bounds.size()).unwrap();
     let mut layer_view = layer.as_mut();
     let nested = Target {
       pixmap: &mut layer_view,
@@ -1147,7 +1103,7 @@ mod tests {
 
   #[test]
   fn an_isolation_layer_covers_its_paint_bounds() {
-    let mut pixmap = Pixmap::new(100, 100).unwrap();
+    let mut pixmap = Pixmap::new(Size::new(100, 100)).unwrap();
     let mut view = pixmap.as_mut();
     let target = Target::root(&mut view, Affine::IDENTITY).unwrap();
 
