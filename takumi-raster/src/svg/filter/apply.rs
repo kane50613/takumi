@@ -976,20 +976,45 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
   }
 }
 
-/// The pixels `bounds` covers, none unless it has area: the floor of the origin and the ceiling of
-/// the size, as tiny-skia's `NonZeroRect::to_int_rect` rounds. Approximate: Skia rounds a decal crop
-/// out, so `[0.75, 1.75)` covers `[0, 2)` there and `[0, 1)` here.
+/// `kRoundEpsilon` in `SkImageFilterTypes.cpp`: how far past a pixel edge a crop must reach to
+/// cover the next pixel, so float error in a near-integer edge does not add a row.
+const ROUND_EPSILON: f32 = 1e-3;
+
+/// The pixels `bounds` covers, none unless it has area, rounded out as Skia's crop image filter
+/// rounds a decal crop rect (`RoundOut` in `SkImageFilterTypes.cpp`). Edges past `i32` saturate, so
+/// a huge region still meets the layer it covers.
 fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
-  if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
-    return None;
+  (bounds.left < bounds.right && bounds.top < bounds.bottom).then(|| Rect {
+    left: (bounds.left + ROUND_EPSILON).floor() as i32,
+    top: (bounds.top + ROUND_EPSILON).floor() as i32,
+    right: (bounds.right - ROUND_EPSILON).ceil() as i32,
+    bottom: (bounds.bottom - ROUND_EPSILON).ceil() as i32,
+  })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_region_past_the_i32_range_keeps_the_pixels_it_covers() {
+    let bounds = pixel_bounds(Rect::from_ltrb(-100.0, 0.0, 3e9, 16.0).unwrap()).unwrap();
+
+    assert_eq!(
+      bounds.intersection(&Rect::from_size(0, 0, 16, 16)),
+      Some(Rect::from_size(0, 0, 16, 16))
+    );
   }
 
-  let (left, top) = (bounds.left.floor() as i32, bounds.top.floor() as i32);
-
-  Some(Rect {
-    left,
-    top,
-    right: left.checked_add((bounds.width().ceil() as i32).max(1))?,
-    bottom: top.checked_add((bounds.height().ceil() as i32).max(1))?,
-  })
+  #[test]
+  fn a_near_integer_edge_rounds_to_that_integer() {
+    assert_eq!(
+      pixel_bounds(Rect::from_ltrb(0.5, -0.0005, 16.0005, 16.0).unwrap()),
+      Some(Rect::from_size(0, 0, 16, 16))
+    );
+    assert_eq!(
+      pixel_bounds(Rect::from_ltrb(0.75, 1.75, 1.75, 2.75).unwrap()),
+      Some(Rect::from_size(0, 1, 2, 2))
+    );
+  }
 }

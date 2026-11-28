@@ -5,6 +5,7 @@ mod conic;
 mod dash;
 mod geometry;
 mod rect;
+mod rect_contour;
 mod stroke;
 #[cfg(test)]
 mod tests;
@@ -14,6 +15,7 @@ pub use geometry::{
   chop_cubic_at, chop_quad_at, cubic_split, eval_cubic_pos_at, eval_quad_at, find_cubic_extrema,
   find_quad_extrema, find_unit_quad_roots, valid_unit_divide,
 };
+pub use rect_contour::RectContour;
 pub use stroke::{Stroke, resolution_scale};
 
 use skrifa::outline::OutlinePen;
@@ -63,7 +65,12 @@ impl Path {
         Point::new(rect.right, rect.bottom),
         Point::new(rect.left, rect.bottom),
       ],
-      bounds: rect,
+      bounds: Rect {
+        left: rect.left.min(rect.right),
+        top: rect.top.min(rect.bottom),
+        right: rect.left.max(rect.right),
+        bottom: rect.top.max(rect.bottom),
+      },
     }
   }
 

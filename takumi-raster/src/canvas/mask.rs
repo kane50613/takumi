@@ -7,6 +7,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size, transformed_rect_extents},
   paint_property::{ClipKind, ClipNode},
   painter::{BackgroundClipArea, FillShape},
+  path::resolution_scale,
   resources::glyph_cache::GlyphCache,
   scene::SceneBounds,
 };
@@ -719,7 +720,7 @@ fn rasterize_mask(
   let mut path = PathCommand::build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
-    path = path.stroke(stroke, 1.0)?;
+    path = path.stroke(stroke, transform.map_or(1.0, resolution_scale))?;
   }
 
   if let Some(transform) = transform {
@@ -855,10 +856,42 @@ mod tests {
   use takumi_core::{
     Cache,
     layout::border::BorderProperties,
-    style::{Angle, Sides, SpacePair},
+    path::Stroke,
+    style::{Angle, LineCap, Sides, SpacePair},
   };
 
+  use crate::style::FillRule;
+
   use super::*;
+
+  #[test]
+  fn a_stroke_under_a_transform_splits_its_caps_at_the_device_scale() {
+    let paths = [
+      PathCommand::MoveTo(Point::new(1.0, 1.0)),
+      PathCommand::LineTo(Point::new(3.0, 1.0)),
+    ];
+    let stroke = Stroke {
+      width: 1.0,
+      line_cap: LineCap::Round,
+      ..Stroke::default()
+    };
+    let transform = Affine::scale(40.0, 40.0);
+    let outline = PathCommand::build_path(&paths)
+      .and_then(|path| path.stroke(&stroke, 40.0))
+      .and_then(|path| path.transform(transform))
+      .unwrap();
+    let bounds = outline.compute_tight_bounds().unwrap().round_out().unwrap();
+    let local = outline
+      .transform(Affine::translation(
+        -(bounds.left as f32),
+        -(bounds.top as f32),
+      ))
+      .unwrap();
+    let size = Size::new(bounds.width(), bounds.height());
+    let (mask, _) = render_mask(&paths, Some(transform), Some(Style::Stroke(stroke)), None);
+
+    assert_eq!(mask, coverage::fill_path(&local, FillRule::NonZero, size));
+  }
 
   #[test]
   fn a_rect_past_the_fixed_point_range_fills_as_a_path() {

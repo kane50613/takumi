@@ -68,7 +68,7 @@ impl<'a> ImageShader<'a> {
       pixels: image.pixels(),
       width: image.width(),
       height: image.height(),
-      device_to_image: transform.invert()?,
+      device_to_image: transform.skia_invert()?,
       spread,
       filter,
       alpha: unorm_to_byte(opacity),

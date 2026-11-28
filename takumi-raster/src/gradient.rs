@@ -177,7 +177,7 @@ impl Gradient {
       return Err(Some(premultiplied(last.color)));
     }
 
-    let Some(device_to_local) = transform.invert() else {
+    let Some(device_to_local) = transform.skia_invert() else {
       return Err(None);
     };
     let degenerate = || Err(Some(degenerate_color(stops, spread)));

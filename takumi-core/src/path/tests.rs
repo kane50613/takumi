@@ -1,6 +1,7 @@
-use super::{Path, PathBuilder, Stroke, StrokeDash};
+use super::conic::{CONIC_TOLERANCE, Conic};
+use super::{Path, PathBuilder, RectContour, Stroke, StrokeDash};
 use crate::geometry::{Point, Rect};
-use crate::style::{LineCap, LineJoin};
+use crate::style::{Affine, LineCap, LineJoin};
 
 fn line(from: (f32, f32), to: (f32, f32)) -> Path {
   let mut builder = PathBuilder::new();
@@ -91,6 +92,22 @@ fn a_dash_cuts_a_line_into_its_on_intervals() {
 }
 
 #[test]
+fn a_path_past_the_dash_limit_strokes_undashed() {
+  let line = line((0.0, 0.0), (3_000_000.0, 0.0));
+  let stroke = Stroke {
+    width: 2.0,
+    dash: StrokeDash::new(vec![1.0, 1.0], 0.0),
+    ..Stroke::default()
+  };
+
+  assert!(line.dash(stroke.dash.as_ref().unwrap(), 1.0).is_none());
+  assert_eq!(
+    line.stroke(&stroke, 1.0).unwrap().bounds(),
+    Rect::from_ltrb(0.0, -1.0, 3_000_000.0, 1.0).unwrap(),
+  );
+}
+
+#[test]
 fn an_invalid_dash_pattern_is_rejected() {
   assert!(StrokeDash::new(vec![4.0], 0.0).is_none());
   assert!(StrokeDash::new(vec![4.0, -1.0], 0.0).is_none());
@@ -163,4 +180,175 @@ fn appending_a_builder_replaces_a_pending_move_and_continues_its_contour() {
     path.points()[path.points().len() - 2],
     Point::new(20.0, 0.0)
   );
+}
+
+#[test]
+fn a_rect_traced_through_collinear_points_and_an_implicit_close_is_a_rect() {
+  let contour = |points: &[(f32, f32)], close: bool| {
+    let mut builder = PathBuilder::new();
+
+    builder.move_to(points[0].0, points[0].1);
+
+    for &(x, y) in &points[1..] {
+      builder.line_to(x, y);
+    }
+
+    if close {
+      builder.close();
+    }
+
+    builder.finish().unwrap().rect_contour()
+  };
+  let rect = Rect::from_ltrb(0.0, 0.0, 10.0, 8.0).unwrap();
+
+  assert_eq!(
+    contour(
+      &[(0.0, 0.0), (4.0, 0.0), (10.0, 0.0), (10.0, 8.0), (0.0, 8.0)],
+      true
+    ),
+    Some(RectContour {
+      rect,
+      closed: true,
+      clockwise: true,
+    })
+  );
+  assert_eq!(
+    contour(
+      &[(0.0, 0.0), (0.0, 8.0), (0.0, 8.0), (10.0, 8.0), (10.0, 0.0)],
+      false
+    ),
+    Some(RectContour {
+      rect,
+      closed: false,
+      clockwise: false,
+    })
+  );
+  assert_eq!(
+    contour(&[(0.0, 0.0), (10.0, 0.0), (10.0, 8.0), (1.0, 8.0)], true),
+    None
+  );
+  assert_eq!(
+    contour(&[(0.0, 0.0), (10.0, 0.0), (0.0, 0.0), (10.0, 0.0)], true),
+    None
+  );
+}
+
+#[test]
+fn a_closed_rect_strokes_to_its_outer_and_inner_rects() {
+  let rect = Path::from_rect(Rect::from_ltrb(10.0, 10.0, 30.0, 20.0).unwrap());
+  let outline = |width: f32, line_join: LineJoin| {
+    rect
+      .stroke(
+        &Stroke {
+          width,
+          line_join,
+          ..Stroke::default()
+        },
+        1.0,
+      )
+      .unwrap()
+  };
+  let mitered = outline(4.0, LineJoin::Miter);
+
+  assert_eq!(
+    mitered.points(),
+    [
+      (8.0, 8.0),
+      (32.0, 8.0),
+      (32.0, 22.0),
+      (8.0, 22.0),
+      (12.0, 12.0),
+      (12.0, 18.0),
+      (28.0, 18.0),
+      (28.0, 12.0),
+    ]
+    .map(|(x, y)| Point::new(x, y))
+  );
+  assert_eq!(outline(4.0, LineJoin::Bevel).points().len(), 12);
+  assert_eq!(
+    outline(4.0, LineJoin::Round).points()[0],
+    Point::new(8.0, 20.0)
+  );
+  assert_eq!(outline(12.0, LineJoin::Miter).points().len(), 4);
+}
+
+#[test]
+fn a_heavy_conic_whose_halves_nearly_meet_splits_into_two_lines() {
+  let conic = Conic {
+    points: [
+      Point::new(0.0, 0.0),
+      Point::new(1000.0, 0.0),
+      Point::new(1000.0, 1000.0),
+    ],
+    weight: 1e7,
+  };
+
+  assert_eq!(conic.to_quads(CONIC_TOLERANCE).len(), 4);
+}
+
+#[test]
+fn a_transformed_rect_maps_its_own_edges() {
+  let rect = Rect {
+    left: -1e8,
+    top: 0.0,
+    right: 1.0,
+    bottom: 1.0,
+  };
+
+  assert_eq!(rect.transformed(Affine::IDENTITY), Some(rect));
+}
+
+#[test]
+fn a_path_from_an_inverted_rect_sorts_its_bounds() {
+  let path = Path::from_rect(Rect {
+    left: 10.0,
+    top: 20.0,
+    right: 0.0,
+    bottom: 5.0,
+  });
+
+  assert_eq!(
+    path.bounds(),
+    Rect {
+      left: 0.0,
+      top: 5.0,
+      right: 10.0,
+      bottom: 20.0,
+    }
+  );
+  assert_eq!(path.points()[0], Point::new(10.0, 20.0));
+}
+
+#[test]
+fn a_rect_wider_than_i32_translates_while_its_edges_fit() {
+  let rect = Rect {
+    left: -2_000_000_000,
+    top: 0,
+    right: 2_000_000_000,
+    bottom: 1,
+  };
+
+  assert_eq!(
+    rect.checked_translated(1, 1),
+    Some(Rect {
+      left: -1_999_999_999,
+      top: 1,
+      right: 2_000_000_001,
+      bottom: 2,
+    })
+  );
+  assert_eq!(rect.checked_translated(i32::MAX, 0), None);
+}
+
+#[test]
+fn a_round_joined_rect_splits_its_corners_at_the_resolution_scale() {
+  let rect = Path::from_rect(Rect::from_ltrb(0.0, 0.0, 10.0, 10.0).unwrap());
+  let stroke = Stroke {
+    width: 2.0,
+    line_join: LineJoin::Round,
+    ..Stroke::default()
+  };
+  let points = |scale: f32| rect.stroke(&stroke, scale).unwrap().points().len();
+
+  assert!(points(100.0) > points(1.0));
 }

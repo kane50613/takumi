@@ -1,9 +1,7 @@
 //! Skia's dashing, `SkDashPath` in `src/utils/SkDashPath.cpp`, walking contours as
 //! `SkContourMeasure` in `src/core/SkContourMeasure.cpp` measures them. Approximate: a lone line
 //! dashes through the general walk, where Skia's `SpecialLineRec` emits the dashes as rects. No
-//! cull rect trims a line or rect to the clip before the dash limit as `cull_path` does with one,
-//! and a path past the limit strokes nothing, where `skpathutils::FillPathWithPaint` strokes it
-//! undashed.
+//! cull rect trims a line or rect to the clip before the dash limit as `cull_path` does with one.
 
 use crate::{
   math::{NEARLY_ZERO, hash_f32},
@@ -128,6 +126,12 @@ impl Path {
   /// `SkDashPath::InternalFilter`: the dashes `dash` cuts the path into, measured to
   /// `resolution_scale`. None where it has more than a million dashes or none at all.
   pub fn dash(&self, dash: &StrokeDash, resolution_scale: f32) -> Option<Path> {
+    self.dashes(dash, resolution_scale).flatten()
+  }
+
+  /// [`Self::dash`], none past the dash limit, where `skpathutils::FillPathWithPaint` strokes the
+  /// path undashed.
+  pub(super) fn dashes(&self, dash: &StrokeDash, resolution_scale: f32) -> Option<Option<Path>> {
     let count = dash.intervals.len();
     let mut builder = PathBuilder::new();
     let mut dash_count = 0.0;
@@ -181,7 +185,7 @@ impl Path {
       }
     }
 
-    builder.finish()
+    Some(builder.finish())
   }
 
   /// `cull_path` without a cull rect: a lone line of no length with its end moved out by

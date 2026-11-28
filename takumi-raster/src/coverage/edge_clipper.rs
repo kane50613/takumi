@@ -9,6 +9,7 @@ use takumi_core::{
   path::{chop_quad_at, cubic_split, find_unit_quad_roots},
 };
 
+use super::cubics;
 use super::edge_builder::{
   chop_cubic_at_x_extrema, chop_cubic_at_y_extrema, chop_quad_at_x_extrema, chop_quad_at_y_extrema,
   transpose,
@@ -124,39 +125,10 @@ fn mono_cubic_closest_t(coords: [f32; 4], x: f32) -> f32 {
 
 /// `SkChopMonoCubicAtY` falling back to `mono_cubic_closestT`, as `chop_mono_cubic_at_y` does:
 /// the cubic split where it reaches `y`, as seven points.
-///
-/// Approximate: Skia finds the root with `SkCubics::RootsValidT` and subdivides in doubles. This
-/// bisects the monotonic polynomial in doubles instead, which can pick a split point a float bit
-/// away.
 fn chop_mono_cubic_at_y(src: [Point<f32>; 4], y: f32) -> [Point<f32>; 7] {
-  let coords = src.map(|point| f64::from(point.y));
-  let eval = |t: f64| {
-    let u = 1.0 - t;
-
-    u * u * u * coords[0]
-      + 3.0 * u * u * t * coords[1]
-      + 3.0 * u * t * t * coords[2]
-      + t * t * t * coords[3]
-  };
-  let target = f64::from(y);
-  let increasing = coords[3] >= coords[0];
-  let in_range = (coords[0].min(coords[3])..=coords[0].max(coords[3])).contains(&target);
-
-  if in_range {
-    let (mut low, mut high) = (0.0f64, 1.0f64);
-
-    for _ in 0..64 {
-      let mid = (low + high) * 0.5;
-
-      if (eval(mid) < target) == increasing {
-        low = mid;
-      } else {
-        high = mid;
-      }
-    }
-
-    let t = (low + high) * 0.5;
+  if let Some(t) = first_y_intersection(src, y) {
     let points = src.map(|point| (f64::from(point.x), f64::from(point.y)));
+    // `SkBezierCubic::Subdivide`.
     let mix = |a: (f64, f64), b: (f64, f64)| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
     let ab = mix(points[0], points[1]);
     let bc = mix(points[1], points[2]);
@@ -173,6 +145,30 @@ fn chop_mono_cubic_at_y(src: [Point<f32>; 4], y: f32) -> [Point<f32>; 7] {
   let [ab, _, cd, abc, bcd, abcd] = cubic_split(&src, t);
 
   [src[0], ab, abc, abcd, bcd, cd, src[3]]
+}
+
+/// `first_axis_intersection` in `SkGeometry.cpp`: the first `t` where the cubic reaches `y` closely
+/// enough, from `SkCubics::RootsValidT` and then from its bisection.
+fn first_y_intersection(src: [Point<f32>; 4], y: f32) -> Option<f64> {
+  let [p0, p1, p2, p3] = src.map(|point| f64::from(point.y));
+  // `SkBezierCubic::ConvertToPolynomial`.
+  let (a, b, c, d) = (
+    -p0 + 3.0 * p1 - 3.0 * p2 + p3,
+    3.0 * p0 - 6.0 * p1 + 3.0 * p2,
+    -3.0 * p0 + 3.0 * p1,
+    p0 - f64::from(y),
+  );
+  // `close_enough_to_zero`.
+  let accurate = |t: &f64| cubics::eval(a, b, c, d, *t).abs() < 0.00001;
+
+  cubics::roots_valid_t(a, b, c, d)
+    .into_iter()
+    .find(accurate)
+    .or_else(|| {
+      cubics::binary_search_roots_valid_t(a, b, c, d)
+        .into_iter()
+        .find(accurate)
+    })
 }
 
 /// `chop_mono_cubic_at_x`, through [`chop_mono_cubic_at_y`] on the transposed cubic.

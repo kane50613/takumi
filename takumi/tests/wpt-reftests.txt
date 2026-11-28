@@ -2757,6 +2757,7 @@ css/css-text/word-space-transform/word-space-transform-029.html
 !css/css-text/word-spacing/word-spacing-combining-mark-002.html
 !css/css-text/writing-system/
 css/css-text/writing-system/writing-system-font-001.html
+!css/css-transforms/2d-rotate-001.html
 !css/css-transforms/3d-rendering-context-and-inline.html
 !css/css-transforms/3dtransform-and-filter-no-perspective-001.html
 !css/css-transforms/animation/transform-additive-animation.html

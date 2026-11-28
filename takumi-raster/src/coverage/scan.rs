@@ -16,7 +16,7 @@ use super::{
     ACCURACY, Curve, Edge, FIXED_ONE, Fixed, MAX_S32, MIN_S32, ceil_to_fixed, ceil_to_int,
     fixed_mul, floor_to_fixed, floor_to_int, int_to_fixed, left_shift, round_to_int,
   },
-  edge_builder::{build_edges, is_convex, trivial_rect},
+  edge_builder::{build_edges, is_convex},
   edge_clipper::EdgeClipper,
 };
 
@@ -1084,7 +1084,7 @@ pub(super) fn fill_path(
 
   let additive = if MaskBlitter::can_handle(ir) {
     // `try_blit_fat_anti_rect`.
-    if let Some(rect) = trivial_rect(path) {
+    if let Some(rect) = path.rect_contour().map(|contour| contour.rect) {
       let Some(rect) = Rect::from_ltrb(
         rect.left.max(clip.left as f32),
         rect.top.max(clip.top as f32),

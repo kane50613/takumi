@@ -35,9 +35,9 @@ pub(crate) fn with_length(x: f32, y: f32, length: f32) -> Option<Point<f32>> {
   (x.is_finite() && y.is_finite() && (x != 0.0 || y != 0.0)).then_some(Point::new(x, y))
 }
 
-/// `SkPointPriv::EqualsWithinTolerance` without a tolerance: no direction between them.
+/// `SkPointPriv::EqualsWithinTolerance`: each axis within `SK_ScalarNearlyZero`.
 fn equals_within_tolerance(a: Point<f32>, b: Point<f32>) -> bool {
-  !can_normalize(a.x - b.x, a.y - b.y)
+  (a.x - b.x).abs() <= NEARLY_ZERO && (a.y - b.y).abs() <= NEARLY_ZERO
 }
 
 /// `between` in `SkGeometry.cpp`.
