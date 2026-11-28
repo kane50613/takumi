@@ -65,7 +65,12 @@ impl Path {
         Point::new(rect.right, rect.bottom),
         Point::new(rect.left, rect.bottom),
       ],
-      bounds: rect,
+      bounds: Rect {
+        left: rect.left.min(rect.right),
+        top: rect.top.min(rect.bottom),
+        right: rect.left.max(rect.right),
+        bottom: rect.top.max(rect.bottom),
+      },
     }
   }
 

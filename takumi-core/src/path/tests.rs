@@ -297,3 +297,24 @@ fn a_transformed_rect_maps_its_own_edges() {
 
   assert_eq!(rect.transformed(Affine::IDENTITY), Some(rect));
 }
+
+#[test]
+fn a_path_from_an_inverted_rect_sorts_its_bounds() {
+  let path = Path::from_rect(Rect {
+    left: 10.0,
+    top: 20.0,
+    right: 0.0,
+    bottom: 5.0,
+  });
+
+  assert_eq!(
+    path.bounds(),
+    Rect {
+      left: 0.0,
+      top: 5.0,
+      right: 10.0,
+      bottom: 20.0,
+    }
+  );
+  assert_eq!(path.points()[0], Point::new(10.0, 20.0));
+}
