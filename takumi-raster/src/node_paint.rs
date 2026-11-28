@@ -1,4 +1,4 @@
-//! Raster box decorations, compositing [`takumi_core::layout::decoration`] with tiny-skia.
+//! Raster box decorations, compositing [`takumi_core::layout::decoration`].
 
 use std::sync::Arc;
 
@@ -512,7 +512,7 @@ impl<'c> CanvasDevice<'c> {
       let text_stroke = (stroke.0 > 0.0).then(|| {
         let mut text_stroke = Stroke::new(stroke.0);
 
-        text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
+        text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin;
         text_stroke
       });
       let mut coverages = Vec::with_capacity(glyph_run.glyphs.len());
@@ -1284,7 +1284,7 @@ mod tests {
   };
 
   use super::CanvasDevice;
-  use crate::{Canvas, Cap, Stroke};
+  use crate::{Canvas, Stroke, style::LineCap};
 
   fn paint_border(
     border: BorderProperties,
@@ -1474,7 +1474,7 @@ mod tests {
       unreachable!("thin dotted stroke should produce a dash pattern");
     };
 
-    assert_eq!(stroke.cap, Cap::Butt);
+    assert_eq!(stroke.cap, LineCap::Butt);
     assert_eq!(dash_pattern.intervals, [2.0, 2.0]);
   }
 

@@ -1,18 +1,19 @@
-//! Draws flattened SVG ops onto a tiny-skia pixmap. A layer covers its supplied paint bounds, or a
+//! Draws flattened SVG ops onto a pixmap. A layer covers its supplied paint bounds, or a
 //! filter layer's region when it has none.
 
 use std::slice::Iter;
 
 use crate::path::Fill;
 use crate::pixmap::{Mask, Pixmap, PixmapMut, PixmapRef};
-use takumi_core::path::{IntRect, IntSize, Path, PathBuilder, Rect};
-use tiny_skia_path::{LineCap, LineJoin, Stroke, StrokeDash};
+use takumi_core::path::{
+  IntRect, IntSize, Path, PathBuilder, Rect, Stroke, StrokeDash, resolution_scale,
+};
 
 use super::filter::apply as apply_filter;
 use crate::{
   blend::{blend_premultiplied_pixel, scale_premultiplied_pixel},
   coverage,
-  path::{resolution_scale, stroke_path},
+  path::stroke_path,
   shader::{Gradient, GradientShape, GradientStop, ImageFilter, ImageShader, Shader, Spread},
 };
 use takumi_core::{
@@ -28,7 +29,7 @@ use takumi_core::{
     },
     image_buffer::ImageBuffer,
   },
-  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, math::mul_div_255},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm, LineCap, LineJoin, math::mul_div_255},
 };
 
 /// A pixmap being drawn on, with the transform and clip that apply to what is drawn.
@@ -281,8 +282,8 @@ impl<'a, 'b> Target<'a, 'b> {
     true
   }
 
-  /// The mask `ops` draw, which cuts the layer it is pushed with: their alpha, or their luminance as
-  /// tiny-skia's `Mask::from_pixmap` reads it.
+  /// The mask `ops` draw, which cuts the layer it is pushed with: their alpha, or the luminance of
+  /// their unpremultiplied color times their alpha, rounded up.
   fn mask(&self, ops: &[SvgOp], luminance: bool) -> Option<Mask> {
     let (width, height) = (self.pixmap.width(), self.pixmap.height());
     let mut drawn = Pixmap::new(width, height)?;
@@ -355,9 +356,12 @@ impl<'a, 'b> Target<'a, 'b> {
       // as a hairline of reduced coverage.
       let mut tile = None;
 
+      let (outline, dash) = svg_stroke(stroke);
+
       if let Some(outline) = stroke_path(
         &path,
-        &tiny_stroke(stroke),
+        &outline,
+        dash.as_ref(),
         resolution_scale(self.transform),
       ) && let Some(shader) = shader_of(&stroke.paint, stroke.opacity, self.transform, &mut tile)
       {
@@ -639,7 +643,7 @@ pub(crate) fn draw(ops: &[SvgOp], transform: Affine, pixmap: &mut PixmapMut) {
 }
 
 /// Draws `source` over `target` with its top left at `origin`, at `opacity` and inside `clip` when
-/// there is one, as tiny-skia's source-over `draw_pixmap` does, in integers.
+/// there is one, in integers.
 pub(crate) fn draw_over(
   target: &mut PixmapMut,
   source: PixmapRef,
@@ -844,26 +848,28 @@ fn tiny_path(commands: &[PathCommand]) -> Option<Path> {
   builder.finish()
 }
 
-/// The tiny-skia stroke of `stroke`.
-fn tiny_stroke(stroke: &SvgStrokeStyle) -> Stroke {
-  Stroke {
-    width: stroke.width,
-    miter_limit: stroke.miter_limit,
-    line_cap: match stroke.cap {
-      SvgLineCap::Butt => LineCap::Butt,
-      SvgLineCap::Round => LineCap::Round,
-      SvgLineCap::Square => LineCap::Square,
+/// The outline `stroke` draws and the dashes it cuts first.
+fn svg_stroke(stroke: &SvgStrokeStyle) -> (Stroke, Option<StrokeDash>) {
+  (
+    Stroke {
+      width: stroke.width,
+      miter_limit: stroke.miter_limit,
+      line_cap: match stroke.cap {
+        SvgLineCap::Butt => LineCap::Butt,
+        SvgLineCap::Round => LineCap::Round,
+        SvgLineCap::Square => LineCap::Square,
+      },
+      line_join: match stroke.join {
+        SvgLineJoin::Miter => LineJoin::Miter,
+        SvgLineJoin::Round => LineJoin::Round,
+        SvgLineJoin::Bevel => LineJoin::Bevel,
+      },
     },
-    line_join: match stroke.join {
-      SvgLineJoin::Miter => LineJoin::Miter,
-      SvgLineJoin::Round => LineJoin::Round,
-      SvgLineJoin::Bevel => LineJoin::Bevel,
-    },
-    dash: stroke
+    stroke
       .dash
       .as_ref()
       .and_then(|(array, offset)| StrokeDash::new(array.clone(), *offset)),
-  }
+  )
 }
 
 fn gradient_stops(gradient: &SvgGradient, opacity: f32) -> Vec<GradientStop> {

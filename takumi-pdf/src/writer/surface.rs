@@ -214,11 +214,11 @@ impl<'a> Surface<'a> {
     let (mut cur_x, mut cur_y) = (start.x, start.y);
 
     for glyph in glyphs {
-      let mut base_transform = tiny_skia_path::Transform::from_translate(
+      let base_transform = Transform::from_translate(
         cur_x + glyph.x_offset(font_size),
         cur_y - glyph.y_offset(font_size),
       );
-      base_transform = base_transform.pre_concat(tiny_skia_path::Transform::from_scale(
+      let base_transform = base_transform.pre_concat(Transform::from_scale(
         font_size / font.units_per_em(),
         -font_size / font.units_per_em(),
       ));
@@ -226,7 +226,7 @@ impl<'a> Surface<'a> {
         font.clone(),
         context_color,
         glyph.glyph_id(),
-        Transform::from_tsp(base_transform),
+        base_transform,
         self,
       );
 

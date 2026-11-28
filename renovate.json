@@ -7,10 +7,10 @@
   "packageRules": [
     {
       "matchManagers": ["cargo"],
-      "matchPackageNames": ["phf", "strict-num", "float-cmp"],
+      "matchPackageNames": ["phf", "float-cmp"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false,
-      "description": "Held at the versions cssparser, selectors and tiny-skia-path resolve to. A newer major lands a second copy of the crate in the tree."
+      "description": "Held at the versions cssparser and selectors resolve to. A newer major lands a second copy of the crate in the tree."
     },
     {
       "matchManagers": ["cargo"],

@@ -1,14 +1,21 @@
 //! Skia's path geometry: `SkPath` and `SkPathBuilder` as the raster and PDF backends build and walk
 //! paths, its float and integer rects, and the `SkGeometry` curve helpers that bound them.
 
+mod conic;
+mod dash;
 mod geometry;
 mod rect;
+mod stroke;
+#[cfg(test)]
+mod tests;
 
+pub use dash::StrokeDash;
 pub use geometry::{
-  chop_quad_at, cubic_split, eval_cubic_pos_at, eval_quad_at, find_cubic_extrema,
+  chop_cubic_at, chop_quad_at, cubic_split, eval_cubic_pos_at, eval_quad_at, find_cubic_extrema,
   find_quad_extrema, find_unit_quad_roots, valid_unit_divide,
 };
 pub use rect::{IntRect, IntSize, Rect};
+pub use stroke::{Stroke, resolution_scale};
 
 use crate::style::Affine;
 
@@ -30,6 +37,18 @@ impl Point {
   /// The origin.
   pub const fn zero() -> Self {
     Self { x: 0.0, y: 0.0 }
+  }
+
+  /// `SkPoint::Distance`: how far `other` is, through doubles only where the floats overflow.
+  pub fn distance(self, other: Self) -> f32 {
+    let (dx, dy) = (self.x - other.x, self.y - other.y);
+    let squared = dx * dx + dy * dy;
+
+    if squared.is_finite() {
+      squared.sqrt()
+    } else {
+      (f64::from(dx) * f64::from(dx) + f64::from(dy) * f64::from(dy)).sqrt() as f32
+    }
   }
 
   /// Whether both coordinates are finite.
@@ -300,6 +319,114 @@ impl PathBuilder {
     self.points.push(Point::from_xy(x1, y1));
     self.points.push(Point::from_xy(x2, y2));
     self.points.push(Point::from_xy(x, y));
+  }
+
+  /// Adds a conic through `x1`, `y1` to `x`, `y` pulled by `weight`, as `SkPathBuilder::conicTo`
+  /// takes it. Approximate: the conic is split into quads here, within a quarter of a unit, where
+  /// `SkEdgeBuilder` splits it in device space.
+  pub fn conic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32) {
+    self.conic_to_within(x1, y1, x, y, weight, conic::CONIC_TOLERANCE);
+  }
+
+  /// [`Self::conic_to`], split into quads within `tolerance`.
+  fn conic_to_within(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32, tolerance: f32) {
+    self.inject_move_to_if_needed();
+
+    if weight <= 0.0 {
+      self.line_to(x, y);
+    } else if weight == 1.0 {
+      self.quad_to(x1, y1, x, y);
+    } else if !weight.is_finite() {
+      self.line_to(x1, y1);
+      self.line_to(x, y);
+    } else {
+      let start = self.last_point().unwrap_or_default();
+      let conic = conic::Conic {
+        points: [start, Point::from_xy(x1, y1), Point::from_xy(x, y)],
+        weight,
+      };
+
+      for quad in conic.to_quads(tolerance).as_chunks::<2>().0 {
+        self.quad_to(quad[0].x, quad[0].y, quad[1].x, quad[1].y);
+      }
+    }
+  }
+
+  /// Moves the last point to `point`, or starts a contour there when there is none.
+  pub fn set_last_point(&mut self, point: Point) {
+    match self.points.last_mut() {
+      Some(last) => *last = point,
+      None => self.move_to(point.x, point.y),
+    }
+  }
+
+  /// The points added so far.
+  pub fn points(&self) -> &[Point] {
+    &self.points
+  }
+
+  /// Empties the builder.
+  pub fn clear(&mut self) {
+    self.verbs.clear();
+    self.points.clear();
+    self.last_move_to_index = 0;
+    self.move_to_required = true;
+  }
+
+  /// Appends `other`'s verbs and points, `SkPathBuilder::addPath` in append mode.
+  pub fn push_builder(&mut self, other: &Self) {
+    if other.is_empty() {
+      return;
+    }
+
+    // A pending move gives way to the one `other` starts with.
+    if self.verbs.last() == Some(&PathVerb::Move) {
+      self.verbs.pop();
+      self.points.pop();
+    }
+
+    self.last_move_to_index = self.points.len() + other.last_move_to_index;
+    self.move_to_required = other.move_to_required;
+    self.verbs.extend_from_slice(&other.verbs);
+    self.points.extend_from_slice(&other.points);
+  }
+
+  /// `SkPathBuilder::privateReversePathTo`: continues with `other`'s last contour walked backwards
+  /// to its start.
+  pub fn push_reversed(&mut self, other: &Self) {
+    let mut end = other.points.len();
+
+    for verb in other.verbs.iter().rev() {
+      match verb {
+        PathVerb::Move => return,
+        PathVerb::Line => {
+          end -= 1;
+
+          let to = other.points[end - 1];
+
+          self.line_to(to.x, to.y);
+        }
+        PathVerb::Quad => {
+          end -= 2;
+
+          let [to, control] = [other.points[end - 1], other.points[end]];
+
+          self.quad_to(control.x, control.y, to.x, to.y);
+        }
+        PathVerb::Cubic => {
+          end -= 3;
+
+          let [to, second, first] = [
+            other.points[end - 1],
+            other.points[end],
+            other.points[end + 1],
+          ];
+
+          self.cubic_to(first.x, first.y, second.x, second.y, to.x, to.y);
+        }
+        PathVerb::Close => {}
+      }
+    }
   }
 
   /// Closes the open contour.

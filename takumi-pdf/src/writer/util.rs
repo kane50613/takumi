@@ -10,7 +10,7 @@ use base64::Engine;
 pub(crate) use deferred::*;
 use pdf_writer::Name;
 use siphasher::sip128::{Hasher128, SipHasher13};
-use tiny_skia_path::Path;
+use takumi_core::path::Path;
 
 pub(crate) trait NameExt {
   fn to_pdf_name(&self) -> Name<'_>;
@@ -28,14 +28,14 @@ impl NameExt for &str {
   }
 }
 
+/// The bounds of `stroke` along `path`, measured undashed since the viewer dashes it and the solid
+/// outline holds every dash.
 pub(crate) fn calculate_stroke_bbox(stroke: &Stroke, path: &Path) -> Option<Rect> {
-  let stroke = stroke.clone().into_tiny_skia();
+  let (outline, _) = stroke.clone().outline();
 
-  if let Some(stroked_path) = path.stroke(&stroke, 1.0) {
-    return Some(Rect::from_tsp(stroked_path.compute_tight_bounds()?));
-  }
-
-  None
+  Some(Rect::from_core(
+    path.stroke(&outline, 1.0)?.compute_tight_bounds()?,
+  ))
 }
 
 pub(crate) struct Prehashed<T: ?Sized> {
@@ -215,4 +215,33 @@ pub(crate) mod test_utils {
     NOTO_COLOR_EMOJI_COLR,
     FONT_PATH.join("NotoColorEmoji.COLR.subset.ttf")
   );
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::path::PathBuilder;
+
+  use super::*;
+  use crate::writer::graphics::paint::StrokeDash;
+
+  #[test]
+  fn a_dashed_stroke_is_bounded_by_its_whole_outline() {
+    let mut builder = PathBuilder::new();
+
+    builder.move_to(0.0, 0.0);
+    builder.line_to(100.0, 0.0);
+
+    let path = builder.finish().unwrap();
+    let stroke = Stroke {
+      dash: Some(StrokeDash {
+        array: vec![5.0, 95.0],
+        offset: 0.0,
+      }),
+      ..Stroke::default()
+    };
+
+    let bounds = calculate_stroke_bbox(&stroke, &path).unwrap();
+
+    assert_eq!((bounds.left(), bounds.right()), (0.0, 100.0));
+  }
 }

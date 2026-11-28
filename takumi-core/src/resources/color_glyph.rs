@@ -405,7 +405,7 @@ impl ColorPainter for Recorder<'_> {
   }
 }
 
-/// Records a glyph outline into a tiny-skia path, in font units with the y-axis pointing up.
+/// Records a glyph outline into a path, in font units with the y-axis pointing up.
 struct PathRecorder(PathBuilder);
 
 impl OutlinePen for PathRecorder {

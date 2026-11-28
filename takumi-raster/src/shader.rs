@@ -841,64 +841,86 @@ mod tests {
     assert!(pixels[4][0] > pixels[0][0]);
   }
 
-  /// tiny-skia ports the same Skia gradient code, so its pixels are the reference here.
-  fn tiny_skia_pixels(shape: GradientShape, stops: &[GradientStop], size: u32) -> Vec<[u8; 4]> {
-    use tiny_skia::{Color, GradientStop as TinyStop, Paint, Pixmap, SpreadMode};
-    use tiny_skia::{Point, Rect, Transform};
-
-    let tiny_stops = stops
-      .iter()
-      .map(|stop| {
-        let [r, g, b, a] = stop.color;
-
-        TinyStop::new(stop.position, Color::from_rgba(r, g, b, a).unwrap())
-      })
-      .collect();
-    let shader = match shape {
-      GradientShape::Linear { start, end } => tiny_skia::LinearGradient::new(
-        Point::from_xy(start[0], start[1]),
-        Point::from_xy(end[0], end[1]),
-        tiny_stops,
-        SpreadMode::Pad,
-        Transform::identity(),
-      ),
-      GradientShape::Conical {
-        start,
-        start_radius,
-        end,
-        end_radius,
-      } => tiny_skia::RadialGradient::new(
-        Point::from_xy(start[0], start[1]),
-        start_radius,
-        Point::from_xy(end[0], end[1]),
-        end_radius,
-        tiny_stops,
-        SpreadMode::Pad,
-        Transform::identity(),
-      ),
-    }
-    .unwrap();
-    let mut pixmap = Pixmap::new(size, size).unwrap();
-
-    pixmap.fill_rect(
-      Rect::from_xywh(0.0, 0.0, size as f32, size as f32).unwrap(),
-      &Paint {
-        shader,
-        anti_alias: false,
-        ..Paint::default()
-      },
-      Transform::identity(),
-      None,
+  /// The two-point conical gradient at the center of pixel `(x, y)`, solved in doubles for the
+  /// largest `t` whose circle has a radius, padded, and interpolated between unpremultiplied stops:
+  /// an oracle independent of the stage pipeline.
+  fn conical_reference(shape: GradientShape, stops: &[GradientStop], x: u32, y: u32) -> [u8; 4] {
+    let GradientShape::Conical {
+      start,
+      start_radius,
+      end,
+      end_radius,
+    } = shape
+    else {
+      return [0; 4];
+    };
+    let (px, py) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
+    let (cx, cy) = (f64::from(start[0]), f64::from(start[1]));
+    let (dx, dy) = (f64::from(end[0]) - cx, f64::from(end[1]) - cy);
+    let (r0, dr) = (
+      f64::from(start_radius),
+      f64::from(end_radius - start_radius),
     );
-    pixmap
-      .pixels()
+    let (qx, qy) = (px - cx, py - cy);
+    let a = dx * dx + dy * dy - dr * dr;
+    let b = qx * dx + qy * dy + r0 * dr;
+    let c = qx * qx + qy * qy - r0 * r0;
+    let radius_at = |t: f64| r0 + t * dr;
+    let t = if a.abs() < 1e-9 {
+      (b != 0.0)
+        .then(|| c / (2.0 * b))
+        .filter(|&t| radius_at(t) >= 0.0)
+    } else {
+      let discriminant = b * b - a * c;
+
+      (discriminant >= 0.0)
+        .then(|| {
+          let root = discriminant.sqrt();
+          let (high, low) = ((b + root) / a, (b - root) / a);
+          let (high, low) = if high >= low {
+            (high, low)
+          } else {
+            (low, high)
+          };
+
+          [high, low].into_iter().find(|&t| radius_at(t) >= 0.0)
+        })
+        .flatten()
+    };
+    let Some(t) = t else {
+      return [0; 4];
+    };
+    let t = t.clamp(0.0, 1.0) as f32;
+    let next = stops
       .iter()
-      .map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()])
-      .collect()
+      .position(|stop| stop.position >= t)
+      .unwrap_or(stops.len() - 1);
+    let color = if next == 0 {
+      stops[0].color
+    } else {
+      let (from, to) = (&stops[next - 1], &stops[next]);
+      let span = to.position - from.position;
+      let weight = if span > 0.0 {
+        (t - from.position) / span
+      } else {
+        1.0
+      };
+
+      std::array::from_fn(|lane| from.color[lane] + (to.color[lane] - from.color[lane]) * weight)
+    };
+    let alpha = color[3];
+    let unorm = |value: f32| (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+
+    [
+      unorm(color[0] * alpha),
+      unorm(color[1] * alpha),
+      unorm(color[2] * alpha),
+      unorm(alpha),
+    ]
   }
 
   #[test]
-  fn conical_gradients_match_skia_in_every_focal_case() {
+  fn conical_gradients_match_the_analytic_gradient_in_every_focal_case() {
     let stops = [
       stop(0.0, RED),
       stop(0.4, [0.0, 1.0, 0.0, 0.5]),
@@ -928,13 +950,12 @@ mod tests {
       };
       let gradient = Gradient::new(shape, &stops, Spread::Pad, Affine::IDENTITY).unwrap();
 
-      let reference = tiny_skia_pixels(shape, &stops, 32);
-
       for y in 0..32 {
         let ours = row(&gradient, y, 32);
-        let theirs = &reference[y as usize * 32..][..32];
 
-        for (x, (a, b)) in ours.iter().zip(theirs).enumerate() {
+        for (x, a) in ours.iter().enumerate() {
+          let b = &conical_reference(shape, &stops, x as u32, y as u32);
+
           assert!(
             a.iter().zip(b).all(|(p, q)| p.abs_diff(*q) <= 1),
             "{shape:?} at ({x}, {y}): {a:?} against {b:?}"

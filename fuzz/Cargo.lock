@@ -15,16 +15,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2fb6cfd47bf496ff64095c20eaba0c201404ee38714d4142fcfa1dc334fcc7a"
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+
+[[package]]
 name = "arbitrary"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
-
-[[package]]
-name = "arrayref"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
 
 [[package]]
 name = "arrayvec"
@@ -292,9 +292,9 @@ dependencies = [
 
 [[package]]
 name = "float-cmp"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
 dependencies = [
  "num-traits",
 ]
@@ -358,6 +358,11 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash",
+]
 
 [[package]]
 name = "icu_casemap"
@@ -868,13 +873,14 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "selectors"
-version = "0.41.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8322aebea94a6cc288ff884e8a49bdbceef60206c400c6c46d22e62fc4fd91a6"
+checksum = "474a2075f58859e8482495e1a2ae9634754ee383ad09a3c4093b8d9a51910fa3"
 dependencies = [
  "bitflags",
  "cssparser",
  "derive_more",
+ "hashbrown",
  "log",
  "new_debug_unreachable",
  "precomputed-hash",
@@ -931,9 +937,9 @@ dependencies = [
 
 [[package]]
 name = "servo_arc"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4eceb519ec34d8290aaf6e46f435102f2bfa63f22b05a144fb16ab266d3b198"
+checksum = "9f121f129345b5201873a0e253f630413d750b9d799613e2873fb768e592c2a7"
 dependencies = [
  "stable_deref_trait",
 ]
@@ -982,12 +988,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
-name = "strict-num"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
-
-[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.20.0"
+version = "2.22.1"
 dependencies = [
  "takumi-core",
  "takumi-raster",
@@ -1030,7 +1030,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.36.0"
+version = "0.39.0"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1062,7 +1062,6 @@ dependencies = [
  "smallvec",
  "thin-vec",
  "thiserror",
- "tiny-skia",
  "typed-builder",
  "unicode-bidi",
  "wuff",
@@ -1082,16 +1081,14 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.20.0"
+version = "0.21.3"
 dependencies = [
  "base64",
  "bumpalo",
  "flate2",
  "float-cmp",
- "gif",
  "icu_normalizer",
  "image-webp",
- "imagesize",
  "indexmap",
  "kurbo",
  "pdf-writer",
@@ -1101,7 +1098,6 @@ dependencies = [
  "skrifa",
  "smallvec",
  "takumi-core",
- "tiny-skia-path",
  "typed-builder",
  "write-fonts",
  "xmp-writer",
@@ -1111,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "0.7.0"
+version = "0.9.1"
 dependencies = [
  "bytemuck",
  "color",
@@ -1122,12 +1118,10 @@ dependencies = [
  "libz-rs-sys",
  "png",
  "rayon",
- "rustc-hash",
  "serde",
  "skrifa",
  "smallvec",
  "takumi-core",
- "tiny-skia",
  "typed-builder",
  "xxhash-rust",
  "zlib-rs",
@@ -1157,31 +1151,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
-]
-
-[[package]]
-name = "tiny-skia"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47ffee5eaaf5527f630fb0e356b90ebdec84d5d18d937c5e440350f88c5a91ea"
-dependencies = [
- "arrayref",
- "arrayvec",
- "bytemuck",
- "cfg-if",
- "log",
- "tiny-skia-path",
-]
-
-[[package]]
-name = "tiny-skia-path"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edca365c3faccca67d06593c5980fa6c57687de727a03131735bb85f01fdeeb9"
-dependencies = [
- "arrayref",
- "bytemuck",
- "strict-num",
 ]
 
 [[package]]

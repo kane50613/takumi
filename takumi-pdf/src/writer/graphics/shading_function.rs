@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bumpalo::Bump;
 use pdf_writer::types::{FunctionShadingType, PostScriptOp};
 use pdf_writer::{Chunk, Finish, Name, Ref};
-use tiny_skia_path::Point;
+use takumi_core::path::Point;
 
 use crate::writer::chunk_container::ChunkContainer;
 use crate::writer::configure::ValidationError;

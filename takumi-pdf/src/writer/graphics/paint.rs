@@ -4,6 +4,10 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use pdf_writer::types::{LineCapStyle, LineJoinStyle};
+use takumi_core::{
+  path::{Stroke as PathStroke, StrokeDash as PathDash},
+  style::{LineCap as CoreLineCap, LineJoin as CoreLineJoin},
+};
 
 use crate::writer::geom::Transform;
 use crate::writer::graphics::color::{Color, luma, rgb};
@@ -369,28 +373,27 @@ impl Default for Stroke {
 }
 
 impl Stroke {
-  pub(crate) fn into_tiny_skia(self) -> tiny_skia_path::Stroke {
-    let mut stroke = tiny_skia_path::Stroke {
-      width: self.width,
-      miter_limit: self.miter_limit,
-      line_cap: match self.line_cap {
-        LineCap::Butt => tiny_skia_path::LineCap::Butt,
-        LineCap::Round => tiny_skia_path::LineCap::Round,
-        LineCap::Square => tiny_skia_path::LineCap::Square,
+  /// The outline this stroke draws and the dashes it cuts first, for its bounds.
+  pub(crate) fn outline(self) -> (PathStroke, Option<PathDash>) {
+    (
+      PathStroke {
+        width: self.width,
+        miter_limit: self.miter_limit,
+        line_cap: match self.line_cap {
+          LineCap::Butt => CoreLineCap::Butt,
+          LineCap::Round => CoreLineCap::Round,
+          LineCap::Square => CoreLineCap::Square,
+        },
+        line_join: match self.line_join {
+          LineJoin::Miter => CoreLineJoin::Miter,
+          LineJoin::Round => CoreLineJoin::Round,
+          LineJoin::Bevel => CoreLineJoin::Bevel,
+        },
       },
-      line_join: match self.line_join {
-        LineJoin::Miter => tiny_skia_path::LineJoin::Miter,
-        LineJoin::Round => tiny_skia_path::LineJoin::Round,
-        LineJoin::Bevel => tiny_skia_path::LineJoin::Bevel,
-      },
-      dash: None,
-    };
-
-    if let Some(stroke_dash) = self.dash {
-      stroke.dash = tiny_skia_path::StrokeDash::new(stroke_dash.array, stroke_dash.offset);
-    }
-
-    stroke
+      self
+        .dash
+        .and_then(|dash| PathDash::new(dash.array, dash.offset)),
+    )
   }
 }
 

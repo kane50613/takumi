@@ -13,7 +13,6 @@ png.workspace = true
 gif.workspace = true
 jpeg-encoder.workspace = true
 color.workspace = true
-tiny-skia-path.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
@@ -62,7 +61,6 @@ pages = ["takumi-core/fragmentation"]
 
 [dev-dependencies]
 serde_json.workspace = true
-tiny-skia.workspace = true
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
