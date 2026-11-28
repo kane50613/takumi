@@ -10,7 +10,7 @@ pub(crate) const UNIT_RECT: Rect<f32> = Rect {
   bottom: 1.0,
 };
 
-/// A rotation by `angle` degrees around `x`, `y`.
+/// A rotation by `angle` degrees around `x`, `y`, keeping the unsnapped sine and cosine of [`Affine::rotation`] so PDF output stays as before.
 pub(crate) fn rotation_at(angle: f32, x: f32, y: f32) -> Affine {
   let radians = angle.to_radians();
   let (sin, cos) = (radians.sin(), radians.cos());

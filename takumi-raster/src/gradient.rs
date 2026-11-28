@@ -1,6 +1,8 @@
 //! The linear and two-point conical gradients of Skia's `SkGradientBaseShader`, as its
 //! high-precision raster pipeline runs them. Approximate: a shaded pixel rounds to 8 bits before it
 //! blends, where Skia blends a gradient's pixels in floats.
+//! Gradients are not dithered, where Blink requests dithering (`gradient.cc`), so a shallow ramp can
+//! band.
 
 use crate::blend::unorm_to_byte;
 use takumi_core::{
@@ -187,6 +189,7 @@ impl Gradient {
         if !length.is_finite() {
           return Err(None);
         }
+        // Follows Skia and Blink, which average the stops where SVG 2 paints the last one.
         if nearly_zero(length, DEGENERATE_THRESHOLD) {
           return degenerate();
         }
