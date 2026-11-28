@@ -31,15 +31,26 @@ impl NameExt for &str {
   }
 }
 
-/// The bounds of `stroke` along `path`, measured undashed since the viewer dashes it and the solid
-/// outline holds every dash.
+/// The bounds of `stroke` along `path`, its solid outline joined with its dashes' outline.
 pub(crate) fn calculate_stroke_bbox(stroke: &Stroke, path: &Path) -> Option<Rect<f32>> {
   let undashed = PathStroke {
     dash: None,
     ..stroke.outline.clone()
   };
+  let solid = path.stroke(&undashed, 1.0)?.compute_tight_bounds()?;
 
-  path.stroke(&undashed, 1.0)?.compute_tight_bounds()
+  if stroke.outline.dash.is_none() {
+    return Some(solid);
+  }
+
+  // A dash's square cap can pass a corner the solid outline bevels, and the viewer dashes it.
+  match path
+    .stroke(&stroke.outline, 1.0)
+    .and_then(|dashed| dashed.compute_tight_bounds())
+  {
+    Some(dashed) => solid.join(&dashed),
+    None => Some(solid),
+  }
 }
 
 pub(crate) struct Prehashed<T: ?Sized> {
@@ -223,7 +234,10 @@ pub(crate) mod test_utils {
 
 #[cfg(test)]
 mod tests {
-  use takumi_core::path::{PathBuilder, StrokeDash};
+  use takumi_core::{
+    path::{PathBuilder, StrokeDash},
+    style::{LineCap, LineJoin},
+  };
 
   use crate::writer::graphics::color::luma;
   use crate::writer::num::NormalizedF32;
@@ -245,5 +259,25 @@ mod tests {
     let bounds = calculate_stroke_bbox(&stroke, &path).unwrap();
 
     assert_eq!((bounds.left, bounds.right), (0.0, 100.0));
+  }
+
+  #[test]
+  fn a_square_capped_dash_past_a_bevel_widens_the_bounds() {
+    let mut builder = PathBuilder::new();
+
+    builder.move_to(0.0, 0.0);
+    builder.line_to(100.0, 0.0);
+    builder.line_to(0.0, 10.0);
+
+    let path = builder.finish().unwrap();
+    let mut stroke = Stroke::solid(luma::Color::black().into(), NormalizedF32::ONE, 10.0);
+
+    stroke.outline.line_cap = LineCap::Square;
+    stroke.outline.line_join = LineJoin::Bevel;
+    stroke.outline.dash = StrokeDash::new(vec![99.0, 1000.0], 0.0);
+
+    let bounds = calculate_stroke_bbox(&stroke, &path).unwrap();
+
+    assert_eq!(bounds.right, 104.0);
   }
 }
