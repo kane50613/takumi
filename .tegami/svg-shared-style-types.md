@@ -3,9 +3,12 @@ packages:
   takumi-core: minor
 ---
 
-# SVG strokes and spread methods use the shared style types
+# SVG stroke caps, joins, and spread methods import from new paths
 
-`SvgStrokeStyle` now holds `style::LineCap` and `style::LineJoin`, so `SvgLineCap` and `SvgLineJoin` are gone. `SvgSpreadMethod` is now `takumi_core::paint::SpreadMethod`, since CSS gradients and PDF colour glyphs use it too. The variants keep their names.
+Code that names the SVG stroke or gradient enums through `takumi_core::resources::image` imports them from their shared homes. The variants keep their names.
+
+- `SvgLineCap` and `SvgLineJoin` are gone. `SvgStrokeStyle` holds `takumi_core::style::LineCap` and `LineJoin`.
+- `SvgSpreadMethod` is now `takumi_core::paint::SpreadMethod`.
 
 #### Migration
 
@@ -15,4 +18,11 @@ packages:
 +   paint::SpreadMethod,
 +   style::{LineCap, LineJoin},
 + };
+
+- let cap = SvgLineCap::Round;
+- let join = SvgLineJoin::Bevel;
+- let spread = SvgSpreadMethod::Reflect;
++ let cap = LineCap::Round;
++ let join = LineJoin::Bevel;
++ let spread = SpreadMethod::Reflect;
 ```
