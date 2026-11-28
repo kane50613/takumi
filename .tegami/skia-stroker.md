@@ -6,13 +6,7 @@ packages:
 
 # Strokes and dashes are outlined closer to Chromium
 
-Strokes, dashed and dotted borders, and SVG strokes now follow Chromium's outlines more closely.
-
-- A curve that doubles back on itself gets a rounded point where it turns.
-- A dashed line of no length draws its round or square cap.
-- The edges of round caps and joins can shift by a few colour levels.
-
-`takumi_core::path` gains `Path::stroke`, `Path::dash`, `Stroke`, and `StrokeDash`, which outline a path for any backend to fill.
+Strokes, dashed and dotted borders, and SVG strokes now follow Chromium's outlines more closely. A curve that doubles back on itself gets a rounded point where it turns, a dashed line of no length draws its round or square cap, and the edges of round caps and joins can shift by a few colour levels. `takumi_core::path` gains `Path::stroke`, `Path::dash`, `Stroke`, and `StrokeDash`, which outline a path for any backend to fill.
 
 ```rust
 use takumi_core::{
