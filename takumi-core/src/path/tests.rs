@@ -318,3 +318,24 @@ fn a_path_from_an_inverted_rect_sorts_its_bounds() {
   );
   assert_eq!(path.points()[0], Point::new(10.0, 20.0));
 }
+
+#[test]
+fn a_rect_wider_than_i32_translates_while_its_edges_fit() {
+  let rect = Rect {
+    left: -2_000_000_000,
+    top: 0,
+    right: 2_000_000_000,
+    bottom: 1,
+  };
+
+  assert_eq!(
+    rect.checked_translated(1, 1),
+    Some(Rect {
+      left: -1_999_999_999,
+      top: 1,
+      right: 2_000_000_001,
+      bottom: 2,
+    })
+  );
+  assert_eq!(rect.checked_translated(i32::MAX, 0), None);
+}

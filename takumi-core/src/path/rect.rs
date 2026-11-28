@@ -120,12 +120,14 @@ impl Rect<i32> {
 
   /// [`Self::translated`], none where an edge overflows.
   pub fn checked_translated(&self, dx: i32, dy: i32) -> Option<Self> {
-    Self::checked_from_size(
-      self.left.checked_add(dx)?,
-      self.top.checked_add(dy)?,
-      self.width(),
-      self.height(),
-    )
+    let translated = Self {
+      left: self.left.checked_add(dx)?,
+      top: self.top.checked_add(dy)?,
+      right: self.right.checked_add(dx)?,
+      bottom: self.bottom.checked_add(dy)?,
+    };
+
+    (translated.width() > 0 && translated.height() > 0).then_some(translated)
   }
 
   /// The width and height.
