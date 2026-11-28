@@ -1,7 +1,7 @@
 use super::conic::{CONIC_TOLERANCE, Conic};
 use super::{Path, PathBuilder, RectContour, Stroke, StrokeDash};
 use crate::geometry::{Point, Rect};
-use crate::style::{LineCap, LineJoin};
+use crate::style::{Affine, LineCap, LineJoin};
 
 fn line(from: (f32, f32), to: (f32, f32)) -> Path {
   let mut builder = PathBuilder::new();
@@ -284,4 +284,16 @@ fn a_heavy_conic_whose_halves_nearly_meet_splits_into_two_lines() {
   };
 
   assert_eq!(conic.to_quads(CONIC_TOLERANCE).len(), 4);
+}
+
+#[test]
+fn a_transformed_rect_maps_its_own_edges() {
+  let rect = Rect {
+    left: -1e8,
+    top: 0.0,
+    right: 1.0,
+    bottom: 1.0,
+  };
+
+  assert_eq!(rect.transformed(Affine::IDENTITY), Some(rect));
 }

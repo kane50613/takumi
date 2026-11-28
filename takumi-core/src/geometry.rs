@@ -388,15 +388,21 @@ impl Rect<f32> {
     self.bottom - self.top
   }
 
-  /// The bounds of the rect under `transform`, none when they are not finite.
+  /// `SkMatrix::mapRect`: the bounds of the corners under `transform`, none where not finite.
   pub fn transformed(&self, transform: Affine) -> Option<Self> {
-    let (left, top, right, bottom) = transformed_rect_extents(
-      self.top_left(),
-      Size::new(self.width(), self.height()),
-      transform,
-    )?;
+    let corners = [
+      (self.left, self.top),
+      (self.right, self.top),
+      (self.right, self.bottom),
+      (self.left, self.bottom),
+    ]
+    .map(|(x, y)| {
+      let (x, y) = transform.transform_point(x, y);
 
-    Self::from_ltrb(left, top, right, bottom)
+      Point::new(x, y)
+    });
+
+    Self::from_points(&corners)
   }
 }
 
