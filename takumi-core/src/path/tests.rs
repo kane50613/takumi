@@ -339,3 +339,16 @@ fn a_rect_wider_than_i32_translates_while_its_edges_fit() {
   );
   assert_eq!(rect.checked_translated(i32::MAX, 0), None);
 }
+
+#[test]
+fn a_round_joined_rect_splits_its_corners_at_the_resolution_scale() {
+  let rect = Path::from_rect(Rect::from_ltrb(0.0, 0.0, 10.0, 10.0).unwrap());
+  let stroke = Stroke {
+    width: 2.0,
+    line_join: LineJoin::Round,
+    ..Stroke::default()
+  };
+  let points = |scale: f32| rect.stroke(&stroke, scale).unwrap().points().len();
+
+  assert!(points(100.0) > points(1.0));
+}

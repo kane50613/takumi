@@ -977,30 +977,28 @@ fn clear_outside(pixmap: &mut Pixmap, keep: Rect<i32>) {
 }
 
 /// The pixels `bounds` covers, none unless it has area, rounded out as Skia's crop image filter
-/// rounds a decal crop rect (`SkCropImageFilter.cpp`).
+/// rounds a decal crop rect (`SkCropImageFilter.cpp`). Edges past `i32` saturate, so a huge region
+/// still meets the layer it covers.
 fn pixel_bounds(bounds: Rect<f32>) -> Option<Rect<i32>> {
-  if bounds.left >= bounds.right || bounds.top >= bounds.bottom {
-    return None;
+  (bounds.left < bounds.right && bounds.top < bounds.bottom).then(|| Rect {
+    left: bounds.left.floor() as i32,
+    top: bounds.top.floor() as i32,
+    right: bounds.right.ceil() as i32,
+    bottom: bounds.bottom.ceil() as i32,
+  })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_region_past_the_i32_range_keeps_the_pixels_it_covers() {
+    let bounds = pixel_bounds(Rect::from_ltrb(-100.0, 0.0, 3e9, 16.0).unwrap()).unwrap();
+
+    assert_eq!(
+      bounds.intersection(&Rect::from_size(0, 0, 16, 16)),
+      Some(Rect::from_size(0, 0, 16, 16))
+    );
   }
-
-  let edges = [
-    bounds.left.floor(),
-    bounds.top.floor(),
-    bounds.right.ceil(),
-    bounds.bottom.ceil(),
-  ];
-
-  edges
-    .iter()
-    .all(|edge| edge.abs() < i32::MAX as f32)
-    .then(|| {
-      let [left, top, right, bottom] = edges.map(|edge| edge as i32);
-
-      Rect {
-        left,
-        top,
-        right,
-        bottom,
-      }
-    })
 }

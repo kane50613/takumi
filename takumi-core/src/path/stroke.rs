@@ -102,7 +102,9 @@ impl RectContour {
 
     match stroke.line_join {
       LineJoin::Miter if stroke.miter_limit >= SQRT_2 => builder.push_rect(outer, clockwise),
-      LineJoin::Round => builder.push_round_rect(outer, radius, clockwise, CONIC_TOLERANCE),
+      LineJoin::Round => {
+        builder.push_round_rect(outer, radius, clockwise, CONIC_TOLERANCE / resolution_scale)
+      }
       LineJoin::Miter | LineJoin::Bevel => {
         // `addBevel`: the outer rect with its corners cut at the rect's edges.
         let mut corners = [
