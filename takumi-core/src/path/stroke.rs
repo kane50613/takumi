@@ -2,7 +2,7 @@
 //! joins of `src/core/SkStrokerPriv.cpp`: the outline a stroke of a path fills. Approximate: a
 //! closed rect strokes as any other path, where Skia's `strokeRect` builds its outline directly.
 
-use crate::math::{NEARLY_ZERO, hash_f32, nearly_zero};
+use crate::math::{NEARLY_ZERO, eq_f32, hash_f32, nearly_zero};
 use std::{
   cmp::Ordering,
   hash::{Hash, Hasher},
@@ -16,7 +16,7 @@ use super::{
 use crate::style::{Affine, LineCap, LineJoin};
 
 /// The stroke of a path: its width, caps, joins, and miter limit.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Stroke {
   /// The full width.
   pub width: f32,
@@ -28,6 +28,16 @@ pub struct Stroke {
   pub line_join: LineJoin,
   /// The dashes the path is cut into before it is stroked, Skia's dash path effect.
   pub dash: Option<StrokeDash>,
+}
+
+impl PartialEq for Stroke {
+  fn eq(&self, other: &Self) -> bool {
+    eq_f32(self.width, other.width)
+      && eq_f32(self.miter_limit, other.miter_limit)
+      && self.line_cap == other.line_cap
+      && self.line_join == other.line_join
+      && self.dash == other.dash
+  }
 }
 
 impl Eq for Stroke {}
@@ -515,9 +525,8 @@ impl Stroker {
       }
 
       if !self.cusper.is_empty() {
-        let cusper = std::mem::take(&mut self.cusper);
-
-        self.outer.push_builder(&cusper);
+        self.outer.push_builder(&self.cusper);
+        self.cusper.clear();
       }
     }
 

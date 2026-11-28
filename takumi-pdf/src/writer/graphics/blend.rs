@@ -1,11 +1,10 @@
 //! Blending.
 
+use pdf_writer::types::BlendMode as Pdf;
 use takumi_core::style::BlendMode;
 
 /// The PDF blend mode `mode` writes as, normal for the modes PDF lacks.
-pub(crate) fn pdf_blend_mode(mode: BlendMode) -> pdf_writer::types::BlendMode {
-  use pdf_writer::types::BlendMode as Pdf;
-
+pub(crate) fn pdf_blend_mode(mode: BlendMode) -> Pdf {
   match mode {
     BlendMode::Multiply => Pdf::Multiply,
     BlendMode::Screen => Pdf::Screen,

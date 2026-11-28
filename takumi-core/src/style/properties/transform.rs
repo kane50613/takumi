@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
   geometry::Rect,
-  math::{NEARLY_ZERO, hash_f32},
+  math::{NEARLY_ZERO, eq_f32, hash_f32},
 };
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
@@ -100,7 +100,7 @@ impl Animatable for Transform {
 // | b d y |
 // | 0 0 1 |
 /// An affine transform matrix, representing a combination of translation, rotation, scaling, and skewing.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Affine {
   /// Horizontal scaling / cosine of rotation
   pub a: f32,
@@ -114,6 +114,16 @@ pub struct Affine {
   pub x: f32,
   /// Vertical translation (always orthogonal regardless of rotation)
   pub y: f32,
+}
+
+impl PartialEq for Affine {
+  fn eq(&self, other: &Self) -> bool {
+    self
+      .to_cols_array()
+      .into_iter()
+      .zip(other.to_cols_array())
+      .all(|(a, b)| eq_f32(a, b))
+  }
 }
 
 impl Eq for Affine {}

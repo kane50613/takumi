@@ -11,8 +11,15 @@ pub fn nearly_zero(value: f32, tolerance: f32) -> bool {
   value.abs() <= tolerance
 }
 
-/// Hashes `value` so that floats `==` holds equal hash equally, `-0.0` as `0.0`.
+/// Whether `a` and `b` are equal, any two NaNs included so that [`Eq`] holds.
+pub(crate) fn eq_f32(a: f32, b: f32) -> bool {
+  a == b || (a.is_nan() && b.is_nan())
+}
+
+/// Hashes `value` as [`eq_f32`] equates floats, `-0.0` as `0.0` and every NaN as one.
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
+  let value = if value.is_nan() { f32::NAN } else { value };
+
   (value + 0.0).to_bits().hash(state);
 }
 
